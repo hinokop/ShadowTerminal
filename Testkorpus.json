@@ -1,0 +1,4031 @@
+[
+ [
+  "handler",
+  "Z-P1 ist erledigt.",
+  [
+   "erledigt"
+  ]
+ ],
+ [
+  "handler",
+  "Ziel Z-P2 erledigt",
+  [
+   "erledigt"
+  ]
+ ],
+ [
+  "handler",
+  "Z-P3 fertig, Beleg folgt",
+  [
+   "erledigt",
+   "ziel"
+  ]
+ ],
+ [
+  "handler",
+  "wie steht es um Z-P1?",
+  [
+   "ziel"
+  ]
+ ],
+ [
+  "handler",
+  "Was ist mit Ziel Z-S1?",
+  [
+   "ziel"
+  ]
+ ],
+ [
+  "handler",
+  "Ich brauche eine Extraktion",
+  [
+   "extraktion"
+  ]
+ ],
+ [
+  "handler",
+  "Extrahiert mich hier raus",
+  [
+   "extraktion"
+  ]
+ ],
+ [
+  "handler",
+  "bitte evakuieren, es wird gefährlich",
+  [
+   "evakuierung"
+  ]
+ ],
+ [
+  "handler",
+  "Lage hier ist ruhig",
+  [
+   "lage",
+   "dialog:ruhig"
+  ]
+ ],
+ [
+  "handler",
+  "Wie ist die Lage?",
+  [
+   "dialog:neuigkeiten",
+   "lage"
+  ]
+ ],
+ [
+  "handler",
+  "Was ist der aktuelle Status?",
+  [
+   "lage"
+  ]
+ ],
+ [
+  "handler",
+  "wann ist das nächste Meldefenster?",
+  [
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "Check-in gemacht",
+  [
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "brauche einen neuen Ausweis",
+  [
+   "dokumente"
+  ]
+ ],
+ [
+  "handler",
+  "Sind meine Dokumente noch gültig?",
+  [
+   "dokumente"
+  ]
+ ],
+ [
+  "handler",
+  "gibt es neues?",
+  [
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "Noch etwas für mich?",
+  [
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "Hallo",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "Guten Morgen",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "moin",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "danke",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "Vielen Dank dafür",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "ok",
+  [
+   "dialog:bestaetigung"
+  ]
+ ],
+ [
+  "handler",
+  "verstanden",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang"
+  ]
+ ],
+ [
+  "handler",
+  "Bestätige",
+  [
+   "dialog:empfang"
+  ]
+ ],
+ [
+  "handler",
+  "kannst du mich lesen?",
+  [
+   "dialog:test"
+  ]
+ ],
+ [
+  "handler",
+  "hörst du mich",
+  [
+   "dialog:test"
+  ]
+ ],
+ [
+  "handler",
+  "bist du da?",
+  [
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "handler",
+  "wie geht's?",
+  [
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "tschüss",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "bis später",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "wie spät ist es?",
+  [
+   "dialog:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "welche Uhrzeit haben wir",
+  [
+   "dialog:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "wo bin ich eigentlich eingetragen?",
+  [
+   "dialog:standort"
+  ]
+ ],
+ [
+  "handler",
+  "Wo bist du?",
+  [
+   "dialog:standort"
+  ]
+ ],
+ [
+  "handler",
+  "wann ist das nächste Treffen?",
+  [
+   "dialog:treffen",
+   "abfrage:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "wie sieht es mit dem Budget aus?",
+  [
+   "dialog:geld"
+  ]
+ ],
+ [
+  "handler",
+  "brauche mehr Geld",
+  [
+   "dialog:geld",
+   "dialog:geldMehr"
+  ]
+ ],
+ [
+  "handler",
+  "das Auto springt nicht an",
+  [
+   "dialog:fahrzeug",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "handler",
+  "Mein Handy hat keinen Akku mehr",
+  [
+   "dialog:technik"
+  ]
+ ],
+ [
+  "handler",
+  "Ich brauche ein Ersatzgerät",
+  [
+   "dialog:technik"
+  ]
+ ],
+ [
+  "handler",
+  "Wie komme ich an die Unterkunft?",
+  [
+   "dialog:unterkunft"
+  ]
+ ],
+ [
+  "handler",
+  "was soll ich als nächstes tun?",
+  [
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Wie ist die Weisung?",
+  [
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Ich sehe zwei Männer am Tor",
+  [
+   "dialog:beobachtung"
+  ]
+ ],
+ [
+  "handler",
+  "der Transporter fährt ab",
+  [
+   "dialog:beobachtung"
+  ]
+ ],
+ [
+  "handler",
+  "bin angekommen",
+  [
+   "dialog:angekommen"
+  ]
+ ],
+ [
+  "handler",
+  "bin vor Ort",
+  [
+   "dialog:angekommen"
+  ]
+ ],
+ [
+  "handler",
+  "alles ruhig hier",
+  [
+   "dialog:ruhig"
+  ]
+ ],
+ [
+  "handler",
+  "keine Auffälligkeiten",
+  [
+   "dialog:ruhig"
+  ]
+ ],
+ [
+  "handler",
+  "Wir haben ein Problem",
+  [
+   "dialog:problem"
+  ]
+ ],
+ [
+  "handler",
+  "Funktioniert nicht",
+  [
+   "dialog:problem"
+  ]
+ ],
+ [
+  "handler",
+  "das muss sofort passieren",
+  [
+   "dialog:dringend"
+  ]
+ ],
+ [
+  "handler",
+  "warte kurz",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "handler",
+  "Moment bitte",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "handler",
+  "das mache ich nicht",
+  [
+   "dialog:ablehnung"
+  ]
+ ],
+ [
+  "handler",
+  "Ich habe Angst",
+  [
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "handler",
+  "ich bin unsicher ob das klappt",
+  [
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "handler",
+  "Das nervt gewaltig, verdammt",
+  [
+   "dialog:frust"
+  ]
+ ],
+ [
+  "handler",
+  "gut gemacht",
+  [
+   "dialog:lob"
+  ]
+ ],
+ [
+  "handler",
+  "haha",
+  [
+   "dialog:humor"
+  ]
+ ],
+ [
+  "handler",
+  "wer bist du eigentlich?",
+  [
+   "dialog:privat"
+  ]
+ ],
+ [
+  "handler",
+  "bist du verheiratet",
+  [
+   "dialog:privat"
+  ]
+ ],
+ [
+  "handler",
+  "wird der Kanal abgehört?",
+  [
+   "dialog:sicherheit"
+  ]
+ ],
+ [
+  "handler",
+  "Ich bin müde",
+  [
+   "dialog:koerper"
+  ]
+ ],
+ [
+  "handler",
+  "ich brauche Kaffee",
+  [
+   "dialog:koerper"
+  ]
+ ],
+ [
+  "handler",
+  "was denkst du darüber?",
+  [
+   "dialog:meinung"
+  ]
+ ],
+ [
+  "handler",
+  "Schönes Wetter heute",
+  [
+   "dialog:wetter"
+  ]
+ ],
+ [
+  "handler",
+  "Was hast du am Wochenende vor?",
+  [
+   "dialog:smalltalk"
+  ]
+ ],
+ [
+  "handler",
+  "nein",
+  [
+   "dialog:verneinung"
+  ]
+ ],
+ [
+  "handler",
+  "Was weißt du über P-0001?",
+  [
+   "dossier",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "was weißt du über Emre Kaya",
+  [
+   "dossier"
+  ]
+ ],
+ [
+  "handler",
+  "wer ist Kowalczyk?",
+  [
+   "dossier"
+  ]
+ ],
+ [
+  "handler",
+  "Kennt Brandt den Kutscher?",
+  [
+   "dossier"
+  ]
+ ],
+ [
+  "handler",
+  "Was ist L-9052?",
+  [
+   "dossier",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "wohnt Petrenko in Hamburg?",
+  [
+   "dossier"
+  ]
+ ],
+ [
+  "handler",
+  "Hat Nordwerk Verbindungen nach Duisburg?",
+  [
+   "dossier"
+  ]
+ ],
+ [
+  "handler",
+  "Notfall!",
+  [
+   "dialog:notfall"
+  ]
+ ],
+ [
+  "handler",
+  "Hilfe, ich brauche Hilfe",
+  [
+   "dialog:notfall"
+  ]
+ ],
+ [
+  "handler",
+  "Ich bin verletzt",
+  [
+   "dialog:verletzt"
+  ]
+ ],
+ [
+  "handler",
+  "Ich werde verfolgt",
+  [
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "handler",
+  "Ich glaube ich wurde enttarnt",
+  [
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "handler",
+  "bitte wiederhole das nochmal",
+  [
+   "dialog:wiederholen",
+   "dialog:wiederholenOhne"
+  ]
+ ],
+ [
+  "handler",
+  "Ich beginne jetzt mit Phase 2",
+  [
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Fahre jetzt zur Sonnenallee",
+  [
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Ich werde morgen früh die Halle beobachten",
+  [
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Beginne Phase 2.",
+  [
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Gehe jetzt rein",
+  [
+   "dialog:ankuendigung",
+   "dialog:beobachtung"
+  ]
+ ],
+ [
+  "handler",
+  "verstehe",
+  [
+   "dialog:bestaetigung"
+  ]
+ ],
+ [
+  "handler",
+  "alles klar",
+  [
+   "dialog:bestaetigung",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Moin, Z-P1 ist erledigt",
+  [
+   "erledigt"
+  ]
+ ],
+ [
+  "handler",
+  "Danke. Wie ist die Lage?",
+  [
+   "lage"
+  ]
+ ],
+ [
+  "handler",
+  "Ziel Z-P2 ist erledigt und ich beginne Phase 3",
+  [
+   "erledigt"
+  ]
+ ],
+ [
+  "handler",
+  "Ich bin da und alles ruhig",
+  [
+   "dialog:angekommen",
+   "dialog:ruhig",
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "handler",
+  "Wo ist der Frachtbrief gelandet?",
+  [
+   "dossier",
+   "dialog:unklar",
+   "dialog:allgemeineFrage",
+   "dokumente"
+  ]
+ ],
+ [
+  "handler",
+  "Verstärkung bitte, sofort",
+  [
+   "dialog:dringend",
+   "dialog:notfall"
+  ]
+ ],
+ [
+  "handler",
+  "kein Problem",
+  [
+   "dialog:ruhig",
+   "dialog:bestaetigung"
+  ]
+ ],
+ [
+  "handler",
+  "Das ist nicht erledigt",
+  [
+   "dialog:unklar",
+   "ziel",
+   "dialog:verneinung",
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "Verstaerkung angefordert",
+  [
+   "dialog:auftrag",
+   "dialog:bestaetigung",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Extraktoin bitte",
+  [
+   "extraktion"
+  ]
+ ],
+ [
+  "handler",
+  "Evakuirung notwendig",
+  [
+   "evakuierung"
+  ]
+ ],
+ [
+  "handler",
+  "Wie ist die Lgae?",
+  [
+   "lage"
+  ]
+ ],
+ [
+  "handler",
+  "Meldefenster verpasst, tut mir leid",
+  [
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "dokumnete sind fertig",
+  [
+   "dokumente"
+  ]
+ ],
+ [
+  "handler",
+  "Haloo",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "Gute Nacht",
+  [
+   "dialog:abschied",
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "wir haben Besuch bekommen",
+  [
+   "dialog:beobachtung",
+   "dialog:gefahr",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Mir ist kalt",
+  [
+   "dialog:wetter",
+   "dialog:koerper"
+  ]
+ ],
+ [
+  "handler",
+  "Kannst du mir helfen?",
+  [
+   "dialog:notfall",
+   "dialog:auftrag",
+   "dialog:allgemeineFrage",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Ich bin spät dran",
+  [
+   "dialog:zeit",
+   "dialog:unklar",
+   "dialog:problem",
+   "dialog:dringend"
+  ]
+ ],
+ [
+  "handler",
+  "wo genau soll ich hin?",
+  [
+   "dialog:standort",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "wer kommt zum Treffen",
+  [
+   "dialog:treffen"
+  ]
+ ],
+ [
+  "support",
+  "Ich brauche ein Fahrzeug",
+  [
+   "dialog:fahrzeug"
+  ]
+ ],
+ [
+  "support",
+  "Ersatz für die Kamera bitte",
+  [
+   "dialog:technik"
+  ]
+ ],
+ [
+  "support",
+  "Habt ihr Zimmer frei?",
+  [
+   "dialog:unterkunft"
+  ]
+ ],
+ [
+  "support",
+  "Guten Tag",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "support",
+  "Wie ist der Stand der Ausrüstung?",
+  [
+   "dialog:technik",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "support",
+  "Ich brauche neue Dokumente",
+  [
+   "dokumente"
+  ]
+ ],
+ [
+  "support",
+  "Danke für die Hilfe",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "support",
+  "Was kostet das?",
+  [
+   "dialog:geld",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "asset",
+  "Hallo Emre",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "asset",
+  "Hast du etwas gesehen?",
+  [
+   "dialog:allgemeineFrage",
+   "dialog:beobachtung",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "asset",
+  "Ich schicke dir Unterstützung, keine Details.",
+  [
+   "dialog:unterstuetzung"
+  ]
+ ],
+ [
+  "asset",
+  "Alles ruhig bei dir?",
+  [
+   "dialog:beobachtung",
+   "dialog:neuigkeiten",
+   "dialog:ruhig",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "asset",
+  "Kennst du Nordwerk?",
+  [
+   "dossier"
+  ]
+ ],
+ [
+  "asset",
+  "Wann können wir uns treffen?",
+  [
+   "dialog:treffen"
+  ]
+ ],
+ [
+  "asset",
+  "Danke dir",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "asset",
+  "Wie geht es dir?",
+  [
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "asset",
+  "Keine Sorge, wir kümmern uns",
+  [
+   "dialog:beruhigung"
+  ]
+ ],
+ [
+  "asset",
+  "wer war gestern bei dir",
+  [
+   "dialog:allgemeineFrage",
+   "dialog:unklar",
+   "dialog:beobachtung"
+  ]
+ ],
+ [
+  "handler",
+  "Wie viel Zeit bleibt mir bis Transport?",
+  [
+   "abfrage:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Standort von KIEBITZ und P9101",
+  [
+   "abfrage:standort"
+  ]
+ ],
+ [
+  "handler",
+  "Alias von P-0001",
+  [
+   "abfrage:alias"
+  ]
+ ],
+ [
+  "handler",
+  "Nächste Missionsphase?",
+  [
+   "abfrage:phase"
+  ]
+ ],
+ [
+  "handler",
+  "Verstärkung für P-0001 muss sich beeilen.",
+  [
+   "abfrage:verstaerkung"
+  ]
+ ],
+ [
+  "handler",
+  "Letzter Standort p-9101",
+  [
+   "abfrage:standort"
+  ]
+ ],
+ [
+  "handler",
+  "Ist DISPO verfügbar?",
+  [
+   "abfrage:erreichbar"
+  ]
+ ],
+ [
+  "support",
+  "Ist DISPO verfügbar?",
+  [
+   "abfrage:erreichbar"
+  ]
+ ],
+ [
+  "asset",
+  "Gibt es aktuelle informationen?",
+  [
+   "dialog:neuigkeiten"
+  ]
+ ],
+ [
+  "handler",
+  "Wann geht der Transport los?",
+  [
+   "abfrage:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Wo ist P-0001 gerade?",
+  [
+   "abfrage:standort"
+  ]
+ ],
+ [
+  "handler",
+  "Wann beginnt das Treffen mit KIEBITZ?",
+  [
+   "abfrage:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Welche Phase läuft gerade?",
+  [
+   "abfrage:phase"
+  ]
+ ],
+ [
+  "handler",
+  "Wo bleibt die Verstärkung?",
+  [
+   "abfrage:verstaerkung"
+  ]
+ ],
+ [
+  "handler",
+  "Hat P-0001 Aliase?",
+  [
+   "abfrage:alias"
+  ]
+ ],
+ [
+  "handler",
+  "Gibt es aktuelle Informationen?",
+  [
+   "dialog:neuigkeiten",
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "Wie steht es um meine Freigaben?",
+  [
+   "abfrage:freigabe",
+   "abfrage:modul"
+  ]
+ ],
+ [
+  "handler",
+  "Wie ist der Zustand meiner Ausrüstung?",
+  [
+   "abfrage:modul"
+  ]
+ ],
+ [
+  "handler",
+  "Wie ist mein Zustand?",
+  [
+   "abfrage:modul"
+  ]
+ ],
+ [
+  "handler",
+  "Welche Identität habe ich aktiv?",
+  [
+   "abfrage:modul"
+  ]
+ ],
+ [
+  "handler",
+  "Welche Termine stehen an?",
+  [
+   "abfrage:modul"
+  ]
+ ],
+ [
+  "handler",
+  "Wie viele Berichte habe ich?",
+  [
+   "abfrage:modul"
+  ]
+ ],
+ [
+  "handler",
+  "KIEBITZ ist unzuverlässig.",
+  [
+   "dialog:aussageEntitaet"
+  ]
+ ],
+ [
+  "handler",
+  "P-0003 ist gefährlich und redet zu viel.",
+  [
+   "dialog:aussageEntitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Emre Kaya wirkt nervös seit gestern.",
+  [
+   "dialog:aussageEntitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Kutscher ist heute früh weggefahren und kommt abends wieder.",
+  [
+   "dialog:aussageEntitaet"
+  ]
+ ],
+ [
+  "support",
+  "P-0002 ist verdächtig.",
+  [
+   "dialog:aussageEntitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Bist du Einsatzbereit?",
+  [
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "asset",
+  "Bist du Einsatzbereit?",
+  [
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "asset",
+  "Wie geht es dir?",
+  [
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "asset",
+  "Alles klar bei dir?",
+  [
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "support",
+  "Seid ihr bereit?",
+  [
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "handler",
+  "Wie geht's?",
+  [
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "asset",
+  "Wenn du mir nochmal so frech antwortest, eliminiere ich deinen erbärmlichen Arsch",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "asset",
+  "Ich mach dich fertig, wenn du das verbockst.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "handler",
+  "Dafür zahlst du noch.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "asset",
+  "Du bist ein Idiot.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "handler",
+  "Halt die Fresse.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "support",
+  "Ihr seid inkompetent.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "asset",
+  "Du Versager machst nichts richtig.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "handler",
+  "Das ist ein Idiot von Fahrer.",
+  [
+   "dialog:frust",
+   "dialog:aussageEntitaet",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Verstärkung für P-0001 muss sich beeilen.",
+  [
+   "abfrage:verstaerkung",
+   "dialog:aussageEntitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Alias von P-0001",
+  [
+   "abfrage:alias"
+  ]
+ ],
+ [
+  "handler",
+  "Wie viel Zeit bleibt mir bis Transport?",
+  [
+   "abfrage:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Nächste Missionsphase?",
+  [
+   "abfrage:phase"
+  ]
+ ],
+ [
+  "handler",
+  "Letzter Standort p-0001",
+  [
+   "abfrage:standort"
+  ]
+ ],
+ [
+  "handler",
+  "Standort von KIEBITZ",
+  [
+   "abfrage:standort"
+  ]
+ ],
+ [
+  "asset",
+  "Gibt es aktuelle informationen?",
+  [
+   "dialog:neuigkeiten"
+  ]
+ ],
+ [
+  "support",
+  "Verstärkung erfoderlich?",
+  [
+   "dialog:verstaerkungBedarf"
+  ]
+ ],
+ [
+  "asset",
+  "Bist du fit für heute Abend?",
+  [
+   "dialog:befinden",
+   "dialog:wiegehts",
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "asset",
+  "Bist du bereit?",
+  [
+   "dialog:befinden",
+   "dialog:wiegehts",
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "asset",
+  "Bist du einsatzbereit?",
+  [
+   "dialog:befinden",
+   "dialog:wiegehts",
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "asset",
+  "Alles bereit bei dir?",
+  [
+   "dialog:befinden",
+   "dialog:wiegehts",
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "support",
+  "Sind Sie einsatzbereit?",
+  [
+   "dialog:befinden",
+   "dialog:wiegehts",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "support",
+  "Seid ihr bereit für die Übergabe?",
+  [
+   "dialog:befinden",
+   "dialog:wiegehts",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "support",
+  "Ist das Team bereit?",
+  [
+   "dialog:befinden",
+   "dialog:wiegehts",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Bist du bereit für den Auftrag?",
+  [
+   "dialog:befinden",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Wie fühlst du dich?",
+  [
+   "dialog:befinden",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "asset",
+  "Na, wie läuft's?",
+  [
+   "dialog:wiegehts",
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "asset",
+  "Wie gehts dir so?",
+  [
+   "dialog:wiegehts",
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "asset",
+  "Und, alles fit?",
+  [
+   "dialog:wiegehts",
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "asset",
+  "Wie ist die Stimmung bei dir?",
+  [
+   "dialog:wiegehts",
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "asset",
+  "Geht's dir gut?",
+  [
+   "dialog:wiegehts",
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "support",
+  "Wie läuft es bei Ihnen?",
+  [
+   "dialog:wiegehts",
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "support",
+  "Wie geht es Ihnen?",
+  [
+   "dialog:wiegehts",
+   "dialog:befinden"
+  ]
+ ],
+ [
+  "asset",
+  "Bist du noch da?",
+  [
+   "dialog:anwesend",
+   "dialog:gruss",
+   "dialog:test"
+  ]
+ ],
+ [
+  "asset",
+  "Jemand da?",
+  [
+   "dialog:anwesend",
+   "dialog:gruss",
+   "dialog:test"
+  ]
+ ],
+ [
+  "asset",
+  "Hallo, bist du online?",
+  [
+   "dialog:anwesend",
+   "dialog:gruss",
+   "dialog:test"
+  ]
+ ],
+ [
+  "asset",
+  "Antworte mal kurz.",
+  [
+   "dialog:anwesend",
+   "dialog:gruss",
+   "dialog:test"
+  ]
+ ],
+ [
+  "asset",
+  "Ping",
+  [
+   "dialog:anwesend",
+   "dialog:gruss",
+   "dialog:test"
+  ]
+ ],
+ [
+  "support",
+  "Sind Sie noch da?",
+  [
+   "dialog:anwesend",
+   "abfrage:erreichbar"
+  ]
+ ],
+ [
+  "support",
+  "Ist jemand erreichbar?",
+  [
+   "dialog:anwesend",
+   "abfrage:erreichbar"
+  ]
+ ],
+ [
+  "asset",
+  "Irgendwas Auffälliges heute?",
+  [
+   "dialog:ruhig",
+   "dialog:wiegehts",
+   "dialog:neuigkeiten",
+   "dialog:beobachtung"
+  ]
+ ],
+ [
+  "asset",
+  "Ist es ruhig im Betrieb?",
+  [
+   "dialog:ruhig",
+   "dialog:wiegehts",
+   "dialog:neuigkeiten",
+   "dialog:beobachtung",
+   "dialog:neuigkeiten"
+  ]
+ ],
+ [
+  "asset",
+  "Nichts Neues im Hof?",
+  [
+   "dialog:ruhig",
+   "dialog:wiegehts",
+   "dialog:neuigkeiten",
+   "dialog:beobachtung",
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "KIEBITZ wirkt unsicher.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel",
+   "dialog:meinung"
+  ]
+ ],
+ [
+  "handler",
+  "Kiebitz ist mir zu nervös.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel",
+   "dialog:meinung"
+  ]
+ ],
+ [
+  "handler",
+  "P-0001 redet zu viel.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel",
+   "dialog:meinung"
+  ]
+ ],
+ [
+  "handler",
+  "Ich traue Emre Kaya nicht.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel",
+   "dialog:meinung"
+  ]
+ ],
+ [
+  "handler",
+  "P-0003 ist mir nicht geheuer.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel",
+   "dialog:meinung"
+  ]
+ ],
+ [
+  "handler",
+  "Der Händler lügt, glaube ich.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel",
+   "dialog:meinung"
+  ]
+ ],
+ [
+  "handler",
+  "Der Kutscher macht mich misstrauisch.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel",
+   "dialog:meinung"
+  ]
+ ],
+ [
+  "support",
+  "Mit P-0002 stimmt etwas nicht.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "support",
+  "Kiebitz ist ein Risiko.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "support",
+  "Ich halte P-0001 für unzuverlässig.",
+  [
+   "dialog:aussageEntitaet",
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "handler",
+  "Was hältst du von dem Plan?",
+  [
+   "dialog:meinung",
+   "lage",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Was denkst du über die Strecke?",
+  [
+   "dialog:meinung",
+   "lage",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Glaubst du, das klappt?",
+  [
+   "dialog:meinung",
+   "lage",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Wie siehst du die Lage?",
+  [
+   "dialog:meinung",
+   "lage",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "asset",
+  "Was meinst du dazu?",
+  [
+   "dialog:meinung",
+   "dialog:zweifel",
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "asset",
+  "Glaubst du, die haben was gemerkt?",
+  [
+   "dialog:meinung",
+   "dialog:zweifel",
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "asset",
+  "Hältst du das für riskant?",
+  [
+   "dialog:meinung",
+   "dialog:zweifel",
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "handler",
+  "Ich habe ein schlechtes Gefühl bei der Sache.",
+  [
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "handler",
+  "Mir ist mulmig.",
+  [
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "handler",
+  "Ich bin unsicher, ob das gut geht.",
+  [
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "handler",
+  "Ich habe Bedenken.",
+  [
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "asset",
+  "Mir ist nicht wohl dabei.",
+  [
+   "dialog:zweifel",
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "asset",
+  "Ich habe Angst, dass ich auffalle.",
+  [
+   "dialog:zweifel",
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "asset",
+  "Das macht mich nervös.",
+  [
+   "dialog:zweifel",
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "handler",
+  "So ein Mist.",
+  [
+   "dialog:frust"
+  ]
+ ],
+ [
+  "handler",
+  "Verdammt, das nervt.",
+  [
+   "dialog:frust"
+  ]
+ ],
+ [
+  "handler",
+  "Ich habe die Schnauze voll.",
+  [
+   "dialog:frust"
+  ]
+ ],
+ [
+  "handler",
+  "Das ist echt zum Kotzen.",
+  [
+   "dialog:frust"
+  ]
+ ],
+ [
+  "handler",
+  "Alles Scheiße hier.",
+  [
+   "dialog:frust"
+  ]
+ ],
+ [
+  "asset",
+  "Mann, ich bin so genervt.",
+  [
+   "dialog:frust",
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "asset",
+  "Scheiße, schon wieder nichts.",
+  [
+   "dialog:frust",
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "asset",
+  "Das reicht mir langsam.",
+  [
+   "dialog:frust",
+   "dialog:zweifel"
+  ]
+ ],
+ [
+  "asset",
+  "Ich mach dich fertig.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "asset",
+  "Wenn du mich verrätst, bring ich dich um.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "asset",
+  "Ich erledige dich.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "asset",
+  "Dafür zahlst du.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "asset",
+  "Ich schlag dir die Zähne ein.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "asset",
+  "Ich werde dich kaputt machen.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "handler",
+  "Ich mach dich fertig, wenn das schiefgeht.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "handler",
+  "Ich zerstöre dich.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "handler",
+  "Ich töte dich.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "support",
+  "Ich mach euch fertig.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "support",
+  "Dafür bezahlt ihr.",
+  [
+   "dialog:drohung"
+  ]
+ ],
+ [
+  "asset",
+  "Du Arschloch.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "asset",
+  "Du bist so ein Trottel.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "asset",
+  "Halts Maul.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "asset",
+  "Du bist nutzlos.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "asset",
+  "Du bist echt dumm.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "asset",
+  "Du Spast.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "asset",
+  "Du Penner.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "handler",
+  "Ihr seid Idioten.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "handler",
+  "Du bist ein Versager.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "handler",
+  "Ihr seid vollkommen inkompetent.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "handler",
+  "Halt den Mund.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "support",
+  "Ihr seid nutzlos.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "support",
+  "Ihr Idioten.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "support",
+  "Sie sind ein Trottel.",
+  [
+   "dialog:beleidigung"
+  ]
+ ],
+ [
+  "handler",
+  "Subjekt verlässt das Objekt.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "ZP in Bewegung, Richtung Süd.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "Fahrzeug fährt vom Hof, zwei Insassen.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "Übergabe beobachtet, Zeit 2140.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "Kennzeichen notiert, Fahrzeug dunkel, Kombi.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "Zwei Personen am Tor, einer raucht.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "asset",
+  "Subjekt bewegt sich Richtung Süd.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "asset",
+  "Wagen steht seit zehn Minuten vor dem Tor.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "asset",
+  "Einer kommt raus und telefoniert.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "Gegenobservation vermutet.",
+  [
+   "dialog:gefahr",
+   "extraktion",
+   "evakuierung"
+  ]
+ ],
+ [
+  "handler",
+  "Bin möglicherweise enttarnt.",
+  [
+   "dialog:gefahr",
+   "extraktion",
+   "evakuierung"
+  ]
+ ],
+ [
+  "handler",
+  "Ich habe einen Verfolger.",
+  [
+   "dialog:gefahr",
+   "extraktion",
+   "evakuierung"
+  ]
+ ],
+ [
+  "handler",
+  "Der Wagen hinter mir fährt seit Kilometern mit.",
+  [
+   "dialog:gefahr",
+   "extraktion",
+   "evakuierung"
+  ]
+ ],
+ [
+  "handler",
+  "Keine besonderen Vorkommnisse.",
+  [
+   "dialog:ruhig",
+   "lage"
+  ]
+ ],
+ [
+  "handler",
+  "Lage unverändert.",
+  [
+   "dialog:ruhig",
+   "lage"
+  ]
+ ],
+ [
+  "handler",
+  "Nichts zu melden.",
+  [
+   "dialog:ruhig",
+   "lage"
+  ]
+ ],
+ [
+  "handler",
+  "Alles im grünen Bereich.",
+  [
+   "dialog:ruhig",
+   "lage"
+  ]
+ ],
+ [
+  "handler",
+  "Keine Auffälligkeiten.",
+  [
+   "dialog:ruhig",
+   "lage"
+  ]
+ ],
+ [
+  "handler",
+  "Bin auf Position.",
+  [
+   "dialog:angekommen",
+   "dialog:beobachtung",
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Stehe am Treffpunkt.",
+  [
+   "dialog:angekommen",
+   "dialog:beobachtung",
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Vor Ort, Beobachtung läuft.",
+  [
+   "dialog:angekommen",
+   "dialog:beobachtung",
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Position bezogen.",
+  [
+   "dialog:angekommen",
+   "dialog:beobachtung",
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Beginne mit der Observation.",
+  [
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Rücke jetzt ab.",
+  [
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Gehe jetzt rein.",
+  [
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Starte die Annäherung.",
+  [
+   "dialog:ankuendigung"
+  ]
+ ],
+ [
+  "handler",
+  "Verstanden.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Roger.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Kopiert.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Wilco.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Copy that.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Alles klar, mach ich.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Jawohl.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "asset",
+  "Okay.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang"
+  ]
+ ],
+ [
+  "asset",
+  "Roger.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang"
+  ]
+ ],
+ [
+  "asset",
+  "Mach ich.",
+  [
+   "dialog:bestaetigung",
+   "dialog:empfang"
+  ]
+ ],
+ [
+  "handler",
+  "Negativ.",
+  [
+   "dialog:verneinung",
+   "dialog:ablehnung",
+   "dialog:ruhig"
+  ]
+ ],
+ [
+  "handler",
+  "Negativ, nichts zu sehen.",
+  [
+   "dialog:verneinung",
+   "dialog:ablehnung",
+   "dialog:ruhig"
+  ]
+ ],
+ [
+  "handler",
+  "Nö.",
+  [
+   "dialog:verneinung",
+   "dialog:ablehnung",
+   "dialog:ruhig"
+  ]
+ ],
+ [
+  "handler",
+  "Auf keinen Fall.",
+  [
+   "dialog:verneinung",
+   "dialog:ablehnung",
+   "dialog:ruhig"
+  ]
+ ],
+ [
+  "handler",
+  "Funkcheck.",
+  [
+   "dialog:test",
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "handler",
+  "Kanaltest.",
+  [
+   "dialog:test",
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "handler",
+  "Test, Test, eins zwei.",
+  [
+   "dialog:test",
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "handler",
+  "Hört mich jemand?",
+  [
+   "dialog:test",
+   "dialog:anwesend"
+  ]
+ ],
+ [
+  "handler",
+  "Over and out.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "Ende.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "Bis später.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "Ich melde mich später.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "Schönen Abend noch.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "Bis morgen.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "Moin.",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "Servus.",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "Guten Abend.",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "Hi zusammen.",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "Hallo ARGUS.",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "handler",
+  "Guten Morgen.",
+  [
+   "dialog:gruss"
+  ]
+ ],
+ [
+  "asset",
+  "Hi.",
+  [
+   "dialog:gruss",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "asset",
+  "Na?",
+  [
+   "dialog:gruss",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "asset",
+  "Guten Abend, KIEBITZ.",
+  [
+   "dialog:gruss",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Danke dir.",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "Besten Dank.",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "Thx.",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "Merci.",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "Vielen Dank für die Info.",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "support",
+  "Danke, das hilft.",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "support",
+  "Danke euch.",
+  [
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "Brauche das ASAP.",
+  [
+   "dialog:dringend",
+   "dialog:notfall",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Eilt!",
+  [
+   "dialog:dringend",
+   "dialog:notfall",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Dringend bitte.",
+  [
+   "dialog:dringend",
+   "dialog:notfall",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Das muss jetzt sofort sein.",
+  [
+   "dialog:dringend",
+   "dialog:notfall",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Moment bitte.",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "handler",
+  "Warte kurz.",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "handler",
+  "Gib mir fünf Minuten.",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "handler",
+  "Einen Augenblick noch.",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "asset",
+  "Moment, ich muss kurz überlegen.",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "asset",
+  "Warte mal.",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "handler",
+  "SITREP?",
+  [
+   "lage",
+   "dialog:neuigkeiten"
+  ]
+ ],
+ [
+  "handler",
+  "Lage?",
+  [
+   "lage",
+   "dialog:neuigkeiten"
+  ]
+ ],
+ [
+  "handler",
+  "Lagebild bitte.",
+  [
+   "lage",
+   "dialog:neuigkeiten",
+   "abfrage:lagebild"
+  ]
+ ],
+ [
+  "handler",
+  "Status?",
+  [
+   "lage",
+   "dialog:wiegehts",
+   "abfrage:phase",
+   "dialog:auftrag",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Statusmeldung.",
+  [
+   "lage",
+   "dialog:wiegehts",
+   "abfrage:phase",
+   "dialog:auftrag",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "LZ bestätigt.",
+  [
+   "dialog:bestaetigung",
+   "dialog:ruhig",
+   "dialog:empfang",
+   "dialog:unklar",
+   "meldung",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Lebenszeichen, alles gut.",
+  [
+   "dialog:bestaetigung",
+   "dialog:ruhig",
+   "dialog:empfang",
+   "dialog:unklar",
+   "meldung",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "CI gesendet.",
+  [
+   "dialog:bestaetigung",
+   "dialog:ruhig",
+   "dialog:empfang",
+   "dialog:unklar",
+   "meldung",
+   "dialog:wiegehts"
+  ]
+ ],
+ [
+  "handler",
+  "Check-in erledigt.",
+  [
+   "dialog:checkin"
+  ]
+ ],
+ [
+  "handler",
+  "EVA nötig?",
+  [
+   "evakuierung",
+   "extraktion",
+   "dialog:gefahr",
+   "dialog:unklar",
+   "dialog:allgemeineFrage",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "handler",
+  "Brauche ich eine Evakuierung?",
+  [
+   "evakuierung",
+   "extraktion",
+   "dialog:gefahr",
+   "dialog:unklar",
+   "dialog:allgemeineFrage",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "handler",
+  "Ich muss hier raus.",
+  [
+   "evakuierung",
+   "extraktion",
+   "dialog:gefahr",
+   "dialog:unklar",
+   "dialog:allgemeineFrage",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "support",
+  "Brauche ich Ersatzfahrzeug?",
+  [
+   "dialog:fahrzeug"
+  ]
+ ],
+ [
+  "support",
+  "Ist ein Mietwagen eingeplant?",
+  [
+   "dialog:fahrzeug"
+  ]
+ ],
+ [
+  "support",
+  "Mein Akku ist fast leer.",
+  [
+   "dialog:technik",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "support",
+  "Das Handy ist kaputt.",
+  [
+   "dialog:technik",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "support",
+  "Funkgerät rauscht nur noch.",
+  [
+   "dialog:technik",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "handler",
+  "Wo ist die Übergabe?",
+  [
+   "dialog:treffen",
+   "dialog:standort",
+   "dialog:zeit",
+   "abfrage:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Wann ist das Treffen?",
+  [
+   "dialog:treffen",
+   "dialog:standort",
+   "dialog:zeit",
+   "abfrage:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Wann ist die nächste Übergabe?",
+  [
+   "dialog:treffen",
+   "dialog:standort",
+   "dialog:zeit",
+   "abfrage:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Wie spät ist es?",
+  [
+   "dialog:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Welche Uhrzeit haben wir?",
+  [
+   "dialog:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Wie viel Spesen darf ich ausgeben?",
+  [
+   "dialog:geld"
+  ]
+ ],
+ [
+  "handler",
+  "Wer zahlt das Hotel?",
+  [
+   "dialog:geld"
+  ]
+ ],
+ [
+  "handler",
+  "Brauche ich Bargeld?",
+  [
+   "dialog:geld"
+  ]
+ ],
+ [
+  "support",
+  "Ist die Unterkunft sicher?",
+  [
+   "dialog:unterkunft"
+  ]
+ ],
+ [
+  "support",
+  "Wo schlafe ich heute?",
+  [
+   "dialog:unterkunft"
+  ]
+ ],
+ [
+  "support",
+  "Das Hotel ist laut.",
+  [
+   "dialog:unterkunft"
+  ]
+ ],
+ [
+  "handler",
+  "Ich bin müde.",
+  [
+   "dialog:koerper"
+  ]
+ ],
+ [
+  "handler",
+  "Habe Hunger.",
+  [
+   "dialog:koerper"
+  ]
+ ],
+ [
+  "handler",
+  "Brauche eine Pause.",
+  [
+   "dialog:atempause"
+  ]
+ ],
+ [
+  "handler",
+  "Heute regnet es.",
+  [
+   "dialog:wetter",
+   "dialog:smalltalk"
+  ]
+ ],
+ [
+  "handler",
+  "Ganz schön kalt heute.",
+  [
+   "dialog:wetter",
+   "dialog:smalltalk"
+  ]
+ ],
+ [
+  "handler",
+  "Wer bist du eigentlich?",
+  [
+   "dialog:privat"
+  ]
+ ],
+ [
+  "handler",
+  "Wie heißt du?",
+  [
+   "dialog:privat"
+  ]
+ ],
+ [
+  "handler",
+  "Ist der Kanal sicher?",
+  [
+   "dialog:sicherheit"
+  ]
+ ],
+ [
+  "handler",
+  "Werden wir abgehört?",
+  [
+   "dialog:sicherheit"
+  ]
+ ],
+ [
+  "handler",
+  "Ist die Verschlüsselung in Ordnung?",
+  [
+   "dialog:sicherheit"
+  ]
+ ],
+ [
+  "handler",
+  "Gut gemacht.",
+  [
+   "dialog:lob",
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "Das war stark.",
+  [
+   "dialog:lob",
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "Perfekt, danke.",
+  [
+   "dialog:lob",
+   "dialog:danke"
+  ]
+ ],
+ [
+  "handler",
+  "Ich mache das nicht.",
+  [
+   "dialog:ablehnung"
+  ]
+ ],
+ [
+  "handler",
+  "Das lehne ich ab.",
+  [
+   "dialog:ablehnung"
+  ]
+ ],
+ [
+  "handler",
+  "Nicht mit mir.",
+  [
+   "dialog:ablehnung"
+  ]
+ ],
+ [
+  "handler",
+  "Haha, guter Witz.",
+  [
+   "dialog:humor"
+  ]
+ ],
+ [
+  "handler",
+  "Das war lustig.",
+  [
+   "dialog:humor"
+  ]
+ ],
+ [
+  "handler",
+  "Der Mann hatte eine Narbe am Kinn.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "Er trug eine dunkle Jacke.",
+  [
+   "dialog:beobachtung",
+   "meldung"
+  ]
+ ],
+ [
+  "handler",
+  "Letzter Standort P0001",
+  [
+   "abfrage:standort"
+  ]
+ ],
+ [
+  "handler",
+  "Und jetzt?",
+  [
+   "dialog:auftrag",
+   "dialog:unklar",
+   "dialog:allgemeineFrage",
+   "abfrage:phase"
+  ]
+ ],
+ [
+  "handler",
+  "Weiter?",
+  [
+   "dialog:auftrag",
+   "dialog:unklar",
+   "dialog:allgemeineFrage",
+   "abfrage:phase"
+  ]
+ ],
+ [
+  "handler",
+  "Wie weiter?",
+  [
+   "dialog:auftrag",
+   "dialog:unklar",
+   "dialog:allgemeineFrage",
+   "abfrage:phase"
+  ]
+ ],
+ [
+  "handler",
+  "Was nun?",
+  [
+   "dialog:auftrag",
+   "dialog:unklar",
+   "dialog:allgemeineFrage",
+   "abfrage:phase"
+  ]
+ ],
+ [
+  "handler",
+  "Warum?",
+  [
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Wieso das denn?",
+  [
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Wann?",
+  [
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Wo?",
+  [
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Wer?",
+  [
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Wie lange noch?",
+  [
+   "dialog:zeit",
+   "abfrage:zeit",
+   "dialog:allgemeineFrage",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Noch wie lange?",
+  [
+   "dialog:zeit",
+   "abfrage:zeit",
+   "dialog:allgemeineFrage",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Alter, was läuft hier eigentlich?",
+  [
+   "dialog:auftrag",
+   "lage",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Digga, ich blick nicht durch.",
+  [
+   "dialog:auftrag",
+   "lage",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Chef, ich brauch mal ne Ansage.",
+  [
+   "dialog:auftrag",
+   "lage",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Bro, was soll ich jetzt machen?",
+  [
+   "dialog:auftrag",
+   "lage",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Hey, was ist der Plan?",
+  [
+   "dialog:auftrag",
+   "lage",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "asset",
+  "Hey, wie sieht's aus?",
+  [
+   "dialog:wiegehts",
+   "dialog:gruss",
+   "dialog:befinden",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "asset",
+  "Na, alles klar bei dir?",
+  [
+   "dialog:wiegehts",
+   "dialog:gruss",
+   "dialog:befinden",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "asset",
+  "Moin, alles gut?",
+  [
+   "dialog:wiegehts",
+   "dialog:gruss",
+   "dialog:befinden",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "asset",
+  "Servus, was geht?",
+  [
+   "dialog:wiegehts",
+   "dialog:gruss",
+   "dialog:befinden",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "asset",
+  "Ey, ich hab da was gesehen.",
+  [
+   "dialog:beobachtung",
+   "meldung",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "asset",
+  "Du, da war gerade ein Wagen am Tor.",
+  [
+   "dialog:beobachtung",
+   "meldung",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "asset",
+  "Da kommt wer.",
+  [
+   "dialog:beobachtung",
+   "meldung",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Hast du noch Kohle für mich?",
+  [
+   "dialog:geld"
+  ]
+ ],
+ [
+  "handler",
+  "Wann kommt das Geld?",
+  [
+   "dialog:geld"
+  ]
+ ],
+ [
+  "handler",
+  "Ich brauche mehr Budget.",
+  [
+   "dialog:geld",
+   "dialog:geldMehr"
+  ]
+ ],
+ [
+  "support",
+  "Kannst du mir ein Auto besorgen?",
+  [
+   "dialog:fahrzeug",
+   "dialog:technik",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "support",
+  "Ich brauche einen anderen Wagen.",
+  [
+   "dialog:fahrzeug",
+   "dialog:technik",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "support",
+  "Der Wagen springt nicht an.",
+  [
+   "dialog:fahrzeug",
+   "dialog:technik",
+   "dialog:problem"
+  ]
+ ],
+ [
+  "support",
+  "Hast du ein Ersatzhandy für mich?",
+  [
+   "dialog:technik"
+  ]
+ ],
+ [
+  "support",
+  "Brauche ein neues Funkgerät.",
+  [
+   "dialog:technik"
+  ]
+ ],
+ [
+  "support",
+  "Der Akku macht schlapp.",
+  [
+   "dialog:technik"
+  ]
+ ],
+ [
+  "asset",
+  "Kannst du dich kurz melden?",
+  [
+   "dialog:anwesend",
+   "dialog:ankuendigung",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "asset",
+  "Melde dich bitte.",
+  [
+   "dialog:anwesend",
+   "dialog:ankuendigung",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "asset",
+  "Gib mal ein Lebenszeichen.",
+  [
+   "dialog:anwesend",
+   "dialog:ankuendigung",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Was ist mein nächster Schritt?",
+  [
+   "dialog:auftrag",
+   "ziel",
+   "abfrage:modul",
+   "abfrage:phase",
+   "lage",
+   "dialog:neuigkeiten",
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "Was steht heute an?",
+  [
+   "dialog:auftrag",
+   "ziel",
+   "abfrage:modul",
+   "abfrage:phase",
+   "lage",
+   "dialog:neuigkeiten",
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "Wie sieht der Zeitplan aus?",
+  [
+   "dialog:auftrag",
+   "ziel",
+   "abfrage:modul",
+   "abfrage:phase",
+   "lage",
+   "dialog:neuigkeiten",
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "Was sind meine Ziele?",
+  [
+   "dialog:auftrag",
+   "ziel",
+   "abfrage:modul",
+   "abfrage:phase",
+   "lage",
+   "dialog:neuigkeiten",
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "Gibt es neue Anweisungen?",
+  [
+   "dialog:auftrag",
+   "ziel",
+   "abfrage:modul",
+   "abfrage:phase",
+   "lage",
+   "dialog:neuigkeiten",
+   "hinweise"
+  ]
+ ],
+ [
+  "handler",
+  "Wann soll ich losfahren?",
+  [
+   "dialog:treffen",
+   "dialog:zeit",
+   "abfrage:zeit",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Wann fange ich an?",
+  [
+   "dialog:treffen",
+   "dialog:zeit",
+   "abfrage:zeit",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Um wie viel Uhr ist die Übergabe?",
+  [
+   "dialog:treffen",
+   "dialog:zeit",
+   "abfrage:zeit",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Wo soll ich hin?",
+  [
+   "dialog:standort",
+   "dialog:treffen",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Wohin muss ich?",
+  [
+   "dialog:standort",
+   "dialog:treffen",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Wo ist der Treffpunkt?",
+  [
+   "dialog:standort",
+   "dialog:treffen",
+   "dialog:auftrag"
+  ]
+ ],
+ [
+  "handler",
+  "Was weißt du über den Kutscher?",
+  [
+   "dossier",
+   "abfrage:alias",
+   "abfrage:standort",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Erzähl mir was über den Händler.",
+  [
+   "dossier",
+   "abfrage:alias",
+   "abfrage:standort",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Wer ist eigentlich P-0003?",
+  [
+   "dossier",
+   "abfrage:alias",
+   "abfrage:standort",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Zeig mir die Akte von Emre Kaya.",
+  [
+   "dossier",
+   "abfrage:alias",
+   "abfrage:standort",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Gibt es Fotos von P-0002?",
+  [
+   "dossier",
+   "abfrage:alias",
+   "abfrage:standort",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Wie gefährlich ist P-0003?",
+  [
+   "dossier",
+   "abfrage:alias",
+   "abfrage:standort",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Mit wem hängt P-0002 zusammen?",
+  [
+   "dossier",
+   "abfrage:alias",
+   "abfrage:standort",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Kennt der Kutscher den Händler?",
+  [
+   "dossier",
+   "abfrage:alias",
+   "abfrage:standort",
+   "dialog:entitaet"
+  ]
+ ],
+ [
+  "handler",
+  "Wo wohnt Emre Kaya?",
+  [
+   "abfrage:standort",
+   "dossier"
+  ]
+ ],
+ [
+  "handler",
+  "Wo finde ich den Händler?",
+  [
+   "abfrage:standort",
+   "dossier"
+  ]
+ ],
+ [
+  "handler",
+  "Wo steckt der Kutscher gerade?",
+  [
+   "abfrage:standort",
+   "dossier"
+  ]
+ ],
+ [
+  "handler",
+  "Ist P-0001 erreichbar?",
+  [
+   "abfrage:erreichbar",
+   "dossier",
+   "abfrage:standort"
+  ]
+ ],
+ [
+  "handler",
+  "Wie erreiche ich KIEBITZ?",
+  [
+   "abfrage:erreichbar",
+   "dossier",
+   "abfrage:standort"
+  ]
+ ],
+ [
+  "handler",
+  "Ich brauche Leute vor Ort.",
+  [
+   "abfrage:verstaerkung",
+   "dialog:verstaerkungBedarf",
+   "dialog:unterstuetzung",
+   "dialog:auftrag",
+   "dialog:technik",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Kannst du mir jemanden schicken?",
+  [
+   "abfrage:verstaerkung",
+   "dialog:verstaerkungBedarf",
+   "dialog:unterstuetzung",
+   "dialog:auftrag",
+   "dialog:technik",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Ich bräuchte Verstärkung am Hof.",
+  [
+   "abfrage:verstaerkung",
+   "dialog:verstaerkungBedarf",
+   "dialog:unterstuetzung",
+   "dialog:auftrag",
+   "dialog:technik",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Schick mir ein Team.",
+  [
+   "abfrage:verstaerkung",
+   "dialog:verstaerkungBedarf",
+   "dialog:unterstuetzung",
+   "dialog:auftrag",
+   "dialog:technik",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Wann kommt die Verstärkung?",
+  [
+   "abfrage:verstaerkung",
+   "dialog:verstaerkungBedarf"
+  ]
+ ],
+ [
+  "handler",
+  "Ist die Verstärkung schon unterwegs?",
+  [
+   "abfrage:verstaerkung",
+   "dialog:verstaerkungBedarf"
+  ]
+ ],
+ [
+  "handler",
+  "Wie weit ist die Verstärkung?",
+  [
+   "abfrage:verstaerkung",
+   "dialog:verstaerkungBedarf"
+  ]
+ ],
+ [
+  "handler",
+  "Habe ich eine Freigabe?",
+  [
+   "abfrage:modul",
+   "abfrage:freigabe"
+  ]
+ ],
+ [
+  "handler",
+  "Wurde meine Freigabe genehmigt?",
+  [
+   "abfrage:modul",
+   "abfrage:freigabe"
+  ]
+ ],
+ [
+  "handler",
+  "Ich glaube, mir folgt jemand.",
+  [
+   "dialog:gefahr",
+   "dialog:beobachtung",
+   "extraktion",
+   "evakuierung"
+  ]
+ ],
+ [
+  "handler",
+  "Ich werde beobachtet.",
+  [
+   "dialog:gefahr",
+   "dialog:beobachtung",
+   "extraktion",
+   "evakuierung"
+  ]
+ ],
+ [
+  "handler",
+  "Da steht ein Auto, das ich nicht kenne.",
+  [
+   "dialog:gefahr",
+   "dialog:beobachtung",
+   "extraktion",
+   "evakuierung"
+  ]
+ ],
+ [
+  "handler",
+  "Mir geht es nicht gut.",
+  [
+   "dialog:koerper",
+   "dialog:zweifel",
+   "dialog:problem",
+   "dialog:frust",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Ich bin am Ende.",
+  [
+   "dialog:koerper",
+   "dialog:zweifel",
+   "dialog:problem",
+   "dialog:frust",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Ich kann nicht mehr.",
+  [
+   "dialog:koerper",
+   "dialog:zweifel",
+   "dialog:problem",
+   "dialog:frust",
+   "dialog:unklar",
+   "dialog:allgemeineFrage"
+  ]
+ ],
+ [
+  "handler",
+  "Guten Tag, hier ist RAIZO.",
+  [
+   "dialog:gruss",
+   "dialog:test",
+   "dialog:anwesend",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "Hier RAIZO, bitte kommen.",
+  [
+   "dialog:gruss",
+   "dialog:test",
+   "dialog:anwesend",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "handler",
+  "RAIZO meldet sich.",
+  [
+   "dialog:gruss",
+   "dialog:test",
+   "dialog:anwesend",
+   "dialog:unklar"
+  ]
+ ],
+ [
+  "support",
+  "Danke für die schnelle Hilfe.",
+  [
+   "dialog:danke",
+   "dialog:lob"
+  ]
+ ],
+ [
+  "support",
+  "Das war nett von euch.",
+  [
+   "dialog:danke",
+   "dialog:lob"
+  ]
+ ],
+ [
+  "support",
+  "Ich bin dankbar.",
+  [
+   "dialog:danke",
+   "dialog:lob"
+  ]
+ ],
+ [
+  "handler",
+  "Tschüss.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "Ciao.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "Ich bin dann mal weg.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "handler",
+  "Bis die Tage.",
+  [
+   "dialog:abschied"
+  ]
+ ],
+ [
+  "asset",
+  "Schönes Wetter heute.",
+  [
+   "dialog:wetter",
+   "dialog:smalltalk"
+  ]
+ ],
+ [
+  "asset",
+  "Es regnet in Strömen.",
+  [
+   "dialog:wetter",
+   "dialog:smalltalk"
+  ]
+ ],
+ [
+  "asset",
+  "Hast du am Wochenende was vor?",
+  [
+   "dialog:smalltalk",
+   "dialog:koerper",
+   "dialog:privat"
+  ]
+ ],
+ [
+  "asset",
+  "Schon was gegessen?",
+  [
+   "dialog:smalltalk",
+   "dialog:koerper",
+   "dialog:privat"
+  ]
+ ],
+ [
+  "asset",
+  "Hast du Familie?",
+  [
+   "dialog:privat"
+  ]
+ ],
+ [
+  "asset",
+  "Bist du verheiratet?",
+  [
+   "dialog:privat"
+  ]
+ ],
+ [
+  "asset",
+  "Wie alt bist du?",
+  [
+   "dialog:privat"
+  ]
+ ],
+ [
+  "asset",
+  "Glaubst du an das Ganze?",
+  [
+   "dialog:meinung",
+   "dialog:zweifel",
+   "dialog:sicherheit"
+  ]
+ ],
+ [
+  "asset",
+  "Meinst du, wir sind sicher?",
+  [
+   "dialog:meinung",
+   "dialog:zweifel",
+   "dialog:sicherheit"
+  ]
+ ],
+ [
+  "handler",
+  "Bin agekommen.",
+  [
+   "dialog:angekommen"
+  ]
+ ],
+ [
+  "handler",
+  "Bin anegkommen.",
+  [
+   "dialog:angekommen"
+  ]
+ ],
+ [
+  "handler",
+  "Alles ruig.",
+  [
+   "dialog:ruhig"
+  ]
+ ],
+ [
+  "handler",
+  "Alles rhig hier.",
+  [
+   "dialog:ruhig"
+  ]
+ ],
+ [
+  "handler",
+  "Brauche hilfe dringen.",
+  [
+   "dialog:notfall",
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "handler",
+  "Gefar, werde verfolgt.",
+  [
+   "dialog:notfall",
+   "dialog:gefahr"
+  ]
+ ],
+ [
+  "handler",
+  "Moment bite.",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "handler",
+  "Wate kurz.",
+  [
+   "dialog:warten"
+  ]
+ ],
+ [
+  "handler",
+  "Verstnaden.",
+  [
+   "dialog:bestaetigung",
+   "dialog:danke",
+   "dialog:empfang"
+  ]
+ ],
+ [
+  "handler",
+  "Verstanden dnake.",
+  [
+   "dialog:bestaetigung",
+   "dialog:danke",
+   "dialog:empfang"
+  ]
+ ],
+ [
+  "handler",
+  "Wie spät ists?",
+  [
+   "dialog:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Wieviel uhr ist es?",
+  [
+   "dialog:zeit"
+  ]
+ ],
+ [
+  "handler",
+  "Wo ist der Standot von P-0001?",
+  [
+   "abfrage:standort"
+  ]
+ ],
+ [
+  "asset",
+  "Wie ist dein aktueller Stand?",
+  [
+   "dialog:neuigkeiten"
+  ]
+ ],
+ [
+  "asset",
+  "Standort?",
+  [
+   "dialog:standort"
+  ]
+ ],
+ [
+  "asset",
+  "Wo befindest du dich derzeit",
+  [
+   "dialog:standort"
+  ]
+ ],
+ [
+  "handler",
+  "Ich brauche kurz eine Pause",
+  [
+   "dialog:atempause"
+  ]
+ ],
+ [
+  "handler",
+  "Bin am Limit, brauche kurz Ruhe",
+  [
+   "dialog:atempause"
+  ]
+ ],
+ [
+  "asset",
+  "Bleib ruhig, wir schaffen das",
+  [
+   "dialog:beruhigung"
+  ]
+ ],
+ [
+  "asset",
+  "Mach dir keine Sorgen",
+  [
+   "dialog:beruhigung"
+  ]
+ ],
+ [
+  "asset",
+  "Ich melde mich nicht mehr, melde du dich wenn du etwas hast",
+  [
+   "dialog:funkruhe"
+  ]
+ ],
+ [
+  "asset",
+  "Lass dich in Ruhe, wir schreiben erst morgen wieder",
+  [
+   "dialog:funkruhe"
+  ]
+ ],
+ [
+  "asset",
+  "Ich muss mich beruhigen und mache erstmal etwas anderes",
+  [
+   "dialog:funkruhe"
+  ]
+ ],
+ [
+  "asset",
+  "Ich mache jetzt eine Pause, wir schreiben später",
+  [
+   "dialog:funkruhe"
+  ]
+ ],
+ [
+  "asset",
+  "Lass uns pausieren",
+  [
+   "dialog:funkruhe"
+  ]
+ ]
+]

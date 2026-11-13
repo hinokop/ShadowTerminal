@@ -1,0 +1,18 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:1000}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});});
+const send=async(t)=>{await p.evaluate((t)=>dispatch({type:'NACHRICHT_GESENDET',kanal:'handler',text:t,dringlichkeit:'Routine'}),t);
+ await p.evaluate(()=>{STATE.plan.forEach(x=>{x.faelligAm=new Date(Date.now()-1000).toISOString()});});
+ await p.waitForTimeout(1800);
+ console.log('>',t,'\n  <',await p.evaluate(()=>{const n=STATE.komm.kanaele.handler.nachrichten;return n[n.length-1].text.slice(0,200)}));};
+await send('Fordere Freigabe für P-9503 an.');
+const ids=await p.evaluate(()=>SCENARIO.entitaeten.map(e=>e.id+':'+e.typ).join(' '));console.log(ids);
+await send('Fordere Freigabe für L-9052 an.');
+await send('Observation');
+await send('Dort steht abends ein Fahrzeug, das die Ladung übernimmt, ich will die Fahrer identifizieren und die Abfahrtszeit belegen.');
+console.log(await p.evaluate(()=>JSON.stringify(FGL().map(f=>[f.id,f.massnahme,f.ziel,f.urteil]))));
+await send('Ordne P-9054 dem Auftrag zu als Hinweisgeber');
+await send('Beantrage Festsetzung gegen P-9060 weil er Mitwisser ist und die Ladung deckt. Ich habe Belege dafür vorliegen.');
+console.log(e.join()||'keine Fehler');await b.close()})();

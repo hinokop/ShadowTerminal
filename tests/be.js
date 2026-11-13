@@ -1,0 +1,16 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:1000}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});});
+await p.keyboard.press('5');await p.waitForTimeout(300);
+await p.selectOption('#be-stufe','4');await p.fill('#be-text','Fahrzeug mit Sicherheitsjacke gesehen');await p.click('#btn-be');await p.waitForTimeout(300);
+console.log(await p.evaluate(()=>JSON.stringify({s:STATE.extraktion.stufe,st:STATE.agent.status,b:STATE.extraktion.begruendung.slice(-1)[0].quelle})));
+await p.keyboard.press('2');await p.waitForTimeout(300);
+console.log(await p.evaluate(()=>document.body.innerText.match(/Anreiseplanung[^\n]*\n?[^\n]*/i)?.[0]));
+console.log(await p.evaluate(()=>{const d=LM();const b=anreiseBewerten(d,{mittel:'bahn',abfahrtH:12,unterkunft:'haupt',erkundung:false,ausgang:''},Date.now());dispatch({type:'ANREISE_EINGEREICHT',mittel:'bahn',abfahrtH:12,unterkunft:'haupt',erkundung:false,ausgang:''});return JSON.stringify([b&&b.gueltig,b&&b.grund,STATE.agent.status])}));
+console.log(await p.evaluate(()=>JSON.stringify(STATE.anreise&&STATE.anreise.geprueft)));
+await p.evaluate(()=>{const f=STATE.plan.find(x=>x.anreise);f.faelligAm=new Date(Date.now()-1000).toISOString();});
+await p.waitForTimeout(3500);
+console.log(await p.evaluate(()=>JSON.stringify({g:!!STATE.anreise.geprueft,txt:[...document.querySelectorAll('.badge')].map(x=>x.textContent).filter(t=>/Plan|Angek/.test(t))})));
+console.log(e.join()||'keine Fehler');await b.close()})();

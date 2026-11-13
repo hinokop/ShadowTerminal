@@ -1,0 +1,20 @@
+const {chromium}=require('playwright');
+const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:1200}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>dispatch({type:'STATUS_GESETZT',status:'Standby'}));
+// alles fällig machen: Einweisung, Prüfsatz und Folgeauftrag
+await p.evaluate(()=>{STATE.plan.forEach(x=>x.faelligAm=new Date(Date.now()-1000).toISOString());STATE.serie.folge.faelligAm=new Date(Date.now()-1000).toISOString()});
+await p.waitForTimeout(2500);
+ok(await p.evaluate(()=>!!STATE.kw.aufgabe),'Prüfsatz gestellt');
+ok(await p.evaluate(()=>!zugewiesene()),'Auftrag NICHT zugewiesen, solange unverifiziert');
+await p.evaluate(()=>dispatch({type:'NACHRICHT_GESENDET',kanal:'handler',text:'Bestätige.',dringlichkeit:'Routine'}));
+await p.waitForTimeout(2200);ok(await p.evaluate(()=>!zugewiesene()),'weiter gesperrt nach Nicht-Antwort');
+const w=await p.evaluate(()=>SCENARIO.kennwort.paare.find(x=>x.id===STATE.kw.aufgabe.paar).antwort);
+await p.evaluate((w)=>dispatch({type:'NACHRICHT_GESENDET',kanal:'handler',text:w,dringlichkeit:'Routine'}),w);
+await p.waitForTimeout(2200);ok(await p.evaluate(()=>!zugewiesene()),'unmittelbar nach Antwort noch nicht');
+const d=await p.evaluate(()=>(Date.parse(STATE.serie.folge.faelligAm)-Date.now())/1000);ok(d>5&&d<16,'Auftrag in '+Math.round(d)+' s');
+await p.evaluate(()=>{STATE.serie.folge.faelligAm=new Date(Date.now()-1000).toISOString()});await p.waitForTimeout(2200);
+ok(await p.evaluate(()=>!!zugewiesene()),'Auftrag nach Verifizierung zugewiesen');
+console.log(e.join()||'keine Fehler');await b.close()})();

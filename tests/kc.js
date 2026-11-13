@@ -1,0 +1,15 @@
+const {chromium}=require('playwright');
+const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
+const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==','base64');
+(async()=>{const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1400,height:1000}});const p=await ctx.newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
+let n=0;await ctx.route(/gdi\.berlin\.de/,r=>{n++;const big=Buffer.concat([PNG,Buffer.alloc(300)]);r.fulfill({status:200,contentType:'image/png',headers:{'access-control-allow-origin':'*'},body:big})});
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'NAVIGATION',modul:'karte'});VIEW.karte.anbieter='luftbild';VIEW.karte.ebenen.kacheln=true;VIEW.karte.lat=52.48;VIEW.karte.lon=13.43;VIEW.karte.zoom=14;renderModule()});
+await p.waitForTimeout(2500);const n1=n;ok(n1>0,'erster Abruf lädt aus dem Netz: '+n1);
+const anz=await p.evaluate(()=>KCACHE.anzahl());ok(anz>0,'Kacheln gespeichert: '+anz);
+await p.evaluate(()=>{KACHELN.clear();renderModule()});await p.waitForTimeout(1500);
+ok(n===n1,'zweiter Aufruf ohne Netz: '+(n-n1)+' neue Anfragen');
+ok(await p.evaluate(()=>[...document.querySelectorAll('.k-kachel')].some(e=>/^blob:/.test(e.getAttribute('href')||''))),'Kacheln aus dem Speicher (blob)');
+await p.evaluate(()=>KCACHE.leeren());ok(await p.evaluate(()=>KCACHE.anzahl())===0,'Leeren funktioniert');
+console.log(e.length?'FEHLER '+e.join('|'):'keine Seitenfehler');await b.close()})();

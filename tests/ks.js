@@ -1,0 +1,11 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1100}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});
+dispatch({type:'SICHTUNG_HINZU',id:'P-0001',ort:'Richtung Ludwigsfelde',text:'fährt los',guete:'unbestaetigt'});dispatch({type:'SICHTUNG_HINZU',id:'P-0002',ort:'Kfz-Betrieb Sonnenallee',text:'am Tor',guete:'gesichert'});dispatch({type:'SICHTUNG_HINZU',id:'P-0003',ort:'Potsdam',text:'x'});});
+console.log(await p.evaluate(()=>JSON.stringify(karteMarker().filter(m=>m.kat==='sichtung').map(m=>[m.id,m.genau,m.bez]))));
+await p.keyboard.press('6');await p.waitForTimeout(800);
+await p.evaluate(()=>{VIEW.karte.zoom=9.5;VIEW.karte.lat=52.4;VIEW.karte.lon=13.3;zeichneKarte($('k-svg'));});await p.waitForTimeout(300);
+await p.screenshot({path:'ks.png'});
+console.log(e.join()||'keine Fehler');await b.close()})();

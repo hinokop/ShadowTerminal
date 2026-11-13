@@ -1,0 +1,11 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:950}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'DOSSIER_ANGELEGT',typ:'Person',name:'Eigen A',land:'DE',stufe:2});
+ const id=PROFIL.eigene[0].id;STATE.dossiers.eigeneKanten.push({id:'V-E1',mission:'STD',von:id,nach:'P-9001',typ:'Kontakt',richtung:'gerichtet',bewertung:'C3',quelle:'Test'});profilSpeichern();});
+await p.reload();await p.waitForTimeout(600);await p.keyboard.press('x').catch(()=>{});
+await p.fill('#gate-pw','pw-test-123').catch(()=>{});await p.click('#gate-go').catch(()=>{});
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000}).catch(()=>{});
+await p.evaluate(()=>{dispatch({type:'RESET'});dispatch({type:'NAVIGATION',modul:'dossier'});dispatch({type:'DOSSIER_GEOEFFNET',id:PROFIL.eigene[0].id})});await p.waitForTimeout(500);
+console.log(await p.evaluate(()=>document.getElementById('main').innerText.includes('P-9001')),e.join()||'keine Fehler');await b.close()})();

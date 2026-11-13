@@ -1,0 +1,16 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:850}});
+const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(500);
+await p.fill('#gate-pw','geheim-pw-123');await p.fill('#gate-pw2','geheim-pw-123');await p.click('#gate-go');
+await p.waitForSelector('body:not(.locked)',{timeout:20000});await p.waitForTimeout(800);
+await p.screenshot({path:'/tmp/t/s_profil.png'});
+const E=x=>p.evaluate(x);
+await E("STATE.plan.forEach(function(q){q.faelligAm=new Date(Date.now()-1000).toISOString()}); STATE.serie.folge.faelligAm=new Date(Date.now()-1000).toISOString();");
+await p.waitForTimeout(1600);
+await E("dispatch({type:'NAVIGATION',modul:'komm'})");await p.waitForTimeout(300);await p.screenshot({path:'/tmp/t/s_komm.png'});
+await E("dispatch({type:'NAVIGATION',modul:'mission'})");await p.waitForTimeout(300);await p.screenshot({path:'/tmp/t/s_auftrag.png'});
+await E("dispatch({type:'MISSION_ANGENOMMEN',id:'M1'})");
+await E("LM().ziele.forEach(function(z){dispatch({type:'ZIEL_GESETZT',id:z.id,erledigt:true})}); dispatch({type:'MISSION_ABGESCHLOSSEN',bericht:'Alle Ziele erreicht, keine Auffaelligkeiten.'}); dispatch({type:'NAVIGATION',modul:'mission'})");
+await p.waitForTimeout(400);await p.screenshot({path:'/tmp/t/s_nachb.png',fullPage:false});
+console.log(errs);await b.close();})();

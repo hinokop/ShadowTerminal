@@ -1,0 +1,14 @@
+const {chromium}=require('playwright');
+const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:1100}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});});
+await p.waitForTimeout(600);await p.keyboard.press('6');await p.waitForTimeout(800);
+ok(await p.locator('.k-strecke').count()===3,'3 Abschnitte');
+ok(await p.locator('.k-strecke-alt').count()===2,'2 Alternativen');
+ok(await p.evaluate(()=>document.body.innerText.includes('Vermutete Transportroute')),'Panel');
+await p.click('#k-raum');await p.waitForTimeout(500);
+await p.screenshot({path:'rt.png'});
+await p.uncheck('#ke-strecke');await p.waitForTimeout(300);ok(await p.locator('.k-strecke').count()===0,'abschaltbar');
+console.log(e.join()||'keine Fehler');await b.close()})();

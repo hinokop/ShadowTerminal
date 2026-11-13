@@ -1,0 +1,10 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1000}})).newPage();
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});dispatch({type:'NAVIGATION',modul:'mission'});});await p.waitForTimeout(500);
+console.log(await p.evaluate(()=>[...document.querySelectorAll('[id^="wi-s-"]')].map(x=>x.id+':'+(entitaet(x.id.slice(5))||{}).name).join(' | ')));
+console.log(await p.evaluate(()=>[...document.querySelectorAll('.badge')].map(x=>x.textContent).join(' ; ')));
+await p.evaluate(()=>{infoFreigeben(entitaet('P-9054'),[]);dispatch({type:'NAVIGATION',modul:'karte'});dispatch({type:'NAVIGATION',modul:'mission'})});await p.waitForTimeout(400);
+console.log(await p.evaluate(()=>[...document.querySelectorAll('[id^="wi-s-"]')].map(x=>x.id.slice(5)).join(',')));
+await b.close()})();

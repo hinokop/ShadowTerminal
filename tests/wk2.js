@@ -1,0 +1,12 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1000}})).newPage();
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});dispatch({type:'DOSSIER_GEOEFFNET',id:'P-0002',navigieren:true})});
+await p.waitForTimeout(300);
+const f=async(re)=>console.log(await p.evaluate((re)=>{const t=document.body.innerText.split('\n');return t.filter(l=>new RegExp(re).test(l)).join(' || ')},re));
+console.log('--P-0002 sichtbar:');await f('P-0002');
+console.log('--Unbekannte (P-90xx):');await f('[PO]-90');
+await p.evaluate(()=>{dispatch({type:'DOSSIER_GEOEFFNET',id:'P-0001',navigieren:true})});await p.waitForTimeout(300);
+console.log('--P-0001 Ansicht, Verbindungen:');await f('P-9054|P-0002|Nguyen|Kutscher|P-90|L-9052');
+await b.close()})();

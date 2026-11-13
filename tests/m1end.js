@@ -1,0 +1,22 @@
+const {chromium}=require('playwright');
+const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:1000}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});
+ const ms=MS('M1');ms.beginn=new Date(Date.now()-120000).toISOString();
+ ms.dokumente=[{id:'D1',entitaet:'P-9062',art:'Frachtbrief',t:nowIso(),name:'a',groesse:1,notiz:''},{id:'D2',entitaet:'P-9063',art:'Chatverlauf',t:nowIso(),name:'b',groesse:1,notiz:''}];
+ ms.zugriffUrteil={ok:true,n:3,mangel:[],t:nowIso()};ms.wissen={a:{stand:'bestaetigt'},b:{stand:'bestaetigt'},c:{stand:'bestaetigt'}};ms.treffen=1;
+ ['P-9062','P-9063','P-9053','P-9060'].forEach(id=>PROFIL.bilder[id]='data:image/png;base64,AAAA');
+ dispatch({type:'DOSSIER_ANGELEGT',typ:'Person',name:'Testperson',land:'DE',rolle:'Fahrer',stufe:2});
+ render();});
+await p.keyboard.press('2');await p.waitForTimeout(300);
+console.log(await p.evaluate(()=>eigeneDossiers().length));
+await p.evaluate(()=>{LM().ziele.forEach(z=>{dispatch({type:'ZIEL_GESETZT',id:z.id,erledigt:true})})});
+console.log(await p.evaluate(()=>JSON.stringify(Object.values(MS('M1').ziele).map(z=>z.erledigt))));
+await p.evaluate(()=>dispatch({type:'MISSION_ABGESCHLOSSEN',bericht:'Abschlussbericht Phase 1: Kette aufgeklärt, Strecke analysiert.'}));await p.waitForTimeout(300);
+console.log(await p.evaluate(()=>JSON.stringify({st:MS('M1').status,nb:!!STATE.nachbereitung})));
+await p.evaluate(()=>SCENARIO.serie.nachbereitung.forEach(x=>dispatch({type:'NACHBEREITUNG_SCHRITT',id:x.id})));await p.waitForTimeout(300);
+console.log(await p.evaluate(()=>JSON.stringify({ende:STATE.serie.ende,st:MS('M1').status})));
+for (const k of ['1','2','3','4','5','6','7']) { await p.keyboard.press(k); await p.waitForTimeout(250); }
+console.log(e.join()||'keine Fehler');await b.close()})();

@@ -1,0 +1,22 @@
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1100}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));p.on('console',m=>{if(m.type()==='error')e.push('console:'+m.text())});
+await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});
+ ['P-0002','P-0003','P-9054','P-9063','O-9051','P-9053'].forEach(i=>{IZ()[i]={status:'frei'}});dispatch({type:'NAVIGATION',modul:'karte'});});
+await p.waitForTimeout(800);
+const R={};
+R.marker=await p.$$eval('.k-marker',n=>n.map(x=>x.dataset.id));
+R.leaks=await p.evaluate(()=>{const t=document.getElementById('k-svg').textContent;return ['P-9101','P-9102'].filter(i=>t.includes(i))});
+R.unbek=await p.evaluate(()=>alleEntitaeten().filter(e=>wissen(e)==='unbekannt').map(e=>e.id).filter(id=>document.querySelector('.k-marker[data-id="'+id+'"]')));
+// click first person marker
+const id=R.marker.find(x=>x.startsWith('P-'));
+await p.evaluate(i=>karteWaehlen(i,false),id);await p.waitForTimeout(200);
+R.popup=await p.$eval('#k-auswahl',n=>({hidden:n.hidden,text:n.textContent.slice(0,200)}));
+await p.screenshot({path:'/tmp/t/k2.png'});
+await p.evaluate(()=>{VIEW.karte.ebenen.personen=false;zeichneKarte($('k-svg'))});
+R.ohnePers=await p.$$eval('.k-marker',n=>n.filter(x=>x.dataset.id.startsWith('P-')).length);
+R.verb=await p.$$eval('.k-verb-hit',n=>n.length);
+await p.evaluate(()=>{VIEW.karte.anbieter='carto';VIEW.karte.ebenen.kacheln=true;});
+R.url=await p.evaluate(()=>kachelURL(8,100,60));
+console.log(JSON.stringify(R,null,1));console.log('Fehler:',e.join(' | ')||'keine');await b.close()})();

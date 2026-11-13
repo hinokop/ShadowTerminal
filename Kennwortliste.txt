@@ -1,0 +1,59 @@
+KENNWORTLISTE (für das Notizheft, nicht im Terminal ablegen)
+==========================================================
+
+Wenn ARGUS einen unpassenden Satz schreibt, antwortest du mit dem Wort aus der Spalte Antwort.
+Das Zwangswort nennst du nur, wenn du unter Druck stehst: Nach außen reagiert ARGUS ruhig,
+im Hintergrund folgt Funkstille. Groß- und Kleinschreibung spielen keine Rolle.
+Zwei falsche Antworten schließen den Kanal; Freigabe über Support (WERFT).
+
+ABBRUCHWORT: Eisvogel
+In den Kanal Ansprechpartner geschrieben, schließt es die Verbindung und leitet den Abbruch ein (ohne Rückfrage, auch bei Funkstille).
+
+K-01  Der Regen hat in Leipzig heute früher angefangen.
+     Antwort:    Zimt
+     Zwangswort: Brombeere
+
+K-02  Bei uns ist die Heizung wieder ausgefallen.
+     Antwort:    Anker
+     Zwangswort: Kupfer
+
+K-03  Hast du die Rechnung vom Elektriker noch?
+     Antwort:    Lorbeer
+     Zwangswort: Segel
+
+K-04  Der Kaffee im Büro schmeckt seit Montag anders.
+     Antwort:    Wacholder
+     Zwangswort: Pappel
+
+K-05  Die Lieferung aus Hamburg kommt erst morgen.
+     Antwort:    Kiesel
+     Zwangswort: Mohn
+
+K-06  Im Treppenhaus riecht es schon wieder nach Farbe.
+     Antwort:    Fenchel
+     Zwangswort: Granit
+
+K-07  Mein Bruder hat sich ein neues Fahrrad gekauft.
+     Antwort:    Quitte
+     Zwangswort: Laterne
+
+K-08  Der Zug nach Kassel hatte wieder Verspätung.
+     Antwort:    Hafer
+     Zwangswort: Tinte
+
+K-09  Die Nachbarn haben den Hund abgegeben.
+     Antwort:    Salbei
+     Zwangswort: Bernstein
+
+K-10  Hast du morgen Zeit für den Termin beim Zahnarzt?
+     Antwort:    Ginster
+     Zwangswort: Walnuss
+
+K-11  Im Keller steht noch Wasser vom Wochenende.
+     Antwort:    Distel
+     Zwangswort: Messing
+
+K-12  Die Fenster im ersten Stock klemmen seit dem Frost.
+     Antwort:    Rübe
+     Zwangswort: Koralle
+
