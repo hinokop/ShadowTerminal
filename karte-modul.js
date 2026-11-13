@@ -82,9 +82,18 @@ function sichtungKoord(s) {
   if (!roh) return null;
   const richtung = /^richtung\b/i.test(roh), name = erkFold(roh.replace(/^richtung\s+/i, '')).replace(/[^a-z0-9 ]/g, ' ').trim();
   if (name.length < 4) return null;
-  const ort = pool().find(function (e) { return e.typ === 'Ort' && karteKoord(e.id) && erkFold(e.name).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').indexOf(name.replace(/\s+/g, ' ')) >= 0; });
+  const norm = function (t) { return erkFold(t).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }, q = name.replace(/\s+/g, ' ');
+  const orte = pool().filter(function (e) { return e.typ === 'Ort' && karteKoord(e.id); });
+  /* exakter Name zuerst; Teiltreffer nur, wenn genau ein Ort passt (mehrdeutige Angaben bekommen keinen geratenen Punkt) */
+  const exakt = orte.filter(function (e) { return norm(e.name) === q; }), teil = orte.filter(function (e) { return norm(e.name).indexOf(q) >= 0; });
+  const dmehr = exakt.length > 1 || (!exakt.length && teil.length > 1);          /* mehrdeutiger Dossier-Ort: kein Punkt, auch nicht aus dem Ortsverzeichnis */
+  if (dmehr) return null;
+  const ort = exakt.length === 1 ? exakt[0] : (teil.length === 1 ? teil[0] : null);
   if (ort) return { ll: karteKoord(ort.id), genau: richtung ? 'Richtung' : 'Ort im Dossier', bez: ort.id + ' ' + ort.name };
-  const st = karteEbenenDaten().orte.find(function (o) { const n = erkFold(String(o[0])).replace(/[^a-z0-9 ]/g, ' ').trim(); return n === name || (name.length >= 5 && n.indexOf(name) === 0); });
+  const nn = function (o) { return erkFold(String(o[0])).replace(/[^a-z0-9 ]/g, ' ').trim(); }, verz = karteEbenenDaten().orte;
+  const sx = verz.filter(function (o) { return nn(o) === name; }), sp = name.length >= 5 ? verz.filter(function (o) { return nn(o).indexOf(name) === 0; }) : [];
+  /* im Ortsverzeichnis gilt dieselbe Regel: exakt eindeutig, sonst genau ein Präfixtreffer, sonst kein Punkt */
+  const st = sx.length === 1 ? sx[0] : (!sx.length && sp.length === 1 ? sp[0] : null);
   if (st) return { ll: [st[2] / 100, st[1] / 100], genau: richtung ? 'Richtung' : 'Ortschaft', bez: st[0] };
   return null;
 }
