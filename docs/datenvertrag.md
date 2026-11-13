@@ -21,11 +21,22 @@ Stand 13. November 2026. Gilt für das Recherchewerkzeug ohne Szenario, Handler,
 | Quelle | id, fall, art (Datei, Link, Text, Eigenbeobachtung) | herkunft, url, abruf, aktuelleFassung, guete (A–F, Begruendung), kette (siehe 3) |
 | Fassung | id, quelle, erfasst | hash (SHA-256), dateiname, groesse, typ, anhang (Verweis auf Binärspeicher), veroeffentlicht |
 | Beobachtung | id, fassung, fundstelle | zitat, ereignis (Intervall), ort (siehe 4), erfasst |
-| Aussage | id, fall, text, status (entwurf, offen, gestuetzt, widerlegt, strittig) | stuetzend[], widersprechend[], begruendung, glaubwuerdigkeit (1–6, Begruendung) |
+| Aussage | id, fall, text, status (entwurf, offen, abgeschlossen), einschaetzung (siehe 2a, Ausgangswert „nicht eingeschätzt“) | stuetzend[], widersprechend[], begruendung, prueft (siehe 2a) |
 | Dossier | id, fall, typ (Person, Organisation, Ort, Sache), name | aliase[], aussagen[], notizen |
 | Ereignis | id, fall, bezug (Objekt-ID) | ereignis (Intervall), veroeffentlicht, erfasst, beschreibung |
 
 Die Fundstelle besteht aus Typ (Seite, Absatz, Zeitmarke, Zeichenbereich, ganze Datei) und Wert. „Ganze Datei“ ist erlaubt, wird aber als schwächste Fundstelle gekennzeichnet.
+
+### 2a. Einschätzung einer Aussage und Prüfstand
+
+- **Status** beschreibt nur den Arbeitsstand: Entwurf, offen, abgeschlossen.
+- **Einschätzung** ist fünfstufig und unabhängig von der Quellengüte: widerlegt, spricht dagegen, unentschieden, spricht dafür, gestützt. Ohne Eintrag gilt „nicht eingeschätzt“. „Strittig“ ist keine Stufe, sondern wird berechnet, wenn stützende und widersprechende Belege nebeneinander stehen.
+- Die Einschätzung ist immer die des Nutzers, mit Begründung. Die Anwendung berechnet keinen Wert und schlägt keine Stufe vor.
+- **Prüfstand** je Beleg: „eingetragen“ (Fundstelle gesetzt) oder „geprüft“ (Nutzer hat die Fundstelle geöffnet und bestätigt). Beide Zustände werden getrennt angezeigt.
+
+### 2b. Fassungen ohne Mehraufwand
+
+Beim Erfassen von Text, Link oder Eigenbeobachtung entsteht die erste Fassung automatisch und unsichtbar. Die Oberfläche zeigt Fassungen erst, wenn es mehr als eine gibt oder ein Anhang vorliegt.
 
 ## 3. Quellenketten und Abhängigkeit
 
@@ -59,6 +70,6 @@ Die Startansicht zeigt je Fall: Frage, letzte Änderung, Zahl offener Aussagen, 
 
 ## 8. Offene Fragen
 
-- Wird Verschlüsselung der Falldaten gefordert? Falls ja, ist sie ein eigener Vertrag. Bis dahin zeigt die Oberfläche „lokaler Speicher, nicht verschlüsselt“.
+- Verschlüsselung: entschieden, nicht gefordert. Das Werkzeug ist ein privates Einzelnutzer-Werkzeug auf privaten Geräten und im privaten Repository. Die Zugangskulisse (Kennwort, Startsequenz) bleibt Stilmittel und wird nicht als Schutz dargestellt. Die Oberfläche zeigt „lokaler Speicher“, ohne Sicherheitsversprechen.
 - Bleibt die Karte im ersten Stand bei 2D? Vorschlag: ja, 3D und Online-Ebenen später und einzeln zuschaltbar.
 - Referenzfall: Radweg (Beschluss Juni, Pressemitteilung Juli, zwei Medien zitieren dieselbe Mitteilung).
