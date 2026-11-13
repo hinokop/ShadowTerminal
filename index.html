@@ -894,6 +894,18 @@ function legende(id) {
 }
 /* Aktive Identität: gehört zum Profil (überlebt Neustart und Zurücksetzen), nicht zum Auftrag. STATE.agent.legende spiegelt sie nur für die Altlogik. */
 function aktiveLegendeId() { return PROFIL.identitaet && legende(PROFIL.identitaet) ? PROFIL.identitaet : STATE.agent.legende; }
+/* Einmalige Übernahme aus einem (alten) Zustand: Identität und Fristen gehen ins Profil, sofern dort noch nichts steht (null = unbefristet zählt als Wert).
+   Danach hat das Profil Vorrang; der Agentenwert wird nur gespiegelt, solange Altlogik ihn liest. Läuft beim Laden, vor Reset und nach Zustandsimport. */
+function identitaetUebernehmen(z) {
+  if (!z || !z.agent) return;
+  let neu = false;
+  if (!PROFIL.identitaet && z.agent.legende && legende(z.agent.legende)) { PROFIL.identitaet = z.agent.legende; neu = true; }
+  Object.keys(z.agent.dokumente || {}).forEach(function (id) {
+    if (!(id in PROFIL.dokFristen)) { PROFIL.dokFristen[id] = z.agent.dokumente[id] ? (z.agent.dokumente[id].gueltigBis || null) : null; neu = true; }
+  });
+  if (PROFIL.identitaet && legende(PROFIL.identitaet)) z.agent.legende = PROFIL.identitaet;
+  if (neu) profilSpeichern();
+}
 function startLegende(def) { return PROFIL.identitaet && legende(PROFIL.identitaet) ? PROFIL.identitaet : def.legendeStart; }
 function ortText(c) { return c && c.standortId ? c.standortId + ' ' + standortName(c.standortId) : '–'; }
 function opText(def) { return def.nummer + ' ' + def.name; }
@@ -3995,12 +4007,12 @@ const ACTIONS = {
   /* Ereignisse des Zugangsschirms (Zeitstempel stammt vom Ereignis selbst, da sie vor dem Laden des Zustands entstehen können) */
   AUTH_EREIGNIS: function (a) { return a.liste && a.liste.length ? a.liste : null; },
   IMPORT: function (a) {
-    STATE = a.state; VIEW.draft = {}; planeAlle(); profilEinspielen(STATE);
+    STATE = a.state; identitaetUebernehmen(STATE); VIEW.draft = {}; planeAlle(); profilEinspielen(STATE);
     return { modul: 'System', aktion: 'Zustand importiert', detail: a.datei + ', ' + a.state.log.length + ' Protokolleinträge übernommen' };
   },
   IMPORT_ABGELEHNT: function (a) { return { modul: 'System', aktion: 'Import abgelehnt', detail: a.datei + ': ' + a.grund }; },
   RESET: function () {
-    profilSpeichern(); STATE = buildInitialState(Date.now()); VIEW.draft = {}; planeAlle(); IDB.leeren();
+    identitaetUebernehmen(STATE); profilSpeichern(); STATE = buildInitialState(Date.now()); VIEW.draft = {}; planeAlle(); IDB.leeren();
     return { modul: 'System', aktion: 'Zustand zurückgesetzt', detail: 'Ausgangszustand hergestellt, Seed-Zeiten neu berechnet' };
   },
 
@@ -5763,7 +5775,7 @@ function ausgangPanel() {
     h('div', { class: 'row top' }, h('button', { type: 'button', id: 'btn-ausgang-neu', onclick: neuerAusgang }, 'Ausgangsort anlegen')));
 }
 function renderProfil(m) {
-  const A = SCENARIO.agent, now = Date.now(), akt = legende(STATE.agent.legende), M = KM().meldewesen, lauf = LM();
+  const A = SCENARIO.agent, now = Date.now(), akt = legende(aktiveLegendeId()), M = KM().meldewesen, lauf = LM();
   const ortId = VIEW.draft['sel-ort'] || STATE.agent.checkin.standortId;
   if (VIEW.profilReiter === 'tarn') return [modKopf(m), reiterLeiste()].concat(tarnPanels(now));
   return [
@@ -8395,6 +8407,7 @@ function init() {
   const neu = !isValidState(geladen);
   if (neu && geladen) { try { Store.sichereDefekt(JSON.stringify(geladen)); } catch (e) { /* nicht serialisierbar */ } }
   STATE = neu ? buildInitialState(Date.now()) : geladen;
+  identitaetUebernehmen(STATE);
 
   renderBanner(); buildNav(); buildLogFilter();
 
