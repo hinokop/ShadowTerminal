@@ -733,3 +733,8 @@ Nachtrag Paket o:
 - Nicht aufgenommen: DOP-Dienst des BKG (für Dritte gebührenpflichtig).
 - 3D-Ansicht: Fehlerkanal (Bibliothek fehlt, WebGL-Start scheitert, Kartenstil nicht erreichbar, Grafikkontext verloren und wiederhergestellt); Hinweis in der Fläche und kurze Meldung im Terminal.
 - Tests (Ordner tests im Repository): Pfade jetzt relativ zum Projektordner (_pfad.js), README.
+
+Nachtrag Paket p:
+- Karte, Lagefeld (aufklappbar): Zeile "Licht" (Tag, bürgerliche oder nautische Dämmerung, Nacht, mit Aufgang und Untergang in Z) für die Kartenmitte und den Zeitpunkt des Zeitschiebers. Offline berechnet; gegen eine unabhängige Bibliothek geprüft (Abweichung höchstens zwei Minuten).
+- Zeitfenster-Tabelle: je Fenster die Lichtlage bei Beginn und Ende.
+- Wetter (online, standardmäßig aus, Schalter "Wetter" im Ebenenfeld unter Umgebung): Open-Meteo, aktuelle Werte für die Kartenmitte (Temperatur, Wetterlage, Wind, Böen, Niederschlag, Sicht). Höchstens eine Abfrage je 0,1-Grad-Feld in 15 Minuten.

@@ -11,7 +11,7 @@
    ===================================================================== */
 const KW = 960, KH = 540, DEG = Math.PI / 180;
 VIEW.karte = { cartoKey: '', cartoStil: 'dark_all', zoneSetzen: false, statusOffen: false, lat: 50.5, lon: 8, zoom: 5, dt: 0, auswahl: null, pick: null, init: false, messen: false, messPts: [], spiel: null, flug: null, suche: '', anbieter: 'osm', url: '', dunkel: true,
-  ebenenOffen: true, quellenAus: {},
+  ebenenOffen: true, quellenAus: {}, wetter: false,
   ebenen: { ausgang: true, standorte: true, orte: true, personen: true, organisationen: true, verbindungen: true, sichtungen: true, fenster: true, route: true, strecke: true, gelaende: true, strassen: true, namen: true, zonen: true, kacheln: false } };
 try {
   const gespeichert = JSON.parse(window.localStorage.getItem(STORAGE_KEY + '.kartenwahl') || 'null');
@@ -24,6 +24,7 @@ try {
     if (gespeichert.cartoStil === 'dark_all' || gespeichert.cartoStil === 'dark_nolabels') VIEW.karte.cartoStil = gespeichert.cartoStil;
     if (typeof gespeichert.dunkel === 'boolean') VIEW.karte.dunkel = gespeichert.dunkel;
     if (gespeichert.quellenAus && typeof gespeichert.quellenAus === 'object') VIEW.karte.quellenAus = gespeichert.quellenAus;
+    if (typeof gespeichert.wetter === 'boolean') VIEW.karte.wetter = gespeichert.wetter;
   }
   /* Schlüsseldatei kartenschluessel.js (optional, liegt neben index.html): setzt den Schlüssel, wenn im Browser keiner steht */
   const sd = window.KARTEN_SCHLUESSEL;
@@ -32,7 +33,7 @@ try {
     if (!gespeichert) { VIEW.karte.anbieter = 'carto'; VIEW.karte.ebenen.kacheln = true; }
   }
 } catch (e) { /* ohne gespeicherte Wahl */ }
-function karteWahlSichern() { try { window.localStorage.setItem(STORAGE_KEY + '.kartenwahl', JSON.stringify({ ebenen: VIEW.karte.ebenen, anbieter: VIEW.karte.anbieter, url: VIEW.karte.url, dunkel: VIEW.karte.dunkel, cartoKey: VIEW.karte.cartoKey, cartoStil: VIEW.karte.cartoStil, quellenAus: VIEW.karte.quellenAus })); } catch (e) { /* ohne Speicher */ } }
+function karteWahlSichern() { try { window.localStorage.setItem(STORAGE_KEY + '.kartenwahl', JSON.stringify({ ebenen: VIEW.karte.ebenen, anbieter: VIEW.karte.anbieter, url: VIEW.karte.url, dunkel: VIEW.karte.dunkel, cartoKey: VIEW.karte.cartoKey, cartoStil: VIEW.karte.cartoStil, quellenAus: VIEW.karte.quellenAus, wetter: VIEW.karte.wetter })); } catch (e) { /* ohne Speicher */ } }
 function merc(lat) { return Math.log(Math.tan(Math.PI / 4 + Math.max(-85, Math.min(85, lat)) * DEG / 2)); }
 function mercInv(y) { return (2 * Math.atan(Math.exp(y)) - Math.PI / 2) / DEG; }
 function karteProj() {
@@ -763,6 +764,69 @@ function zoneKurz(zn, lg) {
   const st = zoneStufe(zn, lg);
   return zn.standort + ' · ' + (st == null ? 'ohne Bewertung' : 'Stufe ' + st) + (zn.urteil && zn.urteil.status === 'frei' ? ' (eigen)' : '') + alt;
 }
+/* ---------- Sonne, Licht und Wetter ----------
+   Sonnenstand und Zeiten werden offline berechnet (NOAA-Näherung, Genauigkeit etwa eine Minute; Brechung der Atmosphäre ist über -0,833 Grad
+   berücksichtigt). Das Wetter ist online und standardmäßig aus (Open-Meteo, CC BY 4.0, nicht-kommerzielle Nutzung): je Kartenmitte (auf 0,1 Grad
+   gerundet) höchstens eine Abfrage in 15 Minuten, nie öfter als alle 8 Sekunden. */
+function sonneHoehe(lat, lon, t) {
+  const n = t / 86400000 + 2440587.5 - 2451545.0, rad = Math.PI / 180;
+  const L = (280.460 + 0.9856474 * n) % 360, g = ((357.528 + 0.9856003 * n) % 360) * rad;
+  const lam = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad, eps = (23.439 - 0.0000004 * n) * rad;
+  const ra = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam)), dek = Math.asin(Math.sin(eps) * Math.sin(lam));
+  const gmst = (18.697374558 + 24.06570982441908 * n) % 24, ha = ((gmst * 15 + lon) * rad) - ra;
+  const phi = lat * rad;
+  return Math.asin(Math.sin(phi) * Math.sin(dek) + Math.cos(phi) * Math.cos(dek) * Math.cos(ha)) / rad;
+}
+/* Aufgang, Untergang und bürgerliche Dämmerung für den Tag um t (Sonnenkulmination in der Nähe); null bei Polartag oder Polarnacht */
+function sonneTag(lat, lon, t) {
+  const rad = Math.PI / 180, jd = t / 86400000 + 2440587.5;
+  const n = Math.round(jd - 2451545.0 + 0.0008 + lon / 360), Js = n - lon / 360;   /* Tageszähler und mittlere Kulmination (Länge Ost positiv) */
+  const M = ((357.5291 + 0.98560028 * Js) % 360) * rad;
+  const C = 1.9148 * Math.sin(M) + 0.0200 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M);
+  const lam = ((M / rad + C + 180 + 102.9372) % 360) * rad;
+  const Jt = 2451545.0 + Js + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * lam);
+  const sd = Math.sin(lam) * Math.sin(23.4397 * rad), cd = Math.cos(Math.asin(sd)), phi = lat * rad;
+  const zeit = function (h0) {
+    const c = (Math.sin(h0 * rad) - Math.sin(phi) * sd) / (Math.cos(phi) * cd);
+    if (c < -1 || c > 1) return null;
+    const w = Math.acos(c) / rad / 360;
+    return { auf: (Jt - w - 2440587.5) * 86400000, unter: (Jt + w - 2440587.5) * 86400000 };
+  };
+  return { sonne: zeit(-0.833), buerger: zeit(-6) };
+}
+function lichtPhase(el) { return el > -0.833 ? 'Tag' : el > -6 ? 'bürgerliche Dämmerung' : el > -12 ? 'nautische Dämmerung' : 'Nacht'; }
+function lichtText(lat, lon, t) {
+  const el = sonneHoehe(lat, lon, t), d = sonneTag(lat, lon, t), hm = function (ms) { return fmtZ(new Date(ms).toISOString()).slice(11, 16) + 'Z'; };
+  const zeiten = d.sonne ? 'Aufgang ' + hm(d.sonne.auf) + ' · Untergang ' + hm(d.sonne.unter) : (el > 0 ? 'Polartag' : 'Polarnacht');
+  return lichtPhase(el) + ' · ' + zeiten;
+}
+const WMO_TEXT = { 0: 'klar', 1: 'überwiegend klar', 2: 'teils bewölkt', 3: 'bedeckt', 45: 'Nebel', 48: 'Reifnebel', 51: 'leichter Nieselregen', 53: 'Nieselregen', 55: 'starker Nieselregen', 56: 'gefrierender Nieselregen', 57: 'gefrierender Nieselregen',
+  61: 'leichter Regen', 63: 'Regen', 65: 'starker Regen', 66: 'gefrierender Regen', 67: 'gefrierender Regen', 71: 'leichter Schneefall', 73: 'Schneefall', 75: 'starker Schneefall', 77: 'Schneegriesel',
+  80: 'leichte Regenschauer', 81: 'Regenschauer', 82: 'heftige Regenschauer', 85: 'Schneeschauer', 86: 'heftige Schneeschauer', 95: 'Gewitter', 96: 'Gewitter mit Hagel', 99: 'schweres Gewitter mit Hagel' };
+const WETTER = { cache: {}, laufend: false, zuletzt: 0 };
+function windRichtung(grad) { return ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'][Math.round(((grad % 360) + 360) % 360 / 45) % 8]; }
+function wetterStand(lat, lon) {
+  if (!VIEW.karte.wetter || typeof fetch !== 'function') return null;
+  const key = lat.toFixed(1) + ',' + lon.toFixed(1), c = WETTER.cache[key], jetzt = Date.now();
+  if (c && jetzt - c.t < 15 * 60000) return c;
+  if (!WETTER.laufend && jetzt - WETTER.zuletzt > 8000) {
+    WETTER.laufend = true; WETTER.zuletzt = jetzt;
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=' + (+lat.toFixed(1)) + '&longitude=' + (+lon.toFixed(1)) + '&current=temperature_2m,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility&wind_speed_unit=kmh&timezone=UTC')
+      .then(function (r) { if (!r.ok) throw new Error('http'); return r.json(); })
+      .then(function (j) { WETTER.cache[key] = { t: Date.now(), c: j.current }; })
+      .catch(function () { WETTER.cache[key] = { t: Date.now(), fehler: true }; })
+      .then(function () { WETTER.laufend = false; karteStatusAkt(); });
+  }
+  return c || { laden: true };
+}
+function wetterText(w) {
+  if (!w) return '–';
+  if (w.laden) return 'wird abgerufen …';
+  if (w.fehler || !w.c) return 'nicht erreichbar';
+  const c = w.c, sicht = c.visibility != null ? (c.visibility >= 10000 ? ' · Sicht ' + Math.round(c.visibility / 1000) + ' km' : ' · Sicht ' + (c.visibility / 1000).toFixed(1).replace('.', ',') + ' km') : '';
+  return Math.round(c.temperature_2m) + ' °C, ' + (WMO_TEXT[c.weather_code] || 'Wettercode ' + c.weather_code) + ' · Wind ' + Math.round(c.wind_speed_10m) + ' km/h ' + windRichtung(c.wind_direction_10m)
+    + (c.wind_gusts_10m > c.wind_speed_10m + 15 ? ', Böen ' + Math.round(c.wind_gusts_10m) : '') + (c.precipitation > 0 ? ' · Niederschlag ' + String(c.precipitation).replace('.', ',') + ' mm' : '') + sicht + ' · ' + String(c.time || '').slice(11, 16) + 'Z';
+}
 function karteStatusAkt() {
   const box = $('k-status');
   if (!box) return;
@@ -781,7 +845,9 @@ function karteStatusAkt() {
       zeile('Höchste Stufe im Bestand', hoechst == null ? '–' : hoechst + ' · ' + SCENARIO.bedrohungsstufen[hoechst], 'k-st-stufe'),
       zeile('Letzter Check-in', ciT, 'k-st-ci'),
       zeile('Offene Ziele', def ? offeneZiele() + ' von ' + def.ziele.length : '–', 'k-st-ziele'),
-      zeile('Zeitfenster', fenster, 'k-st-fenster')) : null].filter(Boolean));
+      zeile('Zeitfenster', fenster, 'k-st-fenster'),
+      zeile('Licht', lichtText(VIEW.karte.lat, VIEW.karte.lon, Date.now() + VIEW.karte.dt * 3600000), 'k-st-licht'),
+      VIEW.karte.wetter ? zeile('Wetter', wetterText(wetterStand(VIEW.karte.lat, VIEW.karte.lon)) + (VIEW.karte.dt ? ' (Stand jetzt)' : ''), 'k-st-wetter') : null) : null].filter(Boolean));
 }
 function karteFensterListe() {
   const liste = karteFenster(), K = VIEW.karte, T = Date.now() + K.dt * 3600000;
@@ -790,7 +856,8 @@ function karteFensterListe() {
   wrap.replaceChildren(tabelle(['ID', 'Fenster', 'Ort', 'Zustand'], liste.map(function (w) {
     const lbl = w.zustand === 'aktiv' ? 's-accent' : w.zustand === 'ausstehend' ? 's-warn' : 's-dim';
     const rest = w.zustand === 'aktiv' ? 'noch ' + dauerText((w.bis - T) / 60000) : w.zustand === 'ausstehend' ? 'in ' + dauerText((w.von - T) / 60000) : 'seit ' + dauerText((T - w.bis) / 60000);
-    return [td('nw', w.id), td('txt', w.titel + ' (' + fmtZ(w.von).slice(0, 16) + 'Z bis ' + fmtZ(w.bis).slice(0, 16) + 'Z)'),
+    const ll = (w.ort && karteKoord(w.ort)) || [K.lat, K.lon], p1 = lichtPhase(sonneHoehe(ll[0], ll[1], w.von)), p2 = lichtPhase(sonneHoehe(ll[0], ll[1], w.bis));
+    return [td('nw', w.id), td('txt', [w.titel + ' (' + fmtZ(w.von).slice(0, 16) + 'Z bis ' + fmtZ(w.bis).slice(0, 16) + 'Z)', h('span', { class: 'dim' }, ' · Licht: ' + (p1 === p2 ? p1 : p1 + ' → ' + p2))]),
       w.ort && karteKoord(w.ort) ? h('button', { type: 'button', class: 'link', onclick: function () { karteWaehlen(w.ort, true); } }, w.ort) : td('dim', 'ohne Ort'),
       td('nw', [h('span', { class: 'label ' + lbl }, w.zustand), ' ' + rest])];
   }), STATE.vorlauf ? 'Kein laufender Auftrag, daher keine Zeitfenster.' : 'Keine Zeitfenster.'));
@@ -1295,6 +1362,9 @@ function renderKarte(m) {
       ebene('verbindungen', 'Verbindungen', IKON.verbindungen, 'Linien zwischen verknüpften, freigeschalteten Dossiers'),
       ebene('fenster', 'Zeitfenster', IKON.fenster, 'Meldefenster und Termine; außerhalb aller aktiven Fenster wird die Karte abgedunkelt'),
       ebene(['ausgang', 'route'], 'Eigener Standort', IKON.ausgang, 'Ausgangsorte, letzter Check-in und Anreiseroute'),
+      h('div', { class: 'k-eb-gruppe' }, 'Umgebung'),
+      h('label', { class: 'k-ebene', title: 'Fragt für die Kartenmitte das aktuelle Wetter bei Open-Meteo ab (CC BY 4.0). Der Anbieter sieht Kartenmitte (auf 0,1 Grad gerundet) und IP-Adresse. Standardmäßig aus.' },
+        h('input', { type: 'checkbox', id: 'k-wetter', checked: !!K.wetter, onchange: function (ev) { K.wetter = ev.target.checked; karteWahlSichern(); karteStatusAkt(); } }), h('span', null, 'Wetter (online, Open-Meteo)')),
       h('div', { class: 'k-eb-gruppe' }, 'Auftrag'),
       ebene('zonen', 'Lagezonen', IKON.zonen, 'Eine Zone je Standort mit eigener Lagebewertung, dazu die eigenen Zonen'),
       ebene('sichtungen', 'Sichtungen', IKON.sichtungen),
