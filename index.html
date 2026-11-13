@@ -5131,17 +5131,20 @@ const ACTIONS = {
     PROFIL.pins = PROFIL.pins || [];
     let pinKonflikt = 0, pinDoppelt = 0;
     const pinNr = function (y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Number(k[1]) : 0; };
-    PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, (q.seq && q.seq.pin) || 0, PROFIL.pins.reduce(function (m, y) { return Math.max(m, pinNr(y)); }, 0));
-    (Array.isArray(q.pins) ? q.pins : []).forEach(function (x) {
-      if (!x || !x.id || !Array.isArray(x.ll)) return;
-      const rein = function (y) { const c = Object.assign({}, y); delete c.importVon; delete c.id; delete c.name; return JSON.stringify(c); };
+    const eingehend = (Array.isArray(q.pins) ? q.pins : []).filter(function (x) { return x && x.id && Array.isArray(x.ll); });
+    /* alle eingehenden IDs sind reserviert, bevor Ersatz-IDs vergeben werden */
+    const hoechst = eingehend.concat(PROFIL.pins).reduce(function (m, y) { return Math.max(m, pinNr(y)); }, 0);
+    PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, (q.seq && q.seq.pin) || 0, hoechst);
+    const inhalt = function (y) { const c = Object.assign({}, y); delete c.importVon; delete c.importName; delete c.id; delete c.name; return JSON.stringify(c); };
+    eingehend.forEach(function (x) {
       const gl = PROFIL.pins.find(function (y) { return y.id === x.id; });
-      if (!gl) { PROFIL.pins.push(x); PROFIL.seq.pin = Math.max(PROFIL.seq.pin, pinNr(x)); return; }
+      if (!gl) { PROFIL.pins.push(x); return; }
       if (JSON.stringify(gl) === JSON.stringify(x)) { pinDoppelt += 1; return; }                  /* vollständig identisch */
-      /* gleiche ID, anderer Inhalt: als eigener Pin mit neuer ID übernehmen; dieselbe Datei erzeugt beim zweiten Import keine weitere Kopie */
-      if (PROFIL.pins.some(function (y) { return y.importVon === x.id && rein(y) === rein(x); })) { pinDoppelt += 1; return; }
+      /* gleiche ID, anderer Inhalt oder Name: als eigener Pin mit neuer ID übernehmen. Originalname und Importzusatz bleiben getrennt;
+         dieselbe Datei erzeugt beim zweiten Import keine weitere Kopie, eine geänderte Fassung (auch nur umbenannt) dagegen schon */
+      if (PROFIL.pins.some(function (y) { return y.importVon === x.id && inhalt(y) === inhalt(x) && y.importName === (x.name || 'Pin'); })) { pinDoppelt += 1; return; }
       PROFIL.seq.pin += 1;
-      PROFIL.pins.push(Object.assign({}, x, { id: 'PIN-' + p3(PROFIL.seq.pin), name: (x.name || 'Pin') + ' (Import ' + x.id + ')', importVon: x.id }));
+      PROFIL.pins.push(Object.assign({}, x, { id: 'PIN-' + p3(PROFIL.seq.pin), name: (x.name || 'Pin') + ' (Import ' + x.id + ')', importVon: x.id, importName: x.name || 'Pin' }));
       pinKonflikt += 1;
     });
     Object.keys(q.aenderungen || {}).forEach(function (k) { if (!PROFIL.aenderungen[k] && entitaet(k)) PROFIL.aenderungen[k] = q.aenderungen[k]; });

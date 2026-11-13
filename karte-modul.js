@@ -86,7 +86,9 @@ function sichtungKoord(s) {
   const orte = pool().filter(function (e) { return e.typ === 'Ort' && karteKoord(e.id); });
   /* exakter Name zuerst; Teiltreffer nur, wenn genau ein Ort passt (mehrdeutige Angaben bekommen keinen geratenen Punkt) */
   const exakt = orte.filter(function (e) { return norm(e.name) === q; }), teil = orte.filter(function (e) { return norm(e.name).indexOf(q) >= 0; });
-  const ort = exakt.length === 1 ? exakt[0] : (!exakt.length && teil.length === 1 ? teil[0] : null);
+  const dmehr = exakt.length > 1 || (!exakt.length && teil.length > 1);          /* mehrdeutiger Dossier-Ort: kein Punkt, auch nicht aus dem Ortsverzeichnis */
+  if (dmehr) return null;
+  const ort = exakt.length === 1 ? exakt[0] : (teil.length === 1 ? teil[0] : null);
   if (ort) return { ll: karteKoord(ort.id), genau: richtung ? 'Richtung' : 'Ort im Dossier', bez: ort.id + ' ' + ort.name };
   const nn = function (o) { return erkFold(String(o[0])).replace(/[^a-z0-9 ]/g, ' ').trim(); }, verz = karteEbenenDaten().orte;
   const sx = verz.filter(function (o) { return nn(o) === name; }), sp = name.length >= 5 ? verz.filter(function (o) { return nn(o).indexOf(name) === 0; }) : [];
