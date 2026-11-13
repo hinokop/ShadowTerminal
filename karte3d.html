@@ -8,6 +8,7 @@ html,body{margin:0;height:100%;background:#0b0f14;color:#c9d4df;font:13px/1.4 sy
 #bar{position:absolute;z-index:2;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:calc(100% - 20px)}
 #bar button,#bar select{background:#121a23;color:#c9d4df;border:1px solid #2a3846;padding:5px 9px;border-radius:3px;font:inherit;cursor:pointer}
 #bar button.on{border-color:#6fa8d6;color:#fff}
+body.emb #bar{left:auto;right:56px}
 #st{position:absolute;z-index:2;bottom:8px;left:10px;opacity:.7}
 </style></head><body>
 <div id="bar">
@@ -16,41 +17,62 @@ html,body{margin:0;height:100%;background:#0b0f14;color:#c9d4df;font:13px/1.4 sy
  <button id="bnord">Nord</button>
  <button id="bflach">Flach</button>
 </div>
-<div id="m"></div><div id="st">Prototyp · Basiskarte OpenFreeMap / OpenStreetMap-Mitwirkende</div>
+<div id="m"></div><div id="st">Basiskarte OpenFreeMap / OpenStreetMap-Mitwirkende</div>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="szenario.js"></script>
 <script>
-/* Datenquelle: dieselben Koordinaten und Zonenradien wie die 2D-Karte (SCENARIO.karte.koord / SCENARIO.zonen). */
+/* Zwei Betriebsarten: eingebettet im Terminal (Daten kommen per postMessage) oder eigenständig (Daten aus szenario.js). */
 (function(){
-  var K = (window.SCENARIO && SCENARIO.karte && SCENARIO.karte.koord) || {};
-  var Z = (window.SCENARIO && SCENARIO.zonen) || {};
-  var ids = Object.keys(K).filter(function(k){return /^S-/.test(k);});
+  var emb = /eingebettet=1/.test(location.search) && window.parent !== window;
+  if(emb) document.body.className='emb';
+  var FARBE = {standort:'#6fa8d6',zugriff:'#d6a24a',sichtung:'#e07b6a',pin:'#9ad0a0',figur:'#c9d4df',ort:'#b79bd6',ausgang:'#9ad0a0'};
   var map = new maplibregl.Map({container:'m', style:'https://tiles.openfreemap.org/styles/liberty',
     center:[13.426,52.4905], zoom:15.5, pitch:60, bearing:-20, maxPitch:80, attributionControl:{compact:true}});
   window.karte3d = map;
   map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
+  var bereit=false, offen=null, ort=document.getElementById('ort'), ortListe={};
 
   function kreis(lat,lon,r){var p=[],n=64;for(var i=0;i<=n;i++){var a=i/n*2*Math.PI;
     p.push([lon+(r*Math.sin(a))/(111320*Math.cos(lat*Math.PI/180)), lat+(r*Math.cos(a))/110540]);}
     return [p];}
+  function setze(d){ /* d: {zonen:[{id,name,ll,r}], marker:[{id,kat,name,ll}]} */
+    offen=d; if(!bereit) return;
+    var fz=(d.zonen||[]).map(function(z){return {type:'Feature',properties:{id:z.id,name:z.name||z.id},geometry:{type:'Polygon',coordinates:kreis(z.ll[0],z.ll[1],z.r||250)}};});
+    var fp=(d.marker||[]).map(function(m){return {type:'Feature',properties:{id:m.id,kat:m.kat||'figur',name:m.name||m.id},geometry:{type:'Point',coordinates:[m.ll[1],m.ll[0]]}};});
+    map.getSource('zonen').setData({type:'FeatureCollection',features:fz});
+    map.getSource('punkte').setData({type:'FeatureCollection',features:fp});
+    ort.innerHTML='<option value="">Gehe zu …</option>'; ortListe={};
+    (d.marker||[]).filter(function(m){return m.kat==='standort'||m.kat==='zugriff'||m.kat==='pin';}).forEach(function(m){
+      ortListe[m.id]=m.ll;var o=document.createElement('option');o.value=m.id;o.textContent=m.id+' '+(m.name||'');ort.appendChild(o);});
+  }
   map.on('load',function(){
-    var fz=[],fp=[];
-    ids.forEach(function(id){var c=K[id];
-      fz.push({type:'Feature',properties:{id:id},geometry:{type:'Polygon',coordinates:kreis(c[0],c[1],(Z[id]&&Z[id].r)||250)}});
-      fp.push({type:'Feature',properties:{id:id},geometry:{type:'Point',coordinates:[c[1],c[0]]}});});
-    map.addSource('zonen',{type:'geojson',data:{type:'FeatureCollection',features:fz}});
-    map.addSource('punkte',{type:'geojson',data:{type:'FeatureCollection',features:fp}});
+    var leer={type:'FeatureCollection',features:[]};
+    map.addSource('zonen',{type:'geojson',data:leer}); map.addSource('punkte',{type:'geojson',data:leer});
     map.addLayer({id:'z-fl',type:'fill',source:'zonen',paint:{'fill-color':'#d6a24a','fill-opacity':.12}});
     map.addLayer({id:'z-li',type:'line',source:'zonen',paint:{'line-color':'#d6a24a','line-width':1.5,'line-dasharray':[3,2]}});
-    map.addLayer({id:'p-ci',type:'circle',source:'punkte',paint:{'circle-radius':5,'circle-color':'#6fa8d6','circle-stroke-color':'#fff','circle-stroke-width':1.5}});
-    map.addLayer({id:'p-tx',type:'symbol',source:'punkte',layout:{'text-field':['get','id'],'text-offset':[0,1.2],'text-size':12,'text-font':['Noto Sans Regular']},paint:{'text-color':'#fff','text-halo-color':'#000','text-halo-width':1.2}});
+    var cm=['match',['get','kat']]; Object.keys(FARBE).forEach(function(k){cm.push(k,FARBE[k]);}); cm.push('#c9d4df');
+    map.addLayer({id:'p-ci',type:'circle',source:'punkte',paint:{'circle-radius':5,'circle-color':cm,'circle-stroke-color':'#fff','circle-stroke-width':1.5,'circle-pitch-alignment':'map'}});
+    map.addLayer({id:'p-tx',type:'symbol',source:'punkte',minzoom:12,layout:{'text-field':['get','name'],'text-offset':[0,1.2],'text-size':12,'text-font':['Noto Sans Regular'],'text-optional':true},paint:{'text-color':'#fff','text-halo-color':'#000','text-halo-width':1.2}});
+    bereit=true; if(offen) setze(offen);
+    if(emb) parent.postMessage({typ:'karte3d-bereit'},'*');
   });
-  var sel=document.getElementById('ort');
-  ids.forEach(function(id){var o=document.createElement('option');o.value=id;o.textContent=id;sel.appendChild(o);});
-  sel.onchange=function(){var c=K[sel.value];map.flyTo({center:[c[1],c[0]],zoom:16,pitch:60,duration:1200});};
+  ort.onchange=function(){var c=ortListe[ort.value];if(c)map.flyTo({center:[c[1],c[0]],zoom:16,pitch:60,duration:1200});};
   document.getElementById('b3d').onclick=function(e){var on=e.target.classList.toggle('on');
     (map.getStyle().layers||[]).forEach(function(l){if(l.type==='fill-extrusion')map.setLayoutProperty(l.id,'visibility',on?'visible':'none');});};
   document.getElementById('bnord').onclick=function(){map.easeTo({bearing:0});};
   document.getElementById('bflach').onclick=function(){map.easeTo({pitch:0,bearing:0});};
+
+  if(emb){
+    window.addEventListener('message',function(ev){
+      if(ev.source!==parent) return; var d=ev.data||{};
+      if(d.typ==='karte3d-daten'){ if(d.kamera&&!map._kameraGesetzt){map._kameraGesetzt=1;map.jumpTo(d.kamera);} setze(d); }
+    });
+    map.on('moveend',function(){var c=map.getCenter();parent.postMessage({typ:'karte3d-kamera',kamera:{center:[c.lng,c.lat],zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()}},'*');});
+  } else {
+    var sc=document.createElement('script'); sc.src='szenario.js';
+    sc.onload=function(){var K=(window.SCENARIO&&SCENARIO.karte&&SCENARIO.karte.koord)||{},Z=(SCENARIO&&SCENARIO.zonen)||{};
+      var ids=Object.keys(K).filter(function(k){return /^S-/.test(k);});
+      setze({zonen:ids.map(function(id){return{id:id,ll:K[id],r:(Z[id]&&Z[id].r)||250};}),marker:ids.map(function(id){return{id:id,kat:'standort',name:id,ll:K[id]};})});};
+    document.body.appendChild(sc);
+  }
 })();
 </script></body></html>

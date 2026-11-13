@@ -223,6 +223,8 @@ fieldset:disabled .opt{color:var(--text-dim)}
 .karte-svg:focus{outline:none}
 .karte-svg{display:block;width:100%;height:auto;max-height:78vh;background:#080C11;border:1px solid var(--border);cursor:grab;touch-action:none;user-select:none}
 .karte-svg:active{cursor:grabbing}
+.k-3d{position:absolute;inset:0;width:100%;height:100%;border:0;background:#080C11;z-index:3}
+.karte-wrap.ist3d .k-zoom,.karte-wrap.ist3d .k-status{display:none}
 .k-meer{fill:#091017}
 .k-gitter{stroke:#141C24;stroke-width:1}
 .k-land{fill:#141D26;stroke:#33414E;stroke-width:.8}
@@ -7555,10 +7557,24 @@ function kachelHolen(url, ebKey, z, x, y) {
     el.addEventListener('load', function () { c.ok = true; kachelNachladen(); });
     el.addEventListener('error', function () { c.fehler = true; });
     KACHELN.set(k, c);
-    if (KACHELN.size > 900) { const alt = []; KACHELN.forEach(function (v, kk) { if (v.f < kachelFrame - 2) alt.push(kk); }); alt.slice(0, 300).forEach(function (kk) { KACHELN.delete(kk); }); }
+    if (KACHELN.size > 900) { const alt = []; KACHELN.forEach(function (v, kk) { if (v.f < kachelFrame - 40) alt.push(kk); }); alt.slice(0, 300).forEach(function (kk) { const v = KACHELN.get(kk); if (v && v.el.parentNode) v.el.parentNode.removeChild(v.el); KACHELN.delete(kk); }); }
   }
   c.f = kachelFrame;
   return c;
+}
+/* Dauerhafte Kachelgruppe: Die Bildelemente bleiben beim Neuzeichnen im Dokument und werden nur umgesetzt oder ein- und ausgeblendet.
+   Dadurch entfällt das Entfernen und Wiedereinsetzen, das ein kurzes Schwarz verursachen kann. */
+const KGRUPPE = { wurzel: null, teile: {}, sicht: new Set() };
+function kachelTeil(key, rolle) {
+  if (!KGRUPPE.wurzel) KGRUPPE.wurzel = s('g', { class: 'k-kachelgruppe' });
+  const k = key + '|' + rolle;
+  if (!KGRUPPE.teile[k]) { KGRUPPE.teile[k] = s('g', { class: 'k-kachelteil' }); KGRUPPE.wurzel.appendChild(KGRUPPE.teile[k]); }
+  return KGRUPPE.teile[k];
+}
+function kachelAblegen(el, key, rolle, neuSicht) {
+  const g = kachelTeil(key, rolle);
+  if (el.parentNode !== g) g.appendChild(el);
+  neuSicht.add(el);
 }
 function kachelnZeichnen(P, kids) {
   const K = VIEW.karte, z = Math.max(0, Math.min(19, Math.round(K.zoom))), n = Math.pow(2, z), ts = P.Wd / n;
@@ -7567,6 +7583,7 @@ function kachelnZeichnen(P, kids) {
   const x0 = tx(P.lon(0)), x1 = tx(P.lon(KW)), y0 = Math.max(0, ty(P.lat(0))), y1 = Math.min(n - 1, ty(P.lat(KH)));
   if ((x1 - x0 + 1) * (y1 - y0 + 1) > 60) return;
   kachelFrame++;
+  const neuSicht = new Set();
   const hatKey = !!(K.cartoKey || '').trim(), luft = K.anbieter === 'luftbild' || K.anbieter === 'hybrid';
   /* Ganz in Berlin: die dunkle Unterlage wird nicht gebraucht und nicht geladen */
   const imBerlin = P.lon(0) >= BERLIN_BOX[0] && P.lon(KW) <= BERLIN_BOX[2] && P.lat(KH) >= BERLIN_BOX[1] && P.lat(0) <= BERLIN_BOX[3];
@@ -7579,7 +7596,7 @@ function kachelnZeichnen(P, kids) {
     if (K.anbieter === 'hybrid' && hatKey) ebenen.push({ key: 'cl', u: function (zz, xx, yy) { return cartoURL('dark_only_labels', zz, xx, yy); }, dunkel: false, beschr: true });
   }
   const gesetzt = new Set();
-  const setze = function (c, zz, xx, yy, dunkel, beschr) {
+  const setze = function (c, zz, xx, yy, dunkel, beschr, ebk) {
     if (gesetzt.has(c.el)) return;
     gesetzt.add(c.el);
     const nn = Math.pow(2, zz), lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * yy / nn))) / DEG, ts2 = P.Wd / nn;
@@ -7587,7 +7604,7 @@ function kachelnZeichnen(P, kids) {
     el.setAttribute('x', P.px(xx / nn * 360 - 180).toFixed(2)); el.setAttribute('y', P.py(lat).toFixed(2));
     el.setAttribute('width', (ts2 + 0.6).toFixed(2)); el.setAttribute('height', (ts2 + 0.6).toFixed(2));
     el.setAttribute('class', 'k-kachel' + (dunkel ? ' dunkel' : '') + (beschr ? ' beschriftung' : ''));
-    kids.push(el);
+    kachelAblegen(el, ebk, 'u', neuSicht);
   };
   ebenen.forEach(function (eb) {
     const unten = [], oben = [];
@@ -7609,7 +7626,7 @@ function kachelnZeichnen(P, kids) {
       }
       oben.push([c, z, xm, y, x]);
     }
-    unten.forEach(function (u) { setze(u[0], u[1], u[2], u[3], eb.dunkel, eb.beschr); });
+    unten.forEach(function (u) { u[0].f = kachelFrame; setze(u[0], u[1], u[2], u[3], eb.dunkel, eb.beschr, eb.key); });
     oben.forEach(function (o) {
       /* Der Abstand über die Dateline hinaus: Position aus dem ungewrappten x, damit die Kachel am richtigen Ort liegt */
       const c = o[0], nn = n, lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * o[3] / nn))) / DEG;
@@ -7619,9 +7636,21 @@ function kachelnZeichnen(P, kids) {
       el.setAttribute('x', P.px(o[4] / nn * 360 - 180).toFixed(2)); el.setAttribute('y', P.py(lat).toFixed(2));
       el.setAttribute('width', (ts + 0.6).toFixed(2)); el.setAttribute('height', (ts + 0.6).toFixed(2));
       el.setAttribute('class', 'k-kachel' + (eb.dunkel ? ' dunkel' : '') + (eb.beschr ? ' beschriftung' : ''));
-      kids.push(el);
+      kachelAblegen(el, eb.key, 'o', neuSicht);
     });
   });
+  /* Reihenfolge der Teilgruppen wie die Ebenen (nur bei Änderung wird umgesetzt), nicht benötigte ausblenden */
+  const W = KGRUPPE.wurzel; let pos = 0;
+  ebenen.forEach(function (eb) { ['u', 'o'].forEach(function (r) {
+    const g = kachelTeil(eb.key, r); g.removeAttribute('display');
+    if (W.childNodes[pos] !== g) W.insertBefore(g, W.childNodes[pos] || null);
+    pos++;
+  }); });
+  Object.keys(KGRUPPE.teile).forEach(function (k) { const g = KGRUPPE.teile[k]; if (!ebenen.some(function (eb) { return k === eb.key + '|u' || k === eb.key + '|o'; })) g.setAttribute('display', 'none'); });
+  KGRUPPE.sicht.forEach(function (el) { if (!neuSicht.has(el)) el.setAttribute('display', 'none'); });
+  neuSicht.forEach(function (el) { el.removeAttribute('display'); });
+  KGRUPPE.sicht = neuSicht;
+  kids.push(W);
 }
 function karteSymbol(m, x, y) {
   const hoch = m.stufe >= 4 ? ' hoch' : '';
@@ -7820,7 +7849,16 @@ function zeichneKarte(svg) {
   kids.push(s('line', { x1: 16, y1: KH - 18, x2: 16 + len, y2: KH - 18, class: 'k-mass' }), s('text', { x: 16, y: KH - 24, class: 'k-text' }, km < 1 ? Math.round(km * 1000) + ' m' : km + ' km'));
   kids.push(s('text', { x: KW - 12, y: KH - 10, class: 'k-text dim', 'text-anchor': 'end' },
     (kachelnOk ? (K.anbieter === 'osm' ? '© OpenStreetMap-Mitwirkende' : K.anbieter === 'carto' ? '© CARTO © OpenStreetMap-Mitwirkende' : (K.anbieter === 'luftbild' || K.anbieter === 'hybrid') ? 'Luftbild: Geoportal Berlin, TrueDOP 2024' + (K.cartoKey ? ' · © CARTO © OSM' : '') : 'Kacheln: eigener Anbieter') + ' · ' : 'Natural Earth · ') + 'Breite ' + K.lat.toFixed(4) + ', Länge ' + K.lon.toFixed(4) + ' · Zoom ' + K.zoom.toFixed(1)));
-  svg.replaceChildren.apply(svg, kids);
+  const kw = KGRUPPE.wurzel;
+  if (kw && kids.indexOf(kw) >= 0) {
+    /* Kachelgruppe bleibt im Dokument; alles andere wird ausgetauscht */
+    Array.prototype.slice.call(svg.childNodes).forEach(function (n) { if (n !== kw) svg.removeChild(n); });
+    let davor = true;
+    kids.forEach(function (n) {
+      if (n === kw) { davor = false; if (kw.parentNode !== svg) svg.appendChild(kw); return; }
+      if (davor && kw.parentNode === svg) svg.insertBefore(n, kw); else svg.appendChild(n);
+    });
+  } else svg.replaceChildren.apply(svg, kids);
   kartePopupPos();
   karteStatusAkt();
 }
@@ -8219,6 +8257,36 @@ function karteFokus(svg, id) {
   svg.querySelectorAll('.k-marker').forEach(function (g) { g.classList.toggle('k-nah', !!nah[g.getAttribute('data-id')]); });
   svg.querySelectorAll('.k-verbg').forEach(function (g) { g.classList.toggle('k-nah', g.getAttribute('data-von') === id || g.getAttribute('data-nach') === id); });
 }
+/* 3D-Ansicht: eingebettete Seite karte3d.html (MapLibre). Das Terminal liefert Markierungen, Zonen und die Kamera per postMessage;
+   die Kamera der 3D-Ansicht wird gemerkt, damit ein Neuaufbau des Moduls sie nicht zurücksetzt. */
+function karte3dDaten() {
+  const K = VIEW.karte;
+  const marker = karteMarker().filter(function (m) { return m.ll; }).map(function (m) { return { id: m.id, kat: m.kat, name: m.name, ll: m.ll }; });
+  const zonen = karteZonen().filter(function (z) { return z.ll; }).map(function (z) { return { id: z.id, name: z.name, ll: z.ll, r: z.r }; });
+  /* Ohne gemerkte Kamera: bei weiter Ausgangsansicht auf den ersten Standort (sonst erste Markierung) gehen, sonst die aktuelle Mitte nehmen */
+  const ziel = K.zoom < 9 ? (marker.find(function (m) { return m.kat === 'standort'; }) || marker[0]) : null;
+  const kamera = K.kamera3d || (ziel
+    ? { center: [ziel.ll[1], ziel.ll[0]], zoom: 15.5, pitch: 60, bearing: -20 }
+    : { center: [K.lon, K.lat], zoom: Math.max(14, Math.min(17.5, K.zoom - 0.5)), pitch: 60, bearing: -20 });
+  return { typ: 'karte3d-daten', marker: marker, zonen: zonen, kamera: kamera };
+}
+function karte3dRahmen() {
+  const fr = h('iframe', { class: 'k-3d', id: 'k-3d-frame', title: '3D-Ansicht der Lagekarte', src: 'karte3d.html?eingebettet=1' });
+  return fr;
+}
+if (typeof window !== 'undefined' && !window.__karte3dHoerer) {
+  window.__karte3dHoerer = true;
+  window.addEventListener('message', function (ev) {
+    const fr = document.getElementById('k-3d-frame'); if (!fr || ev.source !== fr.contentWindow) return;
+    const d = ev.data || {};
+    if (d.typ === 'karte3d-bereit') { try { fr.contentWindow.postMessage(karte3dDaten(), '*'); } catch (e) { /* ohne 3D */ } }
+    else if (d.typ === 'karte3d-kamera' && d.kamera) {
+      VIEW.karte.kamera3d = d.kamera;
+      /* 2D-Mitte nachführen, damit der Wechsel zurück an derselben Stelle landet */
+      VIEW.karte.lon = d.kamera.center[0]; VIEW.karte.lat = d.kamera.center[1];
+    }
+  });
+}
 function karteSteuerung(svg) {
   const K = VIEW.karte;
   let ausstehend = false;
@@ -8380,7 +8448,8 @@ function renderKarte(m) {
     h('button', { type: 'button', id: 'k-zone-neu', class: K.zoneSetzen ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen ? 'true' : 'false', disabled: !def, title: def ? 'Auf die Karte klicken: setzt eine eigene Zone mit Radius und Sicherheitsbewertung' : 'Nur mit laufendem Auftrag', onclick: function () { K.zoneSetzen = !K.zoneSetzen; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen ? 'Zone: auf Karte klicken' : 'Zone markieren'),
     h('button', { type: 'button', id: 'k-zugriff-neu', class: K.zugriffSetzen ? 'aktiv' : '', 'aria-pressed': K.zugriffSetzen ? 'true' : 'false', disabled: !def, title: def ? 'Wiederholt auf die Karte klicken: markiert mögliche Zugriffspunkte (Zufahrt, Tor, Seiteneingang …). Ende mit Esc oder erneutem Klick' : 'Nur mit laufendem Auftrag', onclick: function () { K.zugriffSetzen = !K.zugriffSetzen; K.zoneSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zugriffSetzen ? 'Zugriffspunkte: klicken, Ende mit Esc' : 'Zugriffspunkte markieren'),
     h('button', { type: 'button', id: 'k-mehr', class: K.mehrModus ? 'aktiv' : '', 'aria-pressed': K.mehrModus ? 'true' : 'false', title: 'Zonen nacheinander anklicken, um mehrere gemeinsam zu bearbeiten (auch mit Umschalt- oder Strg-Klick)', onclick: function () { K.mehrModus = !K.mehrModus; if (!K.mehrModus) { K.mehr = []; } K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; renderModule(); } }, K.mehrModus ? 'Mehrfach: Zonen anklicken' : 'Mehrfach'),
-    h('button', { type: 'button', id: 'k-messen', class: K.messen ? 'aktiv' : '', 'aria-pressed': K.messen ? 'true' : 'false', title: 'Zwei Punkte oder Markierungen anklicken: Entfernung und Fahrzeit', onclick: function () { if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; } else { K.messen = true; K.auswahl = null; } renderModule(); } }, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen')];
+    h('button', { type: 'button', id: 'k-messen', class: K.messen ? 'aktiv' : '', 'aria-pressed': K.messen ? 'true' : 'false', title: 'Zwei Punkte oder Markierungen anklicken: Entfernung und Fahrzeit', onclick: function () { if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; } else { K.messen = true; K.auswahl = null; } renderModule(); } }, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen'),
+    h('button', { type: 'button', id: 'k-3d', class: K.ansicht3d ? 'aktiv' : '', 'aria-pressed': K.ansicht3d ? 'true' : 'false', title: 'Wechselt zwischen der flachen Karte und der geneigten Ansicht mit Gebäuden (benötigt Internetverbindung)', onclick: function () { K.ansicht3d = !K.ansicht3d; renderModule(); } }, K.ansicht3d ? '2D' : '3D')];
   const preset = function (name, sets) {
     const aktiv = Object.keys(sets).every(function (k) { return !!K.ebenen[k] === sets[k]; });
     return h('button', { type: 'button', class: aktiv ? 'aktiv' : '', 'aria-pressed': aktiv ? 'true' : 'false', id: 'k-p-' + name.toLowerCase(), onclick: function () { Object.keys(sets).forEach(function (k) { K.ebenen[k] = sets[k]; }); karteWahlSichern(); renderModule(); } }, name);
@@ -8442,7 +8511,7 @@ function renderKarte(m) {
       pickE ? h('div', { class: 'row k-pickbar' }, h('span', null, 'Klick auf die Karte setzt die Position von ' + pickE.id + ' ' + pickE.name + '.'),
         knopf('k-pick-x', 'Abbrechen', function () { K.pick = null; renderModule(); })) : null,
       h('div', { class: 'row' }, kopf),
-      h('div', { class: 'karte-wrap' }, svg, leiste,
+      h('div', { class: 'karte-wrap' + (K.ansicht3d ? ' ist3d' : '') }, svg, K.ansicht3d ? karte3dRahmen() : null, leiste,
         h('div', { class: 'k-status', id: 'k-status', 'aria-label': 'Lage' }),
         h('div', { class: 'k-popup', id: 'k-auswahl', hidden: true, 'aria-live': 'polite' }),
         h('div', { class: 'k-tip', id: 'k-tip', hidden: true }),

@@ -15,3 +15,8 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 - Pro Arbeitsrunde ein Branch, kleine Commits; Historie ersetzt ZIP-Backups.
 - Ziel langfristig: Basismission "Transportlinie Ost" ersetzen; nur Rahmen bleibt, getrieben von Dossier, Ablage, Nachrichten.
 - Keine spielartigen Hinweise/Zahlen in der Oberfläche; mehr Realismus.
+
+## Karte (Stand)
+- Kacheln liegen in einer dauerhaften SVG-Gruppe (KGRUPPE); beim Neuzeichnen werden Bildelemente nicht mehr entfernt und neu eingesetzt.
+- 3D-Ansicht: Schalter "3D"/"2D" in der Kartenleiste; karte3d.html wird eingebettet (iframe) und erhält Marker, Zonen und Kamera per postMessage.
+  Offen: Luftbild in 3D, Klick auf Marker in 3D, Pins/Zonen in 3D setzen.
