@@ -6566,16 +6566,22 @@ function zielpersonKnopf(e) {
     an ? h('span', { class: 'label s-accent' }, 'Zielperson') : null,
     h('span', { class: 'note' }, 'Eigene Zonen auf der Karte lassen sich dem Ansprechpartner melden, sobald eine Zielperson in der Zone liegt.'));
 }
+/* Gemeinsamer Einstieg „Auf der Karte zeigen“: macht die passende Markerebene (Orte, Personen, Organisationen) sichtbar, zentriert und wählt aus.
+   Gilt für 2D und 3D, beide lesen karteMarker(). */
+function kartenEbeneFuer(e) { return e.typ === 'Ort' ? 'orte' : e.typ === 'Person' ? 'personen' : 'organisationen'; }
+function kartenSprung(e, ll) {
+  const K = VIEW.karte;
+  K.ebenen[kartenEbeneFuer(e)] = true;
+  K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, 11);
+  dispatch({ type: 'NAVIGATION', modul: 'karte' });
+  setTimeout(function () { karteWaehlen(e.id, true); }, 0);
+}
 function kartenKnopf(e) {
   const ll = karteKoord(e.id);
   if (!ll) return null;
   return h('div', { class: 'row pad' },
     h('button', { type: 'button', id: 'btn-dk-karte', onclick: function () {
-      const K = VIEW.karte;
-      if (e.typ === 'Ort') K.ebenen.orte = true; else K.ebenen.akteure = true;
-      K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, 11);
-      dispatch({ type: 'NAVIGATION', modul: 'karte' });
-      setTimeout(function () { karteWaehlen(e.id, true); }, 0);
+      kartenSprung(e, ll);
     } }, 'Auf der Karte zeigen'),
     h('span', { class: 'note' }, 'Vermuteter Standort: ' + ll[0].toFixed(4) + ', ' + ll[1].toFixed(4)));
 }
@@ -6629,11 +6635,7 @@ function standortRudiment(e) {
   const nah = karteEbenenDaten().orte.map(function (o) { return { n: o[0], d: Math.hypot((o[2] / 100 - ll[0]) * 111, (o[1] / 100 - ll[1]) * 68) }; }).sort(function (a, b) { return a.d - b.d; })[0];
   return feld('Letzter bekannter Standort', [ll[0].toFixed(4) + ', ' + ll[1].toFixed(4) + (nah && nah.d < 15 ? ', Umgebung ' + nah.n : ''), ' ',
     h('button', { type: 'button', class: 'link', id: 'btn-dk-karte', onclick: function () {
-      const K = VIEW.karte;
-      if (e.typ === 'Ort') K.ebenen.orte = true; else K.ebenen.akteure = true;
-      K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, 11);
-      dispatch({ type: 'NAVIGATION', modul: 'karte' });
-      setTimeout(function () { karteWaehlen(e.id, true); }, 0);
+      kartenSprung(e, ll);
     } }, 'auf der Karte zeigen')], 'full');
 }
 function belegHinzufuegen(e) {
