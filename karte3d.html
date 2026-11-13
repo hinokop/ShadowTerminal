@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Karte 3D – Prototyp</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+html,body{margin:0;height:100%;background:#0b0f14;color:#c9d4df;font:13px/1.4 system-ui,sans-serif}
+#m{position:absolute;inset:0}
+#bar{position:absolute;z-index:2;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:calc(100% - 20px)}
+#bar button,#bar select{background:#121a23;color:#c9d4df;border:1px solid #2a3846;padding:5px 9px;border-radius:3px;font:inherit;cursor:pointer}
+#bar button.on{border-color:#6fa8d6;color:#fff}
+#st{position:absolute;z-index:2;bottom:8px;left:10px;opacity:.7}
+</style></head><body>
+<div id="bar">
+ <select id="ort"></select>
+ <button id="b3d" class="on">3D-Gebäude</button>
+ <button id="bnord">Nord</button>
+ <button id="bflach">Flach</button>
+</div>
+<div id="m"></div><div id="st">Prototyp · Basiskarte OpenFreeMap / OpenStreetMap-Mitwirkende</div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="szenario.js"></script>
+<script>
+/* Datenquelle: dieselben Koordinaten und Zonenradien wie die 2D-Karte (SCENARIO.karte.koord / SCENARIO.zonen). */
+(function(){
+  var K = (window.SCENARIO && SCENARIO.karte && SCENARIO.karte.koord) || {};
+  var Z = (window.SCENARIO && SCENARIO.zonen) || {};
+  var ids = Object.keys(K).filter(function(k){return /^S-/.test(k);});
+  var map = new maplibregl.Map({container:'m', style:'https://tiles.openfreemap.org/styles/liberty',
+    center:[13.426,52.4905], zoom:15.5, pitch:60, bearing:-20, maxPitch:80, attributionControl:{compact:true}});
+  window.karte3d = map;
+  map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
+
+  function kreis(lat,lon,r){var p=[],n=64;for(var i=0;i<=n;i++){var a=i/n*2*Math.PI;
+    p.push([lon+(r*Math.sin(a))/(111320*Math.cos(lat*Math.PI/180)), lat+(r*Math.cos(a))/110540]);}
+    return [p];}
+  map.on('load',function(){
+    var fz=[],fp=[];
+    ids.forEach(function(id){var c=K[id];
+      fz.push({type:'Feature',properties:{id:id},geometry:{type:'Polygon',coordinates:kreis(c[0],c[1],(Z[id]&&Z[id].r)||250)}});
+      fp.push({type:'Feature',properties:{id:id},geometry:{type:'Point',coordinates:[c[1],c[0]]}});});
+    map.addSource('zonen',{type:'geojson',data:{type:'FeatureCollection',features:fz}});
+    map.addSource('punkte',{type:'geojson',data:{type:'FeatureCollection',features:fp}});
+    map.addLayer({id:'z-fl',type:'fill',source:'zonen',paint:{'fill-color':'#d6a24a','fill-opacity':.12}});
+    map.addLayer({id:'z-li',type:'line',source:'zonen',paint:{'line-color':'#d6a24a','line-width':1.5,'line-dasharray':[3,2]}});
+    map.addLayer({id:'p-ci',type:'circle',source:'punkte',paint:{'circle-radius':5,'circle-color':'#6fa8d6','circle-stroke-color':'#fff','circle-stroke-width':1.5}});
+    map.addLayer({id:'p-tx',type:'symbol',source:'punkte',layout:{'text-field':['get','id'],'text-offset':[0,1.2],'text-size':12,'text-font':['Noto Sans Regular']},paint:{'text-color':'#fff','text-halo-color':'#000','text-halo-width':1.2}});
+  });
+  var sel=document.getElementById('ort');
+  ids.forEach(function(id){var o=document.createElement('option');o.value=id;o.textContent=id;sel.appendChild(o);});
+  sel.onchange=function(){var c=K[sel.value];map.flyTo({center:[c[1],c[0]],zoom:16,pitch:60,duration:1200});};
+  document.getElementById('b3d').onclick=function(e){var on=e.target.classList.toggle('on');
+    (map.getStyle().layers||[]).forEach(function(l){if(l.type==='fill-extrusion')map.setLayoutProperty(l.id,'visibility',on?'visible':'none');});};
+  document.getElementById('bnord').onclick=function(){map.easeTo({bearing:0});};
+  document.getElementById('bflach').onclick=function(){map.easeTo({pitch:0,bearing:0});};
+})();
+</script></body></html>
