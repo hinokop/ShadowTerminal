@@ -1,0 +1,64 @@
+# Datenvertrag Fallkern (Entwurf 1)
+
+Stand 13. November 2026. Gilt für das Recherchewerkzeug ohne Szenario, Handler, Mission und Timer. Der Vertrag beschreibt Daten, keinen Code. Änderungen daran werden zuerst hier vorgenommen und von zwei Seiten geprüft (Umsetzung und unabhängige Gegenprüfung).
+
+## 1. Grundregeln
+
+1. **Stabile IDs.** Jedes Objekt erhält bei der Anlage eine ID, die nie wiederverwendet wird, auch nicht nach Löschen, Leeren oder Import. Anzeigenummern sind davon getrennt. Der Zähler ist Teil der gespeicherten Daten und wird bei Export und Import mitgeführt.
+2. **Eine Aussage ohne Fundstelle darf als Entwurf gespeichert werden.** Sie erscheint nie als belegt und erhält beim Export keine Ersatzquelle. Fehlende Angaben werden als fehlend angezeigt, nie ersetzt.
+3. **Drei getrennte Zeitangaben.** Ereigniszeit (wann geschah es), Veröffentlichungszeit (wann wurde es veröffentlicht), Erfassungszeit (wann wurde es eingetragen). Jede darf fehlen. Eine ungefähre Angabe wird als Intervall gespeichert, nicht als Punkt.
+4. **Unbewertet ist der Ausgangswert.** Quellengüte und Informationsglaubwürdigkeit (A–F / 1–6) werden getrennt gespeichert und je mit Begründung. Ohne Eintrag gilt „unbewertet“, nie „gesichert“.
+5. **Verweise auf konkrete Fassungen.** Eine Quelle verweist auf eine Fassung (Hash, Abrufzeit). Wird ein Dokument aktualisiert, entsteht eine neue Fassung. Frühere Vermerke bleiben an ihrer Fassung.
+6. **Originale bleiben unverändert.** Der Anhang einer Quelle wird bytegetreu gespeichert. Vorschauen und abgeleitete Texte sind eigene Objekte und als abgeleitet gekennzeichnet.
+7. **Kein stilles Verwerfen.** Jeder Import meldet, was übernommen, als identisch erkannt, als Konflikt behandelt oder abgelehnt wurde. Ein fehlerhafter Import ändert den Zielbestand nicht.
+8. **Getrennter Speicher.** Der Fallspeicher ist unabhängig vom Altprofil. Altdaten werden nur lesend und nach Vorschau übernommen, mit Kennzeichnung „Legacy, Herkunft ungeprüft“.
+
+## 2. Objekte
+
+| Objekt | Pflichtfelder | Weitere Felder |
+| --- | --- | --- |
+| Fall | id, titel, frage, zustand (offen, ruhend, abgeschlossen) | erfasst, geaendert, notiz |
+| Quelle | id, fall, art (Datei, Link, Text, Eigenbeobachtung) | herkunft, url, abruf, aktuelleFassung, guete (A–F, Begruendung), kette (siehe 3) |
+| Fassung | id, quelle, erfasst | hash (SHA-256), dateiname, groesse, typ, anhang (Verweis auf Binärspeicher), veroeffentlicht |
+| Beobachtung | id, fassung, fundstelle | zitat, ereignis (Intervall), ort (siehe 4), erfasst |
+| Aussage | id, fall, text, status (entwurf, offen, gestuetzt, widerlegt, strittig) | stuetzend[], widersprechend[], begruendung, glaubwuerdigkeit (1–6, Begruendung) |
+| Dossier | id, fall, typ (Person, Organisation, Ort, Sache), name | aliase[], aussagen[], notizen |
+| Ereignis | id, fall, bezug (Objekt-ID) | ereignis (Intervall), veroeffentlicht, erfasst, beschreibung |
+
+Die Fundstelle besteht aus Typ (Seite, Absatz, Zeitmarke, Zeichenbereich, ganze Datei) und Wert. „Ganze Datei“ ist erlaubt, wird aber als schwächste Fundstelle gekennzeichnet.
+
+## 3. Quellenketten und Abhängigkeit
+
+Eine Quelle kann angeben, dass sie von einer anderen Quelle abgeleitet ist (`kette`: Liste von Quellen-IDs mit Begründung). Abhängige Quellen zählen bei der Anzeige von Belegen als eine Stützung, nicht als mehrere. Gleicher Dateihash ist ein starker Hinweis auf gleiche Bytes. Ähnlicher Text oder gleiche Herkunft ist nur ein Vorschlag und wird nie automatisch zusammengeführt.
+
+## 4. Orte
+
+Gespeichert werden getrennt: Rohtext der Ortsangabe, gewählte Geometrie (Punkt, Fläche oder keine), Genauigkeit (exakt, Gebäude, Ortsteil, Ortsmittelpunkt, Region) und die Herkunft der Zuordnung (manuell, Vorschlag bestätigt). Bei Mehrdeutigkeit wird kein Punkt gesetzt, sondern eine Auswahl mit Begründung verlangt. Ein Ortsmittelpunkt wird als solcher gekennzeichnet.
+
+## 5. Zustand eines Falls (Mindestansicht)
+
+Die Startansicht zeigt je Fall: Frage, letzte Änderung, Zahl offener Aussagen, Aussagen mit Widerspruch, Aussagen ohne Fundstelle, Ortszuordnungen offen. Diese Zahlen werden aus den Daten berechnet, nie gespeichert.
+
+## 6. Fallpaket (Export und Import)
+
+- Ein Paket ist eine einzelne Datei mit Manifest: Versionsnummer, Fall-ID, Liste aller Objekte, je Anhang Hash und Größe, Zählerstände.
+- Der Import prüft zuerst das gesamte Paket (Manifest, Hashes, Verweise) und übernimmt erst danach. Bei Fehlern bleibt der Zielbestand unverändert.
+- Gleiche ID mit anderem Inhalt gilt als Konflikt. Konflikte werden unter neuer ID übernommen, mit Verweis auf die Herkunft (`importVon`). Dieselbe Datei erzeugt beim zweiten Import keine weiteren Kopien.
+- Ein Altexport ohne Binärdateien markiert fehlende Anhänge ausdrücklich.
+- Ein selektiver Bericht (Zitatstellen, Gegenbelege, Stichtag, offene Fragen) ist ein eigenes Produkt. Ausgeblendete Inhalte sind im Bericht nicht enthalten.
+
+## 7. Abnahmekriterien für den ersten Stand
+
+1. Start im leeren Profil ohne `szenario.js`, ohne simulierte Startsequenz, ohne erzeugte Fallinhalte, ohne Netzwerk.
+2. Ein Fall mit zwei widersprechenden Quellen und einem Originalanhang lässt sich erfassen, schließen und exportieren.
+3. Das Paket lässt sich in einem zweiten, frischen Profil bytegetreu wiederherstellen (Hash gleich).
+4. Jede Aussage führt zu ihrer Fundstelle zurück. Eine Aussage ohne Fundstelle wird als Entwurf angezeigt.
+5. Zwei Quellen, die denselben Bericht abschreiben, erscheinen als eine Kette.
+6. Ein fehlerhaftes Paket verändert den Zielbestand nicht.
+7. Der Testlauf liefert einen Exit-Code und bricht bei fehlenden Pfaden ab, statt auf Ersatzpfade auszuweichen.
+
+## 8. Offene Fragen
+
+- Wird Verschlüsselung der Falldaten gefordert? Falls ja, ist sie ein eigener Vertrag. Bis dahin zeigt die Oberfläche „lokaler Speicher, nicht verschlüsselt“.
+- Bleibt die Karte im ersten Stand bei 2D? Vorschlag: ja, 3D und Online-Ebenen später und einzeln zuschaltbar.
+- Referenzfall: Radweg (Beschluss Juni, Pressemitteilung Juli, zwei Medien zitieren dieselbe Mitteilung).
