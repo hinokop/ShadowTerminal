@@ -9,7 +9,7 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
   (Absichten in DIALOG.absichten, Antwortgruppen MÜSSEN in DIALOG.antworten[kat][kanal] liegen)
 - karte.js / karte2.js: Kartendaten; kartenschluessel.js: lokal, NIE committen (.gitignore)
 - tests/: Playwright-Skripte (Passwort 'pw-test-123'); bekannt unstabil: abd, wk3, dp
-- karte3d.html: MapLibre-3D-Prototyp (Branch feature/maplibre-3d), nutzt Koordinaten aus szenario.js
+- karte3d.html: MapLibre-3D-Ansicht (eingebettet in die Karte; eigenständig nutzt sie szenario.js)
 
 ## Arbeitsweise
 - Pro Arbeitsrunde ein Branch, kleine Commits; Historie ersetzt ZIP-Backups.
@@ -19,4 +19,8 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 ## Karte (Stand)
 - Kacheln liegen in einer dauerhaften SVG-Gruppe (KGRUPPE); beim Neuzeichnen werden Bildelemente nicht mehr entfernt und neu eingesetzt.
 - 3D-Ansicht: Schalter "3D"/"2D" in der Kartenleiste; karte3d.html wird eingebettet (iframe) und erhält Marker, Zonen und Kamera per postMessage.
-  Offen: Luftbild in 3D, Klick auf Marker in 3D, Pins/Zonen in 3D setzen.
+  Klicks in 3D laufen über st.klick (KARTE_ST) wie in 2D. Offen in 3D: Luftbild, Verbindungen, Route, Sichtungs-Unschärfe, Zeitfenster.
+- 3D braucht WebGL: START.bat/START_LOKAL.bat/START_SICHER.bat/START.vbs schalten die GPU ab; START_3D.bat nicht.
+
+## Git
+- main ist der Hauptstand. Pro Arbeitsrunde ein Branch von main, danach nach main zusammenführen.

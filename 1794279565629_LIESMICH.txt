@@ -717,3 +717,8 @@ Nachtrag Paket k:
 Nachtrag Paket l:
 - 3D-Karte benötigt WebGL. Die Starter START.bat, START_LOKAL.bat, START_SICHER.bat und START.vbs schalten die Grafikbeschleunigung ab; dort zeigt der 3D-Knopf nun einen Hinweis statt einer leeren Fläche.
 - Neu: START_3D.bat (wie START.bat, aber mit Grafikbeschleunigung; dasselbe Profil, Zustand bleibt erhalten). Zeigt Edge ein schwarzes Fenster, wieder START_SICHER.bat verwenden.
+
+Nachtrag Paket m:
+- 3D-Karte: kräftigere Symbole je Kategorie (Person, Organisation, Standort, Zugriffspunkt, Sichtung, Pin, Ort) mit hellem Rand und dunkler Kontur, roter Ring ab Stufe 4, Beschriftung mit Kontur, Auswahlring.
+- Klicks in 3D laufen durch denselben Handler wie in 2D: Markierung wählen (Popup rechts), Zone wählen (Umschalt/Strg für Mehrfachauswahl), Pin setzen, Zone markieren, Zugriffspunkte markieren, Messen, Position für ein Dossier festlegen.
+- Noch nicht in 3D: Verbindungen, vermutete Transportroute, Unschärferinge der Sichtungen, Zeitfenster-Overlay.

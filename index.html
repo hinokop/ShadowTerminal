@@ -8051,6 +8051,8 @@ function karteFensterListe() {
 }
 function kartePopupPos() {
   const box = $('k-auswahl'), K = VIEW.karte;
+  if (box && K.ansicht3d) { if (box.hidden) return; box.style.visibility = 'visible'; box.style.left = 'auto'; box.style.right = '64px'; box.style.top = '64px'; box.style.transform = 'none'; return; }
+  if (box) { box.style.right = ''; box.style.transform = ''; }
   const ref = K.auswahl || (K.mehr && K.mehr.length ? K.mehr[K.mehr.length - 1] : null);   /* Mehrfachauswahl: Popup an der zuletzt gewählten Zone */
   if (!box || box.hidden || !ref) return;
   let ll = null;
@@ -8224,9 +8226,11 @@ function karteWaehlen(id, zentrieren) {
   if (zentrieren && m) { karteFlug(m.ll[0], m.ll[1], Math.max(K.zoom, 11), karteAuswahlAnzeige); }
   else if (svg) zeichneKarte(svg);
   karteAuswahlAnzeige();
+  if (K.ansicht3d) karte3dSenden({ typ: 'karte3d-auswahl', id: id || null });
 }
 /* Weiche Kamerafahrt (550 ms); ohne Bewegungsreduktion */
 function karteFlug(lat, lon, zoom, fertig) {
+  if (VIEW.karte.ansicht3d) { karte3dSenden({ typ: 'karte3d-flug', center: [lon, lat], zoom: Math.max(15, zoom || 15) }); if (fertig) fertig(); return; }
   const K = VIEW.karte, a = { lat: K.lat, lon: K.lon, zoom: K.zoom }, t0 = performance.now();
   if (K.flug) cancelAnimationFrame(K.flug);
   const reduziert = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -8263,18 +8267,34 @@ function karteFokus(svg, id) {
    die Kamera der 3D-Ansicht wird gemerkt, damit ein Neuaufbau des Moduls sie nicht zurücksetzt. */
 function karte3dDaten() {
   const K = VIEW.karte;
-  const marker = karteMarker().filter(function (m) { return m.ll; }).map(function (m) { return { id: m.id, kat: m.kat, name: m.name, ll: m.ll }; });
+  const marker = karteMarker().filter(function (m) { return m.ll; }).map(function (m) { return { id: m.id, kat: m.kat, typ: m.typ, stufe: m.stufe || 0, name: m.name, ll: m.ll }; });
   const zonen = karteZonen().filter(function (z) { return z.ll; }).map(function (z) { return { id: z.id, name: z.name, ll: z.ll, r: z.r }; });
   /* Ohne gemerkte Kamera: bei weiter Ausgangsansicht auf den ersten Standort (sonst erste Markierung) gehen, sonst die aktuelle Mitte nehmen */
   const ziel = K.zoom < 9 ? (marker.find(function (m) { return m.kat === 'standort'; }) || marker[0]) : null;
   const kamera = K.kamera3d || (ziel
     ? { center: [ziel.ll[1], ziel.ll[0]], zoom: 15.5, pitch: 60, bearing: -20 }
     : { center: [K.lon, K.lat], zoom: Math.max(14, Math.min(17.5, K.zoom - 0.5)), pitch: 60, bearing: -20 });
-  return { typ: 'karte3d-daten', marker: marker, zonen: zonen, kamera: kamera };
+  return { typ: 'karte3d-daten', marker: marker, zonen: zonen, kamera: kamera, auswahl: K.auswahl || null, fadenkreuz: !!(K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen || K.messen), mess: K.messPts || [] };
 }
 function webglVorhanden() {
   try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; }
 }
+function karte3dSenden(nachricht) {
+  const fr = document.getElementById('k-3d-frame');
+  if (fr && fr.contentWindow) { try { fr.contentWindow.postMessage(nachricht, '*'); } catch (e) { /* ohne 3D */ } }
+}
+/* Klick in der 3D-Ansicht: läuft durch denselben Klick-Handler wie in 2D (Auswahl, Pin, Zone, Zugriffspunkt, Messen, Positionswahl) */
+function karte3dKlick(d) {
+  const st = KARTE_ST, svg = $('k-svg');
+  if (!st || !st.klick || !svg) return;
+  const P = karteProj(), r = svg.getBoundingClientRect();
+  const ziel = d.id ? { closest: function (q) { return q === '.k-marker' ? { getAttribute: function () { return d.id; } } : null; } }
+    : d.zid ? { closest: function (q) { return q === '.k-zone' ? { getAttribute: function () { return d.zid; } } : null; } }
+    : { closest: function () { return null; } };
+  st.klick({ target: ziel, shiftKey: !!d.umschalt, clientX: r.left + P.px(d.lon) * r.width / KW, clientY: r.top + P.py(d.lat) * r.height / KH });
+  karte3dSenden({ typ: 'karte3d-auswahl', id: VIEW.karte.auswahl || null });
+}
+let KARTE_ST = null;
 function karte3dRahmen() {
   if (!webglVorhanden()) return h('div', { class: 'k-3d k-3d-hinweis', id: 'k-3d-hinweis' },
     h('p', null, 'Die 3D-Ansicht benötigt Grafikbeschleunigung (WebGL). In diesem Fenster ist sie abgeschaltet.'),
@@ -8288,6 +8308,7 @@ if (typeof window !== 'undefined' && !window.__karte3dHoerer) {
     const fr = document.getElementById('k-3d-frame'); if (!fr || ev.source !== fr.contentWindow) return;
     const d = ev.data || {};
     if (d.typ === 'karte3d-bereit') { try { fr.contentWindow.postMessage(karte3dDaten(), '*'); } catch (e) { /* ohne 3D */ } }
+    else if (d.typ === 'karte3d-klick') karte3dKlick(d);
     else if (d.typ === 'karte3d-kamera' && d.kamera) {
       VIEW.karte.kamera3d = d.kamera;
       /* 2D-Mitte nachführen, damit der Wechsel zurück an derselben Stelle landet */
@@ -8420,13 +8441,13 @@ function karteSteuerung(svg) {
     const t = ev.target && ev.target.closest ? ev.target.closest('.k-marker') : null;
     if (t && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); klick({ target: t, clientX: 0, clientY: 0 }); }
   });
-  return { zoom: function (dz) { zoomUm(dz, KW / 2, KH / 2); }, neu: neu };
+  return { zoom: function (dz) { zoomUm(dz, KW / 2, KH / 2); }, neu: neu, klick: klick };
 }
 function renderKarte(m) {
   const K = VIEW.karte, def = STATE.vorlauf ? null : KM();
   if (!K.init) { karteGrundansicht(); K.init = true; }
   const svg = s('svg', { id: 'k-svg', class: 'karte-svg' + (K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen ? ' pick' : '') + (K.messen ? ' messen' : ''), viewBox: '0 0 ' + KW + ' ' + KH, role: 'application', tabindex: '-1', 'aria-label': 'Karte, mit Maus ziehen und Mausrad zoomen' });
-  const st = karteSteuerung(svg);
+  const st = karteSteuerung(svg); KARTE_ST = st;
   const knopf = function (id, text, fn) { return h('button', { type: 'button', id: id, onclick: fn }, text); };
   /* Ebenenleiste: ein Eintrag kann mehrere technische Ebenen schalten; das Symbol zeigt, wie die Ebene auf der Karte aussieht */
   const ik = function () { return s.apply(null, ['svg', { class: 'k-ik', viewBox: '0 0 14 14', 'aria-hidden': 'true' }].concat([].slice.call(arguments))); };

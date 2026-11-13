@@ -24,36 +24,96 @@ body.emb #bar{left:auto;right:56px}
 (function(){
   var emb = /eingebettet=1/.test(location.search) && window.parent !== window;
   if(emb) document.body.className='emb';
-  var FARBE = {standort:'#6fa8d6',zugriff:'#d6a24a',sichtung:'#e07b6a',pin:'#9ad0a0',figur:'#c9d4df',ort:'#b79bd6',ausgang:'#9ad0a0'};
   var map = new maplibregl.Map({container:'m', style:'https://tiles.openfreemap.org/styles/liberty',
     center:[13.426,52.4905], zoom:15.5, pitch:60, bearing:-20, maxPitch:80, attributionControl:{compact:true}});
   window.karte3d = map;
   map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
-  var bereit=false, offen=null, ort=document.getElementById('ort'), ortListe={};
+  var bereit=false, offen=null, ort=document.getElementById('ort'), ortListe={}, fadenkreuz=false;
+
+  /* Symbole: kräftige Füllung, weißer Rand und dunkle Kontur, damit sie vor Gebäuden und Straßen sofort erkennbar sind.
+     Je Kategorie eine eigene Form und Farbe; Stufe 4 oder 5 trägt zusätzlich einen roten Ring. */
+  var ART = {
+    person:{f:'#2f7fd1',form:'kreis',g:'person'}, org:{f:'#7a4fc9',form:'quadrat',g:'org'},
+    standort:{f:'#0f8a8a',form:'kreis',g:'kreuz'}, zugriff:{f:'#e08a00',form:'kreis',g:'x'},
+    sichtung:{f:'#d13b2f',form:'dreieck',g:''}, pin:{f:'#2e9d4f',form:'tropfen',g:''},
+    ort:{f:'#8e5bd6',form:'raute',g:''}, ausgang:{f:'#2e9d4f',form:'dreieck',g:''}, figur:{f:'#2f7fd1',form:'kreis',g:'person'}
+  };
+  function bild(name,spec,hoch){
+    var S=64,c=document.createElement('canvas');c.width=c.height=S;var g=c.getContext('2d'),m=S/2;
+    function pfad(r){g.beginPath();
+      if(spec.form==='kreis'){g.arc(m,m,r,0,7);}
+      else if(spec.form==='quadrat'){g.rect(m-r*.9,m-r*.9,r*1.8,r*1.8);}
+      else if(spec.form==='raute'){g.moveTo(m,m-r*1.15);g.lineTo(m+r*1.15,m);g.lineTo(m,m+r*1.15);g.lineTo(m-r*1.15,m);g.closePath();}
+      else if(spec.form==='dreieck'){g.moveTo(m,m-r*1.1);g.lineTo(m+r*1.05,m+r*.85);g.lineTo(m-r*1.05,m+r*.85);g.closePath();}
+      else {g.arc(m,m-r*.2,r*.85,Math.PI*.8,Math.PI*.2,false);g.lineTo(m,m+r*1.1);g.closePath();}}
+    if(hoch){g.beginPath();g.arc(m,m,S*.47,0,7);g.strokeStyle='#e0261b';g.lineWidth=5;g.stroke();}
+    pfad(S*.3);g.lineJoin='round';g.lineWidth=9;g.strokeStyle='#ffffff';g.stroke();   /* heller Rand */
+    pfad(S*.3);g.lineWidth=4;g.strokeStyle='#10161d';g.stroke();                      /* dunkle Kontur */
+    pfad(S*.3);g.fillStyle=spec.f;g.fill();
+    g.strokeStyle='#fff';g.fillStyle='#fff';g.lineWidth=3.4;g.lineCap='round';
+    if(spec.g==='kreuz'){g.beginPath();g.moveTo(m-8,m);g.lineTo(m+8,m);g.moveTo(m,m-8);g.lineTo(m,m+8);g.stroke();}
+    if(spec.g==='x'){g.beginPath();g.moveTo(m-7,m-7);g.lineTo(m+7,m+7);g.moveTo(m+7,m-7);g.lineTo(m-7,m+7);g.stroke();}
+    if(spec.g==='person'){g.beginPath();g.arc(m,m-5,4.6,0,7);g.fill();g.beginPath();g.moveTo(m-9,m+10);g.quadraticCurveTo(m,m-4,m+9,m+10);g.fill();}
+    if(spec.g==='org'){g.fillRect(m-8,m-7,5,15);g.fillRect(m+2,m-7,6,15);}
+    var d=g.getImageData(0,0,S,S);map.addImage(name,d,{pixelRatio:2});
+  }
+  function ring(){var S=96,c=document.createElement('canvas');c.width=c.height=S;var g=c.getContext('2d');
+    g.beginPath();g.arc(S/2,S/2,S*.42,0,7);g.strokeStyle='#ffffff';g.lineWidth=10;g.stroke();
+    g.beginPath();g.arc(S/2,S/2,S*.42,0,7);g.strokeStyle='#e0a100';g.lineWidth=5;g.stroke();
+    map.addImage('auswahl',g.getImageData(0,0,S,S),{pixelRatio:2});}
 
   function kreis(lat,lon,r){var p=[],n=64;for(var i=0;i<=n;i++){var a=i/n*2*Math.PI;
     p.push([lon+(r*Math.sin(a))/(111320*Math.cos(lat*Math.PI/180)), lat+(r*Math.cos(a))/110540]);}
     return [p];}
-  function setze(d){ /* d: {zonen:[{id,name,ll,r}], marker:[{id,kat,name,ll}]} */
+  function symbolName(m){var k=m.kat||'figur';
+    if(k==='figur') k=(m.typ==='Organisation')?'org':'person';
+    var hoch=(m.stufe>=4)&&(k==='person'||k==='org'||k==='ort');return (ART[k]?k:'person')+(hoch?'-hoch':'');}
+  function setze(d){ /* d: {zonen, marker, auswahl, fadenkreuz, mess} */
     offen=d; if(!bereit) return;
+    fadenkreuz=!!d.fadenkreuz; map.getCanvas().style.cursor=fadenkreuz?'crosshair':'';
     var fz=(d.zonen||[]).map(function(z){return {type:'Feature',properties:{id:z.id,name:z.name||z.id},geometry:{type:'Polygon',coordinates:kreis(z.ll[0],z.ll[1],z.r||250)}};});
-    var fp=(d.marker||[]).map(function(m){return {type:'Feature',properties:{id:m.id,kat:m.kat||'figur',name:m.name||m.id},geometry:{type:'Point',coordinates:[m.ll[1],m.ll[0]]}};});
+    var fp=(d.marker||[]).map(function(m){return {type:'Feature',properties:{id:m.id,ico:symbolName(m),name:m.name||m.id,prio:m.stufe||0},geometry:{type:'Point',coordinates:[m.ll[1],m.ll[0]]}};});
     map.getSource('zonen').setData({type:'FeatureCollection',features:fz});
     map.getSource('punkte').setData({type:'FeatureCollection',features:fp});
+    var mp=d.mess||[], mf=[];
+    if(mp.length>1) mf.push({type:'Feature',properties:{},geometry:{type:'LineString',coordinates:mp.map(function(p){return[p[1],p[0]];})}});
+    mp.forEach(function(p){mf.push({type:'Feature',properties:{},geometry:{type:'Point',coordinates:[p[1],p[0]]}});});
+    map.getSource('mess').setData({type:'FeatureCollection',features:mf});
+    auswahl(d.auswahl);
     ort.innerHTML='<option value="">Gehe zu …</option>'; ortListe={};
     (d.marker||[]).filter(function(m){return m.kat==='standort'||m.kat==='zugriff'||m.kat==='pin';}).forEach(function(m){
       ortListe[m.id]=m.ll;var o=document.createElement('option');o.value=m.id;o.textContent=m.id+' '+(m.name||'');ort.appendChild(o);});
   }
+  function auswahl(id){ if(!bereit) return; map.setFilter('p-auswahl',['==',['get','id'],id||'']); }
+
   map.on('load',function(){
+    Object.keys(ART).forEach(function(k){bild(k,ART[k],false);bild(k+'-hoch',ART[k],true);}); ring();
     var leer={type:'FeatureCollection',features:[]};
-    map.addSource('zonen',{type:'geojson',data:leer}); map.addSource('punkte',{type:'geojson',data:leer});
-    map.addLayer({id:'z-fl',type:'fill',source:'zonen',paint:{'fill-color':'#d6a24a','fill-opacity':.12}});
-    map.addLayer({id:'z-li',type:'line',source:'zonen',paint:{'line-color':'#d6a24a','line-width':1.5,'line-dasharray':[3,2]}});
-    var cm=['match',['get','kat']]; Object.keys(FARBE).forEach(function(k){cm.push(k,FARBE[k]);}); cm.push('#c9d4df');
-    map.addLayer({id:'p-ci',type:'circle',source:'punkte',paint:{'circle-radius':5,'circle-color':cm,'circle-stroke-color':'#fff','circle-stroke-width':1.5,'circle-pitch-alignment':'map'}});
-    map.addLayer({id:'p-tx',type:'symbol',source:'punkte',minzoom:12,layout:{'text-field':['get','name'],'text-offset':[0,1.2],'text-size':12,'text-font':['Noto Sans Regular'],'text-optional':true},paint:{'text-color':'#fff','text-halo-color':'#000','text-halo-width':1.2}});
+    map.addSource('zonen',{type:'geojson',data:leer}); map.addSource('punkte',{type:'geojson',data:leer}); map.addSource('mess',{type:'geojson',data:leer});
+    map.addLayer({id:'z-fl',type:'fill',source:'zonen',paint:{'fill-color':'#e08a00','fill-opacity':.2}});
+    map.addLayer({id:'z-bg',type:'line',source:'zonen',paint:{'line-color':'#ffffff','line-width':4.5,'line-opacity':.9}});
+    map.addLayer({id:'z-li',type:'line',source:'zonen',paint:{'line-color':'#b86a00','line-width':2.4,'line-dasharray':[3,2]}});
+    map.addLayer({id:'m-li',type:'line',source:'mess',filter:['==',['geometry-type'],'LineString'],paint:{'line-color':'#10161d','line-width':3,'line-dasharray':[2,1.5]}});
+    map.addLayer({id:'m-pt',type:'circle',source:'mess',filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':6,'circle-color':'#fff','circle-stroke-color':'#10161d','circle-stroke-width':3}});
+    map.addLayer({id:'p-auswahl',type:'symbol',source:'punkte',filter:['==',['get','id'],''],layout:{'icon-image':'auswahl','icon-size':1.25,'icon-allow-overlap':true,'icon-ignore-placement':true}});
+    map.addLayer({id:'p-sym',type:'symbol',source:'punkte',layout:{
+      'icon-image':['get','ico'],'icon-size':['interpolate',['linear'],['zoom'],8,.55,13,.75,17,1],'icon-allow-overlap':true,'icon-ignore-placement':true,
+      'symbol-sort-key':['-',0,['get','prio']],
+      'text-field':['get','name'],'text-offset':[0,1.7],'text-anchor':'top','text-size':12.5,'text-font':['Noto Sans Bold'],'text-optional':true,'text-max-width':12},
+      paint:{'text-color':'#10161d','text-halo-color':'#ffffff','text-halo-width':2}});
     bereit=true; if(offen) setze(offen);
     if(emb) parent.postMessage({typ:'karte3d-bereit'},'*');
+  });
+  map.on('mousemove',function(e){ if(fadenkreuz) return;
+    var f=map.queryRenderedFeatures([[e.point.x-12,e.point.y-12],[e.point.x+12,e.point.y+12]],{layers:['p-sym']});
+    map.getCanvas().style.cursor=f.length?'pointer':'';});
+  map.on('click',function(e){
+    if(!emb) return;
+    var f=map.queryRenderedFeatures([[e.point.x-14,e.point.y-14],[e.point.x+14,e.point.y+14]],{layers:['p-sym']});
+    var z=f.length?[]:map.queryRenderedFeatures(e.point,{layers:['z-fl']});
+    var oe=e.originalEvent||{};
+    parent.postMessage({typ:'karte3d-klick',lat:e.lngLat.lat,lon:e.lngLat.lng,id:f.length?f[0].properties.id:null,zid:z.length?z[0].properties.id:null,
+      umschalt:!!(oe.shiftKey||oe.ctrlKey||oe.metaKey)},'*');
   });
   ort.onchange=function(){var c=ortListe[ort.value];if(c)map.flyTo({center:[c[1],c[0]],zoom:16,pitch:60,duration:1200});};
   document.getElementById('b3d').onclick=function(e){var on=e.target.classList.toggle('on');
@@ -65,6 +125,8 @@ body.emb #bar{left:auto;right:56px}
     window.addEventListener('message',function(ev){
       if(ev.source!==parent) return; var d=ev.data||{};
       if(d.typ==='karte3d-daten'){ if(d.kamera&&!map._kameraGesetzt){map._kameraGesetzt=1;map.jumpTo(d.kamera);} setze(d); }
+      else if(d.typ==='karte3d-auswahl'){ auswahl(d.id); }
+      else if(d.typ==='karte3d-flug'){ map.flyTo({center:d.center,zoom:Math.max(map.getZoom(),d.zoom||16),duration:900}); }
     });
     map.on('moveend',function(){var c=map.getCenter();parent.postMessage({typ:'karte3d-kamera',kamera:{center:[c.lng,c.lat],zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()}},'*');});
   } else {
