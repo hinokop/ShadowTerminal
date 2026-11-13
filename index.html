@@ -224,6 +224,13 @@ fieldset:disabled .opt{color:var(--text-dim)}
 .karte-svg{display:block;width:100%;height:auto;max-height:78vh;background:#080C11;border:1px solid var(--border);cursor:grab;touch-action:none;user-select:none}
 .karte-svg:active{cursor:grabbing}
 .k-3d{position:absolute;inset:0;width:100%;height:100%;border:0;background:#080C11;z-index:3}
+.k-3d-platz{position:absolute;inset:0;pointer-events:none}
+.k-3d-host{position:fixed;z-index:2;background:#080C11}
+.k-3d-host[hidden]{display:none}
+.k-3d-frame{display:block;width:100%;height:100%;border:0;background:#080C11}
+.k-popup{max-height:72vh;overflow-y:auto}
+.k-popup select,.k-popup input[type=text],.k-popup input:not([type]){padding:3px 6px;font-size:12px}
+.karte-wrap.ist3d .k-popup{width:292px}
 .k-3d-hinweis{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;padding:24px;text-align:center;color:var(--text);font-size:13px}
 .k-3d-hinweis p{max-width:560px;margin:0}
 .karte-wrap.ist3d .k-zoom,.karte-wrap.ist3d .k-status{display:none}
@@ -342,6 +349,9 @@ fieldset:disabled .opt{color:var(--text-dim)}
 .k-ziel{fill:none;stroke:#E0E4E8;stroke-width:1;stroke-dasharray:1.5 2.5;opacity:.9}
 .k-pop-form{display:grid;grid-template-columns:auto 1fr;gap:5px 8px;align-items:center;margin-bottom:8px}
 .k-pop-form input,.k-pop-form select{min-width:0;width:100%}
+.k-pop-form input[type=checkbox],.k-pop-form input[type=radio]{width:auto;flex:none}
+.k-zp-typen{display:flex;flex-wrap:wrap;gap:1px 12px}
+.k-zp-typen .k-ebene{padding:2px 0}
 .k-st-z{display:flex;flex-direction:column;padding:3px 0;border-top:1px solid rgba(53,66,78,.5)}
 .k-st-k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
 .k-st-v{color:var(--text);font-family:var(--mono);font-size:11.5px}
@@ -8295,19 +8305,44 @@ function karte3dKlick(d) {
   karte3dSenden({ typ: 'karte3d-auswahl', id: VIEW.karte.auswahl || null });
 }
 let KARTE_ST = null;
+const KARTE3D = { host: null, frame: null, platz: null, bereit: false };
+/* Die 3D-Seite lebt dauerhaft außerhalb des Moduls (fest am Seitenende) und wird über den Platzhalter in der Karte positioniert.
+   Ein Neuaufbau des Moduls (Pin setzen, Messen, Ebenen) lädt sie so nicht neu; kein Weißblitz, die Kamera bleibt erhalten. */
+function karte3dHost() {
+  if (!KARTE3D.host) {
+    const fr = h('iframe', { class: 'k-3d-frame', id: 'k-3d-frame', title: '3D-Ansicht der Lagekarte', src: 'karte3d.html?eingebettet=1' });
+    const host = h('div', { class: 'k-3d-host', id: 'k-3d-host', hidden: true }, fr);
+    document.body.appendChild(host);
+    KARTE3D.host = host; KARTE3D.frame = fr;
+    const folgen = function () {
+      const pl = KARTE3D.platz;
+      if (pl && pl.isConnected && VIEW.karte.ansicht3d && STATE.ui.modul === 'karte') {
+        const r = pl.getBoundingClientRect();
+        host.hidden = false;
+        host.style.left = r.left + 'px'; host.style.top = r.top + 'px'; host.style.width = r.width + 'px'; host.style.height = r.height + 'px';
+      } else host.hidden = true;
+      requestAnimationFrame(folgen);
+    };
+    requestAnimationFrame(folgen);
+  }
+  return KARTE3D.host;
+}
 function karte3dRahmen() {
   if (!webglVorhanden()) return h('div', { class: 'k-3d k-3d-hinweis', id: 'k-3d-hinweis' },
     h('p', null, 'Die 3D-Ansicht benötigt Grafikbeschleunigung (WebGL). In diesem Fenster ist sie abgeschaltet.'),
     h('p', { class: 'dim' }, 'Der Start über START_3D.bat lässt sie zu. Die Starter START.bat, START_LOKAL.bat, START_SICHER.bat und START.vbs schalten die Grafikbeschleunigung bewusst ab, weil sie auf manchen Rechnern ein schwarzes Fenster verursacht.'));
-  const fr = h('iframe', { class: 'k-3d', id: 'k-3d-frame', title: '3D-Ansicht der Lagekarte', src: 'karte3d.html?eingebettet=1' });
-  return fr;
+  karte3dHost();
+  const platz = h('div', { class: 'k-3d-platz' });
+  KARTE3D.platz = platz;
+  requestAnimationFrame(function () { if (KARTE3D.bereit) karte3dSenden(karte3dDaten()); });   /* aktueller Stand nach jedem Neuaufbau des Moduls */
+  return platz;
 }
 if (typeof window !== 'undefined' && !window.__karte3dHoerer) {
   window.__karte3dHoerer = true;
   window.addEventListener('message', function (ev) {
     const fr = document.getElementById('k-3d-frame'); if (!fr || ev.source !== fr.contentWindow) return;
     const d = ev.data || {};
-    if (d.typ === 'karte3d-bereit') { try { fr.contentWindow.postMessage(karte3dDaten(), '*'); } catch (e) { /* ohne 3D */ } }
+    if (d.typ === 'karte3d-bereit') { KARTE3D.bereit = true; try { fr.contentWindow.postMessage(karte3dDaten(), '*'); } catch (e) { /* ohne 3D */ } }
     else if (d.typ === 'karte3d-klick') karte3dKlick(d);
     else if (d.typ === 'karte3d-kamera' && d.kamera) {
       VIEW.karte.kamera3d = d.kamera;

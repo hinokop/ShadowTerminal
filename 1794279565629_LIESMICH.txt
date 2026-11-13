@@ -722,3 +722,7 @@ Nachtrag Paket m:
 - 3D-Karte: kräftigere Symbole je Kategorie (Person, Organisation, Standort, Zugriffspunkt, Sichtung, Pin, Ort) mit hellem Rand und dunkler Kontur, roter Ring ab Stufe 4, Beschriftung mit Kontur, Auswahlring.
 - Klicks in 3D laufen durch denselben Handler wie in 2D: Markierung wählen (Popup rechts), Zone wählen (Umschalt/Strg für Mehrfachauswahl), Pin setzen, Zone markieren, Zugriffspunkte markieren, Messen, Position für ein Dossier festlegen.
 - Noch nicht in 3D: Verbindungen, vermutete Transportroute, Unschärferinge der Sichtungen, Zeitfenster-Overlay.
+
+Nachtrag Paket n:
+- 3D-Ansicht lebt dauerhaft außerhalb des Moduls und wird über einen Platzhalter positioniert: Pin setzen, Zone, Messen und Ebenenwechsel laden sie nicht mehr neu (kein Weißblitz, Kamera bleibt). Beim Wechsel 2D/3D und zwischen Modulen bleibt sie erhalten.
+- Popups: maximale Höhe mit Scrollleiste; Zugriffspunkt-Popup mit Kontrollkästchen in normaler Größe (waren auf volle Breite gestreckt); Auswahlfeld "Gehe zu" in 3D begrenzt.
