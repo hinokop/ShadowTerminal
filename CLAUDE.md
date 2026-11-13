@@ -24,7 +24,7 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 - 3D-Ansicht: Schalter "3D"/"2D" in der Kartenleiste; karte3d.html wird eingebettet (iframe) und erhält Marker, Zonen und Kamera per postMessage.
   Klicks in 3D laufen über st.klick (KARTE_ST) wie in 2D. Offen in 3D: Luftbild, Verbindungen, Route, Sichtungs-Unschärfe, Zeitfenster.
 - Zusatzquellen (SAT_QUELLEN in karte-modul.js): Sentinel-2 cloudless (EOX, nicht-kommerziell) und Brandenburg DOP20 (dl-de/by-2.0); Adressen ungeprüft gegen die Dienste. BKG-DOP ist für Dritte gebührenpflichtig, nicht verwenden.
-- Karte: Zeile "Licht" (offline, NOAA-Näherung, geprüft gegen astral) und optionales Wetter (Open-Meteo, aus, max. 1 Abfrage je 0,1-Grad-Feld/15 min).
+- Karte: Zeile "Licht" (offline, NOAA-Näherung, geprüft gegen astral) und Wetter (Open-Meteo, dauerhaft an, max. 1 Abfrage je 0,1-Grad-Feld/15 min).
 - 3D braucht WebGL: START.bat/START_LOKAL.bat/START_SICHER.bat/START.vbs schalten die GPU ab; START_3D.bat nicht.
 
 ## Git

@@ -11,7 +11,7 @@
    ===================================================================== */
 const KW = 960, KH = 540, DEG = Math.PI / 180;
 VIEW.karte = { cartoKey: '', cartoStil: 'dark_all', zoneSetzen: false, statusOffen: false, lat: 50.5, lon: 8, zoom: 5, dt: 0, auswahl: null, pick: null, init: false, messen: false, messPts: [], spiel: null, flug: null, suche: '', anbieter: 'osm', url: '', dunkel: true,
-  ebenenOffen: true, quellenAus: {}, wetter: false,
+  ebenenOffen: true, quellenAus: {}, wetter: true,
   ebenen: { ausgang: true, standorte: true, orte: true, personen: true, organisationen: true, verbindungen: true, sichtungen: true, fenster: true, route: true, strecke: true, gelaende: true, strassen: true, namen: true, zonen: true, kacheln: false } };
 try {
   const gespeichert = JSON.parse(window.localStorage.getItem(STORAGE_KEY + '.kartenwahl') || 'null');
@@ -24,7 +24,6 @@ try {
     if (gespeichert.cartoStil === 'dark_all' || gespeichert.cartoStil === 'dark_nolabels') VIEW.karte.cartoStil = gespeichert.cartoStil;
     if (typeof gespeichert.dunkel === 'boolean') VIEW.karte.dunkel = gespeichert.dunkel;
     if (gespeichert.quellenAus && typeof gespeichert.quellenAus === 'object') VIEW.karte.quellenAus = gespeichert.quellenAus;
-    if (typeof gespeichert.wetter === 'boolean') VIEW.karte.wetter = gespeichert.wetter;
   }
   /* Schlüsseldatei kartenschluessel.js (optional, liegt neben index.html): setzt den Schlüssel, wenn im Browser keiner steht */
   const sd = window.KARTEN_SCHLUESSEL;
@@ -33,7 +32,7 @@ try {
     if (!gespeichert) { VIEW.karte.anbieter = 'carto'; VIEW.karte.ebenen.kacheln = true; }
   }
 } catch (e) { /* ohne gespeicherte Wahl */ }
-function karteWahlSichern() { try { window.localStorage.setItem(STORAGE_KEY + '.kartenwahl', JSON.stringify({ ebenen: VIEW.karte.ebenen, anbieter: VIEW.karte.anbieter, url: VIEW.karte.url, dunkel: VIEW.karte.dunkel, cartoKey: VIEW.karte.cartoKey, cartoStil: VIEW.karte.cartoStil, quellenAus: VIEW.karte.quellenAus, wetter: VIEW.karte.wetter })); } catch (e) { /* ohne Speicher */ } }
+function karteWahlSichern() { try { window.localStorage.setItem(STORAGE_KEY + '.kartenwahl', JSON.stringify({ ebenen: VIEW.karte.ebenen, anbieter: VIEW.karte.anbieter, url: VIEW.karte.url, dunkel: VIEW.karte.dunkel, cartoKey: VIEW.karte.cartoKey, cartoStil: VIEW.karte.cartoStil, quellenAus: VIEW.karte.quellenAus })); } catch (e) { /* ohne Speicher */ } }
 function merc(lat) { return Math.log(Math.tan(Math.PI / 4 + Math.max(-85, Math.min(85, lat)) * DEG / 2)); }
 function mercInv(y) { return (2 * Math.atan(Math.exp(y)) - Math.PI / 2) / DEG; }
 function karteProj() {
@@ -766,7 +765,7 @@ function zoneKurz(zn, lg) {
 }
 /* ---------- Sonne, Licht und Wetter ----------
    Sonnenstand und Zeiten werden offline berechnet (NOAA-Näherung, Genauigkeit etwa eine Minute; Brechung der Atmosphäre ist über -0,833 Grad
-   berücksichtigt). Das Wetter ist online und standardmäßig aus (Open-Meteo, CC BY 4.0, nicht-kommerzielle Nutzung): je Kartenmitte (auf 0,1 Grad
+   berücksichtigt). Das Wetter ist dauerhaft aktiv (Open-Meteo, CC BY 4.0, nicht-kommerzielle Nutzung): je Kartenmitte (auf 0,1 Grad
    gerundet) höchstens eine Abfrage in 15 Minuten, nie öfter als alle 8 Sekunden. */
 function sonneHoehe(lat, lon, t) {
   const n = t / 86400000 + 2440587.5 - 2451545.0, rad = Math.PI / 180;
@@ -1362,9 +1361,6 @@ function renderKarte(m) {
       ebene('verbindungen', 'Verbindungen', IKON.verbindungen, 'Linien zwischen verknüpften, freigeschalteten Dossiers'),
       ebene('fenster', 'Zeitfenster', IKON.fenster, 'Meldefenster und Termine; außerhalb aller aktiven Fenster wird die Karte abgedunkelt'),
       ebene(['ausgang', 'route'], 'Eigener Standort', IKON.ausgang, 'Ausgangsorte, letzter Check-in und Anreiseroute'),
-      h('div', { class: 'k-eb-gruppe' }, 'Umgebung'),
-      h('label', { class: 'k-ebene', title: 'Fragt für die Kartenmitte das aktuelle Wetter bei Open-Meteo ab (CC BY 4.0). Der Anbieter sieht Kartenmitte (auf 0,1 Grad gerundet) und IP-Adresse. Standardmäßig aus.' },
-        h('input', { type: 'checkbox', id: 'k-wetter', checked: !!K.wetter, onchange: function (ev) { K.wetter = ev.target.checked; karteWahlSichern(); karteStatusAkt(); } }), h('span', null, 'Wetter (online, Open-Meteo)')),
       h('div', { class: 'k-eb-gruppe' }, 'Auftrag'),
       ebene('zonen', 'Lagezonen', IKON.zonen, 'Eine Zone je Standort mit eigener Lagebewertung, dazu die eigenen Zonen'),
       ebene('sichtungen', 'Sichtungen', IKON.sichtungen),
