@@ -1,0 +1,13 @@
+const PF=require('./_pfad.js');
+const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:950}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
+const urls=[];await p.route(/eox\.at|geobasis-bb|gdi\.berlin|cartocdn/,async r=>{urls.push(r.request().url().slice(0,90));r.abort()});
+await p.goto(PF.APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+await p.evaluate(()=>{dispatch({type:'NAVIGATION',modul:'karte'})});await p.waitForTimeout(600);
+await p.click('#k-b-luft');await p.waitForTimeout(500);
+const r=await p.evaluate(async()=>{VIEW.karte.lat=52.35;VIEW.karte.lon=14.55;VIEW.karte.zoom=12;const svg=$('k-svg');zeichneKarte(svg);await new Promise(s=>setTimeout(s,1500));zeichneKarte(svg);
+ return {keys:Object.keys(KQ),kq:JSON.stringify(KQ),vermerk:KACHEL_VERMERK,text:[...svg.querySelectorAll('text')].map(t=>t.textContent).filter(t=>/Zoom/.test(t))[0],toggles:[...document.querySelectorAll('.k-quellen input')].map(i=>i.id)}});
+console.log(JSON.stringify(r));console.log('Anfragen',urls.length,[...new Set(urls.map(u=>u.split('/')[2]))].join(','));
+await p.click('#k-q-bb');await p.waitForTimeout(400);console.log('nach Abschalten:',await p.evaluate(()=>KACHEL_VERMERK.length),'Wahl gespeichert',await p.evaluate(()=>JSON.stringify(JSON.parse(localStorage.getItem(STORAGE_KEY+'.kartenwahl')).quellenAus)));
+console.log(e.join('|')||'keine Seitenfehler');await b.close()})();

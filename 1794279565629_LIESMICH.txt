@@ -726,3 +726,10 @@ Nachtrag Paket m:
 Nachtrag Paket n:
 - 3D-Ansicht lebt dauerhaft außerhalb des Moduls und wird über einen Platzhalter positioniert: Pin setzen, Zone, Messen und Ebenenwechsel laden sie nicht mehr neu (kein Weißblitz, Kamera bleibt). Beim Wechsel 2D/3D und zwischen Modulen bleibt sie erhalten.
 - Popups: maximale Höhe mit Scrollleiste; Zugriffspunkt-Popup mit Kontrollkästchen in normaler Größe (waren auf volle Breite gestreckt); Auswahlfeld "Gehe zu" in 3D begrenzt.
+
+Nachtrag Paket o:
+- Neue Datei karte-modul.js (Modul 6, Lagekarte, rund 1.300 Zeilen aus index.html herausgelöst). Sie muss neben index.html liegen; die Starter prüfen das. Klassisches Skript, kein ES-Modul (funktioniert von file://). Die Anwendung startet erst nach dem load-Ereignis.
+- Zusatzquellen unter Grundlage Luftbild/Hybrid (einzeln abschaltbar, Wahl wird gespeichert): Sentinel-2 cloudless 2024 (weltweit, 10 m, Zoom bis 13) und Luftbild Brandenburg DOP20 (20 cm, Lizenz dl-de/by-2.0). Die Dienstadressen konnten in der Entwicklungsumgebung nicht abgerufen werden; bitte testen. Ist eine Quelle nicht erreichbar, steht das in der Quellenzeile.
+- Nicht aufgenommen: DOP-Dienst des BKG (für Dritte gebührenpflichtig).
+- 3D-Ansicht: Fehlerkanal (Bibliothek fehlt, WebGL-Start scheitert, Kartenstil nicht erreichbar, Grafikkontext verloren und wiederhergestellt); Hinweis in der Fläche und kurze Meldung im Terminal.
+- Tests (Ordner tests im Repository): Pfade jetzt relativ zum Projektordner (_pfad.js), README.

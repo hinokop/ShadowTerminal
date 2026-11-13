@@ -10,6 +10,9 @@ html,body{margin:0;height:100%;background:#0b0f14;color:#c9d4df;font:13px/1.4 sy
 #bar button,#bar select{background:#121a23;color:#c9d4df;border:1px solid #2a3846;padding:5px 9px;border-radius:3px;font:inherit;cursor:pointer}
 #bar button.on{border-color:#6fa8d6;color:#fff}
 body.emb #bar{left:auto;right:56px}
+#fehler{position:absolute;z-index:5;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:24px;text-align:center;background:rgba(11,15,20,.94);color:#c9d4df}
+#fehler[hidden]{display:none}
+#fehler p{margin:0;max-width:560px}
 #st{position:absolute;z-index:2;bottom:8px;left:10px;opacity:.7}
 </style></head><body>
 <div id="bar">
@@ -18,16 +21,30 @@ body.emb #bar{left:auto;right:56px}
  <button id="bnord">Nord</button>
  <button id="bflach">Flach</button>
 </div>
-<div id="m"></div><div id="st">Basiskarte OpenFreeMap / OpenStreetMap-Mitwirkende</div>
+<div id="m"></div><div id="fehler" hidden role="alert"></div><div id="st">Basiskarte OpenFreeMap / OpenStreetMap-Mitwirkende</div>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
 /* Zwei Betriebsarten: eingebettet im Terminal (Daten kommen per postMessage) oder eigenständig (Daten aus szenario.js). */
 (function(){
   var emb = /eingebettet=1/.test(location.search) && window.parent !== window;
   if(emb) document.body.className='emb';
-  var map = new maplibregl.Map({container:'m', style:'https://tiles.openfreemap.org/styles/liberty',
-    center:[13.426,52.4905], zoom:15.5, pitch:60, bearing:-20, maxPitch:80, attributionControl:{compact:true}});
+  var fe=document.getElementById('fehler');
+  function fehler(kurz,lang){ fe.hidden=false; fe.innerHTML=''; var a=document.createElement('p'),b=document.createElement('p'); a.style.fontWeight='600'; a.textContent=kurz; b.textContent=lang; fe.appendChild(a); fe.appendChild(b);
+    if(emb) parent.postMessage({typ:'karte3d-fehler',grund:kurz},'*'); }
+  /* Fehlerkanal: Bibliothek fehlt, WebGL-Start scheitert, Kartenstil lädt nicht, Grafikkontext geht verloren */
+  if(typeof maplibregl==='undefined'){ fehler('3D-Ansicht nicht verfügbar','Die Kartenbibliothek konnte nicht geladen werden (keine Internetverbindung oder Dienst gesperrt).'); return; }
+  var map;
+  try{
+    map = new maplibregl.Map({container:'m', style:'https://tiles.openfreemap.org/styles/liberty',
+      center:[13.426,52.4905], zoom:15.5, pitch:60, bearing:-20, maxPitch:80, attributionControl:{compact:true}});
+  }catch(e){ fehler('3D-Ansicht nicht verfügbar','Die Grafikbeschleunigung (WebGL) konnte nicht gestartet werden: '+(e&&e.message||e)); return; }
   window.karte3d = map;
+  var cv=map.getCanvas();
+  cv.addEventListener('webglcontextlost',function(ev){ ev.preventDefault(); fehler('Grafikkontext verloren','Die Grafikkarte hat der Karte den Kontext entzogen. Die Ansicht wird wiederhergestellt, sobald das System ihn zurückgibt.'); });
+  cv.addEventListener('webglcontextrestored',function(){ fe.hidden=true; try{map.triggerRepaint();}catch(e){} });
+  var pruefen=0;
+  map.on('error',function(){ if(bereit||pruefen) return; pruefen=setTimeout(function(){ if(!bereit) fehler('Kartenstil nicht geladen','Der Kartenstil von OpenFreeMap ist nicht erreichbar (offline oder gesperrt). Die 2D-Karte bleibt nutzbar.'); },4000); });   /* Fehler vor dem Laden; läuft das Laden doch noch durch, verschwindet der Hinweis */
+  setTimeout(function(){ if(!bereit && fe.hidden) fehler('Karte lädt nicht','Der Kartenstil antwortet nicht. Bitte die Internetverbindung prüfen; die 2D-Karte bleibt nutzbar.'); },20000);
   map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
   var bereit=false, offen=null, ort=document.getElementById('ort'), ortListe={}, fadenkreuz=false;
 
@@ -88,6 +105,7 @@ body.emb #bar{left:auto;right:56px}
   function auswahl(id){ if(!bereit) return; map.setFilter('p-auswahl',['==',['get','id'],id||'']); }
 
   map.on('load',function(){
+    fe.hidden=true;
     Object.keys(ART).forEach(function(k){bild(k,ART[k],false);bild(k+'-hoch',ART[k],true);}); ring();
     var leer={type:'FeatureCollection',features:[]};
     map.addSource('zonen',{type:'geojson',data:leer}); map.addSource('punkte',{type:'geojson',data:leer}); map.addSource('mess',{type:'geojson',data:leer});

@@ -12,6 +12,7 @@ cd /d "%~dp0"
 
 if not exist "%~dp0index.html" goto fehlt
 if not exist "%~dp0szenario.js" goto fehlt
+if not exist "%~dp0karte-modul.js" goto fehlt
 
 set "EDGE="
 if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" set "EDGE=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
@@ -28,7 +29,7 @@ start "" "!EDGE!" --app="file:///!URL!index.html" --user-data-dir="%~dp0profil" 
 exit /b 0
 
 :fehlt
-echo index.html oder szenario.js fehlt neben dieser Datei.
+echo index.html, szenario.js oder karte-modul.js fehlt neben dieser Datei.
 pause
 exit /b 1
 

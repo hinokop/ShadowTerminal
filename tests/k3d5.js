@@ -1,12 +1,13 @@
+const PF=require('./_pfad.js');
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch({args:['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});const p=await (await b.newContext({viewport:{width:1500,height:950}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
-const D='/tmp/mlb/node_modules/maplibre-gl/dist/';
+const D=PF.MAPLIBRE;
 await p.route('**/*',r=>{const u=r.request().url();
  if(u.includes('maplibre-gl.js'))return r.fulfill({path:D+'maplibre-gl.js',contentType:'text/javascript'});
  if(u.includes('maplibre-gl.css'))return r.fulfill({path:D+'maplibre-gl.css',contentType:'text/css'});
  if(u.includes('styles/liberty'))return r.fulfill({json:{version:8,sources:{},glyphs:'https://x/{fontstack}/{range}.pbf',layers:[{id:'bg',type:'background',paint:{'background-color':'#e9e6e0'}}]}});
  if(u.startsWith('file:'))return r.continue(); return r.abort();});
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(PF.APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',ein:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'NAVIGATION',modul:'karte'})});await p.waitForTimeout(800);
 await p.click('#k-3d');await p.waitForTimeout(3500);

@@ -1,3 +1,4 @@
+const PF=require('./_pfad.js');
 const {chromium}=require('playwright');const zlib=require('zlib');
 function png(){ // 256x256 rot-grau PNG ohne Abhängigkeiten
  const w=256,h=256,raw=Buffer.alloc((w*3+1)*h);for(let y=0;y<h;y++){raw[y*(w*3+1)]=0;for(let x=0;x<w;x++){const o=y*(w*3+1)+1+x*3;raw[o]=90+(x>>5)*10;raw[o+1]=90;raw[o+2]=100+(y>>5)*8}}
@@ -8,7 +9,7 @@ function png(){ // 256x256 rot-grau PNG ohne Abhängigkeiten
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:950}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
 const P=png();let reqs=0;
 await p.route(/geoportal|fbinter|cartocdn|openstreetmap|basemaps/,async r=>{reqs++;await new Promise(s=>setTimeout(s,80));r.fulfill({body:P,contentType:'image/png',headers:{'access-control-allow-origin':'*'}})});
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(PF.APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'NAVIGATION',modul:'karte'})});await p.waitForTimeout(800);
 const r=await p.evaluate(async()=>{

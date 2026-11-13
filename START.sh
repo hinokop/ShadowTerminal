@@ -35,8 +35,9 @@ fehler() {
   exit 1
 }
 
-[ -f "$DIR/index.html" ]  || fehler "index.html oder szenario.js fehlt neben dieser Datei."
-[ -f "$DIR/szenario.js" ] || fehler "index.html oder szenario.js fehlt neben dieser Datei."
+[ -f "$DIR/index.html" ]  || fehler "index.html, szenario.js oder karte-modul.js fehlt neben dieser Datei."
+[ -f "$DIR/szenario.js" ] || fehler "index.html, szenario.js oder karte-modul.js fehlt neben dieser Datei."
+[ -f "$DIR/karte-modul.js" ] || fehler "index.html, szenario.js oder karte-modul.js fehlt neben dieser Datei."
 
 # Browser suchen: erst der ausdrueckliche Wunsch, dann gaengige Chromium-Varianten
 BROWSER=""

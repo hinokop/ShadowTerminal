@@ -7,8 +7,8 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 q = Chr(34)
 dir = fso.GetParentFolderName(WScript.ScriptFullName)
 
-If Not fso.FileExists(dir & "\index.html") Or Not fso.FileExists(dir & "\szenario.js") Then
-  MsgBox "index.html oder szenario.js fehlt neben dieser Datei.", 48, "Start nicht moeglich"
+If Not fso.FileExists(dir & "\index.html") Or Not fso.FileExists(dir & "\szenario.js") Or Not fso.FileExists(dir & "\karte-modul.js") Then
+  MsgBox "index.html, szenario.js oder karte-modul.js fehlt neben dieser Datei.", 48, "Start nicht moeglich"
   WScript.Quit 1
 End If
 
