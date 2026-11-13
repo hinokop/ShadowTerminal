@@ -1,0 +1,18 @@
+const PF=require('./_pfad.js');const {chromium}=require('playwright');
+(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:950}})).newPage();const err=[];p.on('pageerror',x=>err.push(x.message));
+await p.route(/geobasis|eox|gdi\.berlin|cartocdn|open-meteo|openfreemap|unpkg/,r=>r.abort());
+await p.goto('file://'+(PF.index||'/home/claude/index.html'));await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
+const r=await p.evaluate(()=>{const o={};
+ dispatch({type:'PIN_ANGELEGT',ll:[52.5,13.4]});dispatch({type:'PIN_ANGELEGT',ll:[52.6,13.5]});
+ const id1=PROFIL.pins[0].id;dispatch({type:'PIN_ENTFERNT',id:id1});dispatch({type:'PIN_ANGELEGT',ll:[52.7,13.6]});
+ o.ids=PROFIL.pins.map(x=>x.id+'/'+x.name).join(',');o.geloescht=!PROFIL.pins.some(x=>x.id===id1);o.idNeu=!PROFIL.pins.slice(0,-1).some(x=>x.id===PROFIL.pins[PROFIL.pins.length-1].id)&&PROFIL.pins[PROFIL.pins.length-1].id!==id1;
+ dispatch({type:'PROFIL_IMPORT',datei:'t.json',profil:{v:1,eigene:[],eigeneKanten:[],pins:[{id:PROFIL.pins[0].id,name:'X',ll:[1,2]},{id:'PIN-777',name:'Y',ll:[3,4]},{id:PROFIL.pins[0].id,name:'Z',ll:PROFIL.pins[0].ll}]}});
+ o.nachImport=PROFIL.pins.map(x=>x.id).join(',');o.konfliktText=(STATE.protokoll||STATE.log||[]).slice(-1).map(x=>x.detail||'').join('');
+ dispatch({type:'PROFIL_LEEREN'});o.pinsNachLeeren=PROFIL.pins.length;
+ const e=STATE.dossiers&&Object.keys(STATE.dossiers.entitaeten)[0];dispatch({type:'SICHTUNG_HINZU',id:e,ort:'irgendwo',text:'test'});
+ const si=STATE.dossiers.entitaeten[e].sichtungen.slice(-1)[0];o.guete=si.guete;return o});
+console.log(JSON.stringify(r));
+let ok=true;const chk=(n,c)=>{console.log((c?'OK   ':'FAIL ')+n);if(!c)ok=false};
+chk('Pin entfernt',r.geloescht);chk('Pin-ID nicht wiederverwendet',r.idNeu);chk('Import: Konflikt als neuer Pin',/PIN-777/.test(r.nachImport)&&r.nachImport.split(',').length===4);chk('Profil leeren entfernt Pins',r.pinsNachLeeren===0);chk('Sichtung ohne Güte unbewertet',r.guete==='unbewertet');chk('keine Seitenfehler',err.length===0);
+if(err.length)console.log(err.join('|'));await b.close();process.exit(ok?0:1)})();

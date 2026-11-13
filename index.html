@@ -2734,9 +2734,9 @@ function sichtungGuete(e, s) {
   if (frische('E', s.t).stufe === 'veraltet') return 'veraltet';
   const f = erkFold(s.ort || ''), L = (STATE.dossiers.entitaeten[e.id].sichtungen || []);
   if (f && s.guete !== 'unbestaetigt' && L.some(function (x) { const g = erkFold(x.ort || ''); return x.id !== s.id && x.guete !== 'unbestaetigt' && g && Math.abs(Date.parse(x.t) - Date.parse(s.t)) < 3600000 && g.indexOf(f) < 0 && f.indexOf(g) < 0; })) return 'widerspruechlich';
-  return s.guete || 'gesichert';
+  return s.guete || 'unbewertet';
 }
-function gueteLabel(g) { const d = SCENARIO.guete[g] || SCENARIO.guete.gesichert; return h('span', { class: 'label ' + d.klasse, title: d.text }, d.label); }
+function gueteLabel(g) { const d = SCENARIO.guete[g] || SCENARIO.guete.unbewertet; return h('span', { class: 'label ' + d.klasse, title: d.text }, d.label); }
 function sichtungText(e) {
   const T = abfrageT().standort, d = STATE.dossiers.entitaeten[e.id], L = d && d.sichtungen ? d.sichtungen.slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); }) : [];
   const fuell = function (t, x) { Object.keys(x).forEach(function (k) { t = t.replace('{' + k + '}', x[k]); }); return t; };
@@ -5064,9 +5064,11 @@ const ACTIONS = {
     if (!Array.isArray(a.ll) || !isFinite(a.ll[0]) || !isFinite(a.ll[1])) return null;
     PROFIL.pins = PROFIL.pins || [];
     let nr = 1;                                       /* kleinste freie Nummer: wurde Pin 1 gelöscht, heißt der nächste wieder Pin 1 */
-    while (PROFIL.pins.some(function (y) { return y.id === 'PIN-' + p3(nr) || y.name === 'Pin ' + nr; })) nr++;
-    PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, nr);
-    const id = 'PIN-' + p3(nr);
+    while (PROFIL.pins.some(function (y) { return y.name === 'Pin ' + nr; })) nr++;
+    /* Die ID wird nie wiederverwendet (Verweise aus Plänen und Importen); nur die Anzeigenummer darf Lücken füllen */
+    const hoechste = PROFIL.pins.reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0);
+    PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, hoechste) + 1;
+    const id = 'PIN-' + p3(PROFIL.seq.pin);
     PROFIL.pins.push({ id: id, name: 'Pin ' + nr, ll: [Number(a.ll[0]), Number(a.ll[1])], zwecke: [], umgebung: {}, notiz: '', t: nowIso() });
     VIEW.karte.auswahl = id;
     return { modul: 'Karte', aktion: 'Pin gesetzt', detail: id + ' bei ' + Number(a.ll[0]).toFixed(4) + ', ' + Number(a.ll[1]).toFixed(4) };
@@ -5127,14 +5129,24 @@ const ACTIONS = {
     });
     (Array.isArray(q.ausgang) ? q.ausgang : []).forEach(function (x) { if (x && x.id && !PROFIL.ausgang.some(function (y) { return y.id === x.id; })) PROFIL.ausgang.push(x); });
     PROFIL.pins = PROFIL.pins || [];
-    (Array.isArray(q.pins) ? q.pins : []).forEach(function (x) { if (x && x.id && Array.isArray(x.ll) && !PROFIL.pins.some(function (y) { return y.id === x.id; })) PROFIL.pins.push(x); });
+    let pinKonflikt = 0;
+    (Array.isArray(q.pins) ? q.pins : []).forEach(function (x) {
+      if (!x || !x.id || !Array.isArray(x.ll)) return;
+      const gl = PROFIL.pins.find(function (y) { return y.id === x.id; });
+      if (!gl) { PROFIL.pins.push(x); return; }
+      if (gl.ll[0] === x.ll[0] && gl.ll[1] === x.ll[1]) return;          /* gleicher Pin, schon vorhanden */
+      const k = PROFIL.pins.reduce(function (m, y) { const z = /^PIN-(\d+)$/.exec(y.id || ''); return z ? Math.max(m, Number(z[1])) : m; }, 0);
+      PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, k) + 1;            /* gleiche ID, andere Position: als eigener Pin mit neuer ID übernehmen */
+      PROFIL.pins.push(Object.assign({}, x, { id: 'PIN-' + p3(PROFIL.seq.pin), name: (x.name || 'Pin') + ' (Import ' + x.id + ')' }));
+      pinKonflikt += 1;
+    });
     Object.keys(q.aenderungen || {}).forEach(function (k) { if (!PROFIL.aenderungen[k] && entitaet(k)) PROFIL.aenderungen[k] = q.aenderungen[k]; });
     PROFIL.dossierDaten = PROFIL.dossierDaten || {};
     Object.keys(q.dossierDaten || {}).forEach(function (k) { if (!PROFIL.dossierDaten[k] && entitaet(k)) PROFIL.dossierDaten[k] = q.dossierDaten[k]; });
     aenderungenAnwenden();
     ['eigen', 'kante', 'galerie', 'ausgang'].forEach(function (k) { PROFIL.seq[k] = Math.max(PROFIL.seq[k] || 0, (q.seq && q.seq[k]) || 0); });
     profilEinspielen(STATE);
-    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' };
+    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber anderer Position unter neuer Nummer übernommen' : '') };
   },
   PROFIL_LEEREN: function () {
     const ids = STATE.dossiers.eigene.map(function (e) { return e.id; });
@@ -5142,6 +5154,7 @@ const ACTIONS = {
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];
     const alt = PROFIL.leer();
     ['eigene', 'eigeneKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten'].forEach(function (k) { PROFIL[k] = alt[k]; });
+    PROFIL.pins = [];
     Object.keys(STATE.dossiers.entitaeten).forEach(function (id) { const x = STATE.dossiers.entitaeten[id]; if (x && Array.isArray(x.notizen)) x.notizen = []; });
     aenderungenAnwenden();
     STATE.seq.eigen = 0; STATE.seq.kante = 0;
@@ -5221,7 +5234,7 @@ const ACTIONS = {
     d.sichtungen = d.sichtungen || [];
     STATE.seq.sichtung = (STATE.seq.sichtung || 0) + 1;
     const id = 'SI-' + p3(STATE.seq.sichtung), t = nowIso();
-    const guete = SCENARIO.guete[a.guete] ? a.guete : 'gesichert';
+    const guete = SCENARIO.guete[a.guete] ? a.guete : 'unbewertet';
     d.sichtungen.push({ id: id, t: t, ort: ort, text: text, guete: guete, quelle: a.quelle || 'Eintrag', zone: a.zone || undefined });
     d.aktualisiert = t;
     delete VIEW.draft['si-ort-' + e.id]; delete VIEW.draft['si-text-' + e.id];
@@ -6198,20 +6211,6 @@ function dokumentOeffnen(d) {
     setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
   }).catch(function () { meldung('Datei konnte nicht gelesen werden.'); });
 }
-function zpAnlegen(def, karte) {
-  const n0 = MS(def.id).zugriff.length;
-  dispatch({ type: 'ZUGRIFF_ANGELEGT', typ: $('zp-typ').value, bezug: $('zp-bezug').value, text: ($('zp-text').value || '').trim(), r: $('zp-r').value });
-  const L = MS(def.id).zugriff;
-  if (L.length <= n0) return;
-  delete VIEW.draft['zp-text'];
-  if (karte) {
-    const z = L[L.length - 1];
-    VIEW.karte.pick = z.id; VIEW.karte.auswahl = null;
-    if (z.ll) { VIEW.karte.lat = z.ll[0]; VIEW.karte.lon = z.ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 13); }
-    dispatch({ type: 'NAVIGATION', modul: 'karte' });
-    renderModule();
-  }
-}
 const ZP_RADIEN = [0, 50, 100, 250, 500];
 function zpBezugOptionen() { return pool().filter(function (e) { return wissen(e) !== 'unbekannt'; }); }
 /* Auswahlfelder zu einem Zugriffspunkt (Panel und Karten-Popup teilen sich dieselben Felder) */
@@ -6609,7 +6608,7 @@ function sichtungenBlock(e) {
       entwurf('input', 'si-ort', 'si-ort-' + e.id, { type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Ort der Sichtung', placeholder: 'Ort, z. B. Sonnenallee 14, Zufahrt', style: 'flex:1 1 200px;min-width:0' }),
       entwurf('input', 'si-text', 'si-text-' + e.id, { type: 'text', autocomplete: 'off', 'aria-label': 'Beobachtung', placeholder: 'Beobachtung, z. B. steigt in dunklen Transporter', style: 'flex:2 1 260px;min-width:0',
         onkeydown: function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); $('btn-si').click(); } } }),
-      h('select', { id: 'si-guete', 'aria-label': 'Güte der Information' }, ['gesichert', 'plausibel', 'unbestaetigt'].map(function (g) { return h('option', { value: g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); })),
+      h('select', { id: 'si-guete', 'aria-label': 'Güte der Information' }, ['unbewertet', 'gesichert', 'plausibel', 'unbestaetigt'].map(function (g) { return h('option', { value: g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); })),
       h('button', { type: 'button', id: 'btn-si', onclick: function () {
         const o = ($('si-ort').value || '').trim(), t = ($('si-text').value || '').trim();
         if (!o && !t) { meldung('Sichtung ohne Ort und ohne Beobachtung wird nicht eingetragen.'); return; }

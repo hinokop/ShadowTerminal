@@ -940,6 +940,7 @@ SCENARIO.abfragen.dossier = {
   verworfen: 'Verworfen. Es wurde nichts eingetragen.'
 };
 SCENARIO.guete = {
+  unbewertet: { label: 'unbewertet', klasse: 's-dim', text: 'noch nicht eingestuft' },
   gesichert: { label: 'gesichert', klasse: 's-accent', text: 'eigene Beobachtung' },
   plausibel: { label: 'plausibel', klasse: 's-dim', text: 'aus zweiter Hand, schlüssig' },
   unbestaetigt: { label: 'unbestätigt', klasse: 's-warn', text: 'ohne Beleg' },
