@@ -5129,15 +5129,19 @@ const ACTIONS = {
     });
     (Array.isArray(q.ausgang) ? q.ausgang : []).forEach(function (x) { if (x && x.id && !PROFIL.ausgang.some(function (y) { return y.id === x.id; })) PROFIL.ausgang.push(x); });
     PROFIL.pins = PROFIL.pins || [];
-    let pinKonflikt = 0;
+    let pinKonflikt = 0, pinDoppelt = 0;
+    const pinNr = function (y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Number(k[1]) : 0; };
+    PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, (q.seq && q.seq.pin) || 0, PROFIL.pins.reduce(function (m, y) { return Math.max(m, pinNr(y)); }, 0));
     (Array.isArray(q.pins) ? q.pins : []).forEach(function (x) {
       if (!x || !x.id || !Array.isArray(x.ll)) return;
+      const rein = function (y) { const c = Object.assign({}, y); delete c.importVon; delete c.id; delete c.name; return JSON.stringify(c); };
       const gl = PROFIL.pins.find(function (y) { return y.id === x.id; });
-      if (!gl) { PROFIL.pins.push(x); return; }
-      if (gl.ll[0] === x.ll[0] && gl.ll[1] === x.ll[1]) return;          /* gleicher Pin, schon vorhanden */
-      const k = PROFIL.pins.reduce(function (m, y) { const z = /^PIN-(\d+)$/.exec(y.id || ''); return z ? Math.max(m, Number(z[1])) : m; }, 0);
-      PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, k) + 1;            /* gleiche ID, andere Position: als eigener Pin mit neuer ID übernehmen */
-      PROFIL.pins.push(Object.assign({}, x, { id: 'PIN-' + p3(PROFIL.seq.pin), name: (x.name || 'Pin') + ' (Import ' + x.id + ')' }));
+      if (!gl) { PROFIL.pins.push(x); PROFIL.seq.pin = Math.max(PROFIL.seq.pin, pinNr(x)); return; }
+      if (JSON.stringify(gl) === JSON.stringify(x)) { pinDoppelt += 1; return; }                  /* vollständig identisch */
+      /* gleiche ID, anderer Inhalt: als eigener Pin mit neuer ID übernehmen; dieselbe Datei erzeugt beim zweiten Import keine weitere Kopie */
+      if (PROFIL.pins.some(function (y) { return y.importVon === x.id && rein(y) === rein(x); })) { pinDoppelt += 1; return; }
+      PROFIL.seq.pin += 1;
+      PROFIL.pins.push(Object.assign({}, x, { id: 'PIN-' + p3(PROFIL.seq.pin), name: (x.name || 'Pin') + ' (Import ' + x.id + ')', importVon: x.id }));
       pinKonflikt += 1;
     });
     Object.keys(q.aenderungen || {}).forEach(function (k) { if (!PROFIL.aenderungen[k] && entitaet(k)) PROFIL.aenderungen[k] = q.aenderungen[k]; });
@@ -5146,15 +5150,15 @@ const ACTIONS = {
     aenderungenAnwenden();
     ['eigen', 'kante', 'galerie', 'ausgang'].forEach(function (k) { PROFIL.seq[k] = Math.max(PROFIL.seq[k] || 0, (q.seq && q.seq[k]) || 0); });
     profilEinspielen(STATE);
-    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber anderer Position unter neuer Nummer übernommen' : '') };
+    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') };
   },
   PROFIL_LEEREN: function () {
     const ids = STATE.dossiers.eigene.map(function (e) { return e.id; });
     ids.forEach(function (id) { delete STATE.dossiers.entitaeten[id]; });
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];
-    const alt = PROFIL.leer();
+    const alt = PROFIL.leer(), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
     ['eigene', 'eigeneKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten'].forEach(function (k) { PROFIL[k] = alt[k]; });
-    PROFIL.pins = [];
+    PROFIL.pins = []; PROFIL.seq.pin = pinZaehler;     /* IDs werden auch nach dem Leeren nie neu vergeben */
     Object.keys(STATE.dossiers.entitaeten).forEach(function (id) { const x = STATE.dossiers.entitaeten[id]; if (x && Array.isArray(x.notizen)) x.notizen = []; });
     aenderungenAnwenden();
     STATE.seq.eigen = 0; STATE.seq.kante = 0;

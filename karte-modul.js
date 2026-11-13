@@ -88,7 +88,10 @@ function sichtungKoord(s) {
   const exakt = orte.filter(function (e) { return norm(e.name) === q; }), teil = orte.filter(function (e) { return norm(e.name).indexOf(q) >= 0; });
   const ort = exakt.length === 1 ? exakt[0] : (!exakt.length && teil.length === 1 ? teil[0] : null);
   if (ort) return { ll: karteKoord(ort.id), genau: richtung ? 'Richtung' : 'Ort im Dossier', bez: ort.id + ' ' + ort.name };
-  const st = karteEbenenDaten().orte.find(function (o) { const n = erkFold(String(o[0])).replace(/[^a-z0-9 ]/g, ' ').trim(); return n === name || (name.length >= 5 && n.indexOf(name) === 0); });
+  const nn = function (o) { return erkFold(String(o[0])).replace(/[^a-z0-9 ]/g, ' ').trim(); }, verz = karteEbenenDaten().orte;
+  const sx = verz.filter(function (o) { return nn(o) === name; }), sp = name.length >= 5 ? verz.filter(function (o) { return nn(o).indexOf(name) === 0; }) : [];
+  /* im Ortsverzeichnis gilt dieselbe Regel: exakt eindeutig, sonst genau ein Präfixtreffer, sonst kein Punkt */
+  const st = sx.length === 1 ? sx[0] : (!sx.length && sp.length === 1 ? sp[0] : null);
   if (st) return { ll: [st[2] / 100, st[1] / 100], genau: richtung ? 'Richtung' : 'Ortschaft', bez: st[0] };
   return null;
 }
