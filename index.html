@@ -224,6 +224,8 @@ fieldset:disabled .opt{color:var(--text-dim)}
 .karte-svg{display:block;width:100%;height:auto;max-height:78vh;background:#080C11;border:1px solid var(--border);cursor:grab;touch-action:none;user-select:none}
 .karte-svg:active{cursor:grabbing}
 .k-3d{position:absolute;inset:0;width:100%;height:100%;border:0;background:#080C11;z-index:3}
+.k-3d-hinweis{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;padding:24px;text-align:center;color:var(--text);font-size:13px}
+.k-3d-hinweis p{max-width:560px;margin:0}
 .karte-wrap.ist3d .k-zoom,.karte-wrap.ist3d .k-status{display:none}
 .k-meer{fill:#091017}
 .k-gitter{stroke:#141C24;stroke-width:1}
@@ -8270,7 +8272,13 @@ function karte3dDaten() {
     : { center: [K.lon, K.lat], zoom: Math.max(14, Math.min(17.5, K.zoom - 0.5)), pitch: 60, bearing: -20 });
   return { typ: 'karte3d-daten', marker: marker, zonen: zonen, kamera: kamera };
 }
+function webglVorhanden() {
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; }
+}
 function karte3dRahmen() {
+  if (!webglVorhanden()) return h('div', { class: 'k-3d k-3d-hinweis', id: 'k-3d-hinweis' },
+    h('p', null, 'Die 3D-Ansicht benötigt Grafikbeschleunigung (WebGL). In diesem Fenster ist sie abgeschaltet.'),
+    h('p', { class: 'dim' }, 'Der Start über START_3D.bat lässt sie zu. Die Starter START.bat, START_LOKAL.bat, START_SICHER.bat und START.vbs schalten die Grafikbeschleunigung bewusst ab, weil sie auf manchen Rechnern ein schwarzes Fenster verursacht.'));
   const fr = h('iframe', { class: 'k-3d', id: 'k-3d-frame', title: '3D-Ansicht der Lagekarte', src: 'karte3d.html?eingebettet=1' });
   return fr;
 }

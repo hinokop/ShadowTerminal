@@ -709,3 +709,11 @@ Nachtrag (Tasten, Spielhinweise, Handbuch, Ablage)
 - Zahlenwerte und Mechanikhinweise entfernt: kein "Risikowert" mit Punkten (jetzt "Risiko" mit Auffälligkeiten ohne Punkte), keine Zahlen zu Vertrauen und Belastung, keine Erklärtooltips, kein "Haltung", keine Anzeige des Kontingents.
 - Handbuch neu gefasst als Dienstvorschrift (S9-DV 4/2, Teil B) in Randnummern (101 bis 503): Allgemeines, Tarnung und Identität, Verbindung und Meldewesen (inkl. Kanalprüfung, Zwangslage, Funkstille, Abbruchwort), Zusammenarbeit mit Verbindungen, Nachbereitung. Ohne Auftragsbezug und vollständig lesbar.
 - Ablage: Anlagenverzeichnis (Verweise öffnen die Akte, sofern zugänglich), Änderungsnachweis je Dokument, Leseprotokoll (Einsichten werden gezählt, im Protokoll vermerkt).
+
+Nachtrag Paket k:
+- Karte: Kacheln bleiben beim Neuzeichnen im Dokument (gegen kurzes Schwarz beim Zoomen und Bewegen); Ersatzkacheln werden geschützt.
+- Neuer Schalter 3D / 2D in der Kartenleiste. Die 3D-Ansicht benötigt die Datei karte3d.html im selben Ordner wie index.html und eine Internetverbindung.
+
+Nachtrag Paket l:
+- 3D-Karte benötigt WebGL. Die Starter START.bat, START_LOKAL.bat, START_SICHER.bat und START.vbs schalten die Grafikbeschleunigung ab; dort zeigt der 3D-Knopf nun einen Hinweis statt einer leeren Fläche.
+- Neu: START_3D.bat (wie START.bat, aber mit Grafikbeschleunigung; dasselbe Profil, Zustand bleibt erhalten). Zeigt Edge ein schwarzes Fenster, wieder START_SICHER.bat verwenden.
