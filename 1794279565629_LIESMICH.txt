@@ -738,3 +738,7 @@ Nachtrag Paket p:
 - Karte, Lagefeld (aufklappbar): Zeile "Licht" (Tag, bürgerliche oder nautische Dämmerung, Nacht, mit Aufgang und Untergang in Z) für die Kartenmitte und den Zeitpunkt des Zeitschiebers. Offline berechnet; gegen eine unabhängige Bibliothek geprüft (Abweichung höchstens zwei Minuten).
 - Zeitfenster-Tabelle: je Fenster die Lichtlage bei Beginn und Ende.
 - Wetter (online, standardmäßig aus, Schalter "Wetter" im Ebenenfeld unter Umgebung): Open-Meteo, aktuelle Werte für die Kartenmitte (Temperatur, Wetterlage, Wind, Böen, Niederschlag, Sicht). Höchstens eine Abfrage je 0,1-Grad-Feld in 15 Minuten.
+
+Nachtrag Paket q:
+- Neue Datei akten-modul.js (Modul 7, Ablage, rund 100 Zeilen aus index.html herausgelöst). Muss neben index.html liegen; alle Starter prüfen es. Wie karte-modul.js ein klassisches Skript.
+- Dateien im Projektordner: index.html, szenario.js, dialog.js, klassifikator.js, karte.js, karte2.js, karte-modul.js, akten-modul.js, karte3d.html, kartenschluessel.js (lokal).
