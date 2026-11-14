@@ -107,7 +107,7 @@ ACTIONS.RECHERCHE_AUSSAGE_NEU = function (a) {
 };
 ACTIONS.RECHERCHE_AUSSAGE_SETZEN = function (a) {
   const x = rchAussage(a.id); if (!x) return null;
-  const teile = [];
+  const teile = [], vorBegr = x.begruendung, vorEi = x.einschaetzung, vorSt = x.status;
   if (a.status && RCH_STATUS.some(function (s) { return s[0] === a.status; }) && a.status !== x.status) { x.status = a.status; teile.push('Status ' + a.status); }
   if (a.begruendung != null && String(a.begruendung) !== x.begruendung) { x.begruendung = String(a.begruendung).slice(0, 1000); teile.push('Begründung'); }
   if (a.einschaetzung !== undefined && (a.einschaetzung || null) !== x.einschaetzung) {
@@ -118,6 +118,7 @@ ACTIONS.RECHERCHE_AUSSAGE_SETZEN = function (a) {
     if (st && !x.begruendung.trim()) return null;
     x.einschaetzung = st; teile.push('Einschätzung ' + (st || 'zurückgenommen'));
   }
+  if (x.einschaetzung && !x.begruendung.trim()) { x.begruendung = vorBegr; x.einschaetzung = vorEi; x.status = vorSt; return null; }      /* Pflichtbegründung gilt auch nachträglich */
   if (!teile.length) return null;
   x.geaendert = nowIso();
   return { modul: 'Dossier', aktion: 'Aussage geändert', detail: x.id + ': ' + teile.join(', ') };
@@ -271,9 +272,9 @@ function rchAussagenFelder(e) {
     const strittig = x.stuetzend.length && x.widersprechend.length, ohne = !x.stuetzend.length && !x.widersprechend.length;
     const zeilen = x.stuetzend.map(function (l) { return [l, 'stützend']; }).concat(x.widersprechend.map(function (l) { return [l, 'widersprechend']; })).map(function (p) {
       const l = p[0], z = rchZuBeobachtung(l.beob);
-      return [td('nw', l.beob), td('nw', p[1]), td('nw', z ? rchFundstelleText(z.b.fundstelle) : 'fehlt'), td('txt', z && z.b.zitat ? kuerzen(z.b.zitat, 60) : (z && z.f.dateiname) || ''),
+      return [td('nw', l.beob), td('nw', p[1]), td('nw', z ? rchFundstelleText(z.b.fundstelle) : 'fehlt'), td('txt', z && z.b.zitat ? h('details', { id: 'rca-zi-' + x.id + '-' + l.beob }, h('summary', null, kuerzen(z.b.zitat, 60)), h('p', { class: 'note', style: 'white-space:pre-wrap', 'data-vollstaendig': '1' }, z.b.zitat)) : (z && z.f.dateiname) || ''),
         td('nw', h('span', { class: 'label ' + (l.pruefstand === 'geprueft' ? 's-accent' : 's-dim') }, l.pruefstand === 'geprueft' ? 'geprüft' : 'eingetragen')),
-        td('txt', [z && z.f.anhang ? h('button', { type: 'button', class: 'link', onclick: function () { rchOeffnen(z); } }, 'Öffnen') : null, ' ',
+        td('txt', [z && (z.b.dossiers || []).length && (z.b.dossiers || []).indexOf(e.id) < 0 ? h('button', { type: 'button', class: 'link', id: 'rca-zu-' + x.id + '-' + l.beob, onclick: function () { STATE.dossiers.auswahl = z.b.dossiers[0]; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); } }, 'Zum Dossier ' + z.b.dossiers[0]) : null, ' ', z && z.f.anhang ? h('button', { type: 'button', class: 'link', onclick: function () { rchOeffnen(z); } }, 'Öffnen') : null, ' ',
           h('button', { type: 'button', class: 'link', id: 'rca-pr-' + x.id + '-' + l.beob, onclick: function () { sieh('RECHERCHE_PRUEFSTAND', { aussage: x.id, beob: l.beob, stand: l.pruefstand === 'geprueft' ? 'eingetragen' : 'geprueft' }); } }, l.pruefstand === 'geprueft' ? 'Prüfung zurücknehmen' : 'Als geprüft bestätigen'), ' ',
           h('button', { type: 'button', class: 'link', onclick: function () { sieh('RECHERCHE_BELEG_GELOEST', { aussage: x.id, beob: l.beob }); } }, 'Lösen')])];
     });
@@ -294,7 +295,7 @@ function rchAussagenFelder(e) {
           sieh('RECHERCHE_AUSSAGE_SETZEN', { id: x.id, einschaetzung: st }); delete VIEW.draft[bk];
         })),
       h('div', { class: 'row' }, entwurf('input', 'rca-begr-' + x.id, bk, { type: 'text', 'aria-label': 'Begründung ' + x.id, placeholder: 'Begründung der Einschätzung', maxlength: '1000', value: VIEW.draft[bk] != null ? VIEW.draft[bk] : x.begruendung, style: 'flex:1 1 360px;min-width:0' }),
-        h('button', { type: 'button', id: 'rca-begr-ok-' + x.id, onclick: function () { const t = (VIEW.draft[bk] != null ? VIEW.draft[bk] : x.begruendung).trim(); if (sieh('RECHERCHE_AUSSAGE_SETZEN', { id: x.id, begruendung: t })) delete VIEW.draft[bk]; } }, 'Begründung speichern')),
+        h('button', { type: 'button', id: 'rca-begr-ok-' + x.id, onclick: function () { const t = (VIEW.draft[bk] != null ? VIEW.draft[bk] : x.begruendung).trim(); if (!t && x.einschaetzung) { meldung('Die Begründung kann nicht geleert werden, solange eine Einschätzung gesetzt ist. Zuerst die Einschätzung zurücknehmen.'); return; } if (sieh('RECHERCHE_AUSSAGE_SETZEN', { id: x.id, begruendung: t })) delete VIEW.draft[bk]; } }, 'Begründung speichern')),
       zeilen.length ? tabelle(['Beleg', 'Rolle', 'Fundstelle', 'Inhalt', 'Prüfstand', ''], zeilen) : null,
       kand.length ? h('div', { class: 'row' }, h('label', { for: gk }, 'Beleg'),
         sel(gk, 'Beleg verknüpfen ' + x.id, [['', '– Beleg wählen –']].concat(kand.map(function (b) { const z = rchZuBeobachtung(b.id); return [b.id, b.id + ' · ' + z.q.id + ' · ' + rchFundstelleText(b.fundstelle)]; })), VIEW.draft[gk] || '', function (ev) { VIEW.draft[gk] = ev.target.value; }),

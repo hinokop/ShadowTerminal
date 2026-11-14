@@ -54,7 +54,22 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
     const ok = rchSchreiben({ type: 'RECHERCHE_AUSSAGE_NEU', dossier: STATE.dossiers.auswahl, fall: PROFIL.recherche.faelle[0].id, text: 'Voll' }, 'Aussage angelegt'); Storage.prototype.setItem = orig;
     return { ok, n: PROFIL.recherche.aussagen.length - n0, seq: PROFIL.recherche.seq.aussage - s0, log: STATE.log.length - l0 };
   });
+  /* Nachtrag 1: gespeicherte Einschätzung verliert ihre Pflichtbegründung nicht */
+  const leer = await p.evaluate(id => { const x = PROFIL.recherche.aussagen[0]; x.stuetzend.length || dispatch({ type: 'RECHERCHE_BELEG_VERKNUEPFT', aussage: id, beob: PROFIL.recherche.beobachtungen[0].id, rolle: 'stuetzend' });
+    dispatch({ type: 'RECHERCHE_AUSSAGE_SETZEN', id, begruendung: 'Grund' }); dispatch({ type: 'RECHERCHE_AUSSAGE_SETZEN', id, einschaetzung: 'dafuer' });
+    dispatch({ type: 'RECHERCHE_AUSSAGE_SETZEN', id, begruendung: '   ' }); const a = PROFIL.recherche.aussagen[0];
+    return { begr: a.begruendung, ei: a.einschaetzung, gespeichert: JSON.parse(localStorage.getItem(PROFIL_KEY)).recherche.aussagen[0].begruendung }; }, id);
+  /* Nachtrag 2: langer Textbeleg aus anderem Dossier ist nach Neustart aus der Aussage vollständig lesbar und das Dossier erreichbar */
+  const LANG = 'Langer Auszug: ' + 'Die Eröffnung verschob sich wegen Lieferverzug mehrfach. '.repeat(8) + 'ENDE-MARKE';
+  await p.evaluate(LANG => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Zweitdossier', land: 'DE' }); const d2 = STATE.dossiers.eigene.find(x => x.name === 'Zweitdossier').id;
+    dispatch({ type: 'RECHERCHE_BELEG', dossier: d2, fall: PROFIL.recherche.faelle[0].id, neuerFall: null, art: 'Text', herkunft: 'Zeitung', notiz: '', fassung: { dateiname: null, groesse: 10, typ: 'text/plain', hash: null, anhang: false }, fundstelle: { typ: 'Absatz', wert: '7' }, zitat: LANG });
+    const bn = PROFIL.recherche.beobachtungen[PROFIL.recherche.beobachtungen.length - 1].id; dispatch({ type: 'RECHERCHE_BELEG_VERKNUEPFT', aussage: PROFIL.recherche.aussagen[0].id, beob: bn, rolle: 'widersprechend' }); }, LANG);
+  await start(); await zeigen(); await p.waitForSelector('#rca-neu');
+  const lang = await p.evaluate(id => { const bn = PROFIL.recherche.aussagen[0].widersprechend.slice(-1)[0].beob; const el = document.querySelector('#rca-zi-' + id + '-' + bn + ' [data-vollstaendig]'); const zu = document.getElementById('rca-zu-' + id + '-' + bn);
+    const roh = el ? el.textContent : ''; if (zu) zu.click(); return { voll: roh.endsWith('ENDE-MARKE') && roh.length > 400, zu: !!zu, nachSprung: STATE.dossiers.eigene.find(x => x.id === STATE.dossiers.auswahl).name }; }, id);
   const r = {
+    begruendungBleibt: leer.begr === 'Grund' && leer.ei === 'dafuer' && leer.gespeichert === 'Grund',
+    textbelegVollstaendig: lang.voll && lang.zu && lang.nachSprung === 'Zweitdossier',
     ohneFall: ohneFall === 0, angelegt: a1.length === 1 && a1[0].status === 'entwurf' && a1[0].einschaetzung === null,
     verknuepft: nachV[0].stuetzend.length === 1 && nachV[0].widersprechend.length === 1 && nachV[0].stuetzend[0].beob === belege[0],
     ohneBegruendungAbgelehnt: ohneBegr === null,

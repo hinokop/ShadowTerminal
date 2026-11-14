@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 #  Field Terminal - Start vom Stick (Linux / Kali)
-#  Entspricht START.bat / START.vbs: oeffnet index.html in einem
+#  Entspricht START_3D.bat: oeffnet index.html in einem
 #  Chromium-Anwendungsfenster (ohne Adresszeile und Tabs). Das
 #  Browserprofil liegt im Ordner "profil" neben dieser Datei;
 #  Zustand, Protokoll und Kennungs-Hash reisen damit mit dem Stick.
