@@ -1320,15 +1320,19 @@ PROFIL.kartenProtokoll.eintraege = Array.isArray(PROFIL.kartenProtokoll.eintraeg
 PROFIL_AKTIONEN.KARTENPROTOKOLL_FRIST = 1; PROFIL_AKTIONEN.KARTENPROTOKOLL_LEEREN = 1;
 const KP_FRISTEN = [[24, '24 Stunden'], [48, '48 Stunden'], [72, '72 Stunden'], [0, 'nie']];
 const KP_ARTEN = ['Sichtung', 'Zone', 'Pin', 'Zugriffspunkt', 'Position', 'Ausgangsort'];
-function kpArt(aktion) {
-  aktion = String(aktion || '');
-  if (/^Sichtung/.test(aktion)) return 'Sichtung';
-  if (/^(Zone|Zonen|Lage|Radius|Art geändert|Einstufung|Person aus Zonenlage)/.test(aktion)) return 'Zone';
-  if (/^Pin/.test(aktion)) return 'Pin';
-  if (/Zugriffspunkt/.test(aktion)) return 'Zugriffspunkt';
-  if (/^Kartenposition/.test(aktion)) return 'Position';
-  if (/^Ausgangsort/.test(aktion)) return 'Ausgangsort';
-  return null;
+/* Ausdrücklich gekennzeichnete Aktionen: nur Eingaben und Änderungen der Person, nie simulierte Meldungen (Handler, Zonenereignisse),
+   nie Missionsvorgänge. Entscheidend ist der Aktionstyp, nicht der Anzeigetext; "leicht" markierte Änderungen zählen mit. */
+const KP_AKTIONEN = {
+  SICHTUNG_HINZU: 'Sichtung', SICHTUNG_ENTFERNT: 'Sichtung',
+  PIN_ANGELEGT: 'Pin', PIN_GEAENDERT: 'Pin', PIN_ENTFERNT: 'Pin',
+  ZONE_ANGELEGT: 'Zone', ZONE_GEAENDERT: 'Zone', ZONE_URTEIL: 'Zone', ZONE_ENTFERNT: 'Zone',
+  DOSSIER_ORT: 'Position',
+  AUSGANG_ANGELEGT: 'Ausgangsort', AUSGANG_GELOESCHT: 'Ausgangsort', AUSGANG_ORT: 'Ausgangsort'
+};
+function kpArt(typ, aktion) {
+  const art = KP_AKTIONEN[typ];
+  if (!art) return null;
+  return art === 'Zone' && /Zugriffspunkt/.test(String(aktion || '')) ? 'Zugriffspunkt' : art;   /* Unterart nur zur Anzeige */
 }
 /* entfernt abgelaufene Einträge; liefert die Zahl der entfernten */
 function kpVerfall(frist, nur) {
@@ -1339,15 +1343,22 @@ function kpVerfall(frist, nur) {
   return weg;
 }
 /* wird von dispatch für jeden Protokolleintrag aufgerufen; true, wenn das Kartenprotokoll sich geändert hat */
-function kartenProtokollErfassen(eintrag, ereignis) {
-  if ((ereignis && ereignis.leicht) || eintrag.modul === 'Mission' || eintrag.modul === 'Karte' && /^Protokoll/.test(eintrag.aktion)) return false;
-  const art = kpArt(eintrag.aktion);
+function kartenProtokollErfassen(eintrag, ereignis, typ) {
+  if (eintrag.modul === 'Mission') return false;
+  const art = kpArt(typ, eintrag.aktion);
   if (!art) return false;
   const P = PROFIL.kartenProtokoll; P.seq += 1;
   P.eintraege.push({ id: 'KP-' + p3(P.seq), t: eintrag.t, art: art, aktion: eintrag.aktion, text: eintrag.detail || '' });
   kpVerfall();
   return true;
 }
+/* räumt abgelaufene Einträge auf und speichert, wenn tatsächlich etwas entfernt wurde */
+function kpAufraeumen() {
+  const n = kpVerfall();
+  if (n) profilSpeichern();
+  return n;
+}
+kpVerfall();   /* nach dem Neuladen gelten Fristen sofort */
 ACTIONS.KARTENPROTOKOLL_FRIST = function (a) {
   const f = Number(a.stunden), P = PROFIL.kartenProtokoll;
   if (!KP_FRISTEN.some(function (x) { return x[0] === f; }) || f === P.frist) return null;
@@ -1361,6 +1372,7 @@ ACTIONS.KARTENPROTOKOLL_LEEREN = function () {
   return { modul: 'Karte', aktion: 'Protokoll geleert', detail: n + ' Einträge des Kartenprotokolls entfernt' };
 };
 function kartenReiter(aktiv) {
+  kpAufraeumen();
   const n = PROFIL.kartenProtokoll.eintraege.length;
   return h('div', { class: 'reiterleiste', role: 'tablist', 'aria-label': 'Bereiche der Karte' },
     [['karte', 'Lagekarte'], ['protokoll', 'Protokoll (' + n + ')']].map(function (x) {
@@ -1369,7 +1381,7 @@ function kartenReiter(aktiv) {
 }
 function kartenProtokollAnsicht() {
   const P = PROFIL.kartenProtokoll, K = VIEW.karte, filter = KP_ARTEN.indexOf(K.kpFilter) >= 0 ? K.kpFilter : '';
-  kpVerfall();
+  kpAufraeumen();
   const liste = P.eintraege.filter(function (x) { return !filter || x.art === filter; }).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   return panel('Kartenprotokoll', [h('span', { class: 'badge' }, String(liste.length))],
     h('p', { class: 'note pad' }, 'Vorgänge mit Kartenbezug: Sichtungen, Zonen, Pins, Zugriffspunkte, Kartenpositionen und Ausgangsorte. Mausbewegungen, Zoom und Auswahl werden nicht erfasst. Der Verfall entfernt nur den Protokolleintrag, nicht die Sichtung, Zone oder den Pin selbst.'),

@@ -17,8 +17,18 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   const vorZone = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
   await p.evaluate(() => { dispatch({ type: 'ZONE_ANGELEGT', ll: [52.51, 13.41] }); });
   ok.missionNichtErfasst = (await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length)) === vorZone + 1;
+  /* Befund 1: echte Änderungen (auch "leicht") rein, simulierte Handler-Ereignisse raus */
+  const vor1 = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
+  await p.evaluate(() => { dispatch({ type: 'PIN_GEAENDERT', id: PROFIL.pins[0].id, name: 'Umbenannt' }); });
+  await p.evaluate(() => { dispatch({ type: 'AUSGANG_ANGELEGT', name: 'Lager Test', art: 'Safehouse (Lagerhaus)', adresse: 'Teststr. 1', text: '' }); const a = PROFIL.ausgang[PROFIL.ausgang.length - 1]; dispatch({ type: 'AUSGANG_ORT', id: a.id, ll: [52.5, 13.3] }); });
+  const nach1 = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.map(x => x.aktion));
+  ok.echteAenderungen = nach1.includes('Pin geändert') && nach1.includes('Position eines Ausgangsorts gesetzt') && nach1.length === vor1 + 3;
   const arten = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.map(x => x.art));
   ok.erfasst = ['Sichtung', 'Pin', 'Zone'].every(a => arten.includes(a)) && arten.length >= 3;
+  const vorH = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
+  const hLog = await p.evaluate(() => { const L = STATE.log.length; dispatch({ type: 'ZONEN_EREIGNIS', id: 'ZN-001' }); return STATE.log.length - L; });
+  ok.handlerNichtErfasst = (await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length)) === vorH;
+  ok.handlerEreignisLief = hLog >= 1;
   /* Auswahl, Navigation, Mausaktionen erzeugen nichts */
   const n0 = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
   await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); });
@@ -41,12 +51,27 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.evaluate(() => { dispatch({ type: 'KARTENPROTOKOLL_FRIST', stunden: 5 }); });
   ok.ungueltigeFrist = (await p.evaluate(() => PROFIL.kartenProtokoll.frist)) === 0;
   /* Filter */
+  await p.click('#ktab-protokoll'); await p.waitForTimeout(200);
   await p.selectOption('#kp-filter', 'Sichtung'); await p.waitForTimeout(150);
   ok.filter = await p.evaluate(() => Array.from(document.querySelectorAll('section.panel tbody tr')).every(r => /Sichtung/.test(r.textContent)));
+  /* Persistenz (Frist zurück auf nie für die folgenden Schritte) */
+  await p.evaluate(() => { PROFIL.kartenProtokoll.frist = 0; });
   /* Persistenz */
   const gespeichert = await p.evaluate(() => JSON.parse(localStorage.getItem(PROFIL_KEY) || '{}'));
-  ok.persistenz = !!(gespeichert.kartenProtokoll && gespeichert.kartenProtokoll.eintraege.length === nach72.n);
+  ok.persistenz = !!(gespeichert.kartenProtokoll && gespeichert.kartenProtokoll.eintraege.length === await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length));
+  /* Befund 2: Sprung aus dem Dossier zeigt die Lagekarte, auch wenn zuvor das Protokoll offen war */
+  await p.evaluate(i => { VIEW.karte.reiter = 'protokoll'; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); const e = STATE.dossiers.entitaeten[i]; kartenSprung(e, [52.5, 13.4]); }, id);
+  await p.waitForTimeout(400);
+  ok.sprungLagekarte = await p.evaluate(() => VIEW.karte.reiter === 'karte' && document.getElementById('ktab-karte').getAttribute('aria-selected') === 'true');
+  /* Befund 3: Zähler im Reiter = Liste; Bereinigung wird gespeichert, auch nach Neuladen */
+  await p.evaluate(() => { dispatch({ type: 'KARTENPROTOKOLL_FRIST', stunden: 0 }); PROFIL.kartenProtokoll.eintraege[0].t = new Date(Date.now() - 100 * 3600000).toISOString(); PROFIL.kartenProtokoll.frist = 24; profilSpeichern(); });
+  const erwartet = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.filter(x => Date.parse(x.t) >= Date.now() - 24 * 3600000).length);
+  await p.evaluate(() => { VIEW.karte.reiter = 'karte'; renderModule(); });
+  const zaehler = await p.evaluate(() => Number((document.getElementById('ktab-protokoll').textContent.match(/\((\d+)\)/) || [])[1]));
+  const gesp = await p.evaluate(() => JSON.parse(localStorage.getItem(PROFIL_KEY)).kartenProtokoll.eintraege.length);
+  ok.zaehlerGleichListe = zaehler === erwartet && gesp === erwartet;
   /* Leeren */
+  await p.click('#ktab-protokoll'); await p.waitForTimeout(200);
   await p.selectOption('#kp-filter', ''); await p.click('#kp-leeren'); await p.waitForTimeout(300);
   await p.evaluate(() => { const d = document.getElementById('dlg'); const btn = Array.from(d.querySelectorAll('button')).find(x => /Protokoll leeren/.test(x.textContent)); btn && btn.click(); }); await p.waitForTimeout(300);
   ok.leeren = (await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length)) === 0 && await p.evaluate(i => (STATE.dossiers.entitaeten[i].sichtungen || []).length >= 1, id);
