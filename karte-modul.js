@@ -549,12 +549,12 @@ function zeichneKarte(svg) {
     karteZonen().forEach(function (zn) {
       const x = P.px(zn.ll[1]), y = P.py(zn.ll[0]), r = Math.max(zn.art === 'zugriff' ? 7 : 9, zn.r / mpx);
       if (x < -r || x > KW + r || y < -r || y > KH + r) return;
-      const zg = zn.art === 'zugriff', lg = zg ? null : zoneLage(zn), kl = zg ? 'zugriff' : zoneKlasse(zn, lg), sel = K.auswahl === zn.id, mehr = (K.mehr || []).indexOf(zn.id) >= 0;
+      const zg = zn.art === 'zugriff', lg = zg || zn.profil ? null : zoneLage(zn), kl = zg ? 'zugriff' : zn.profil ? 'profil' : zoneKlasse(zn, lg), sel = K.auswahl === zn.id, mehr = (K.mehr || []).indexOf(zn.id) >= 0;
       const g = s('g', { class: 'k-zone ' + kl + (zn.auto ? ' auto' : ' eigen') + (sel ? ' sel' : '') + (mehr ? ' mehr' : ''), 'data-id': zn.id },
-        s('title', null, (zg ? 'Möglicher Zugriffspunkt ' + zn.id : zn.auto ? 'Lagezone ' + zn.standort : 'Zone ' + zn.id + ' ' + zn.name) + ': ' + zoneKurz(zn, lg) + ' · Radius ' + zn.r + ' m'),
+        s('title', null, zn.profil ? 'Zone ' + zn.name + ' · Radius ' + zn.r + ' m · Stand ' + fmtZ(zn.stand || zn.t) : (zg ? 'Möglicher Zugriffspunkt ' + zn.id : zn.auto ? 'Lagezone ' + zn.standort : 'Zone ' + zn.id + ' ' + zn.name) + ': ' + zoneKurz(zn, lg) + ' · Radius ' + zn.r + ' m'),
         s('circle', { cx: x, cy: y, r: r, class: 'k-zone-fl' }), s('circle', { cx: x, cy: y, r: r, class: 'k-zone-ring' }), s('circle', { cx: x, cy: y, r: r, class: 'k-zone-hit' }));
       if (zg) { g.appendChild(s('line', { x1: x - 5, y1: y, x2: x + 5, y2: y, class: 'k-zone-kreuz' })); g.appendChild(s('line', { x1: x, y1: y - 5, x2: x, y2: y + 5, class: 'k-zone-kreuz' })); }
-      if (r >= 16 || sel) g.appendChild(s('text', { x: x, y: zn.auto ? y - r - 5 : y + r + 13, class: 'k-zone-t', 'text-anchor': 'middle' }, zoneKurz(zn, lg)));
+      if (r >= 16 || sel) g.appendChild(s('text', { x: x, y: zn.auto ? y - r - 5 : y + r + 13, class: 'k-zone-t', 'text-anchor': 'middle' }, zn.profil ? zn.name : zoneKurz(zn, lg)));
       kids.push(g);
     });
   }
@@ -708,14 +708,17 @@ function zielpersonenListe() {
 function istZielperson(e) { return zielpersonenListe().indexOf(e.id) >= 0; }
 function karteZonen() {
   const def = zDef(), out = [];
-  if (!def) return out;
-  const Z = SCENARIO.zonen, sz = (SCENARIO.karte && SCENARIO.karte.zonen) || {};
-  def.standorte.forEach(function (st) {
-    const ll = karteKoord(st.id);
-    const u = zonenUrteil(def)['ZA-' + st.id] || null;
-    if (ll) out.push({ id: 'ZA-' + st.id, auto: true, standort: st.id, name: st.name, ll: ll, r: (u && u.r) || (sz[st.id] && sz[st.id].r) || Z.radiusStandard, urteil: u });
-  });
-  zonenEigene(def).forEach(function (zn) { out.push(Object.assign({ auto: false }, zn)); });
+  if (def) {
+    const Z = SCENARIO.zonen, sz = (SCENARIO.karte && SCENARIO.karte.zonen) || {};
+    def.standorte.forEach(function (st) {
+      const ll = karteKoord(st.id);
+      const u = zonenUrteil(def)['ZA-' + st.id] || null;
+      if (ll) out.push({ id: 'ZA-' + st.id, auto: true, standort: st.id, name: st.name, ll: ll, r: (u && u.r) || (sz[st.id] && sz[st.id].r) || Z.radiusStandard, urteil: u });
+    });
+    zonenEigene(def).forEach(function (zn) { out.push(Object.assign({ auto: false }, zn)); });
+  }
+  /* Eigene Zonen des Profils (ZO-nnn): unabhängig vom Auftrag, ohne Bewertung, Zeitgeber und Meldungen */
+  (PROFIL.zonen || []).forEach(function (zn) { out.push(Object.assign({}, zn, { auto: false, profil: true, art: 'ort' })); });
   return out;
 }
 function karteZoneFinden(id) { return id ? (karteZonen().find(function (x) { return x.id === id; }) || null) : null; }
@@ -984,7 +987,42 @@ function zonenMehrPanel(fertig) {
         : h('button', { type: 'button', class: 'link', id: 'mz-weg', disabled: !Z.length, onclick: function () { VIEW.draft['mz-weg'] = '1'; karteAuswahlAnzeige(); } }, 'Entfernen'),
       h('button', { type: 'button', class: 'link', id: 'mz-aus', onclick: function () { K.mehr = []; delete VIEW.draft['mz-weg']; K.auswahl = null; renderModule(); } }, 'Auswahl aufheben'))]);
 }
+/* Eigene Zone (Profil): neutrale Darstellung ohne Bewertung, Handler und Zeitgeber; Schaltflächen benennen ihre tatsächliche Wirkung */
+function eigeneZonePopup(zn, fertig) {
+  const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'OZONE_GEAENDERT', id: zn.id }, patch)); };
+  const dossiers = typeof poolAlle === 'function' ? poolAlle().slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'de'); }) : [];
+  const R = PROFIL.recherche || { beobachtungen: [] };
+  const unterlageText = function (id) {
+    const z = typeof rchZuBeobachtung === 'function' ? rchZuBeobachtung(id) : null;
+    if (!z) return id + ' (nicht mehr vorhanden)';
+    return id + (z.fall ? ' · ' + kuerzen(z.fall.titel || z.fall.id, 30) : '') + ' · ' + (z.q.id || '') + ' · ' + (typeof rchFundstelleText === 'function' ? rchFundstelleText(z.b.fundstelle) : '');
+  };
+  const frei = (R.beobachtungen || []).filter(function (b) { return (zn.unterlagen || []).indexOf(b.id) < 0; });
+  fertig(zn.name, [
+    h('p', { class: 'k-pop-sub' }, zn.ll[0].toFixed(5) + ', ' + zn.ll[1].toFixed(5) + ' · Radius ' + zn.r + ' m'),
+    h('div', { class: 'k-pop-form' },
+      h('label', { for: 'oz-name' }, 'Name'), h('input', { type: 'text', id: 'oz-name', maxlength: '60', value: zn.name, onchange: function (ev) { ab({ name: ev.target.value }); } }),
+      h('label', { for: 'oz-r' }, 'Radius'), h('select', { id: 'oz-r', 'aria-label': 'Radius der Zone', onchange: function (ev) { ab({ r: Number(ev.target.value) }); } }, OZONE_RADIEN.map(function (r) { return h('option', { value: String(r), selected: r === zn.r }, r + ' m'); })),
+      h('label', { for: 'oz-dossier' }, 'Dossier'), h('select', { id: 'oz-dossier', 'aria-label': 'Dossier zur Zone', onchange: function (ev) { ab({ dossier: ev.target.value || null }); } },
+        [h('option', { value: '' }, 'keines')].concat(dossiers.map(function (e) { return h('option', { value: e.id, selected: e.id === zn.dossier }, kuerzen(e.name, 40) + ' (' + e.id + ')'); }))),
+      h('label', { for: 'oz-notiz' }, 'Notiz'), h('textarea', { id: 'oz-notiz', rows: '3', maxlength: '1500', onchange: function (ev) { ab({ notiz: ev.target.value }); } }, zn.notiz || '')),
+    h('p', { class: 'k-pop-meta', id: 'oz-stand-text' }, 'Stand: ' + fmtZ(zn.stand || zn.t) + (zn.standBemerkung ? ' · ' + zn.standBemerkung : '') + '. Der Stand hält fest, wann Sie die Zone zuletzt selbst geprüft haben; er löst keine Meldung aus.'),
+    h('div', { class: 'k-pop-form' }, h('label', { for: 'oz-bem' }, 'Bemerkung zur Prüfung'), h('input', { type: 'text', id: 'oz-bem', maxlength: '300', placeholder: 'optional', value: VIEW.draft['oz-bem-' + zn.id] || '', oninput: function (ev) { VIEW.draft['oz-bem-' + zn.id] = ev.target.value; } })),
+    (zn.unterlagen || []).length ? h('ul', { class: 'k-pop-meta', id: 'oz-unterlagen' }, zn.unterlagen.map(function (u) {
+      return h('li', null, unterlageText(u) + ' ', h('button', { type: 'button', class: 'link', 'data-oz-los': u, onclick: function () { dispatch({ type: 'OZONE_UNTERLAGE', id: zn.id, unterlage: u, op: 'loesen' }); } }, 'lösen'));
+    })) : h('p', { class: 'k-pop-meta' }, 'Keine Unterlage verknüpft.'),
+    frei.length ? h('div', { class: 'k-pop-form' }, h('label', { for: 'oz-unt' }, 'Unterlage'), h('select', { id: 'oz-unt', 'aria-label': 'Unterlage zur Zone' },
+      frei.map(function (b) { return h('option', { value: b.id }, unterlageText(b.id)); })),
+      h('span', null), h('button', { type: 'button', id: 'oz-unt-ja', onclick: function () { dispatch({ type: 'OZONE_UNTERLAGE', id: zn.id, unterlage: $('oz-unt').value, op: 'verknuepfen' }); } }, 'Unterlage verknüpfen')) : null,
+    h('div', { class: 'k-pop-akt' },
+      h('button', { type: 'button', id: 'oz-stand', onclick: function () { const t = VIEW.draft['oz-bem-' + zn.id] || ''; delete VIEW.draft['oz-bem-' + zn.id]; dispatch({ type: 'OZONE_STAND', id: zn.id, bemerkung: t }); } }, 'Stand aktualisieren'),
+      h('button', { type: 'button', class: 'link', id: 'oz-protokoll', onclick: function () { K.kpObjekt = zn.id; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen'),
+      h('button', { type: 'button', class: 'link', id: 'oz-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 15), karteAuswahlAnzeige); } }, 'Zentrieren'),
+      VIEW.draft['oz-weg'] === zn.id ? h('button', { type: 'button', id: 'oz-weg-ja', onclick: function () { delete VIEW.draft['oz-weg']; K.auswahl = null; dispatch({ type: 'OZONE_ENTFERNT', id: zn.id }); } }, 'Wirklich entfernen')
+        : h('button', { type: 'button', class: 'link', id: 'oz-weg', onclick: function () { VIEW.draft['oz-weg'] = zn.id; karteAuswahlAnzeige(); } }, 'Entfernen'))].filter(Boolean));
+}
 function zonePopup(zn, fertig) {
+  if (zn.profil) return eigeneZonePopup(zn, fertig);
   if (zn.art === 'zugriff') return zugriffPopup(zn, fertig);
   const Zt = SCENARIO.zonen, lg = zoneLage(zn), K = VIEW.karte;
   const liste = function (L, max) {
@@ -1248,18 +1286,20 @@ function karteSteuerung(svg) {
       return;
     }
     if (K.zoneSetzen) {                                              /* Zone markieren: einmalig, danach normales Verhalten */
-      const c = koordUm(ev), P = karteProj();
+      const c = koordUm(ev), P = karteProj(), eigen = K.zoneSetzen === 'eigen';
       K.zoneSetzen = false;
-      dispatch({ type: 'ZONE_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])] });
+      dispatch({ type: eigen ? 'OZONE_ANGELEGT' : 'ZONE_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])] });
       renderModule();
       return;
     }
     const zt = !t && !vt && ev.target && ev.target.closest ? ev.target.closest('.k-zone') : null;
     if (zt && !K.messen) {
       const zid = zt.getAttribute('data-id');
-      if (ev.shiftKey || ev.ctrlKey || ev.metaKey || K.mehrModus) {   /* Mehrfachauswahl: Zone zur Auswahl hinzufügen oder entfernen */
+      const zo = karteZoneFinden(zid), vorher = K.auswahl ? karteZoneFinden(K.auswahl) : null;
+      /* Mehrfachbearbeitung gilt nur für Zonen des Auftrags; eigene Zonen werden einzeln bearbeitet */
+      if ((ev.shiftKey || ev.ctrlKey || ev.metaKey || K.mehrModus) && !(zo && zo.profil)) {   /* Mehrfachauswahl: Zone zur Auswahl hinzufügen oder entfernen */
         K.mehr = K.mehr || [];
-        if (!K.mehr.length && K.auswahl && K.auswahl !== zid && karteZoneFinden(K.auswahl)) K.mehr.push(K.auswahl);   /* die bisher gewählte Zone zählt mit */
+        if (!K.mehr.length && K.auswahl && K.auswahl !== zid && vorher && !vorher.profil) K.mehr.push(K.auswahl);   /* die bisher gewählte Zone zählt mit */
         const i = K.mehr.indexOf(zid); if (i >= 0) K.mehr.splice(i, 1); else K.mehr.push(zid);
         K.auswahl = null; delete VIEW.draft['mz-weg'];
         karteAuswahlAnzeige(); neu();
@@ -1326,6 +1366,7 @@ const KP_AKTIONEN = {
   SICHTUNG_HINZU: 'Sichtung', SICHTUNG_ENTFERNT: 'Sichtung',
   PIN_ANGELEGT: 'Pin', PIN_GEAENDERT: 'Pin', PIN_ENTFERNT: 'Pin',
   ZONE_ANGELEGT: 'Zone', ZONE_GEAENDERT: 'Zone', ZONEN_MEHRFACH: 'Zone', ZONE_URTEIL: 'Zone', ZONE_ENTFERNT: 'Zone',
+  OZONE_ANGELEGT: 'Zone', OZONE_GEAENDERT: 'Zone', OZONE_STAND: 'Zone', OZONE_UNTERLAGE: 'Zone', OZONE_ENTFERNT: 'Zone',
   DOSSIER_ORT: 'Position',
   AUSGANG_ANGELEGT: 'Ausgangsort', AUSGANG_GELOESCHT: 'Ausgangsort', AUSGANG_ORT: 'Ausgangsort'
 };
@@ -1348,7 +1389,9 @@ function kartenProtokollErfassen(eintrag, ereignis, typ) {
   const art = kpArt(typ, eintrag.aktion);
   if (!art) return false;
   const P = PROFIL.kartenProtokoll; P.seq += 1;
-  P.eintraege.push({ id: 'KP-' + p3(P.seq), t: eintrag.t, art: art, aktion: eintrag.aktion, text: eintrag.detail || '' });
+  const ein = { id: 'KP-' + p3(P.seq), t: eintrag.t, art: art, aktion: eintrag.aktion, text: eintrag.detail || '' };
+  if (ereignis && typeof ereignis.objekt === 'string' && ereignis.objekt) { ein.objekt = ereignis.objekt; ein.objektName = String(ereignis.objektName || ereignis.objekt).slice(0, 60); }   /* Bezug zum Objekt (Zone, Pin) für den Filter */
+  P.eintraege.push(ein);
   kpVerfall();
   return true;
 }
@@ -1389,7 +1432,11 @@ function kartenReiter(aktiv) {
 function kartenProtokollAnsicht() {
   const P = PROFIL.kartenProtokoll, K = VIEW.karte, filter = KP_ARTEN.indexOf(K.kpFilter) >= 0 ? K.kpFilter : '';
   kpAufraeumen();
-  const liste = P.eintraege.filter(function (x) { return !filter || x.art === filter; }).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
+  /* Anzeigename: aktueller Name des Objekts, solange es besteht, sonst der beim Eintrag festgehaltene */
+  const objName = function (x) { const z = (PROFIL.zonen || []).find(function (y) { return y.id === x.objekt; }), pn = (PROFIL.pins || []).find(function (y) { return y.id === x.objekt; }); return (z || pn || {}).name || x.objektName || x.objekt; };
+  const objekte = {}; P.eintraege.forEach(function (x) { if (x.objekt) objekte[x.objekt] = objName(x); });
+  const objFilter = K.kpObjekt && objekte[K.kpObjekt] ? K.kpObjekt : '';
+  const liste = P.eintraege.filter(function (x) { return (!filter || x.art === filter) && (!objFilter || x.objekt === objFilter); }).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   return panel('Kartenprotokoll', [h('span', { class: 'badge' }, String(liste.length))],
     h('p', { class: 'note pad' }, 'Vorgänge mit Kartenbezug: Sichtungen, Zonen, Pins, Zugriffspunkte, Kartenpositionen und Ausgangsorte. Mausbewegungen, Zoom und Auswahl werden nicht erfasst. Der Verfall entfernt nur den Protokolleintrag, nicht die Sichtung, Zone oder den Pin selbst.'),
     h('div', { class: 'row pad' },
@@ -1399,15 +1446,18 @@ function kartenProtokollAnsicht() {
         if (weg) { renderModule(); bestaetigen('Protokollfrist verkürzen', weg + ' Protokolleinträge sind älter als ' + f + ' Stunden und werden entfernt.', 'Frist setzen', function () { dispatch({ type: 'KARTENPROTOKOLL_FRIST', stunden: f }); }); return; }
         dispatch({ type: 'KARTENPROTOKOLL_FRIST', stunden: f });
       } }, KP_FRISTEN.map(function (x) { return h('option', { value: String(x[0]), selected: x[0] === P.frist }, x[1]); })),
+      h('label', { for: 'kp-objekt' }, 'Objekt'),
+      h('select', { id: 'kp-objekt', 'aria-label': 'Objekt der Einträge', onchange: function (ev) { K.kpObjekt = ev.target.value; renderModule(); } },
+        [h('option', { value: '' }, 'alle')].concat(Object.keys(objekte).sort().map(function (id) { return h('option', { value: id, selected: id === objFilter }, objekte[id]); }))),
       h('label', { for: 'kp-filter' }, 'Art'),
       h('select', { id: 'kp-filter', 'aria-label': 'Art der Einträge', onchange: function (ev) { K.kpFilter = ev.target.value; renderModule(); } },
         [h('option', { value: '' }, 'alle')].concat(KP_ARTEN.map(function (a) { return h('option', { value: a, selected: a === filter }, a); }))),
       h('button', { type: 'button', id: 'kp-leeren', disabled: !P.eintraege.length, onclick: function () {
         bestaetigen('Kartenprotokoll leeren', 'Alle ' + P.eintraege.length + ' Einträge des Kartenprotokolls werden entfernt. Sichtungen, Zonen und Pins bleiben bestehen.', 'Protokoll leeren', function () { dispatch({ type: 'KARTENPROTOKOLL_LEEREN' }); });
       } }, 'Protokoll leeren')),
-    tabelle(['Zeit (UTC)', 'Art', 'Vorgang', 'Einzelheiten', 'Verfällt (UTC)'], liste.map(function (x) {
-      return [td('nw', fmtZ(x.t)), td('nw', x.art), td('nw', x.aktion), td('txt', x.text || '–'), td('nw', P.frist ? fmtZ(new Date(Date.parse(x.t) + P.frist * 3600000).toISOString()) : 'nie')];
-    }), filter ? 'Keine Einträge dieser Art.' : 'Noch keine Einträge.'));
+    tabelle(['Zeit (UTC)', 'Art', 'Objekt', 'Vorgang', 'Einzelheiten', 'Verfällt (UTC)'], liste.map(function (x) {
+      return [td('nw', fmtZ(x.t)), td('nw', x.art), td('nw', x.objekt ? objName(x) : '–'), td('nw', x.aktion), td('txt', x.text || '–'), td('nw', P.frist ? fmtZ(new Date(Date.parse(x.t) + P.frist * 3600000).toISOString()) : 'nie')];
+    }), filter || objFilter ? 'Keine Einträge dieser Auswahl.' : 'Noch keine Einträge.'));
 }
 function renderKarte(m) {
   const K = VIEW.karte, def = STATE.vorlauf ? null : KM();
@@ -1441,7 +1491,8 @@ function renderKarte(m) {
     knopf('k-eu', 'Europa', function () { karteFlug(50, 10, 4.4); }),
     knopf('k-welt', 'Welt', function () { karteFlug(25, 20, 1.9); }),
     h('button', { type: 'button', id: 'k-pin-neu', class: K.pinSetzen ? 'aktiv' : '', 'aria-pressed': K.pinSetzen ? 'true' : 'false', title: 'Auf die Karte klicken: setzt einen eigenen Pin mit Lageblatt (Zweck, Umgebung, Notiz, Textexport)', onclick: function () { K.pinSetzen = !K.pinSetzen; K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.pinSetzen ? 'Pin: auf Karte klicken' : 'Pin setzen'),
-    h('button', { type: 'button', id: 'k-zone-neu', class: K.zoneSetzen ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen ? 'true' : 'false', disabled: !def, title: def ? 'Auf die Karte klicken: setzt eine eigene Zone mit Radius und Sicherheitsbewertung' : 'Nur mit laufendem Auftrag', onclick: function () { K.zoneSetzen = !K.zoneSetzen; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen ? 'Zone: auf Karte klicken' : 'Zone markieren'),
+    h('button', { type: 'button', id: 'k-ozone-neu', class: K.zoneSetzen === 'eigen' ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen === 'eigen' ? 'true' : 'false', title: 'Auf die Karte klicken: setzt eine eigene Zone mit Radius, Notiz und Stand; unabhängig von einem Auftrag', onclick: function () { K.zoneSetzen = K.zoneSetzen === 'eigen' ? false : 'eigen'; K.pinSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen === 'eigen' ? 'Zone: auf Karte klicken' : 'Zone markieren'),
+    h('button', { type: 'button', id: 'k-zone-neu', class: K.zoneSetzen === true ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen === true ? 'true' : 'false', disabled: !def, title: def ? 'Auf die Karte klicken: setzt eine eigene Zone mit Radius und Sicherheitsbewertung' : 'Nur mit laufendem Auftrag', onclick: function () { K.zoneSetzen = K.zoneSetzen === true ? false : true; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen === true ? 'Lagezone: auf Karte klicken' : 'Lagezone (Auftrag)'),
     h('button', { type: 'button', id: 'k-zugriff-neu', class: K.zugriffSetzen ? 'aktiv' : '', 'aria-pressed': K.zugriffSetzen ? 'true' : 'false', disabled: !def, title: def ? 'Wiederholt auf die Karte klicken: markiert mögliche Zugriffspunkte (Zufahrt, Tor, Seiteneingang …). Ende mit Esc oder erneutem Klick' : 'Nur mit laufendem Auftrag', onclick: function () { K.zugriffSetzen = !K.zugriffSetzen; K.zoneSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zugriffSetzen ? 'Zugriffspunkte: klicken, Ende mit Esc' : 'Zugriffspunkte markieren'),
     h('button', { type: 'button', id: 'k-mehr', class: K.mehrModus ? 'aktiv' : '', 'aria-pressed': K.mehrModus ? 'true' : 'false', title: 'Zonen nacheinander anklicken, um mehrere gemeinsam zu bearbeiten (auch mit Umschalt- oder Strg-Klick)', onclick: function () { K.mehrModus = !K.mehrModus; if (!K.mehrModus) { K.mehr = []; } K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; renderModule(); } }, K.mehrModus ? 'Mehrfach: Zonen anklicken' : 'Mehrfach'),
     h('button', { type: 'button', id: 'k-messen', class: K.messen ? 'aktiv' : '', 'aria-pressed': K.messen ? 'true' : 'false', title: 'Zwei Punkte oder Markierungen anklicken: Entfernung und Fahrzeit', onclick: function () { if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; } else { K.messen = true; K.auswahl = null; } renderModule(); } }, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen'),

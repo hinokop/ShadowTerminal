@@ -46,6 +46,7 @@ Die Module nach dem Hauptskript sind klassische Skripte und werden nach ihm gela
 
 - 2D und 3D über den Schalter in der Kartenleiste. Marker, Zonen und Kamera gehen per `postMessage` an die 3D-Ansicht. Klicks laufen in beiden Ansichten durch dieselbe Logik.
 - **Kartenprotokoll:** Ein eigener Reiter neben der Lagekarte erfasst Sichtungen, Zonen, Pins, Zugriffspunkte, Kartenpositionen und Ausgangsorte, nicht aber Mausbewegungen, Zoom oder Auswahl. Der Verfall ist wählbar (24, 48, 72 Stunden oder nie) und entfernt nur den Protokolleintrag, nie die Sichtung, Zone oder den Pin.
+- **Eigene Zonen:** Zone markieren setzt eine Zone mit Name, Radius, Notiz, optionalem Dossier und verknüpften Unterlagen. „Stand aktualisieren“ hält die eigene Prüfung mit Zeitstempel fest und löst keine Meldung und keine Sichtung aus. Das Kartenprotokoll lässt sich nach Objekt filtern. Der Profilimport führt Zonen wie Pins zusammen (keine Doppelung, abweichender Inhalt unter neuer Kennung).
 - In 3D noch offen: Luftbild, Verbindungen, Route, Sichtungs-Unschärfe, Zeitfenster.
 - Zusatzquellen: Sentinel-2 cloudless (EOX, nicht kommerziell) und Brandenburg DOP20 (dl-de/by-2.0). Die Adressen sind nicht gegen die Dienste geprüft. Das BKG-DOP ist für Dritte gebührenpflichtig und wird nicht verwendet.
 - Die Zeile „Licht" arbeitet offline (NOAA-Näherung). Wetter kommt von Open-Meteo, höchstens eine Abfrage je 0,1-Grad-Feld und 15 Minuten.
@@ -56,7 +57,7 @@ Die Skripte in `tests/` benötigen Node.js mit Playwright. Das Testkennwort ist 
 
 ## Bekannte Grenzen
 
-- Zonen und Zugriffspunkte der Karte sind noch an den Missionsrahmen gekoppelt und lassen sich ohne ihn nicht setzen.
+- Eigene Zonen (Kennung ZO-nnn) lassen sich ohne Auftrag setzen. Lagezonen und Zugriffspunkte des Auftrags sind noch an den Missionsrahmen gekoppelt; eigene und Auftragszonen werden nicht gemeinsam bearbeitet. Eigene Zonen sind noch nicht Teil des Fallpakets.
 - Prüfsummen im Fallpaket erkennen Beschädigung, keine Fälschung.
 - Notizen und Bilder der Dossiers sind nicht Teil des Fallpakets, Belegdateien nicht Teil des Profilexports.
 - Die Anwendung wurde bisher nur mit Playwright und nicht systematisch von Hand geprüft.

@@ -346,6 +346,7 @@ fieldset:disabled .opt{color:var(--text-dim)}
 .k-zone.ruhig{--zc:#5B8DB8}.k-zone.leicht{--zc:#C9A04A}.k-zone.bedroht{--zc:#D9824A}.k-zone.akut{--zc:#C4605A}
 .k-zone.sel .k-zone-ring{stroke-width:2.2;stroke-dasharray:none}.k-zone.sel .k-zone-fl{fill-opacity:.16}
 .k-zone.eigen .k-zone-ring{stroke-dasharray:2 3}
+.k-zone.profil{--zc:#8FA3B8}.k-zone.profil .k-zone-ring{stroke-dasharray:6 2}
 .k-zone.zugriff{--zc:#5FB3A8}.k-zone.zugriff .k-zone-ring{stroke-dasharray:1 3}.k-zone .k-zone-kreuz{stroke:var(--zc);stroke-width:1.3}
 .k-zone.mehr .k-zone-ring{stroke:#fff;stroke-width:2.4;stroke-dasharray:none}.k-zone.mehr .k-zone-fl{fill-opacity:.18}
 .k-ziel{fill:none;stroke:#E0E4E8;stroke-width:1;stroke-dasharray:1.5 2.5;opacity:.9}
@@ -1014,7 +1015,7 @@ const Store = (function () {
    ===================================================================== */
 const PROFIL_KEY = STORAGE_KEY + '.profil';
 const PROFIL = (function () {
-  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], daten: {}, seq: { eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
+  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], daten: {}, seq: { eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
   let p = leer();
   try {
     const raw = window.localStorage.getItem(PROFIL_KEY);
@@ -1033,7 +1034,45 @@ function aenderungenAnwenden() {
   });
 }
 aenderungenAnwenden();
-const PROFIL_AKTIONEN = { LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, VERBINDUNG_GELOESCHT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1 };
+const OZONE_RADIEN = [50, 100, 200, 300, 500, 1000, 2000];
+/* Profilimport eigener Zonen, wie bei Pins: keine Doppelung derselben Zone, gleiche Kennung mit anderem Inhalt unter neuer Kennung,
+   zweiter Import derselben Datei ohne weitere Kopie. Bezüge zu Dossier und Unterlage bleiben nur erhalten, wenn sie eindeutig zuzuordnen sind;
+   sonst bleibt die Zone ohne den Bezug importierbar. */
+function zonenImportieren(q) {
+  PROFIL.zonen = PROFIL.zonen || [];
+  const eing = (Array.isArray(q.zonen) ? q.zonen : []).filter(function (x) { return x && typeof x.id === 'string' && Array.isArray(x.ll) && x.ll.length === 2 && isFinite(x.ll[0]) && isFinite(x.ll[1]); });
+  const nr = function (y) { const k = /^ZO-(\d+)$/.exec(y.id || ''); return k ? Number(k[1]) : 0; };
+  PROFIL.seq.zone = Math.max(PROFIL.seq.zone || 0, (q.seq && q.seq.zone) || 0, eing.concat(PROFIL.zonen).reduce(function (m, y) { return Math.max(m, nr(y)); }, 0));
+  const dq = {}; (q.eigene || []).forEach(function (e) { dq[e.id] = e; });
+  const R = PROFIL.recherche || { beobachtungen: [], fassungen: [] }, Rq = q.recherche || { beobachtungen: [], fassungen: [] };
+  const hash = function (L, bid) { const b = (L.beobachtungen || []).find(function (x) { return x.id === bid; }), f = b ? (L.fassungen || []).find(function (x) { return x.id === b.fassung; }) : null; return b ? JSON.stringify([b.zitat || null, b.fundstelle || null, f ? f.hash || null : null]) : null; };
+  let verworfen = 0, doppelt = 0, neuId = 0, neu = 0;
+  const bereinigt = function (x) {
+    const c = JSON.parse(JSON.stringify(x));
+    if (c.dossier) {
+      const lok = entitaet(c.dossier), e = dq[c.dossier];
+      if (!lok || (e && (lok.name !== e.name || lok.typ !== e.typ))) { delete c.dossier; verworfen += 1; }
+    }
+    c.unterlagen = (Array.isArray(c.unterlagen) ? c.unterlagen : []).filter(function (u) {
+      const g = hash(Rq, u);
+      if (g && g === hash(R, u)) return true;
+      verworfen += 1; return false;
+    });
+    return c;
+  };
+  const inhalt = function (y) { const c = Object.assign({}, y); delete c.importVon; delete c.importName; delete c.id; delete c.name; return JSON.stringify(c); };
+  eing.forEach(function (x0) {
+    const v0 = verworfen, x = bereinigt(x0), gl = PROFIL.zonen.find(function (y) { return y.id === x.id; });
+    if (!gl) { PROFIL.zonen.push(x); neu += 1; return; }
+    if (JSON.stringify(gl) === JSON.stringify(x)) { doppelt += 1; verworfen = v0; return; }
+    if (PROFIL.zonen.some(function (y) { return y.importVon === x.id && inhalt(y) === inhalt(x) && y.importName === (x.name || 'Zone'); })) { doppelt += 1; verworfen = v0; return; }
+    PROFIL.seq.zone += 1;
+    PROFIL.zonen.push(Object.assign({}, x, { id: 'ZO-' + p3(PROFIL.seq.zone), name: (x.name || 'Zone') + ' (Import ' + x.id + ')', importVon: x.id, importName: x.name || 'Zone' }));
+    neuId += 1;
+  });
+  return (neu ? '; ' + neu + ' Zone(n) übernommen' : '') + (neuId ? '; ' + neuId + ' Zone(n) mit gleicher Kennung, aber abweichendem Inhalt unter neuer Kennung übernommen' : '') + (doppelt ? '; ' + doppelt + ' Zone(n) bereits vorhanden' : '') + (verworfen ? '; ' + verworfen + ' Bezug/Bezüge zu Dossier oder Unterlage nicht eindeutig zuzuordnen und weggelassen' : '');
+}
+const PROFIL_AKTIONEN = { LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, VERBINDUNG_GELOESCHT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1 };
 function profilSpeichern() {
   if (STATE && STATE.dossiers) {
     const d = STATE.dossiers, daten = {};
@@ -5089,7 +5128,7 @@ const ACTIONS = {
     if (de) px.dossier = de.id;                                   /* Bezug zum Dossier (Sichtungsentwurf) */
     PROFIL.pins.push(px);
     VIEW.karte.auswahl = id;
-    return { modul: 'Karte', aktion: 'Pin gesetzt', detail: px.name + ' bei ' + Number(a.ll[0]).toFixed(4) + ', ' + Number(a.ll[1]).toFixed(4) };
+    return { modul: 'Karte', aktion: 'Pin gesetzt', objekt: id, objektName: px.name, detail: px.name + ' bei ' + Number(a.ll[0]).toFixed(4) + ', ' + Number(a.ll[1]).toFixed(4) };
   },
   PIN_GEAENDERT: function (a) {
     const x = (PROFIL.pins || []).find(function (y) { return y.id === a.id; });
@@ -5099,14 +5138,64 @@ const ACTIONS = {
     if (a.umgebung && typeof a.umgebung === 'object') PIN_UMGEBUNG.forEach(function (u) { if (typeof a.umgebung[u[0]] === 'string') { const t = a.umgebung[u[0]].trim().slice(0, 300); if (t) x.umgebung[u[0]] = t; else delete x.umgebung[u[0]]; } });
     if (typeof a.notiz === 'string') x.notiz = a.notiz.slice(0, 1500);
     x.stand = nowIso();
-    return { modul: 'Karte', aktion: 'Pin geändert', leicht: true, detail: x.name };
+    return { modul: 'Karte', aktion: 'Pin geändert', leicht: true, objekt: x.id, objektName: x.name, detail: x.name };
   },
   PIN_ENTFERNT: function (a) {
     const i = (PROFIL.pins || []).findIndex(function (y) { return y.id === a.id; });
     if (i < 0) return null;
     const x = PROFIL.pins.splice(i, 1)[0];
     if (VIEW.karte.auswahl === x.id) VIEW.karte.auswahl = null;
-    return { modul: 'Karte', aktion: 'Pin entfernt', detail: x.name };
+    return { modul: 'Karte', aktion: 'Pin entfernt', objekt: x.id, objektName: x.name, detail: x.name };
+  },
+  /* Eigene Zonen: gehören zum Profil, nicht zum Auftrag. Keine Bewertung, keine Zeitgeber, keine simulierten Meldungen. */
+  OZONE_ANGELEGT: function (a) {
+    if (!Array.isArray(a.ll) || !isFinite(a.ll[0]) || !isFinite(a.ll[1])) return null;
+    PROFIL.zonen = PROFIL.zonen || [];
+    let nr = 1;                                       /* Anzeigenummer darf Lücken füllen, die Kennung nie */
+    while (PROFIL.zonen.some(function (y) { return y.name === 'Zone ' + nr; })) nr++;
+    const hoechste = PROFIL.zonen.reduce(function (m, y) { const k = /^ZO-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0);
+    PROFIL.seq.zone = Math.max(PROFIL.seq.zone || 0, hoechste) + 1;
+    const id = 'ZO-' + p3(PROFIL.seq.zone), t = nowIso();
+    const eigen = typeof a.name === 'string' && a.name.trim() ? a.name.trim().slice(0, 60) : '';
+    PROFIL.zonen.push({ id: id, name: eigen || 'Zone ' + nr, ll: [Number(a.ll[0]), Number(a.ll[1])], r: 200, notiz: '', unterlagen: [], t: t, stand: t });
+    VIEW.karte.auswahl = id;
+    return { modul: 'Karte', aktion: 'Zone angelegt', objekt: id, objektName: eigen || 'Zone ' + nr, detail: (eigen || 'Zone ' + nr) + ' bei ' + Number(a.ll[0]).toFixed(4) + ', ' + Number(a.ll[1]).toFixed(4) + ', Radius 200 m' };
+  },
+  OZONE_GEAENDERT: function (a) {
+    const x = (PROFIL.zonen || []).find(function (y) { return y.id === a.id; });
+    if (!x) return null;
+    const vor = JSON.stringify([x.name, x.r, x.notiz, x.dossier || null]), teile = [];
+    if (typeof a.name === 'string' && a.name.trim()) x.name = a.name.trim().slice(0, 60);
+    if (OZONE_RADIEN.indexOf(Number(a.r)) >= 0) x.r = Number(a.r);
+    if (typeof a.notiz === 'string') x.notiz = a.notiz.slice(0, 1500);
+    if ('dossier' in a) { const de = a.dossier ? entitaet(a.dossier) : null; if (de) x.dossier = de.id; else delete x.dossier; }
+    if (JSON.stringify([x.name, x.r, x.notiz, x.dossier || null]) === vor) return null;
+    return { modul: 'Karte', aktion: 'Zone geändert', leicht: true, objekt: x.id, objektName: x.name, detail: x.name + ', Radius ' + x.r + ' m' + (x.dossier ? ', Dossier ' + x.dossier : '') };
+  },
+  OZONE_STAND: function (a) {
+    const x = (PROFIL.zonen || []).find(function (y) { return y.id === a.id; });
+    if (!x) return null;
+    const bem = typeof a.bemerkung === 'string' ? a.bemerkung.trim().slice(0, 300) : '';
+    x.stand = nowIso(); x.standBemerkung = bem;
+    return { modul: 'Karte', aktion: 'Stand der Zone aktualisiert', objekt: x.id, objektName: x.name, detail: x.name + ': eigene Prüfung' + (bem ? ' (' + bem + ')' : '') };
+  },
+  OZONE_UNTERLAGE: function (a) {
+    const x = (PROFIL.zonen || []).find(function (y) { return y.id === a.id; });
+    if (!x) return null;
+    x.unterlagen = Array.isArray(x.unterlagen) ? x.unterlagen : [];
+    const hat = x.unterlagen.indexOf(a.unterlage) >= 0;
+    if (a.op === 'loesen') { if (!hat) return null; x.unterlagen = x.unterlagen.filter(function (u) { return u !== a.unterlage; }); return { modul: 'Karte', aktion: 'Unterlage gelöst', leicht: true, objekt: x.id, objektName: x.name, detail: x.name + ': ' + a.unterlage }; }
+    const ok = ((PROFIL.recherche && PROFIL.recherche.beobachtungen) || []).some(function (b) { return b.id === a.unterlage; });
+    if (!ok || hat) return null;
+    x.unterlagen.push(a.unterlage);
+    return { modul: 'Karte', aktion: 'Unterlage verknüpft', leicht: true, objekt: x.id, objektName: x.name, detail: x.name + ': ' + a.unterlage };
+  },
+  OZONE_ENTFERNT: function (a) {
+    const i = (PROFIL.zonen || []).findIndex(function (y) { return y.id === a.id; });
+    if (i < 0) return null;
+    const x = PROFIL.zonen.splice(i, 1)[0];
+    if (VIEW.karte.auswahl === x.id) VIEW.karte.auswahl = null;
+    return { modul: 'Karte', aktion: 'Zone entfernt', objekt: x.id, objektName: x.name, detail: x.name };
   },
   AUSGANG_ANGELEGT: function (a) {
     const name = String(a.name || '').trim().slice(0, 80);
@@ -5176,16 +5265,18 @@ const ACTIONS = {
     if (!PROFIL.identitaet && typeof q.identitaet === 'string' && legende(q.identitaet)) PROFIL.identitaet = q.identitaet;
     Object.keys(q.dokFristen || {}).forEach(function (k) { if (!(k in PROFIL.dokFristen)) PROFIL.dokFristen[k] = q.dokFristen[k]; });
     if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q);
-    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + rchText };
+    const zr = zonenImportieren(q);
+    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + zr + rchText };
   },
   PROFIL_LEEREN: function () {
     const ids = STATE.dossiers.eigene.map(function (e) { return e.id; });
     ids.forEach(function (id) { delete STATE.dossiers.entitaeten[id]; });
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];
-    const alt = PROFIL.leer(), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
+    const alt = PROFIL.leer(), zoneZaehler = Math.max((PROFIL.seq && PROFIL.seq.zone) || 0, (PROFIL.zonen || []).reduce(function (m, y) { const k = /^ZO-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0)), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
     ['eigene', 'eigeneKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten'].forEach(function (k) { PROFIL[k] = alt[k]; });
     if (PROFIL.kartenProtokoll) PROFIL.kartenProtokoll.eintraege = [];
     PROFIL.pins = []; PROFIL.seq.pin = pinZaehler;     /* IDs werden auch nach dem Leeren nie neu vergeben */
+    PROFIL.seq.zone = zoneZaehler; PROFIL.zonen = [];
     Object.keys(STATE.dossiers.entitaeten).forEach(function (id) { const x = STATE.dossiers.entitaeten[id]; if (x && Array.isArray(x.notizen)) x.notizen = []; });
     aenderungenAnwenden();
     STATE.seq.eigen = 0; STATE.seq.kante = 0;
