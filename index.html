@@ -670,7 +670,7 @@ body:not(.locked) #gate{display:none}
     </div>
   </div>
   <div class="gate-box" id="gate-box">
-    <h1>Team 9 · Arbeitsplatz</h1>
+    <h1>Team 9 · Terminal</h1>
     <p class="gate-sub" id="gate-sub">Anmeldung</p>
     <form class="gate-form" id="gate-form" autocomplete="off" novalidate>
       <label for="gate-pw" id="gate-lbl">Zugangskennung</label>
@@ -7871,7 +7871,7 @@ const SPERRE_SEK = [60, 120, 300];                 /* 1., 2., ab 3. Sperre; Rüc
 const LEERLAUF_MS = 15 * 60000;                    /* automatische Sperre nach Inaktivität */
 const PBKDF2_RUNDEN = 150000;
 const AUFBAU_STUFE_MS = [550, 1100];              /* Dauer je Stufe, zufällig gezogen */
-const AUFBAU_ARCHIV_MS = [4200, 6800];              /* Stufe "Verbindung zu FT-ARCHIV": bewusst länger */
+const AUFBAU_ARCHIV_MS = [4200, 6800];              /* Stufe "Verbindung zur Archivdatenbank": bewusst länger */
 const AUFBAU_KURZ_MS = [150, 300];                 /* erneute Anmeldung innerhalb einer Sitzung */
 const AUFBAU_REDUZIERT_MS = [250, 450];            /* prefers-reduced-motion */
 const AUFBAU_SKIP_NACH_MS = 1000;
@@ -7883,7 +7883,7 @@ window.Dev = {
 const AUFBAU_STUFEN = [
   { name: 'Anmeldung', detail: 'Zugangsdaten werden geprüft' },
   { name: 'Sitzung', detail: 'Sitzung wird aufgebaut' },
-  { name: 'Archiv', detail: 'Verbindung zu FT-ARCHIV wird hergestellt' },
+  { name: 'Archiv', detail: 'Verbindung zu pgcl-eu3.arch07 (Shard 04/12) wird hergestellt' },
   { name: 'Fertig', detail: 'Startseite wird geladen' }
 ];
 const AUFBAU_EASE = ['cubic-bezier(.3,.1,.3,1)', 'cubic-bezier(.5,0,.2,1)', 'cubic-bezier(.2,.6,.4,1)'];
@@ -8245,9 +8245,9 @@ const Zugang = (function () {
       ['Medium eingebunden', true],
       ['Datenträgerintegrität wird geprüft', true],
       [rec ? 'Profilschlüssel wird geladen' : 'Profilschlüssel wird erzeugt', true],
-      ['Verbindung zu FT-ARCHIV', true],
+      ['Verbindung zu pgcl-eu3.arch07 (Shard 04/12)', true],
       ['Hidden Service wird veröffentlicht', true],
-      ['Arbeitsplatz erreichbar: ' + host.slice(0, 16) + '….onion', false]
+      ['Terminal erreichbar: ' + host.slice(0, 16) + '….onion', false]
     ];
     liste.replaceChildren(); box.hidden = false;
     let i = 0, aus = false, t = null;
