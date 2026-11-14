@@ -277,7 +277,7 @@ var DIALOG = {
     standort: {
       handler: ['Letzter Standort laut Check-in: {STANDORT}.', 'Dein letzter Check-in lautet {STANDORT}. Änderungen melden.', 'Standort laut Check-in: {STANDORT}. Aktuell halten.'],
       support: ['Unsere Position unverändert. Übergabepunkt bereit.', 'Wir sind am vereinbarten Ort. Fahrzeug steht.', 'Standort wie geplant. Bei Änderung melden wir uns.'],
-      asset: ['An meinem Arbeitsplatz. Wie immer.', 'Ich bin da, wo ich sein soll.', 'Am üblichen Ort. Warum?']
+      asset: ['An meinem Terminal. Wie immer.', 'Ich bin da, wo ich sein soll.', 'Am üblichen Ort. Warum?']
     },
     zeit: {
       handler: ['Es ist {ZEIT}.', 'Aktuelle Zeit {ZEIT}.', '{ZEIT}. Meldefenster {FENSTER}.'],
