@@ -5084,7 +5084,10 @@ const ACTIONS = {
     const hoechste = PROFIL.pins.reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0);
     PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, hoechste) + 1;
     const id = 'PIN-' + p3(PROFIL.seq.pin);
-    PROFIL.pins.push({ id: id, name: 'Pin ' + nr, ll: [Number(a.ll[0]), Number(a.ll[1])], zwecke: [], umgebung: {}, notiz: '', t: nowIso() });
+    const eigen = typeof a.name === 'string' && a.name.trim() ? a.name.trim().slice(0, 60) : '', de = a.dossier ? entitaet(a.dossier) : null;
+    const px = { id: id, name: eigen || 'Pin ' + nr, ll: [Number(a.ll[0]), Number(a.ll[1])], zwecke: [], umgebung: {}, notiz: typeof a.notiz === 'string' ? a.notiz.slice(0, 1500) : '', t: nowIso() };
+    if (de) px.dossier = de.id;                                   /* Bezug zum Dossier (Sichtungsentwurf) */
+    PROFIL.pins.push(px);
     VIEW.karte.auswahl = id;
     return { modul: 'Karte', aktion: 'Pin gesetzt', detail: id + ' bei ' + Number(a.ll[0]).toFixed(4) + ', ' + Number(a.ll[1]).toFixed(4) };
   },
@@ -5263,6 +5266,8 @@ const ACTIONS = {
     const id = 'SI-' + p3(STATE.seq.sichtung), t = nowIso();
     const guete = SCENARIO.guete[a.guete] ? a.guete : 'unbewertet';
     d.sichtungen.push({ id: id, t: t, ort: ort, text: text, guete: guete, quelle: a.quelle || 'Eintrag', zone: a.zone || undefined });
+    const pinX = a.pin ? (PROFIL.pins || []).find(function (y) { return y.id === a.pin && y.dossier === e.id; }) : null;
+    if (pinX) pinX.sichtung = id;                                 /* der Entwurf ist damit als Sichtung eingetragen */
     d.aktualisiert = t;
     delete VIEW.draft['si-ort-' + e.id]; delete VIEW.draft['si-text-' + e.id];
     return { modul: 'Dossier', aktion: a.quelle === 'Meldung' ? 'Sichtung gemeldet' : 'Sichtung eingetragen', detail: e.id + ' ' + e.name + ', ' + id + (ort ? ' bei ' + kuerzen(ort, 60) : '') + (text ? ': ' + kuerzen(text, 100) : '') };
@@ -6613,6 +6618,41 @@ function kartenKnopf(e) {
     } }, 'Auf der Karte zeigen'),
     h('span', { class: 'note' }, 'Vermuteter Standort: ' + ll[0].toFixed(4) + ', ' + ll[1].toFixed(4)));
 }
+/* Sichtung: Karte am letzten bekannten Punkt, dort ein vorgefertigter Pin (S-01, S-02 ...) als Entwurf */
+function sichtungsStart(e) {
+  const d = STATE.dossiers.entitaeten[e.id], L = ((d && d.sichtungen) || []).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
+  for (let i = 0; i < L.length; i++) { const k = typeof sichtungKoord === 'function' ? sichtungKoord(L[i]) : null; if (k) return { ll: k.ll, bez: 'letzte Sichtung ' + L[i].id }; }
+  const ll = karteKoord(e.id);
+  return ll ? { ll: ll, bez: 'Standort laut Dossier' } : null;
+}
+function sichtungsPinName() {
+  let n = 1; const belegt = {};
+  (PROFIL.pins || []).forEach(function (y) { belegt[y.name] = 1; });
+  while (belegt['S-' + (n < 10 ? '0' : '') + n]) n++;
+  return 'S-' + (n < 10 ? '0' : '') + n;
+}
+function sichtungKnopf(e) {
+  const st = sichtungsStart(e);
+  return h('div', { class: 'row pad' },
+    h('button', { type: 'button', id: 'btn-dk-sichtung', onclick: function () {
+      const s2 = sichtungsStart(e);
+      if (!s2) { VIEW.dtab = 'sichtungen'; renderModule(); meldung('Kein bekannter Standort. Die Sichtung mit Ortsangabe im Reiter Sichtungen eintragen.'); return; }
+      dispatch({ type: 'PIN_ANGELEGT', ll: s2.ll, name: sichtungsPinName(), dossier: e.id, notiz: 'Sichtungsentwurf zu ' + e.id + ' ' + e.name + ' (Ausgangspunkt: ' + s2.bez + ')' });
+      const K = VIEW.karte; K.pick = null; K.lat = s2.ll[0]; K.lon = s2.ll[1]; K.zoom = Math.max(K.zoom, 14);
+      const pid = K.auswahl;
+      dispatch({ type: 'NAVIGATION', modul: 'karte' });
+      setTimeout(function () { if (typeof karteWaehlen === 'function') karteWaehlen(pid, true); }, 0);          /* zentriert und wählt den Entwurfs-Pin */
+    } }, 'Sichtung auf der Karte'),
+    h('span', { class: 'note' }, st ? 'Setzt einen Entwurfs-Pin am Punkt: ' + st.bez + ' (' + st.ll[0].toFixed(4) + ', ' + st.ll[1].toFixed(4) + ').' : 'Kein Standort bekannt; die Sichtung wird im Reiter Sichtungen eingetragen.'));
+}
+function sichtungsEntwuerfe(e) {
+  const L = (PROFIL.pins || []).filter(function (y) { return y.dossier === e.id; });
+  if (!L.length) return null;
+  return [h('h3', null, 'Sichtungsentwürfe (' + L.length + ')'), tabelle(['Pin', 'Position', 'Notiz', ''], L.map(function (y) {
+    return [td('nw', y.name), td('nw', y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5)), td('txt', y.notiz || '–'),
+      td('nw', y.sichtung ? 'eingetragen als ' + y.sichtung : h('button', { type: 'button', class: 'link', id: 'si-pin-' + y.id, onclick: function () { dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5), text: 'Aus Entwurf ' + y.name, guete: 'unbewertet', pin: y.id }); } }, 'als Sichtung eintragen'))];
+  }), '')];
+}
 function dossierTabs(e) {
   const tab = VIEW.dtab || 'info', n = (STATE.dossiers.entitaeten[e.id].sichtungen || []).length;
   return h('div', { class: 'reiterleiste', role: 'tablist', 'aria-label': 'Dossierbereiche' },
@@ -6645,6 +6685,7 @@ function sichtungenBlock(e) {
           return [td('nw', fmtZ(a.t)), td('nw', a.id), td('txt', (a.wert ? SCENARIO.abfragen.aussagen.wissenJa : SCENARIO.abfragen.aussagen.wissenNein) + ' (' + a.text + ')'), td('nw', h('span', { class: 'label ' + (a.status === 'gilt' ? 's-accent' : a.status === 'unklar' ? 's-warn' : 's-dim') }, a.status))];
         }), '')] : null];
     })(),
+    sichtungsEntwuerfe(e),
     h('div', { class: 'row top' },
       entwurf('input', 'si-ort', 'si-ort-' + e.id, { type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Ort der Sichtung', placeholder: 'Ort, z. B. Sonnenallee 14, Zufahrt', style: 'flex:1 1 200px;min-width:0' }),
       entwurf('input', 'si-text', 'si-text-' + e.id, { type: 'text', autocomplete: 'off', 'aria-label': 'Beobachtung', placeholder: 'Beobachtung, z. B. steigt in dunklen Transporter', style: 'flex:2 1 260px;min-width:0',
@@ -6774,6 +6815,7 @@ function dossierAnsicht(e) {
       PROFIL.aenderungen[e.id] ? h('span', { class: 'label s-warn' }, 'bearbeitet') : null),
     zusatzZeile(e),
     kartenKnopf(e),
+    sichtungKnopf(e),
     zielpersonKnopf(e),
     haltungDossierPanel(e),
     h('h3', null, 'Verbindungen (' + vs.length + ')'),

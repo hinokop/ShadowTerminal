@@ -5,14 +5,26 @@
    Dateien liegen bytegetreu in einer eigenen IndexedDB ('fieldterminal.recherche'), die das Zurücksetzen des Zustands nicht leert.
    Klassisches Skript, wird nach dem Hauptskript geladen; vom Hauptskript nur zur Laufzeit referenziert.
    ===================================================================== */
-VIEW.recherche = VIEW.recherche || {};
+VIEW.recherche = Object.assign({ fall: '', offen: false, datei: null, alle: false, weitere: false, altOffen: false }, VIEW.recherche || {});
 PROFIL.recherche = PROFIL.recherche || { faelle: [], quellen: [], fassungen: [], beobachtungen: [], aussagen: [], seq: { fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 } };
 ['faelle', 'quellen', 'fassungen', 'beobachtungen', 'aussagen'].forEach(function (k) { PROFIL.recherche[k] = PROFIL.recherche[k] || []; });
 PROFIL.recherche.seq = Object.assign({ fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 }, PROFIL.recherche.seq || {});
 PROFIL_AKTIONEN.RECHERCHE_BELEG = 1; PROFIL_AKTIONEN.RECHERCHE_PAKET_IMPORT = 1;
 
 const RCH_MAX = 20 * 1024 * 1024;
-const RCH_FUNDSTELLEN = ['Seite', 'Absatz', 'Zeitmarke', 'Zeichenbereich', 'ganze Datei'];
+const RCH_FUNDSTELLEN = ['Seite', 'Absatz', 'Abschnitt', 'Zeitmarke', 'Zeichenbereich', 'ganze Datei'];
+/* Fundstellenarten, die zum Material passen; alles Weitere steht unter "Weitere Optionen" */
+const RCH_FT_MATERIAL = { pdf: ['Seite'], zeit: ['Zeitmarke'], text: ['Absatz', 'Abschnitt'], bild: [], datei: [] };
+const RCH_FT_HINWEIS = { 'Seite': 'Seitenzahl, z. B. 4', 'Zeitmarke': 'z. B. 00:12:30', 'Absatz': 'Nummer, z. B. 3', 'Abschnitt': 'z. B. 2.1 oder Überschrift', 'Zeichenbereich': 'z. B. 120–260' };
+function rchMaterial(datei) {
+  if (!datei) return 'text';
+  const t = String(datei.type || '').toLowerCase(), n = String(datei.name || '').toLowerCase();
+  if (t === 'application/pdf' || /\.pdf$/.test(n)) return 'pdf';
+  if (/^(video|audio)\//.test(t) || /\.(mp4|mov|mkv|webm|mp3|wav|m4a|ogg)$/.test(n)) return 'zeit';
+  if (/^image\//.test(t)) return 'bild';
+  if (/^text\//.test(t) || /\.(txt|md|html?|rtf|docx?)$/.test(n)) return 'text';
+  return 'datei';
+}
 const RCH_ID = { fall: ['F-', 'fall'], quelle: ['Q-', 'quelle'], fassung: ['V-', 'fassung'], beobachtung: ['B-', 'beobachtung'], aussage: ['A-', 'aussage'] };
 const RCH_STATUS = [['entwurf', 'Entwurf'], ['offen', 'offen'], ['abgeschlossen', 'abgeschlossen']];
 const RCH_EINSCHAETZUNG = [['', 'nicht eingeschätzt'], ['widerlegt', 'widerlegt'], ['dagegen', 'spricht dagegen'], ['unentschieden', 'unentschieden'], ['dafuer', 'spricht dafür'], ['gestuetzt', 'gestützt']];
@@ -78,7 +90,8 @@ function rchSchreiben(aktion, aktionsName, zurueck) {
 /* ---------- Aktion ---------- */
 ACTIONS.RECHERCHE_BELEG = function (a) {
   const R = PROFIL.recherche, e = entitaet(a.dossier);
-  if (!e || !a.fassung || !a.fundstelle) return null;
+  if (!e || !a.fassung) return null;
+  const ft = a.fundstelle && a.fundstelle.typ ? { typ: String(a.fundstelle.typ).slice(0, 40), wert: String(a.fundstelle.wert || '').slice(0, 120) } : null;      /* Fundstelle ist optional */
   let fall = a.fall ? R.faelle.find(function (f) { return f.id === a.fall; }) : null, neuerFall = false;
   if (!fall && a.neuerFall && a.neuerFall.titel) {
     fall = { id: rchNr('fall'), titel: String(a.neuerFall.titel).slice(0, 120), frage: String(a.neuerFall.frage || '').slice(0, 300), zustand: 'offen', erfasst: nowIso() };
@@ -88,10 +101,24 @@ ACTIONS.RECHERCHE_BELEG = function (a) {
   const t = nowIso(), q = { id: rchNr('quelle'), fall: fall.id, art: a.art, herkunft: String(a.herkunft || '').slice(0, 300), erfasst: t, aktuelleFassung: null, notiz: String(a.notiz || '').slice(0, 300) };
   const f = Object.assign({ id: rchNr('fassung'), quelle: q.id, erfasst: t }, a.fassung);
   q.aktuelleFassung = f.id;
-  const b = { id: rchNr('beobachtung'), fassung: f.id, fundstelle: a.fundstelle, zitat: String(a.zitat || '').slice(0, 2000), ereignis: null, dossiers: [e.id], erfasst: t };
+  const b = { id: rchNr('beobachtung'), fassung: f.id, fundstelle: ft, zitat: String(a.zitat || '').slice(0, 2000), ereignis: null, dossiers: [e.id], erfasst: t };
   R.quellen.push(q); R.fassungen.push(f); R.beobachtungen.push(b);
-  return { modul: 'Dossier', aktion: 'Recherchebeleg erfasst', detail: e.id + ' ' + e.name + ': ' + q.id + ' (' + q.art + ') im Fall ' + fall.id + (neuerFall ? ' (neu angelegt)' : '') + ', Fundstelle ' + a.fundstelle.typ + (a.fundstelle.wert ? ' ' + a.fundstelle.wert : '') };
+  return { modul: 'Dossier', aktion: 'Recherchebeleg erfasst', detail: e.id + ' ' + e.name + ': ' + q.id + ' (' + q.art + ') im Fall ' + fall.id + (neuerFall ? ' (neu angelegt)' : '') + (ft ? ', Fundstelle ' + ft.typ + (ft.wert ? ' ' + ft.wert : '') : ', ohne Fundstelle') };
 };
+
+/* ---------- Markierung einer Unterlage ---------- */
+/* Die Markierung gilt der Unterlage selbst: geprüft und nützlich. Sie bestätigt keine daraus abgeleitete Behauptung. */
+ACTIONS.RECHERCHE_UNTERLAGE_MARKIERT = function (a) {
+  const R = PROFIL.recherche, b = R.beobachtungen.find(function (x) { return x.id === a.beob; });
+  if (!b) return null;
+  const p = b.pruefung = b.pruefung || { nuetzlich: false, am: null, notiz: '' }, teile = [];
+  if (typeof a.geprueft === 'boolean' && a.geprueft !== !!p.nuetzlich) { p.nuetzlich = a.geprueft; p.am = a.geprueft ? nowIso() : null; teile.push(a.geprueft ? 'als geprüft und nützlich markiert' : 'Markierung zurückgenommen'); }
+  if (typeof a.notiz === 'string' && a.notiz.trim().slice(0, 500) !== (p.notiz || '')) { p.notiz = a.notiz.trim().slice(0, 500); teile.push(p.notiz ? 'Notiz gesetzt' : 'Notiz entfernt'); }
+  if (!teile.length) { if (!b.pruefung.nuetzlich && !b.pruefung.notiz && !b.pruefung.am) delete b.pruefung; return null; }
+  const f = R.fassungen.find(function (y) { return y.id === b.fassung; }) || {};
+  return { modul: 'Dossier', aktion: 'Unterlage geprüft', detail: b.id + ' (' + (f.quelle || '–') + '): ' + teile.join(', ') };
+};
+PROFIL_AKTIONEN.RECHERCHE_UNTERLAGE_MARKIERT = 1;
 
 /* ---------- Aussagen ---------- */
 function rchAussage(id) { return PROFIL.recherche.aussagen.find(function (x) { return x.id === id; }) || null; }
@@ -164,7 +191,7 @@ function rchZuBeobachtung(id) {
   const f = R.fassungen.find(function (x) { return x.id === b.fassung; }) || {}, q = R.quellen.find(function (x) { return x.id === f.quelle; }) || {};
   return { b: b, f: f, q: q, fall: R.faelle.find(function (x) { return x.id === q.fall; }) || null };
 }
-function rchFundstelleText(ft) { return ft ? ft.typ + (ft.wert ? ' ' + ft.wert : '') : 'fehlt'; }
+function rchFundstelleText(ft) { return ft && ft.typ ? ft.typ + (ft.wert ? ' ' + ft.wert : '') : 'keine Angabe'; }
 function rchOeffnen(z) {
   RIDB.get(z.f.anhang).then(function (blob) {
     if (!blob) { meldung('Datei nicht mehr vorhanden (Browserspeicher geleert?).'); return null; }
@@ -182,20 +209,28 @@ function rchOeffnen(z) {
 /* ---------- Erfassen ---------- */
 function rchEntwurf(k) { return VIEW.draft['rch-' + k] || ''; }
 function rchSetze(k) { return function (ev) { VIEW.draft['rch-' + k] = ev.target.value; }; }
+function rchFallAuswahl(e) {
+  const R = PROFIL.recherche, K = VIEW.recherche;
+  if (K.fall && R.faelle.some(function (f) { return f.id === K.fall; })) return K.fall;
+  const faelle = {}; rchBelege(e).forEach(function (z) { if (z.fall) faelle[z.fall.id] = 1; });
+  const ids = Object.keys(faelle);
+  return ids.length === 1 ? ids[0] : '';                                  /* nur wenn eindeutig, und dann sichtbar im Auswahlfeld */
+}
 function rchErfassen(e) {
-  const R = PROFIL.recherche, datei = $('rch-datei') && $('rch-datei').files && $('rch-datei').files[0];
+  const R = PROFIL.recherche, K = VIEW.recherche, datei = K.datei || null;
   /* Alle Angaben werden beim Klick gemeinsam erfasst; der weitere (asynchrone) Ablauf liest keine Eingaben mehr */
-  const eing = { fall: rchEntwurf('fall'), titel: rchEntwurf('fall-titel').trim(), frage: rchEntwurf('fall-frage'), text: rchEntwurf('text').trim(), ftTyp: rchEntwurf('ft-typ') || RCH_FUNDSTELLEN[0],
-    ftWert: rchEntwurf('ft-wert').trim(), herkunft: rchEntwurf('herkunft'), notiz: rchEntwurf('notiz') };
-  const gesendet = { 'fall': eing.fall, 'fall-titel': VIEW.draft['rch-fall-titel'], 'fall-frage': VIEW.draft['rch-fall-frage'], 'text': VIEW.draft['rch-text'], 'ft-typ': VIEW.draft['rch-ft-typ'], 'ft-wert': VIEW.draft['rch-ft-wert'],
+  const erlaubt = RCH_FT_MATERIAL[rchMaterial(datei)] || [], typ1 = rchEntwurf('ft-typ'), typ2 = rchEntwurf('ft-typ2');
+  const eing = { fall: rchEntwurf('fall') || rchFallAuswahl(e), titel: rchEntwurf('fall-titel').trim(), frage: rchEntwurf('fall-frage'), text: rchEntwurf('text').trim(),
+    ftTyp: typ2 || (erlaubt.indexOf(typ1) >= 0 ? typ1 : (erlaubt[0] || '')), ftWert: rchEntwurf('ft-wert').trim(), herkunft: rchEntwurf('herkunft'), notiz: rchEntwurf('notiz') };
+  const gesendet = { 'fall': VIEW.draft['rch-fall'], 'fall-titel': VIEW.draft['rch-fall-titel'], 'fall-frage': VIEW.draft['rch-fall-frage'], 'text': VIEW.draft['rch-text'], 'ft-typ': VIEW.draft['rch-ft-typ'], 'ft-typ2': VIEW.draft['rch-ft-typ2'], 'ft-wert': VIEW.draft['rch-ft-wert'],
     'herkunft': VIEW.draft['rch-herkunft'], 'notiz': VIEW.draft['rch-notiz'] };
   if (!eing.fall) { meldung('Bitte zuerst einen Fall wählen oder einen neuen anlegen.'); return; }
   const neu = eing.fall === '__neu';
   if (neu && !eing.titel) { meldung('Für einen neuen Fall fehlt der Titel.'); return; }
   if (!datei && !eing.text) { meldung('Weder Datei noch Textauszug angegeben.'); return; }
   if (datei && datei.size > RCH_MAX) { meldung('Datei über 20 MB, nicht angenommen.'); return; }
-  if (eing.ftTyp !== 'ganze Datei' && !eing.ftWert) { meldung('Die Fundstelle braucht einen Wert (oder "ganze Datei" wählen).'); return; }
-  const fundstelle = { typ: eing.ftTyp, wert: eing.ftTyp === 'ganze Datei' ? '' : eing.ftWert };
+  /* Fundstelle ist optional: ohne Wert (außer "ganze Datei") wird keine gespeichert */
+  const fundstelle = eing.ftTyp === 'ganze Datei' ? { typ: 'ganze Datei', wert: '' } : (eing.ftTyp && eing.ftWert ? { typ: eing.ftTyp, wert: eing.ftWert } : null);
   const fertig = function (fassung) {
     const sicher = JSON.stringify(R);                                  /* Stand vor dem Anlegen, für die Rücknahme */
     dispatch({ type: 'RECHERCHE_BELEG', dossier: e.id, fall: neu ? null : eing.fall, neuerFall: neu ? { titel: eing.titel, frage: eing.frage } : null,
@@ -211,6 +246,7 @@ function rchErfassen(e) {
     }
     /* Nur die gesendeten Eingaben löschen; ein inzwischen neuer Entwurf bleibt erhalten */
     Object.keys(gesendet).forEach(function (k) { if (VIEW.draft['rch-' + k] === gesendet[k]) delete VIEW.draft['rch-' + k]; });
+    K.fall = R.quellen[R.quellen.length - 1].fall; K.offen = false; if (K.datei === datei) K.datei = null;           /* der Fall bleibt sichtbar ausgewählt */
     renderModule();
   };
   if (!datei) { fertig({ dateiname: null, groesse: eing.text.length, typ: 'text/plain', hash: null, anhang: false }); return; }
@@ -222,36 +258,82 @@ function rchErfassen(e) {
 }
 
 /* ---------- Ansicht ---------- */
+/* ---------- Ansicht: Unterlagen zum Fall ---------- */
+function rchUnterlagen(e, fallId, alle) {
+  const R = PROFIL.recherche;
+  return R.beobachtungen.filter(function (b) { return alle || (b.dossiers || []).indexOf(e.id) >= 0; }).map(function (b) {
+    const f = R.fassungen.find(function (x) { return x.id === b.fassung; }) || {}, q = R.quellen.find(function (x) { return x.id === f.quelle; }) || {};
+    return { b: b, f: f, q: q, fall: R.faelle.find(function (x) { return x.id === q.fall; }) || null };
+  }).filter(function (z) { return z.fall && z.fall.id === fallId; });
+}
+function rchUnterlageZeile(e, z) {
+  const b = z.b, p = b.pruefung || null, ok = !!(p && p.nuetzlich), nk = 'rch-n-' + b.id;
+  const titel = z.f.dateiname || kuerzen(String(b.zitat || '').replace(/\s+/g, ' '), 90) || z.q.id;
+  const fremd = (b.dossiers || []).indexOf(e.id) < 0;
+  const speichern = function (d) { if (rchSchreiben(Object.assign({ type: 'RECHERCHE_UNTERLAGE_MARKIERT', beob: b.id }, d), 'Unterlage geprüft')) { delete VIEW.draft[nk]; renderModule(); } };
+  const notizText = function () { return VIEW.draft[nk] != null ? VIEW.draft[nk] : (p && p.notiz) || ''; };
+  const zeile = function (k, v) { return h('div', null, h('span', { class: 'dim' }, k + ': '), v); };
+  return h('div', { class: 'pad', id: 'rch-u-' + b.id, style: 'border-top:1px dashed #33425a;min-width:0;overflow-wrap:anywhere' },
+    h('div', null, h('strong', null, titel), ' ', ok ? h('span', { class: 'label s-accent' }, 'geprüft und nützlich') : null, fremd ? h('span', { class: 'label s-dim' }, ' anderes Dossier: ' + (b.dossiers || []).join(', ')) : null),
+    h('div', { class: 'note' }, 'Quelle: ' + (z.q.herkunft || 'nicht angegeben') + (b.fundstelle && b.fundstelle.typ ? ' · Fundstelle: ' + rchFundstelleText(b.fundstelle) : '')),
+    z.b.zitat && z.f.dateiname ? h('details', { id: 'rch-z-' + b.id }, h('summary', null, 'Textauszug'), h('div', { class: 'note', style: 'white-space:pre-wrap', 'data-vollstaendig': '1' }, b.zitat))
+      : (b.zitat ? h('details', { id: 'rch-z-' + b.id }, h('summary', null, 'Vollständigen Textauszug anzeigen'), h('div', { class: 'note', style: 'white-space:pre-wrap', 'data-vollstaendig': '1' }, b.zitat)) : null),
+    h('div', { class: 'row' },
+      z.f.anhang ? h('button', { type: 'button', id: 'rch-o-' + b.id, onclick: function () { rchOeffnen({ b: b, f: z.f, q: z.q }); } }, 'Öffnen') : null,
+      h('button', { type: 'button', id: 'rch-m-' + b.id, onclick: function () { speichern({ geprueft: !ok, notiz: notizText() }); } }, ok ? 'Markierung zurücknehmen' : 'Als geprüft und nützlich markieren'),
+      entwurf('input', nk, nk, { autocomplete: 'off', type: 'text', 'aria-label': 'Notiz zu ' + b.id, placeholder: 'Notiz: warum geprüft und nützlich (optional)', maxlength: '500', value: notizText(), style: 'flex:1 1 220px;min-width:0' }),
+      h('button', { type: 'button', id: 'rch-ns-' + b.id, onclick: function () { speichern({ notiz: notizText() }); } }, 'Notiz speichern')),
+    h('details', { id: 'rch-d-' + b.id }, h('summary', null, 'Details'),
+      h('div', { class: 'note', style: 'overflow-wrap:anywhere' },
+        zeile('Nummern', z.q.id + ' · ' + z.f.id + ' · ' + b.id), zeile('Fall', z.fall.id + ' ' + z.fall.titel), zeile('Art', (z.q.art || '–') + (z.f.typ ? ', ' + z.f.typ : '') + (z.f.groesse ? ', ' + z.f.groesse + ' Byte' : '')),
+        zeile('Prüfsumme (SHA-256)', z.f.hash || (z.f.anhang ? 'fehlt' : 'kein Anhang')), zeile('Erfasst (UTC)', fmtZ(b.erfasst)), z.q.notiz ? zeile('Anmerkung bei Erfassung', z.q.notiz) : null,
+        p && p.am ? zeile('Markiert (UTC)', fmtZ(p.am)) : null)));
+}
 function rechercheBelege(e) {
-  const R = PROFIL.recherche, liste = rchBelege(e), alt = typeof dossierBelege === 'function' ? dossierBelege(e).length : 0;
-  const fallWahl = rchEntwurf('fall'), ftTyp = rchEntwurf('ft-typ') || RCH_FUNDSTELLEN[0];
+  const R = PROFIL.recherche, K = VIEW.recherche, fallId = rchFallAuswahl(e), alt = typeof dossierBelege === 'function' ? dossierBelege(e).length : 0;
+  const liste = fallId ? rchUnterlagen(e, fallId, K.alle) : [];
   const sel = function (id, label, opts, wert, onch) { return h('select', { id: id, 'aria-label': label, onchange: onch }, opts.map(function (o) { return h('option', { value: o[0], selected: o[0] === wert }, o[1]); })); };
-  const fallOpt = [['', '– Fall wählen –']].concat(R.faelle.map(function (f) { return [f.id, f.id + ' ' + f.titel]; })).concat([['__neu', 'Neuen Fall anlegen …']]);
-  return panel('Recherchebelege', [h('span', { class: 'badge' }, String(liste.length))],
-    h('div', { class: 'pad' },
-      h('p', { class: 'note' }, 'Belege zu diesem Dossier, unabhängig von einem Auftrag. Jeder Beleg gehört zu einem Fall und trägt eine Fundstelle; Dateien bleiben unverändert, eine Prüfsumme weist spätere Änderungen nach.'
-        + (alt ? ' Missionsbelege (' + alt + ') stehen weiter im Abschnitt Aufklärung und Freigabe.' : '')),
+  const imFall = fallId ? rchUnterlagen(e, fallId, true).length : 0;
+  let formular = null;
+  if (K.offen) {
+    const fallWahl = rchEntwurf('fall') || fallId, datei = K.datei, mat = rchMaterial(datei), erlaubt = RCH_FT_MATERIAL[mat] || [];
+    const typ1 = erlaubt.indexOf(rchEntwurf('ft-typ')) >= 0 ? rchEntwurf('ft-typ') : (erlaubt[0] || ''), typ2 = rchEntwurf('ft-typ2'), typ = typ2 || typ1;
+    const fallOpt = [['', '– Fall wählen –']].concat(R.faelle.map(function (f) { return [f.id, f.id + ' ' + f.titel]; })).concat([['__neu', 'Neuen Fall anlegen …']]);
+    const inp = h('input', { type: 'file', id: 'rch-datei', 'aria-label': 'Unterlage als Datei', onchange: function (ev) { K.datei = ev.target.files && ev.target.files[0] || null; renderModule(); } });
+    try { if (K.datei) { const dt = new DataTransfer(); dt.items.add(K.datei); inp.files = dt.files; } } catch (x) { /* Auswahl bleibt sichtbar leer */ }
+    formular = h('div', { class: 'pad', id: 'rch-form', style: 'border-top:1px dashed #33425a' },
       h('div', { class: 'row' }, h('label', { for: 'rch-fall' }, 'Fall'),
         sel('rch-fall', 'Fall wählen', fallOpt, fallWahl, function (ev) { VIEW.draft['rch-fall'] = ev.target.value; renderModule(); })),
       fallWahl === '__neu' ? h('div', { class: 'row' },
         entwurf('input', 'rch-fall-titel', 'rch-fall-titel', { autocomplete: 'off', type: 'text', 'aria-label': 'Titel des neuen Falls', placeholder: 'Titel des Falls', maxlength: '120', style: 'flex:1 1 220px;min-width:0' }),
         entwurf('input', 'rch-fall-frage', 'rch-fall-frage', { autocomplete: 'off', type: 'text', 'aria-label': 'Recherchefrage', placeholder: 'Recherchefrage (optional)', maxlength: '300', style: 'flex:2 1 300px;min-width:0' })) : null,
-      h('div', { class: 'row' }, h('label', { for: 'rch-datei' }, 'Datei'), h('input', { type: 'file', id: 'rch-datei', 'aria-label': 'Beleg als Datei' }),
-        entwurf('input', 'rch-herkunft', 'rch-herkunft', { autocomplete: 'off', type: 'text', 'aria-label': 'Herkunft oder Adresse', placeholder: 'Herkunft oder Adresse (optional; wird nicht abgerufen)', maxlength: '300', style: 'flex:1 1 260px;min-width:0' })),
+      h('div', { class: 'row' }, h('label', { for: 'rch-datei' }, 'Datei'), inp,
+        entwurf('input', 'rch-herkunft', 'rch-herkunft', { autocomplete: 'off', type: 'text', 'aria-label': 'Quelle oder URL', placeholder: 'Quelle oder URL (optional; wird nicht abgerufen)', maxlength: '300', style: 'flex:1 1 260px;min-width:0' })),
       h('div', { class: 'row' }, entwurf('textarea', 'rch-text', 'rch-text', { 'aria-label': 'Textauszug', placeholder: 'Textauszug (wörtlich; ohne Datei Pflicht)', rows: '3', maxlength: '2000', style: 'flex:1 1 100%;min-width:0' })),
       h('div', { class: 'row' }, h('label', { for: 'rch-ft-typ' }, 'Fundstelle'),
-        sel('rch-ft-typ', 'Art der Fundstelle', RCH_FUNDSTELLEN.map(function (x) { return [x, x]; }), ftTyp, function (ev) { VIEW.draft['rch-ft-typ'] = ev.target.value; renderModule(); }),
-        ftTyp === 'ganze Datei' ? h('span', { class: 'note' }, 'Schwächste Fundstelle: der Beleg verweist nicht auf eine Stelle.')
-          : entwurf('input', 'rch-ft-wert', 'rch-ft-wert', { autocomplete: 'off', type: 'text', 'aria-label': 'Wert der Fundstelle', placeholder: ftTyp === 'Seite' ? 'Seitenzahl, z. B. 4' : ftTyp === 'Zeitmarke' ? 'z. B. 00:12:30' : 'z. B. Absatz 3 oder Zeichen 120-340', maxlength: '60', style: 'flex:1 1 200px;min-width:0' })),
+        sel('rch-ft-typ', 'Art der Fundstelle', erlaubt.map(function (x) { return [x, x]; }).concat(erlaubt.length ? [] : [['', 'keine Angabe']]), typ1, function (ev) { VIEW.draft['rch-ft-typ'] = ev.target.value; renderModule(); }),
+        typ && typ !== 'ganze Datei' ? entwurf('input', 'rch-ft-wert', 'rch-ft-wert', { autocomplete: 'off', type: 'text', 'aria-label': 'Wert der Fundstelle', placeholder: (RCH_FT_HINWEIS[typ] || 'Angabe') + ' (optional)', maxlength: '120', style: 'flex:1 1 220px;min-width:0' })
+          : (typ === 'ganze Datei' ? h('span', { class: 'note' }, 'Der Verweis gilt der ganzen Datei.') : h('span', { class: 'note' }, 'Ohne Fundstelle gespeichert.'))),
+      h('details', { id: 'rch-weitere', open: K.weitere, ontoggle: function (ev) { K.weitere = ev.target.open; } }, h('summary', null, 'Weitere Optionen'),
+        h('div', { class: 'row' }, h('label', { for: 'rch-ft-typ2' }, 'Andere Fundstellenart'),
+          sel('rch-ft-typ2', 'Andere Art der Fundstelle', [['', 'wie oben']].concat(RCH_FUNDSTELLEN.map(function (x) { return [x, x]; })), typ2, function (ev) { VIEW.draft['rch-ft-typ2'] = ev.target.value; renderModule(); })),
+        h('div', { class: 'row' }, entwurf('input', 'rch-notiz', 'rch-notiz', { autocomplete: 'off', type: 'text', 'aria-label': 'Anmerkung zur Unterlage', placeholder: 'Anmerkung (optional)', maxlength: '300', style: 'flex:1 1 300px;min-width:0' }))),
       h('div', { class: 'row' },
-        entwurf('input', 'rch-notiz', 'rch-notiz', { autocomplete: 'off', type: 'text', 'aria-label': 'Anmerkung zum Beleg', placeholder: 'Anmerkung (optional)', maxlength: '300', style: 'flex:1 1 300px;min-width:0' }),
-        h('button', { type: 'button', id: 'rch-ok', onclick: function () { rchErfassen(e); } }, 'Beleg erfassen')),
-      liste.length ? tabelle(['ID', 'Fall', 'Art', 'Fundstelle', 'Prüfsumme', 'Erfasst (UTC)', ''], liste.map(function (z) {
-        return [td('nw', z.q.id || '–'), td('txt', z.fall ? z.fall.id + ' ' + z.fall.titel : '–'), td('nw', z.q.art || '–'),
-          td('nw', rchFundstelleText(z.b.fundstelle)), td('nw', z.f.hash ? z.f.hash.slice(0, 12) + '…' : (z.f.anhang ? 'fehlt' : 'kein Anhang')), td('nw', fmtZ(z.b.erfasst)),
-          td('txt', z.f.anhang ? h('button', { type: 'button', class: 'link', onclick: function () { rchOeffnen(z); } }, 'Öffnen')
-            : h('details', null, h('summary', null, 'Textauszug'), h('div', { class: 'note' }, z.b.zitat)))];
-      })) : h('p', { class: 'note' }, 'Noch keine Recherchebelege zu diesem Dossier.')));
+        h('button', { type: 'button', id: 'rch-ok', onclick: function () { rchErfassen(e); } }, 'Unterlage speichern'),
+        h('button', { type: 'button', id: 'rch-abbruch', onclick: function () { K.offen = false; renderModule(); } }, 'Abbrechen')));
+  }
+  return panel('Unterlagen zum Fall', [h('span', { class: 'badge' }, String(liste.length))],
+    h('div', { class: 'pad' },
+      h('p', { class: 'note' }, 'Dokumente und Textauszüge zum gewählten Fall. Die Markierung "geprüft und nützlich" gilt der Unterlage selbst und bestätigt keine Behauptung, die daraus folgen könnte. Dateien bleiben unverändert, eine Prüfsumme weist spätere Änderungen nach.'
+        + (alt ? ' Missionsbelege (' + alt + ') stehen weiter im Abschnitt Aufklärung und Freigabe.' : '')),
+      h('div', { class: 'row' }, h('label', { for: 'rch-fall-sel' }, 'Fall'),
+        sel('rch-fall-sel', 'Fall der angezeigten Unterlagen', [['', '– Fall wählen –']].concat(R.faelle.map(function (f) { return [f.id, f.id + ' ' + f.titel]; })), fallId, function (ev) { K.fall = ev.target.value; renderModule(); }),
+        h('button', { type: 'button', id: 'rch-neu', 'aria-expanded': K.offen ? 'true' : 'false', onclick: function () { K.offen = !K.offen; renderModule(); } }, K.offen ? 'Formular schließen' : 'Unterlage hinzufügen'),
+        fallId && imFall > liste.length || K.alle ? h('label', { class: 'note' }, h('input', { type: 'checkbox', id: 'rch-alle', checked: K.alle, onchange: function (ev) { K.alle = ev.target.checked; renderModule(); } }), ' auch Unterlagen anderer Dossiers dieses Falls (' + imFall + ')') : null),
+      h('p', { class: 'note' }, 'Ungeprüfte Angaben, z. B. "Hauptstandort vermutlich Neukölln", gehören in die Dossiernotizen; Orte lassen sich mit Pin oder Sichtung auf der Karte festhalten.')),
+    formular,
+    liste.length ? liste.map(function (z) { return rchUnterlageZeile(e, z); })
+      : h('p', { class: 'note pad' }, !R.faelle.length ? 'Noch keine Unterlagen. Mit "Unterlage hinzufügen" beginnen.' : !fallId ? 'Bitte einen Fall wählen, um seine Unterlagen zu sehen.' : 'In diesem Fall liegen zu diesem Dossier noch keine Unterlagen.'));
 }
 
 /* ---------- Ansicht: Aussagen ---------- */
@@ -310,9 +392,10 @@ function rchAussagenFelder(e) {
 }
 function rechercheAussagen(e) {
   const F = rchAussagenFelder(e);
-  return panel('Aussagen', [h('span', { class: 'badge' }, String(F.anzahl))],
-    h('div', { class: 'pad' }, h('p', { class: 'note' }, 'Überprüfbare Sätze zu diesem Dossier mit Belegen dafür und dagegen. Die Einschätzung ist Ihr Urteil mit Begründung; die Anwendung rechnet nichts und schlägt nichts vor. Ohne stützenden Beleg mit Fundstelle ist keine positive Einschätzung möglich.'), F.formular),
-    F.bloecke);
+  if (!F.anzahl) return null;                                         /* aus der Standardansicht genommen; bestehende Aussagen bleiben erreichbar */
+  return panel('Frühere Aussagen', [h('span', { class: 'badge' }, String(F.anzahl))],
+    h('details', { id: 'rca-alt', open: VIEW.recherche.altOffen, ontoggle: function (ev) { VIEW.recherche.altOffen = ev.target.open; } }, h('summary', null, 'Bestehende Aussagen anzeigen'),
+      h('div', { class: 'pad' }, h('p', { class: 'note' }, 'Dieser Bereich ist nicht mehr Teil des normalen Ablaufs. Vorhandene Aussagen mit ihren Belegen und Einschätzungen bleiben unverändert erhalten.')), F.bloecke));
 }
 function rechercheDossier(e) { return [rechercheBelege(e), rechercheAussagen(e), rechercheFallpaket()]; }
 
