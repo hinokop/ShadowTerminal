@@ -60,17 +60,9 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   const voll2 = await p.evaluate(async () => { const orig = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (String(k).endsWith('.profil')) throw new Error('quota'); return orig.call(this, k, v); };
     const log0 = STATE.log.length; const ok = rchSchreiben({ type: 'RECHERCHE_UNTERLAGE_MARKIERT', beob: 'B-001', geprueft: true, notiz: 'x' }, 'Unterlage geprüft'); Storage.prototype.setItem = orig;
     return { ok, pr: PROFIL.recherche.beobachtungen[0].pruefung || null, log: STATE.log.length - log0 }; });
-  /* bestehende Aussagen bleiben erhalten und erreichbar, ohne Maske */
-  const aus = await p.evaluate(() => { dispatch({ type: 'RECHERCHE_AUSSAGE_NEU', dossier: STATE.dossiers.auswahl, fall: PROFIL.recherche.faelle[0].id, text: 'Alte Aussage' }); renderModule();
-    const h2 = Array.from(document.querySelectorAll('section.panel > h2')).map(h => h.textContent.trim());
-    return { frueher: h2.some(t => t.startsWith('Frühere Aussagen')), maske: !!document.getElementById('rca-neu'), n: PROFIL.recherche.aussagen.length }; });
-  /* Gegenprobe: eine Unterlage ohne Fundstelle lässt sich ablegen und markieren, qualifiziert aber keine Aussage */
-  const gp = await p.evaluate(() => { const R = PROFIL.recherche, x = R.aussagen[0], d = dispatch;
-    d({ type: 'RECHERCHE_BELEG_VERKNUEPFT', aussage: x.id, beob: 'B-001', rolle: 'stuetzend' }); d({ type: 'RECHERCHE_AUSSAGE_SETZEN', id: x.id, begruendung: 'Begründung' }); d({ type: 'RECHERCHE_AUSSAGE_SETZEN', id: x.id, einschaetzung: 'dafuer' });
-    const e1 = x.einschaetzung; d({ type: 'RECHERCHE_UNTERLAGE_MARKIERT', beob: 'B-001', geprueft: true }); const e2 = x.einschaetzung;
-    d({ type: 'RECHERCHE_BELEG_VERKNUEPFT', aussage: x.id, beob: 'B-002', rolle: 'widersprechend' }); d({ type: 'RECHERCHE_AUSSAGE_SETZEN', id: x.id, einschaetzung: 'gestuetzt' }); const e3 = x.einschaetzung;
-    d({ type: 'RECHERCHE_AUSSAGE_SETZEN', id: x.id, einschaetzung: 'dagegen' });
-    return { e1, e2, e3, e4: x.einschaetzung, marke: R.beobachtungen[0].pruefung.nuetzlich, fs: R.beobachtungen[0].fundstelle }; });
+  /* eine Unterlage ohne Fundstelle lässt sich ablegen und markieren */
+  const gp = await p.evaluate(() => { const R = PROFIL.recherche; dispatch({ type: 'RECHERCHE_UNTERLAGE_MARKIERT', beob: 'B-001', geprueft: true }); return { marke: R.beobachtungen[0].pruefung.nuetzlich, fs: R.beobachtungen[0].fundstelle }; });
+  const ohneAussagenAktionen = await p.evaluate(() => !Object.keys(ACTIONS).some(k => /^RECHERCHE_(AUSSAGE|PRUEFSTAND|BELEG_VERKN|BELEG_GELOEST)/.test(k)));
   /* Sichtung-Button */
   await p.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Ohne Ort', land: 'DE' }); dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Mit Ort', land: 'DE', koord: '52.5000, 13.4000' }); });
   await zeigen('Ohne Ort'); await p.click('#btn-dk-sichtung'); await p.waitForTimeout(300);
@@ -94,14 +86,14 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
     markierung: m1.ok === true && m1.notiz === 'Nennt das Eröffnungsdatum' && m1.badge && m1.aussagen === 0 && m1.knopf === 'Markierung zurücknehmen',
     markierungErhalten: m2.ok === true && m2.notiz === 'Nennt das Eröffnungsdatum' && m2.am && m2.sichtbar && m2.fall !== '', markierungZurueck: m3.ok === false && m3.notiz === 'Nennt das Eröffnungsdatum',
     markierungRollback: voll2.ok === false && voll2.pr === null && voll2.log === 0,
-    aussagenBleiben: aus.frueher && !aus.maske && aus.n === 1,
-    gegenprobeOhneFundstelle: gp.e1 === null && gp.e2 === null && gp.e3 === null && gp.e4 === 'dagegen' && gp.marke === true && gp.fs === null,
+    ohneAussagenAktionen: ohneAussagenAktionen,
+    ohneFundstelleMarkierbar: gp.marke === true && gp.fs === null,
     sichtungOhneOrt: ohneOrt.pins === 0 && ohneOrt.tab === 'sichtungen',
     sichtungPin: s1.name === 'M-01' && Math.abs(s1.ll[0] - 52.5) < 1e-6 && Math.abs(s1.ll[1] - 13.4) < 1e-6 && s1.dossier && s1.mod === 'karte' && Math.abs(s1.lat - 52.5) < 1e-6 && s1.auswahl && s1.marker,
     sichtungAusPin: s2.n === 1 && /^SI-/.test(s2.id) && s2.pin === s2.id && s2.ll && Math.abs(s2.ll[0] - 52.5) < 1e-4 && s2.markerSichtung,
     sichtungLetzterPunkt: s3.name === 'M-02' && Math.abs(s3.ll[0] - 52.61) < 1e-6 && Math.abs(s3.ll[1] - 13.51) < 1e-6 && s3.n === 2,
     keineFehler: err.length === 0
   };
-  console.log(JSON.stringify({ r, a1, a2, a3, oText, oVideo, oBild, oPdf, m2, voll2, aus, ohneOrt, s1, s2, s3, msgOeffnen, err }));
+  console.log(JSON.stringify({ r, a1, a2, a3, oText, oVideo, oBild, oPdf, m2, voll2, gp, ohneOrt, s1, s2, s3, msgOeffnen, err }));
   await b.close(); process.exit(Object.values(r).every(v => v === true) ? 0 : 1);
 })();

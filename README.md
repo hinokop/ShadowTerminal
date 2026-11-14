@@ -22,7 +22,7 @@ Kartenhintergründe und Wetter werden von externen Diensten geladen. Die Zugangs
 | `karte3d.html` | 3D-Ansicht mit MapLibre, eingebettet in die Karte |
 | `karte.js`, `karte2.js` | Kartendaten |
 | `akten-modul.js` | Ablage: Aktenliste, Dokumentenansicht, Schwärzungen, Einsichtsanträge |
-| `recherche-modul.js` | Recherche: Unterlagen zum Fall, Aussagen mit Prüfstand, Fallpaket (Export und Import) |
+| `recherche-modul.js` | Recherche: Unterlagen zum Fall, Fallpaket (Export und Import) |
 | `szenario.js`, `dialog.js`, `klassifikator.js` | Szenariodaten und Dialogmaschine |
 | `docs/datenvertrag.md` | Datenvertrag der Recherche und des Fallpakets |
 | `tests/` | Playwright-Skripte |
@@ -39,8 +39,8 @@ Die Module nach dem Hauptskript sind klassische Skripte und werden nach ihm gela
 
 - **Unterlagen zum Fall:** Im Dossier werden Unterlagen einem Fall zugeordnet (Fall, Quelle, Fassung, Beobachtung). Das Formular ist einklappbar. Die Fundstelle (Seite, Absatz, Zeitmarke, Zeichenbereich) ist optional und richtet sich nach dem Material. Eine Unterlage lässt sich als geprüft und nützlich markieren, mit Notiz.
 - **Sichtung:** Ein Knopf im Dossier öffnet die Karte am letzten bekannten Punkt der Person und legt dort einen Entwurfs-Pin M-01, M-02 usw. an, der sich als Sichtung eintragen lässt.
-- **Aussagen:** Das frühere Aussagenregister ist aus der Standardansicht genommen, vorhandene Aussagen bleiben erhalten. Eine Aussage gilt nur mit einer Unterlage samt Fundstelle als gestützt oder widerlegt, eine Begründung ist Pflicht.
-- **Fallpaket:** Ein Fall mit Quellen, Unterlagen, Aussagen, Belegdateien und den benötigten Dossierangaben lässt sich als eine Datei sichern und laden. Das Paket trägt ein Manifest mit Prüfsummen. Beim Laden wird vor jeder Änderung geprüft (ganz oder gar nicht) und ohne Überschreiben zusammengeführt. Eine fehlende Belegdatei wird aus dem Paket ergänzt, eine abweichende nie überschrieben.
+- **Frühere Aussagen:** Das Aussagenregister ist entfernt (keine Oberfläche, keine Bearbeitung). Vorhandene Aussagen bleiben unverändert erhalten und reisen im Fallpaket mit.
+- **Fallpaket:** Ein Fall mit Quellen, Unterlagen, Belegdateien und den benötigten Dossierangaben lässt sich als eine Datei sichern und laden. Das Paket trägt ein Manifest mit Prüfsummen. Beim Laden wird vor jeder Änderung geprüft (ganz oder gar nicht) und ohne Überschreiben zusammengeführt. Eine fehlende Belegdatei wird aus dem Paket ergänzt, eine abweichende nie überschrieben.
 
 ## Karte
 
@@ -59,7 +59,6 @@ Die Skripte in `tests/` benötigen Node.js mit Playwright. Das Testkennwort ist 
 - Zonen und Zugriffspunkte der Karte sind noch an den Missionsrahmen gekoppelt und lassen sich ohne ihn nicht setzen.
 - Prüfsummen im Fallpaket erkennen Beschädigung, keine Fälschung.
 - Notizen und Bilder der Dossiers sind nicht Teil des Fallpakets, Belegdateien nicht Teil des Profilexports.
-- Das Aussagenregister ist ausgeblendet; sein Code wird in einem eigenen Schritt entfernt.
 - Die Anwendung wurde bisher nur mit Playwright und nicht systematisch von Hand geprüft.
 
 ## Arbeitsweise

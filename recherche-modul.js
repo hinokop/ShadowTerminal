@@ -5,7 +5,7 @@
    Dateien liegen bytegetreu in einer eigenen IndexedDB ('fieldterminal.recherche'), die das Zurücksetzen des Zustands nicht leert.
    Klassisches Skript, wird nach dem Hauptskript geladen; vom Hauptskript nur zur Laufzeit referenziert.
    ===================================================================== */
-VIEW.recherche = Object.assign({ fall: '', offen: false, datei: null, alle: false, weitere: false, altOffen: false }, VIEW.recherche || {});
+VIEW.recherche = Object.assign({ fall: '', offen: false, datei: null, alle: false, weitere: false }, VIEW.recherche || {});
 PROFIL.recherche = PROFIL.recherche || { faelle: [], quellen: [], fassungen: [], beobachtungen: [], aussagen: [], seq: { fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 } };
 ['faelle', 'quellen', 'fassungen', 'beobachtungen', 'aussagen'].forEach(function (k) { PROFIL.recherche[k] = PROFIL.recherche[k] || []; });
 PROFIL.recherche.seq = Object.assign({ fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 }, PROFIL.recherche.seq || {});
@@ -26,8 +26,6 @@ function rchMaterial(datei) {
   return 'datei';
 }
 const RCH_ID = { fall: ['F-', 'fall'], quelle: ['Q-', 'quelle'], fassung: ['V-', 'fassung'], beobachtung: ['B-', 'beobachtung'], aussage: ['A-', 'aussage'] };
-const RCH_STATUS = [['entwurf', 'Entwurf'], ['offen', 'offen'], ['abgeschlossen', 'abgeschlossen']];
-const RCH_EINSCHAETZUNG = [['', 'nicht eingeschätzt'], ['widerlegt', 'widerlegt'], ['dagegen', 'spricht dagegen'], ['unentschieden', 'unentschieden'], ['dafuer', 'spricht dafür'], ['gestuetzt', 'gestützt']];
 
 /* ---------- Dateispeicher ---------- */
 const RIDB = {
@@ -120,67 +118,9 @@ ACTIONS.RECHERCHE_UNTERLAGE_MARKIERT = function (a) {
 };
 PROFIL_AKTIONEN.RECHERCHE_UNTERLAGE_MARKIERT = 1;
 
-/* ---------- Aussagen ---------- */
-function rchAussage(id) { return PROFIL.recherche.aussagen.find(function (x) { return x.id === id; }) || null; }
-/* Ein Beleg zählt für eine positive oder negative Einschätzung nur mit Fundstelle; eine Unterlage ohne Fundstelle bleibt ablegbar und markierbar, qualifiziert aber keine Aussage */
-function rchMitFundstelle(beobId) { const b = PROFIL.recherche.beobachtungen.find(function (x) { return x.id === beobId; }); return !!(b && b.fundstelle && b.fundstelle.typ); }
-function rchStuetzt(x) { return x.stuetzend.some(function (l) { return rchMitFundstelle(l.beob); }); }
-function rchWiderspricht(x) { return x.widersprechend.some(function (l) { return rchMitFundstelle(l.beob); }); }
-function rchVerknuepfung(a, beob) {
-  const s = a.stuetzend.find(function (x) { return x.beob === beob; });
-  if (s) return { l: s, rolle: 'stuetzend' };
-  const w = a.widersprechend.find(function (x) { return x.beob === beob; });
-  return w ? { l: w, rolle: 'widersprechend' } : null;
-}
-ACTIONS.RECHERCHE_AUSSAGE_NEU = function (a) {
-  const R = PROFIL.recherche, e = entitaet(a.dossier), fall = R.faelle.find(function (f) { return f.id === a.fall; }), text = String(a.text || '').trim().slice(0, 500);
-  if (!e || !fall || !text) return null;                                 /* kein stiller Standardfall */
-  const x = { id: rchNr('aussage'), fall: fall.id, text: text, status: 'entwurf', einschaetzung: null, begruendung: '', dossiers: [e.id], stuetzend: [], widersprechend: [], erfasst: nowIso(), geaendert: nowIso() };
-  R.aussagen.push(x);
-  return { modul: 'Dossier', aktion: 'Aussage angelegt', detail: x.id + ' im Fall ' + fall.id + ' (Dossier ' + e.id + '): ' + kuerzen(text, 80) };
-};
-ACTIONS.RECHERCHE_AUSSAGE_SETZEN = function (a) {
-  const x = rchAussage(a.id); if (!x) return null;
-  const teile = [], vorBegr = x.begruendung, vorEi = x.einschaetzung, vorSt = x.status;
-  if (a.status && RCH_STATUS.some(function (s) { return s[0] === a.status; }) && a.status !== x.status) { x.status = a.status; teile.push('Status ' + a.status); }
-  if (a.begruendung != null && String(a.begruendung) !== x.begruendung) { x.begruendung = String(a.begruendung).slice(0, 1000); teile.push('Begründung'); }
-  if (a.einschaetzung !== undefined && (a.einschaetzung || null) !== x.einschaetzung) {
-    const st = a.einschaetzung || null;
-    if (st && !RCH_EINSCHAETZUNG.some(function (s) { return s[0] === st; })) return null;
-    if ((st === 'gestuetzt' || st === 'dafuer') && !rchStuetzt(x)) return null;          /* ohne Fundstelle nie als belegt */
-    if ((st === 'widerlegt' || st === 'dagegen') && !rchWiderspricht(x)) return null;
-    if (st && !x.begruendung.trim()) return null;
-    x.einschaetzung = st; teile.push('Einschätzung ' + (st || 'zurückgenommen'));
-  }
-  if (x.einschaetzung && !x.begruendung.trim()) { x.begruendung = vorBegr; x.einschaetzung = vorEi; x.status = vorSt; return null; }      /* Pflichtbegründung gilt auch nachträglich */
-  if (!teile.length) return null;
-  x.geaendert = nowIso();
-  return { modul: 'Dossier', aktion: 'Aussage geändert', detail: x.id + ': ' + teile.join(', ') };
-};
-ACTIONS.RECHERCHE_BELEG_VERKNUEPFT = function (a) {
-  const R = PROFIL.recherche, x = rchAussage(a.aussage), b = R.beobachtungen.find(function (y) { return y.id === a.beob; });
-  if (!x || !b || (a.rolle !== 'stuetzend' && a.rolle !== 'widersprechend') || rchVerknuepfung(x, b.id)) return null;
-  const f = R.fassungen.find(function (y) { return y.id === b.fassung; }) || {}, q = R.quellen.find(function (y) { return y.id === f.quelle; }) || {};
-  if (q.fall !== x.fall) return null;                                    /* nur Belege desselben Falls */
-  x[a.rolle].push({ beob: b.id, pruefstand: 'eingetragen', geprueftAm: null }); x.geaendert = nowIso();
-  return { modul: 'Dossier', aktion: 'Beleg verknüpft', detail: x.id + ': ' + b.id + ' als ' + (a.rolle === 'stuetzend' ? 'stützend' : 'widersprechend') };
-};
-ACTIONS.RECHERCHE_PRUEFSTAND = function (a) {
-  const x = rchAussage(a.aussage), v = x && rchVerknuepfung(x, a.beob);
-  if (!v || (a.stand !== 'geprueft' && a.stand !== 'eingetragen') || v.l.pruefstand === a.stand) return null;
-  v.l.pruefstand = a.stand; v.l.geprueftAm = a.stand === 'geprueft' ? nowIso() : null; x.geaendert = nowIso();
-  return { modul: 'Dossier', aktion: 'Prüfstand gesetzt', detail: x.id + ' / ' + a.beob + ': ' + a.stand };
-};
-ACTIONS.RECHERCHE_BELEG_GELOEST = function (a) {
-  const x = rchAussage(a.aussage), v = x && rchVerknuepfung(x, a.beob); if (!v) return null;
-  x[v.rolle] = x[v.rolle].filter(function (l) { return l.beob !== a.beob; });
-  /* Eine Einschätzung, die ohne diesen Beleg nicht mehr zulässig ist, wird zurückgenommen und die Begründung bleibt stehen */
-  if ((x.einschaetzung === 'gestuetzt' || x.einschaetzung === 'dafuer') && !rchStuetzt(x)) x.einschaetzung = null;
-  if ((x.einschaetzung === 'widerlegt' || x.einschaetzung === 'dagegen') && !rchWiderspricht(x)) x.einschaetzung = null;
-  x.geaendert = nowIso();
-  return { modul: 'Dossier', aktion: 'Beleg gelöst', detail: x.id + ': ' + a.beob };
-};
-['RECHERCHE_AUSSAGE_NEU', 'RECHERCHE_AUSSAGE_SETZEN', 'RECHERCHE_BELEG_VERKNUEPFT', 'RECHERCHE_PRUEFSTAND', 'RECHERCHE_BELEG_GELOEST'].forEach(function (k) { PROFIL_AKTIONEN[k] = 1; });
+/* ---------- Aussagen (Altdaten) ----------
+   Das Aussagenregister ist entfernt: keine Oberfläche, keine Bearbeitung. Vorhandene Aussagen in PROFIL.recherche.aussagen bleiben unverändert
+   erhalten und reisen im Fallpaket mit (Export, Import, Zusammenführung). */
 
 /* ---------- Lesen ---------- */
 function rchBelege(e) {
@@ -340,68 +280,7 @@ function rechercheBelege(e) {
       : h('p', { class: 'note pad' }, !R.faelle.length ? 'Noch keine Unterlagen. Mit "Unterlage hinzufügen" beginnen.' : !fallId ? 'Bitte einen Fall wählen, um seine Unterlagen zu sehen.' : 'In diesem Fall liegen zu diesem Dossier noch keine Unterlagen.'));
 }
 
-/* ---------- Ansicht: Aussagen ---------- */
-function rchAussagenFelder(e) {
-  const R = PROFIL.recherche, liste = R.aussagen.filter(function (x) { return (x.dossiers || []).indexOf(e.id) >= 0; });
-  const sel = function (id, label, opts, wert, onch) { return h('select', { id: id, 'aria-label': label, onchange: onch }, opts.map(function (o) { return h('option', { value: o[0], selected: o[0] === (wert || '') }, o[1]); })); };
-  const sieh = function (typ, d) { if (!rchSchreiben(Object.assign({ type: typ }, d), typ === 'RECHERCHE_AUSSAGE_NEU' ? 'Aussage angelegt' : typ === 'RECHERCHE_AUSSAGE_SETZEN' ? 'Aussage geändert' : typ === 'RECHERCHE_BELEG_VERKNUEPFT' ? 'Beleg verknüpft' : typ === 'RECHERCHE_PRUEFSTAND' ? 'Prüfstand gesetzt' : 'Beleg gelöst')) return false; renderModule(); return true; };
-  const neuFall = rchEntwurf('a-fall'), neuText = rchEntwurf('a-text');
-  const formular = h('div', null,
-    h('div', { class: 'row' }, h('label', { for: 'rca-fall' }, 'Fall'),
-      sel('rca-fall', 'Fall der Aussage', [['', '– Fall wählen –']].concat(R.faelle.map(function (f) { return [f.id, f.id + ' ' + f.titel]; })), neuFall, function (ev) { VIEW.draft['rch-a-fall'] = ev.target.value; }),
-      entwurf('input', 'rca-text', 'rch-a-text', { autocomplete: 'off', type: 'text', 'aria-label': 'Aussage', placeholder: 'Überprüfbarer Satz, z. B. "Der Radweg wurde im Juni eröffnet."', maxlength: '500', style: 'flex:1 1 320px;min-width:0' }),
-      h('button', { type: 'button', id: 'rca-neu', onclick: function () {
-        const f = VIEW.draft['rch-a-fall'] || '', t = (VIEW.draft['rch-a-text'] || '').trim();
-        if (!f) { meldung(R.faelle.length ? 'Bitte einen Fall wählen.' : 'Zuerst einen Beleg erfassen, damit ein Fall besteht.'); return; }
-        if (!t) { meldung('Die Aussage ist leer.'); return; }
-        if (sieh('RECHERCHE_AUSSAGE_NEU', { dossier: e.id, fall: f, text: t })) { delete VIEW.draft['rch-a-text']; renderModule(); }
-      } }, 'Aussage anlegen')));
-  const bloecke = liste.map(function (x) {
-    const kand = R.beobachtungen.filter(function (b) { const z = rchZuBeobachtung(b.id); return z && z.q.fall === x.fall && !rchVerknuepfung(x, b.id); });
-    const strittig = x.stuetzend.length && x.widersprechend.length, ohne = !x.stuetzend.length && !x.widersprechend.length;
-    const zeilen = x.stuetzend.map(function (l) { return [l, 'stützend']; }).concat(x.widersprechend.map(function (l) { return [l, 'widersprechend']; })).map(function (p) {
-      const l = p[0], z = rchZuBeobachtung(l.beob);
-      return [td('nw', l.beob), td('nw', p[1]), td('nw', z ? rchFundstelleText(z.b.fundstelle) : 'fehlt'), td('txt', z && z.b.zitat ? h('details', { id: 'rca-zi-' + x.id + '-' + l.beob }, h('summary', null, kuerzen(z.b.zitat, 60)), h('p', { class: 'note', style: 'white-space:pre-wrap', 'data-vollstaendig': '1' }, z.b.zitat)) : (z && z.f.dateiname) || ''),
-        td('nw', h('span', { class: 'label ' + (l.pruefstand === 'geprueft' ? 's-accent' : 's-dim') }, l.pruefstand === 'geprueft' ? 'geprüft' : 'eingetragen')),
-        td('txt', [z && (z.b.dossiers || []).length && (z.b.dossiers || []).indexOf(e.id) < 0 ? h('button', { type: 'button', class: 'link', id: 'rca-zu-' + x.id + '-' + l.beob, onclick: function () { STATE.dossiers.auswahl = z.b.dossiers[0]; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); } }, 'Zum Dossier ' + z.b.dossiers[0]) : null, ' ', z && z.f.anhang ? h('button', { type: 'button', class: 'link', onclick: function () { rchOeffnen(z); } }, 'Öffnen') : null, ' ',
-          h('button', { type: 'button', class: 'link', id: 'rca-pr-' + x.id + '-' + l.beob, onclick: function () { sieh('RECHERCHE_PRUEFSTAND', { aussage: x.id, beob: l.beob, stand: l.pruefstand === 'geprueft' ? 'eingetragen' : 'geprueft' }); } }, l.pruefstand === 'geprueft' ? 'Prüfung zurücknehmen' : 'Als geprüft bestätigen'), ' ',
-          h('button', { type: 'button', class: 'link', onclick: function () { sieh('RECHERCHE_BELEG_GELOEST', { aussage: x.id, beob: l.beob }); } }, 'Lösen')])];
-    });
-    const gk = 'rca-b-' + x.id, rk = 'rca-r-' + x.id, bk = 'rca-begr-' + x.id;
-    return h('div', { class: 'pad', style: 'border-top:1px dashed #33425a' },
-      h('p', null, h('strong', null, x.id + ' '), x.text, ' ', h('span', { class: 'label s-dim' }, 'Fall ' + x.fall), ' ',
-        strittig ? h('span', { class: 'label s-warn' }, 'strittig: Belege dafür und dagegen') : null,
-        ohne ? h('span', { class: 'label s-warn' }, 'ohne Fundstelle: nicht belegt') : null),
-      h('div', { class: 'row' }, h('label', { for: 'rca-st-' + x.id }, 'Status'),
-        sel('rca-st-' + x.id, 'Status ' + x.id, RCH_STATUS, x.status, function (ev) { sieh('RECHERCHE_AUSSAGE_SETZEN', { id: x.id, status: ev.target.value }); }),
-        h('label', { for: 'rca-ei-' + x.id }, 'Einschätzung'),
-        sel('rca-ei-' + x.id, 'Einschätzung ' + x.id, RCH_EINSCHAETZUNG, x.einschaetzung, function (ev) {
-          const st = ev.target.value || null;
-          if ((st === 'gestuetzt' || st === 'dafuer') && !rchStuetzt(x)) { meldung('Ohne stützenden Beleg mit Fundstelle ist diese Einschätzung nicht möglich.'); renderModule(); return; }
-          if ((st === 'widerlegt' || st === 'dagegen') && !rchWiderspricht(x)) { meldung('Ohne widersprechenden Beleg mit Fundstelle ist diese Einschätzung nicht möglich.'); renderModule(); return; }
-          if (st && !x.begruendung.trim() && !(VIEW.draft[bk] || '').trim()) { meldung('Zuerst eine Begründung eintragen.'); renderModule(); return; }
-          if ((VIEW.draft[bk] || '').trim() && VIEW.draft[bk].trim() !== x.begruendung) { if (!rchSchreiben({ type: 'RECHERCHE_AUSSAGE_SETZEN', id: x.id, begruendung: VIEW.draft[bk].trim() }, 'Aussage geändert')) { renderModule(); return; } }
-          sieh('RECHERCHE_AUSSAGE_SETZEN', { id: x.id, einschaetzung: st }); delete VIEW.draft[bk];
-        })),
-      h('div', { class: 'row' }, entwurf('input', 'rca-begr-' + x.id, bk, { autocomplete: 'off', type: 'text', 'aria-label': 'Begründung ' + x.id, placeholder: 'Begründung der Einschätzung', maxlength: '1000', value: VIEW.draft[bk] != null ? VIEW.draft[bk] : x.begruendung, style: 'flex:1 1 360px;min-width:0' }),
-        h('button', { type: 'button', id: 'rca-begr-ok-' + x.id, onclick: function () { const t = (VIEW.draft[bk] != null ? VIEW.draft[bk] : x.begruendung).trim(); if (!t && x.einschaetzung) { meldung('Die Begründung kann nicht geleert werden, solange eine Einschätzung gesetzt ist. Zuerst die Einschätzung zurücknehmen.'); return; } if (sieh('RECHERCHE_AUSSAGE_SETZEN', { id: x.id, begruendung: t })) delete VIEW.draft[bk]; } }, 'Begründung speichern')),
-      zeilen.length ? tabelle(['Beleg', 'Rolle', 'Fundstelle', 'Inhalt', 'Prüfstand', ''], zeilen) : null,
-      kand.length ? h('div', { class: 'row' }, h('label', { for: gk }, 'Beleg'),
-        sel(gk, 'Beleg verknüpfen ' + x.id, [['', '– Beleg wählen –']].concat(kand.map(function (b) { const z = rchZuBeobachtung(b.id); return [b.id, b.id + ' · ' + z.q.id + ' · ' + rchFundstelleText(b.fundstelle)]; })), VIEW.draft[gk] || '', function (ev) { VIEW.draft[gk] = ev.target.value; }),
-        sel(rk, 'Rolle des Belegs ' + x.id, [['stuetzend', 'stützend'], ['widersprechend', 'widersprechend']], VIEW.draft[rk] || 'stuetzend', function (ev) { VIEW.draft[rk] = ev.target.value; }),
-        h('button', { type: 'button', id: 'rca-v-' + x.id, onclick: function () { const b = VIEW.draft[gk]; if (!b) { meldung('Bitte einen Beleg wählen.'); return; } if (sieh('RECHERCHE_BELEG_VERKNUEPFT', { aussage: x.id, beob: b, rolle: VIEW.draft[rk] || 'stuetzend' })) { delete VIEW.draft[gk]; delete VIEW.draft[rk]; } } }, 'Verknüpfen'))
-        : h('p', { class: 'note' }, 'Keine weiteren Belege dieses Falls zum Verknüpfen.'));
-  });
-  return { formular: formular, bloecke: bloecke, anzahl: liste.length };
-}
-function rechercheAussagen(e) {
-  const F = rchAussagenFelder(e);
-  if (!F.anzahl) return null;                                         /* aus der Standardansicht genommen; bestehende Aussagen bleiben erreichbar */
-  return panel('Frühere Aussagen', [h('span', { class: 'badge' }, String(F.anzahl))],
-    h('details', { id: 'rca-alt', open: VIEW.recherche.altOffen, ontoggle: function (ev) { VIEW.recherche.altOffen = ev.target.open; } }, h('summary', null, 'Bestehende Aussagen anzeigen'),
-      h('div', { class: 'pad' }, h('p', { class: 'note' }, 'Dieser Bereich ist nicht mehr Teil des normalen Ablaufs. Vorhandene Aussagen mit ihren Belegen und Einschätzungen bleiben unverändert erhalten.')), F.bloecke));
-}
-function rechercheDossier(e) { return [rechercheBelege(e), rechercheAussagen(e), rechercheFallpaket()]; }
+function rechercheDossier(e) { return [rechercheBelege(e), rechercheFallpaket()]; }
 
 /* =====================================================================
    FALLPAKET: ein Fall als eine Datei (Datensätze, benötigte Dossierangaben, Belegdateien), mit Manifest und Prüfsummen.
@@ -478,7 +357,7 @@ function rchPaketSichern(fallId) {
     const blob = new Blob([p.text], { type: 'application/json' }), url = URL.createObjectURL(blob), a = h('a', { href: url, download: datei });
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
     const z = p.manifest.zaehler;
-    meldung('Fallpaket gesichert: ' + datei + ' (' + z.quellen + ' Quellen, ' + z.beobachtungen + ' Belege, ' + z.aussagen + ' Aussagen, ' + z.dateien + ' Dateien)' +
+    meldung('Fallpaket gesichert: ' + datei + ' (' + z.quellen + ' Quellen, ' + z.beobachtungen + ' Unterlagen, ' + z.dateien + ' Dateien' + (z.aussagen ? ', ' + z.aussagen + ' frühere Aussagen' : '') + ')' +
       (p.warnungen.length ? '. ACHTUNG: ' + p.warnungen.map(function (x) { return x.key + ' ' + x.status; }).join(', ') + ' (im Manifest vermerkt)' : '') + '.');
   }).catch(function (e) { meldung('Fallpaket nicht erstellt: ' + (e && e.message ? e.message : 'unbekannter Fehler') + '.'); });
 }
@@ -529,7 +408,7 @@ function rchPaketPruefen(o) {
 let RCH_LETZTER = null;
 function rchZusammenfuehren(inh, opt) {
   if (!inh.faelle && inh.fall) inh = Object.assign({}, inh, { faelle: [inh.fall] });             /* Fallpaket: ein Fall; Profil: Liste */
-  const R = PROFIL.recherche, z = { neu: 0, gleich: 0, neueNr: 0, ohneDossier: 0, verlorenVerkn: 0, einschaetzungZurueck: 0, verworfen: 0 };
+  const R = PROFIL.recherche, z = { neu: 0, gleich: 0, neueNr: 0, ohneDossier: 0, verlorenVerkn: 0, verworfen: 0 };
   const map = { fall: {}, quelle: {}, fassung: {}, beobachtung: {}, aussage: {} };
   Object.keys(RCH_PLURAL).forEach(function (art) {                   /* eingehende Nummern vorab reservieren, damit Ersatznummern nie kollidieren */
     const k = RCH_ID[art][1], hoechst = (inh[RCH_PLURAL[art]] || []).reduce(function (mx, x) { const n = /^[A-Z]-(\d+)$/.exec(x && x.id || ''); return n ? Math.max(mx, Number(n[1])) : mx; }, 0);
@@ -559,8 +438,6 @@ function rchZusammenfuehren(inh, opt) {
     ['stuetzend', 'widersprechend'].forEach(function (k) {
       const vor = (c[k] || []).length; c[k] = (c[k] || []).filter(function (l) { return map.beobachtung[l.beob]; }).map(function (l) { return Object.assign({}, l, { beob: map.beobachtung[l.beob] }); }); z.verlorenVerkn += vor - c[k].length;
     });
-    if ((c.einschaetzung === 'gestuetzt' || c.einschaetzung === 'dafuer') && !rchStuetzt(c)) { c.einschaetzung = null; z.einschaetzungZurueck += 1; }
-    if ((c.einschaetzung === 'widerlegt' || c.einschaetzung === 'dagegen') && !rchWiderspricht(c)) { c.einschaetzung = null; z.einschaetzungZurueck += 1; }
     return c;
   });
   return z;
@@ -568,7 +445,7 @@ function rchZusammenfuehren(inh, opt) {
 function rchZusammenfassung(z) {
   return z.neu + ' neue Datensätze, ' + z.gleich + ' bereits vorhanden' + (z.neueNr ? ', ' + z.neueNr + ' mit abweichendem Inhalt unter neuer Nummer übernommen' : '') +
     (z.ohneDossier ? ', ' + z.ohneDossier + ' Dossierverknüpfung(en) nicht zuordenbar (nicht übernommen)' : '') + (z.verlorenVerkn ? ', ' + z.verlorenVerkn + ' Belegverknüpfung(en) nicht übernommen' : '') +
-    (z.einschaetzungZurueck ? ', ' + z.einschaetzungZurueck + ' Einschätzung(en) zurückgenommen (Beleg fehlt)' : '') + (z.verworfen ? ', ' + z.verworfen + ' Datensatz/Datensätze unvollständig, nicht übernommen' : '');
+    (z.verworfen ? ', ' + z.verworfen + ' Datensatz/Datensätze unvollständig, nicht übernommen' : '');
 }
 /* Profilimport: Dossiernummern gelten nur, wenn das lokale Dossier dasselbe ist */
 function rchProfilZusammenfuehren(rq, q) {
@@ -661,7 +538,7 @@ function rchPaketLaden(file) {
 function rechercheFallpaket() {
   const R = PROFIL.recherche;
   return panel('Fallpaket', [h('span', { class: 'badge' }, String(R.faelle.length))],
-    h('div', { class: 'pad' }, h('p', { class: 'note' }, 'Ein Fall mit allen Quellen, Belegen, Aussagen, Belegdateien und den benötigten Dossierangaben als eine Datei. Beim Laden wird vor jeder Änderung geprüft; Vorhandenes wird nie überschrieben.'),
+    h('div', { class: 'pad' }, h('p', { class: 'note' }, 'Ein Fall mit allen Quellen, Unterlagen, Dateien und den benötigten Dossierangaben als eine Datei. Beim Laden wird vor jeder Änderung geprüft; Vorhandenes wird nie überschrieben.' + (R.aussagen.length ? ' Frühere Aussagen (' + R.aussagen.length + ') sind nicht mehr bearbeitbar und reisen unverändert im Paket mit.' : '')),
       h('div', { class: 'row' }, h('label', { for: 'rfp-fall' }, 'Fall'),
         h('select', { id: 'rfp-fall', 'aria-label': 'Fall für das Fallpaket', onchange: function (ev) { VIEW.draft['rch-fp-fall'] = ev.target.value; } },
           [h('option', { value: '' }, '– Fall wählen –')].concat(R.faelle.map(function (f) { return h('option', { value: f.id, selected: f.id === VIEW.draft['rch-fp-fall'] }, f.id + ' ' + f.titel); }))),
