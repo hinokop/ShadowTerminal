@@ -1,6 +1,6 @@
 # Field Terminal
 
-Lokales Recherchewerkzeug im Stil eines Feldterminals. Eine einzelne Webanwendung in Vanilla JavaScript, ohne Server und ohne Build-Schritt. Alle Daten bleiben im Browserprofil auf dem eigenen Gerät. Oberfläche und Dokumentation sind deutsch.
+Lokales Recherchewerkzeug im Stil eines Feldterminals. Eine einzelne Webanwendung in Vanilla JavaScript, ohne Server und ohne Build-Schritt. Falldaten werden lokal im Browserprofil gespeichert. Online-Karten und Wetter nutzen externe Dienste. Oberfläche und Dokumentation sind deutsch.
 
 Das Projekt war zuvor ein Spiel. Dieser Stand beschreibt das Werkzeug. Reste der früheren Missionsmechanik sind noch im Code vorhanden und werden schrittweise und nur nach Freigabe entfernt (siehe „Bekannte Grenzen").
 
@@ -22,7 +22,7 @@ Kartenhintergründe und Wetter werden von externen Diensten geladen. Die Zugangs
 | `karte3d.html` | 3D-Ansicht mit MapLibre, eingebettet in die Karte |
 | `karte.js`, `karte2.js` | Kartendaten |
 | `akten-modul.js` | Ablage: Aktenliste, Dokumentenansicht, Schwärzungen, Einsichtsanträge |
-| `recherche-modul.js` | Recherche: Fälle, Quellen, Fassungen, Beobachtungen, Prüfstand und Einschätzung |
+| `recherche-modul.js` | Recherche: Unterlagen zum Fall, Aussagen mit Prüfstand, Fallpaket (Export und Import) |
 | `szenario.js`, `dialog.js`, `klassifikator.js` | Szenariodaten und Dialogmaschine |
 | `docs/datenvertrag.md` | Datenvertrag der Recherche und des Fallpakets |
 | `tests/` | Playwright-Skripte |
@@ -31,13 +31,21 @@ Die Module nach dem Hauptskript sind klassische Skripte und werden nach ihm gela
 
 ## Daten
 
-- Das Profil (Dossiers, Pins, Ausgangsorte, Recherche) liegt in `localStorage`.
+- Das Profil (Dossiers, Pins, Ausgangsorte, Recherche, Kartenprotokoll) liegt in `localStorage`.
 - Belegdateien der Recherche liegen in einer eigenen IndexedDB `fieldterminal.recherche`, Prüfsummen werden mit SHA-256 gebildet.
 - Kennungen (Fall, Quelle, Fassung, Beobachtung, Aussage, Pin) werden fortlaufend vergeben und nicht wiederverwendet.
+
+## Recherche
+
+- **Unterlagen zum Fall:** Im Dossier werden Unterlagen einem Fall zugeordnet (Fall, Quelle, Fassung, Beobachtung). Das Formular ist einklappbar. Die Fundstelle (Seite, Absatz, Zeitmarke, Zeichenbereich) ist optional und richtet sich nach dem Material. Eine Unterlage lässt sich als geprüft und nützlich markieren, mit Notiz.
+- **Sichtung:** Ein Knopf im Dossier öffnet die Karte am letzten bekannten Punkt der Person und legt dort einen Entwurfs-Pin M-01, M-02 usw. an, der sich als Sichtung eintragen lässt.
+- **Aussagen:** Das frühere Aussagenregister ist aus der Standardansicht genommen, vorhandene Aussagen bleiben erhalten. Eine Aussage gilt nur mit einer Unterlage samt Fundstelle als gestützt oder widerlegt, eine Begründung ist Pflicht.
+- **Fallpaket:** Ein Fall mit Quellen, Unterlagen, Aussagen, Belegdateien und den benötigten Dossierangaben lässt sich als eine Datei sichern und laden. Das Paket trägt ein Manifest mit Prüfsummen. Beim Laden wird vor jeder Änderung geprüft (ganz oder gar nicht) und ohne Überschreiben zusammengeführt. Eine fehlende Belegdatei wird aus dem Paket ergänzt, eine abweichende nie überschrieben.
 
 ## Karte
 
 - 2D und 3D über den Schalter in der Kartenleiste. Marker, Zonen und Kamera gehen per `postMessage` an die 3D-Ansicht. Klicks laufen in beiden Ansichten durch dieselbe Logik.
+- **Kartenprotokoll:** Ein eigener Reiter neben der Lagekarte erfasst Sichtungen, Zonen, Pins, Zugriffspunkte, Kartenpositionen und Ausgangsorte, nicht aber Mausbewegungen, Zoom oder Auswahl. Der Verfall ist wählbar (24, 48, 72 Stunden oder nie) und entfernt nur den Protokolleintrag, nie die Sichtung, Zone oder den Pin.
 - In 3D noch offen: Luftbild, Verbindungen, Route, Sichtungs-Unschärfe, Zeitfenster.
 - Zusatzquellen: Sentinel-2 cloudless (EOX, nicht kommerziell) und Brandenburg DOP20 (dl-de/by-2.0). Die Adressen sind nicht gegen die Dienste geprüft. Das BKG-DOP ist für Dritte gebührenpflichtig und wird nicht verwendet.
 - Die Zeile „Licht" arbeitet offline (NOAA-Näherung). Wetter kommt von Open-Meteo, höchstens eine Abfrage je 0,1-Grad-Feld und 15 Minuten.
@@ -50,7 +58,8 @@ Die Skripte in `tests/` benötigen Node.js mit Playwright. Das Testkennwort ist 
 
 - Zonen und Zugriffspunkte der Karte sind noch an den Missionsrahmen gekoppelt und lassen sich ohne ihn nicht setzen.
 - Prüfsummen im Fallpaket erkennen Beschädigung, keine Fälschung.
-- Notizen und Bilder der Dossiers sind nicht Teil des Fallpakets.
+- Notizen und Bilder der Dossiers sind nicht Teil des Fallpakets, Belegdateien nicht Teil des Profilexports.
+- Das Aussagenregister ist ausgeblendet; sein Code wird in einem eigenen Schritt entfernt.
 - Die Anwendung wurde bisher nur mit Playwright und nicht systematisch von Hand geprüft.
 
 ## Arbeitsweise
