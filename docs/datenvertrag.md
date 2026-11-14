@@ -22,7 +22,7 @@ Stand 13. November 2026. Gilt für das Recherchewerkzeug ohne Szenario, Handler,
 | Fassung | id, quelle, erfasst | hash (SHA-256), dateiname, groesse, typ, anhang (Verweis auf Binärspeicher), veroeffentlicht |
 | Beobachtung | id, fassung, fundstelle | zitat, ereignis (Intervall), ort (siehe 4), erfasst |
 | Aussage | id, fall, text, status (entwurf, offen, abgeschlossen), einschaetzung (siehe 2a, Ausgangswert „nicht eingeschätzt“) | stuetzend[], widersprechend[], begruendung, prueft (siehe 2a) |
-| Dossier | id, fall, typ (Person, Organisation, Ort, Sache), name | aliase[], aussagen[], notizen |
+| Dossier | id, typ (Person, Organisation, Ort, Sache), name | aliase[], notizen. Profilweit (gehört keinem Fall); Aussagen verweisen auf Dossiers, nicht umgekehrt. |
 | Ereignis | id, fall, bezug (Objekt-ID) | ereignis (Intervall), veroeffentlicht, erfasst, beschreibung |
 
 Die Fundstelle besteht aus Typ (Seite, Absatz, Zeitmarke, Zeichenbereich, ganze Datei) und Wert. „Ganze Datei“ ist erlaubt, wird aber als schwächste Fundstelle gekennzeichnet.
@@ -37,6 +37,10 @@ Die Fundstelle besteht aus Typ (Seite, Absatz, Zeitmarke, Zeichenbereich, ganze 
 ### 2b. Fassungen ohne Mehraufwand
 
 Beim Erfassen von Text, Link oder Eigenbeobachtung entsteht die erste Fassung automatisch und unsichtbar. Die Oberfläche zeigt Fassungen erst, wenn es mehr als eine gibt oder ein Anhang vorliegt.
+
+### 2c. Zuordnung zu einem Fall
+
+Quellen, Fassungen, Beobachtungen, Aussagen und Ereignisse gehören zu genau einem Fall. Es gibt keinen stillen Standardfall: Beim ersten Beleg zeigt die Oberfläche, welchem Fall er zugeordnet wird, und verlangt eine ausdrückliche Wahl oder die Anlage eines Falls. Belege am Dossier ohne laufenden Auftrag laufen über einen eigenen Schreib- und Lesepfad. Der alte Missionspfad (`DOKUMENT_EINGEREICHT`, `MS(def.id).dokumente`) bleibt unverändert, bis die Mission entfällt.
 
 ## 3. Quellenketten und Abhängigkeit
 
@@ -55,6 +59,7 @@ Die Startansicht zeigt je Fall: Frage, letzte Änderung, Zahl offener Aussagen, 
 - Ein Paket ist eine einzelne Datei mit Manifest: Versionsnummer, Fall-ID, Liste aller Objekte, je Anhang Hash und Größe, Zählerstände.
 - Der Import prüft zuerst das gesamte Paket (Manifest, Hashes, Verweise) und übernimmt erst danach. Bei Fehlern bleibt der Zielbestand unverändert.
 - Gleiche ID mit anderem Inhalt gilt als Konflikt. Konflikte werden unter neuer ID übernommen, mit Verweis auf die Herkunft (`importVon`). Dieselbe Datei erzeugt beim zweiten Import keine weiteren Kopien.
+- **Dossiers im Fallexport:** Verweist eine Aussage auf ein profilweites Dossier, bringt das Paket genau die dafür nötigen Dossierdaten (ID, Typ, Name, Aliase, die verwiesenen Notizen) mit, damit es in einem frischen Profil lesbar ist. Das gesamte Profil wird nie exportiert. Beim Import gilt die Konfliktregel von oben: gleiche ID mit anderem Inhalt wird unter neuer ID übernommen.
 - Ein Altexport ohne Binärdateien markiert fehlende Anhänge ausdrücklich.
 - Ein selektiver Bericht (Zitatstellen, Gegenbelege, Stichtag, offene Fragen) ist ein eigenes Produkt. Ausgeblendete Inhalte sind im Bericht nicht enthalten.
 
@@ -71,5 +76,5 @@ Die Startansicht zeigt je Fall: Frage, letzte Änderung, Zahl offener Aussagen, 
 ## 8. Offene Fragen
 
 - Verschlüsselung: entschieden, nicht gefordert. Das Werkzeug ist ein privates Einzelnutzer-Werkzeug auf privaten Geräten und im privaten Repository. Die Zugangskulisse (Kennwort, Startsequenz) bleibt Stilmittel und wird nicht als Schutz dargestellt. Die Oberfläche zeigt „lokaler Speicher“, ohne Sicherheitsversprechen.
-- Bleibt die Karte im ersten Stand bei 2D? Vorschlag: ja, 3D und Online-Ebenen später und einzeln zuschaltbar.
+- Karte: bleibt wie sie ist (2D und 3D, Start über `START_3D.bat`). Der Vertrag macht dazu keine Vorgabe.
 - Referenzfall: Radweg (Beschluss Juni, Pressemitteilung Juli, zwei Medien zitieren dieselbe Mitteilung).
