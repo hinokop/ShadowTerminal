@@ -69,6 +69,16 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.waitForTimeout(1500);
   ok.offlineOhneAbfrage = anfragen.length === vor && /Offline/.test(await text('k-st-wetter') || '');
   await p.evaluate(() => { VIEW.karte.ebenen.kacheln = true; });
+  /* G: 3D-Pfad (Nachrichten der 3D-Ansicht direkt eingespielt; die gerenderte MapLibre-Ansicht selbst wird hier nicht geprüft) */
+  await p.evaluate(() => { VIEW.karte.bezug = null; VIEW.karte.ansicht3d = true; VIEW.karte.statusOffen = true; karteStatusAkt(); });
+  ok.dreiDOhneBezug = await p.evaluate(() => !document.getElementById('k-st-objekt'));
+  await p.evaluate(() => karteFlug(52.5, 13.4, 15, null, 'ZO-001'));
+  ok.dreiDSprungSofort = await p.evaluate(() => /Zone · Zone 1|Zone · /.test((document.getElementById('k-st-objekt') || {}).innerText || '') && !!document.getElementById('k-st-protokoll'));
+  await p.evaluate(() => karte3dEingang({ typ: 'karte3d-kamera', kamera: { center: [13.4, 52.5], zoom: 15, pitch: 40, bearing: 0 } }, null));
+  ok.dreiDBezugNachAnimation = await p.evaluate(() => VIEW.karte.bezug === 'ZO-001' && !!document.getElementById('k-st-objekt'));
+  await p.evaluate(() => { karte3dEingang({ typ: 'karte3d-nutzer-bewegt' }, null); karte3dEingang({ typ: 'karte3d-kamera', kamera: { center: [13.9, 52.9], zoom: 15, pitch: 40, bearing: 0 } }, null); });
+  ok.dreiDRueckfall = await p.evaluate(() => VIEW.karte.bezug === null && !document.getElementById('k-st-objekt') && /52\.900/.test(document.getElementById('k-st-pos').innerText) && /13\.900/.test(document.getElementById('k-st-pos').innerText));
+  await p.evaluate(() => { VIEW.karte.ansicht3d = false; });
   /* F: Gegenprobe mit Auftrag */
   await p.evaluate(() => { dispatch({ type: 'KENNWORT_SCHALTER', an: false }); dispatch({ type: 'STATUS_GESETZT', status: 'Standby' }); dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); dispatch({ type: 'MISSION_BEGINN_JETZT' }); VIEW.karte.bezug = null; VIEW.karte.statusOffen = true; dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; renderModule(); });
   await p.waitForTimeout(800);

@@ -864,6 +864,7 @@ function karteBezugSetzen(id) {
   const K = VIEW.karte;
   K.bezug = id && karteBezugVon(id) ? id : null;
   if (K.bezug) K.statusOffen = true;
+  karteStatusAkt();                                   /* Anzeige sofort aktualisieren, auch im 3D-Pfad ohne eigenes Neuzeichnen */
 }
 function karteStatusAkt() {
   const box = $('k-status');
@@ -1248,14 +1249,21 @@ if (typeof window !== 'undefined' && !window.__karte3dHoerer) {
   window.__karte3dHoerer = true;
   window.addEventListener('message', function (ev) {
     const fr = document.getElementById('k-3d-frame'); if (!fr || ev.source !== fr.contentWindow) return;
-    const d = ev.data || {};
+    karte3dEingang(ev.data || {}, fr);
+  });
+}
+/* Nachrichten der 3D-Ansicht (eigene Funktion, damit sie ohne gerenderte 3D-Ansicht geprüft werden kann) */
+function karte3dEingang(d, fr) {
+  {
     if (d.typ === 'karte3d-bereit') { KARTE3D.bereit = true; try { fr.contentWindow.postMessage(karte3dDaten(), '*'); } catch (e) { /* ohne 3D */ } }
     else if (d.typ === 'karte3d-klick') karte3dKlick(d);
     else if (d.typ === 'karte3d-fehler') { if (!KARTE3D.fehlerGemeldet) { KARTE3D.fehlerGemeldet = true; meldung('3D-Ansicht: ' + d.grund + '. Die 2D-Karte bleibt nutzbar.'); } }
+    else if (d.typ === 'karte3d-nutzer-bewegt') { if (VIEW.karte.bezug) { VIEW.karte.bezug = null; karteStatusAkt(); } }   /* eigenes Ziehen in 3D: Rückfall auf die Kartenmitte */
     else if (d.typ === 'karte3d-kamera' && d.kamera) {
       karteKameraUebernehmen(d.kamera);
+      karteStatusAkt();                                /* Kartenmitte und Wetter nachziehen; der Bezug bleibt, solange der Nutzer nicht gezogen hat */
     }
-  });
+  }
 }
 function karteSteuerung(svg) {
   const K = VIEW.karte;
