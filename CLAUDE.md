@@ -11,8 +11,8 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 - akten-modul.js: Modul 7 Ablage (Aktenliste, Dokumentenansicht, Schwärzungen, Einsichtsanträge); wie karte-modul.js nach dem Hauptskript geladen, in der Tabelle der Render-Funktionen lazy referenziert.
 - Weitere Auslagerungskandidaten: Dossiers (Modul 3), Dialogkern; immer einzeln, mit vollem Testlauf (tests, runall).
 - karte.js / karte2.js: Kartendaten; kartenschluessel.js: lokal, NIE committen (.gitignore)
-- tests/: Playwright-Skripte (Passwort 'pw-test-123'); Gesamtlauf mit `node tests/runall.js`; bekannt unstabil: abd, wk3, dp
-- recherche-modul.js: Modul 8 Recherche, Unterlagen zum Fall (Fall, Quelle, Fassung, Beobachtung am Dossier ohne Auftrag; PROFIL.recherche, Dateien in eigener IndexedDB); nach dem Hauptskript geladen, Aussagenregister und Fallpaket (Export/Import mit Manifest und Prüfsummen); Vertrag in docs/datenvertrag.md
+- tests/: Playwright-Skripte (Passwort 'pw-test-123'); Standardauswahl mit `node tests/runall.js` (einzelne Skripte: `node tests/runall.js zev zp`); bekannt unstabil: abd, wk3, dp
+- recherche-modul.js: Modul 8 Recherche, Unterlagen zum Fall (Fall, Quelle, Fassung, Beobachtung am Dossier ohne Auftrag; PROFIL.recherche, Dateien in eigener IndexedDB); nach dem Hauptskript geladen, Fallpaket (Export/Import mit Manifest und Prüfsummen; frühere Aussagen nur als Altdaten); Vertrag in docs/datenvertrag.md
 - karte3d.html: MapLibre-3D-Ansicht (eingebettet in die Karte; eigenständig nutzt sie szenario.js)
 
 ## Arbeitsweise

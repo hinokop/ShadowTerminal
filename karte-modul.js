@@ -677,7 +677,7 @@ function pinExport(liste) {
 function pinPopup(x, fertig) {
   const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: x.id }, patch)); };
   const n = pinNaehe(x, 1000);
-  fertig('Pin ' + x.id, [
+  fertig(x.name, [   /* die interne Kennung PIN-nnn bleibt verborgen; sie dient nur den Verweisen */
     h('p', { class: 'k-pop-sub' }, x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5)),
     h('div', { class: 'pin-form' }, h('label', { for: 'pin-name' }, 'Name'), h('input', { type: 'text', id: 'pin-name', maxlength: '60', value: x.name, onchange: function (ev) { ab({ name: ev.target.value }); } }),
       h('span', { class: 'pin-kopf' }, 'Zweck (mehrere möglich)'),
