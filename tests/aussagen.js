@@ -7,22 +7,25 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.route(/geobasis|eox|gdi\.berlin|cartocdn|open-meteo|openfreemap|unpkg/, r => r.abort());
   const start = async () => { await p.goto(PF.APP); await p.waitForTimeout(5200); await p.fill('#gate-pw', 'pw-test-123'); const z = await p.$('#gate-pw2'); if (z && await z.isVisible()) await z.fill('pw-test-123'); await p.click('#gate-go');
     await p.waitForFunction(() => !document.body.classList.contains('locked'), null, { timeout: 20000 }); };
-  const zeigen = () => p.evaluate(() => { STATE.dossiers.auswahl = STATE.dossiers.eigene.find(x => x.name === 'Aussagetest').id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); });
+  const zeigen = () => p.evaluate(() => { VIEW.recherche.altOffen = true; STATE.dossiers.auswahl = STATE.dossiers.eigene.find(x => x.name === 'Aussagetest').id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); });
   const A = () => p.evaluate(() => JSON.parse(JSON.stringify(PROFIL.recherche.aussagen)));
   const buf = Buffer.from('%PDF-1.4\n% Beleg Seite 2\n'.repeat(10));
   await start();
   await p.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Aussagetest', land: 'DE' }); });
-  await zeigen(); await p.waitForSelector('#rch-ok');
-  /* Beleg 1: Datei, Seite 2 (stützend); Beleg 2: Textauszug, Absatz 3 (widersprechend) */
-  await p.selectOption('#rch-fall', '__neu'); await p.fill('#rch-fall-titel', 'Radweg'); await p.selectOption('#rch-ft-typ', 'Seite'); await p.fill('#rch-ft-wert', '2');
-  await p.setInputFiles('#rch-datei', { name: 'blatt.pdf', mimeType: 'application/pdf', buffer: buf }); await p.click('#rch-ok'); await p.waitForTimeout(800);
-  const fall = await p.evaluate(() => PROFIL.recherche.faelle[0].id);
-  await p.selectOption('#rch-fall', fall); await p.fill('#rch-text', 'Eröffnung erst im August'); await p.selectOption('#rch-ft-typ', 'Absatz'); await p.fill('#rch-ft-wert', '3'); await p.click('#rch-ok'); await p.waitForTimeout(500);
+  await zeigen();
+  /* Unterlagen und Aussage über die Aktionen anlegen (die Aussagenmaske ist nicht mehr Teil der Standardansicht) */
+  const fall = await p.evaluate(async bytes => {
+    const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }), key = 'ANH-test1', hash = await rchHash(blob), d = STATE.dossiers.auswahl;
+    await RIDB.put(key, blob);
+    dispatch({ type: 'RECHERCHE_BELEG', dossier: d, fall: null, neuerFall: { titel: 'Radweg', frage: '' }, art: 'Datei', herkunft: '', notiz: '', fassung: { dateiname: 'blatt.pdf', groesse: blob.size, typ: 'application/pdf', hash: hash, anhang: key }, fundstelle: { typ: 'Seite', wert: '2' }, zitat: '' });
+    const f = PROFIL.recherche.faelle[0].id;
+    dispatch({ type: 'RECHERCHE_BELEG', dossier: d, fall: f, neuerFall: null, art: 'Text', herkunft: '', notiz: '', fassung: { dateiname: null, groesse: 24, typ: 'text/plain', hash: null, anhang: false }, fundstelle: { typ: 'Absatz', wert: '3' }, zitat: 'Eröffnung erst im August' });
+    return f;
+  }, Array.from(buf));
   const belege = await p.evaluate(() => PROFIL.recherche.beobachtungen.map(x => x.id));
-  /* ohne Fall oder Text: nichts angelegt */
-  await p.fill('#rca-text', 'Der Radweg wurde im Juni eröffnet.'); await p.click('#rca-neu'); await p.waitForTimeout(200);
-  const ohneFall = (await A()).length;
-  await p.selectOption('#rca-fall', fall); await p.click('#rca-neu'); await p.waitForTimeout(300);
+  const ohneFall = await p.evaluate(() => { dispatch({ type: 'RECHERCHE_AUSSAGE_NEU', dossier: STATE.dossiers.auswahl, fall: '', text: 'x' }); return PROFIL.recherche.aussagen.length; });
+  await p.evaluate(fall => { dispatch({ type: 'RECHERCHE_AUSSAGE_NEU', dossier: STATE.dossiers.auswahl, fall: fall, text: 'Der Radweg wurde im Juni eröffnet.' }); renderModule(); }, fall);
+  await p.waitForSelector('#rca-alt');
   const a1 = await A(); const id = a1[0] && a1[0].id;
   /* Verknüpfen über die Oberfläche */
   await p.selectOption('#rca-b-' + id, belege[0]); await p.selectOption('#rca-r-' + id, 'stuetzend'); await p.click('#rca-v-' + id); await p.waitForTimeout(200);
@@ -36,7 +39,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.click('#rca-pr-' + id + '-' + belege[0]); await p.waitForTimeout(200);
   const vorNeustart = await A();
   /* Neustart */
-  await start(); await zeigen(); await p.waitForSelector('#rca-neu');
+  await start(); await zeigen(); await p.waitForSelector('#rca-alt');
   const nach = await A();
   const text = await p.evaluate(() => document.body.innerText);
   const msgOk = await p.evaluate(async b => { const z = rchZuBeobachtung(b); rchOeffnen(z); await new Promise(r => setTimeout(r, 800)); return document.getElementById('sys-msg').textContent; }, belege[0]);
@@ -64,7 +67,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.evaluate(LANG => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Zweitdossier', land: 'DE' }); const d2 = STATE.dossiers.eigene.find(x => x.name === 'Zweitdossier').id;
     dispatch({ type: 'RECHERCHE_BELEG', dossier: d2, fall: PROFIL.recherche.faelle[0].id, neuerFall: null, art: 'Text', herkunft: 'Zeitung', notiz: '', fassung: { dateiname: null, groesse: 10, typ: 'text/plain', hash: null, anhang: false }, fundstelle: { typ: 'Absatz', wert: '7' }, zitat: LANG });
     const bn = PROFIL.recherche.beobachtungen[PROFIL.recherche.beobachtungen.length - 1].id; dispatch({ type: 'RECHERCHE_BELEG_VERKNUEPFT', aussage: PROFIL.recherche.aussagen[0].id, beob: bn, rolle: 'widersprechend' }); }, LANG);
-  await start(); await zeigen(); await p.waitForSelector('#rca-neu');
+  await start(); await zeigen(); await p.waitForSelector('#rca-alt');
   const lang = await p.evaluate(id => { const bn = PROFIL.recherche.aussagen[0].widersprechend.slice(-1)[0].beob; const el = document.querySelector('#rca-zi-' + id + '-' + bn + ' [data-vollstaendig]'); const zu = document.getElementById('rca-zu-' + id + '-' + bn);
     const roh = el ? el.textContent : ''; if (zu) zu.click(); return { voll: roh.endsWith('ENDE-MARKE') && roh.length > 400, zu: !!zu, nachSprung: STATE.dossiers.eigene.find(x => x.id === STATE.dossiers.auswahl).name }; }, id);
   const r = {

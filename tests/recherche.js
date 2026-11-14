@@ -1,4 +1,4 @@
-/* Recherchebelege ohne Auftrag: Fallwahl ohne Standardfall, Fundstelle, bytegetreue Datei mit Prüfsumme, Erhalt nach Neustart und Reset, Manipulationsanzeige.
+/* Unterlagen zum Fall ohne Auftrag: Fallwahl ohne Standardfall, Fundstelle, bytegetreue Datei mit Prüfsumme, Erhalt nach Neustart und Reset, Manipulationsanzeige.
    Exit-Code 1 bei Fehlschlag. */
 const PF = require('./_pfad.js'); const { chromium } = require('playwright'); const crypto = require('crypto');
 (async () => {
@@ -11,7 +11,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   await start();
   const buf = Buffer.from('%PDF-1.4\n% Testbeleg fuer die Recherche, Seite 2\n'.repeat(20)); const sha = crypto.createHash('sha256').update(buf).digest('hex');
   await p.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Belegtest', land: 'DE' }); dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); });
-  await p.waitForSelector('#rch-ok');
+  await p.click('#rch-neu'); await p.waitForSelector('#rch-ok');
   const v0 = await p.evaluate(() => ({ mission: !!LM(), dok: STATE.seq.dok || 0, faelle: PROFIL.recherche.faelle.length, belege: PROFIL.recherche.beobachtungen.length }));
   /* ohne Fallwahl: nichts wird angelegt */
   await p.fill('#rch-text', 'Wörtlicher Auszug'); await p.click('#rch-ok'); await p.waitForTimeout(300);
@@ -19,23 +19,23 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   const msgOhneFall = await sys();
   /* neuer Fall, Datei, Seite 2 */
   await p.selectOption('#rch-fall', '__neu'); await p.fill('#rch-fall-titel', 'Radweg Eröffnung'); await p.fill('#rch-fall-frage', 'Wann wurde der Radweg eröffnet?');
-  await p.selectOption('#rch-ft-typ', 'Seite'); await p.fill('#rch-ft-wert', '2'); await p.fill('#rch-herkunft', 'Projektblatt');
   await p.setInputFiles('#rch-datei', { name: 'projektblatt.pdf', mimeType: 'application/pdf', buffer: buf });
+  await p.selectOption('#rch-ft-typ', 'Seite'); await p.fill('#rch-ft-wert', '2'); await p.fill('#rch-herkunft', 'Projektblatt');
   await p.click('#rch-ok'); await p.waitForTimeout(800);
   const a = await p.evaluate(() => { const R = PROFIL.recherche; return { faelle: R.faelle.length, q: R.quellen.length, v: R.fassungen.length, b: R.beobachtungen.length, f: R.fassungen[0], ft: R.beobachtungen[0] && R.beobachtungen[0].fundstelle, dossier: R.beobachtungen[0] && R.beobachtungen[0].dossiers, dok: STATE.seq.dok || 0 }; });
   /* Textbeleg im bestehenden Fall, ohne Datei, Fundstelle Absatz */
   const fallId = await p.evaluate(() => PROFIL.recherche.faelle[0].id);
-  await p.selectOption('#rch-fall', fallId); await p.fill('#rch-text', 'Eröffnung am 12. Juli'); await p.selectOption('#rch-ft-typ', 'Absatz'); await p.fill('#rch-ft-wert', '3'); await p.click('#rch-ok'); await p.waitForTimeout(500);
+  await p.click('#rch-neu'); await p.selectOption('#rch-fall', fallId); await p.fill('#rch-text', 'Eröffnung am 12. Juli'); await p.selectOption('#rch-ft-typ', 'Absatz'); await p.fill('#rch-ft-wert', '3'); await p.click('#rch-ok'); await p.waitForTimeout(500);
   const t = await p.evaluate(() => ({ b: PROFIL.recherche.beobachtungen.length, faelle: PROFIL.recherche.faelle.length, art: PROFIL.recherche.quellen[1] && PROFIL.recherche.quellen[1].art }));
   /* Neustart */
-  await start(); await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); }); await p.waitForSelector('#rch-ok');
+  await start(); await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); }); await p.waitForSelector('#rch-neu');
   const n = await p.evaluate(async () => {
     const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); STATE.dossiers.auswahl = e.id; renderModule();
     dispatch({ type: 'RESET' }); const z = rchBelege(e)[0]; const blob = await RIDB.get(z.f.anhang);
     const buf2 = blob ? new Uint8Array(await blob.arrayBuffer()) : null;
     return { belege: rchBelege(e).length, tabelle: document.body.innerText.includes('Radweg Eröffnung') || true, blobGroesse: blob ? blob.size : -1, hash: await rchHash(blob), erste: buf2 ? Array.from(buf2.slice(0, 8)) : null };
   });
-  await p.evaluate(() => { STATE.dossiers.auswahl = STATE.dossiers.eigene.find(x => x.name === 'Belegtest').id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); }); await p.waitForSelector('#rch-ok');
+  await p.evaluate(() => { STATE.dossiers.auswahl = STATE.dossiers.eigene.find(x => x.name === 'Belegtest').id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); }); await p.waitForSelector('#rch-neu');
   const zeilen = await p.evaluate(() => document.body.innerText.includes('Seite 2') && document.body.innerText.includes('Absatz 3') && document.body.innerText.includes('Radweg Eröffnung'));
   /* Öffnen: Prüfsumme stimmt; danach manipulierte Datei */
   await p.evaluate(() => { const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); rchOeffnen(rchBelege(e)[0]); }); await p.waitForTimeout(800); const msgOk = await sys();
@@ -43,23 +43,23 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   /* Regression 1: Profilspeicher voll: Eintrag zurücknehmen, Datei aufräumen, Entwurf behalten, kein Protokolleintrag */
   const vor = await p.evaluate(async () => {
     const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); STATE.dossiers.auswahl = e.id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule();
-    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Recherchebeleg erfasst').length, fall: PROFIL.recherche.faelle[0].id };
+    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Unterlage erfasst').length, fall: PROFIL.recherche.faelle[0].id };
   });
   const voll = await p.evaluate(async (vor) => {
     const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest');
     Object.assign(VIEW.draft, { 'rch-fall': vor.fall, 'rch-text': 'Auszug voll', 'rch-ft-typ': 'Absatz', 'rch-ft-wert': '9', 'rch-herkunft': 'H-voll' }); renderModule();
-    const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array([1, 2, 3, 4])], 'voll.bin', { type: 'application/octet-stream' })); document.getElementById('rch-datei').files = dt.files;
+    VIEW.recherche.datei = new File([new Uint8Array([1, 2, 3, 4])], 'voll.bin', { type: 'application/octet-stream' }); VIEW.recherche.offen = true; renderModule();
     const orig = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (String(k).endsWith('.profil')) throw new Error('quota'); return orig.call(this, k, v); };
     rchErfassen(e); await new Promise(r => setTimeout(r, 900)); Storage.prototype.setItem = orig;
-    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Recherchebeleg erfasst').length, text: VIEW.draft['rch-text'], herkunft: VIEW.draft['rch-herkunft'],
+    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Unterlage erfasst').length, text: VIEW.draft['rch-text'], herkunft: VIEW.draft['rch-herkunft'],
       gespeichertN: JSON.parse(localStorage.getItem(PROFIL_KEY)).recherche.beobachtungen.length, meldung: document.getElementById('sys-msg').textContent };
   }, vor);
-  for (const k of ['rch-fall', 'rch-text', 'rch-ft-typ', 'rch-ft-wert', 'rch-herkunft']) await p.evaluate(k => { delete VIEW.draft[k]; }, k);
+  for (const k of ['rch-fall', 'rch-text', 'rch-ft-typ', 'rch-ft-typ2', 'rch-ft-wert', 'rch-herkunft', 'rch-notiz']) await p.evaluate(k => { delete VIEW.draft[k]; }, k);
   /* Regression 2: Eingaben werden beim Klick gemeinsam erfasst; ein neuer Entwurf geht beim Abschluss nicht verloren */
   const misch = await p.evaluate(async (vor) => {
     const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); renderModule();
     Object.assign(VIEW.draft, { 'rch-fall': vor.fall, 'rch-text': 'Auszug A', 'rch-ft-typ': 'Absatz', 'rch-ft-wert': '1', 'rch-herkunft': 'Herkunft A', 'rch-notiz': 'Notiz A' }); renderModule();
-    const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array([9, 9, 9])], 'a.bin', { type: 'application/octet-stream' })); document.getElementById('rch-datei').files = dt.files;
+    VIEW.recherche.datei = new File([new Uint8Array([9, 9, 9])], 'a.bin', { type: 'application/octet-stream' }); VIEW.recherche.offen = true; renderModule();
     rchErfassen(e);
     VIEW.draft['rch-herkunft'] = 'Herkunft B'; VIEW.draft['rch-notiz'] = 'Notiz B'; VIEW.draft['rch-text'] = 'Auszug B';     /* neuer Entwurf, während A gespeichert wird */
     await new Promise(r => setTimeout(r, 900));

@@ -80,6 +80,8 @@ function karteKoord(id) {
 function sichtungKoord(s) {
   const roh = String(s.ort || '').trim();
   if (!roh) return null;
+  const kk = parseKoord(roh);                                     /* Koordinatenangabe (aus einem Entwurfs-Pin): genau dieser Punkt */
+  if (kk) return { ll: kk, genau: 'Koordinate', bez: roh };
   const richtung = /^richtung\b/i.test(roh), name = erkFold(roh.replace(/^richtung\s+/i, '')).replace(/[^a-z0-9 ]/g, ' ').trim();
   if (name.length < 4) return null;
   const norm = function (t) { return erkFold(t).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }, q = name.replace(/\s+/g, ' ');
@@ -1308,8 +1310,108 @@ function karteSteuerung(svg) {
   });
   return { zoom: function (dz) { zoomUm(dz, KW / 2, KH / 2); }, neu: neu, klick: klick };
 }
+/* =====================================================================
+   KARTENPROTOKOLL: Reiter neben der Lagekarte. Erfasst Vorgänge mit Kartenbezug (Sichtungen, Zonen, Pins, Zugriffspunkte, Positionen,
+   Ausgangsorte), nicht aber Mausbewegungen, Zoom oder Auswahl. Verfall nach Wahl: 24, 48, 72 Stunden oder nie (Voreinstellung nie).
+   Der Verfall entfernt nur Protokolleinträge, nie die Sichtungen, Zonen oder Pins selbst. Liegt im Profil und überlebt das Zurücksetzen.
+   ===================================================================== */
+PROFIL.kartenProtokoll = Object.assign({ frist: 0, eintraege: [], seq: 0 }, PROFIL.kartenProtokoll || {});
+PROFIL.kartenProtokoll.eintraege = Array.isArray(PROFIL.kartenProtokoll.eintraege) ? PROFIL.kartenProtokoll.eintraege : [];
+PROFIL_AKTIONEN.KARTENPROTOKOLL_FRIST = 1; PROFIL_AKTIONEN.KARTENPROTOKOLL_LEEREN = 1;
+const KP_FRISTEN = [[24, '24 Stunden'], [48, '48 Stunden'], [72, '72 Stunden'], [0, 'nie']];
+const KP_ARTEN = ['Sichtung', 'Zone', 'Pin', 'Zugriffspunkt', 'Position', 'Ausgangsort'];
+/* Ausdrücklich gekennzeichnete Aktionen: nur Eingaben und Änderungen der Person, nie simulierte Meldungen (Handler, Zonenereignisse),
+   nie Missionsvorgänge. Entscheidend ist der Aktionstyp, nicht der Anzeigetext; "leicht" markierte Änderungen zählen mit. */
+const KP_AKTIONEN = {
+  SICHTUNG_HINZU: 'Sichtung', SICHTUNG_ENTFERNT: 'Sichtung',
+  PIN_ANGELEGT: 'Pin', PIN_GEAENDERT: 'Pin', PIN_ENTFERNT: 'Pin',
+  ZONE_ANGELEGT: 'Zone', ZONE_GEAENDERT: 'Zone', ZONEN_MEHRFACH: 'Zone', ZONE_URTEIL: 'Zone', ZONE_ENTFERNT: 'Zone',
+  DOSSIER_ORT: 'Position',
+  AUSGANG_ANGELEGT: 'Ausgangsort', AUSGANG_GELOESCHT: 'Ausgangsort', AUSGANG_ORT: 'Ausgangsort'
+};
+function kpArt(typ, aktion) {
+  const art = KP_AKTIONEN[typ];
+  if (!art) return null;
+  return art === 'Zone' && /Zugriffspunkt/.test(String(aktion || '')) ? 'Zugriffspunkt' : art;   /* Unterart nur zur Anzeige */
+}
+/* entfernt abgelaufene Einträge; liefert die Zahl der entfernten */
+function kpVerfall(frist, nur) {
+  const P = PROFIL.kartenProtokoll, f = frist === undefined ? P.frist : frist;
+  if (!f) return 0;
+  const grenze = Date.now() - f * 3600000, weg = P.eintraege.filter(function (x) { return Date.parse(x.t) < grenze; }).length;
+  if (!nur && weg) P.eintraege = P.eintraege.filter(function (x) { return Date.parse(x.t) >= grenze; });
+  return weg;
+}
+/* wird von dispatch für jeden Protokolleintrag aufgerufen; true, wenn das Kartenprotokoll sich geändert hat */
+function kartenProtokollErfassen(eintrag, ereignis, typ) {
+  if (eintrag.modul === 'Mission') return false;
+  const art = kpArt(typ, eintrag.aktion);
+  if (!art) return false;
+  const P = PROFIL.kartenProtokoll; P.seq += 1;
+  P.eintraege.push({ id: 'KP-' + p3(P.seq), t: eintrag.t, art: art, aktion: eintrag.aktion, text: eintrag.detail || '' });
+  kpVerfall();
+  return true;
+}
+/* räumt abgelaufene Einträge auf und speichert, wenn tatsächlich etwas entfernt wurde */
+function kpAufraeumen() {
+  const n = kpVerfall();
+  if (n) profilSpeichern();
+  return n;
+}
+/* Beim Laden: abgelaufene Einträge entfernen und nur das Protokoll im gespeicherten Profil nachziehen. profilSpeichern() ist hier
+   nicht zulässig, weil es den Stand der Dossiers aus STATE übernähme, bevor die Anwendung gestartet ist. */
+if (kpVerfall()) {
+  try {
+    const roh = window.localStorage.getItem(PROFIL_KEY), o = roh ? JSON.parse(roh) : null;
+    if (o && o.v === 1) { o.kartenProtokoll = PROFIL.kartenProtokoll; window.localStorage.setItem(PROFIL_KEY, JSON.stringify(o)); }
+  } catch (ex) { /* bleibt im Arbeitsspeicher; die nächste Speicherung zieht es nach */ }
+}
+ACTIONS.KARTENPROTOKOLL_FRIST = function (a) {
+  const f = Number(a.stunden), P = PROFIL.kartenProtokoll;
+  if (!KP_FRISTEN.some(function (x) { return x[0] === f; }) || f === P.frist) return null;
+  const alt = P.frist; P.frist = f; const weg = kpVerfall();
+  return { modul: 'Karte', aktion: 'Protokollfrist geändert', detail: (alt ? alt + ' h' : 'nie') + ' → ' + (f ? f + ' h' : 'nie') + (weg ? '; ' + weg + ' abgelaufene Einträge entfernt' : '') };
+};
+ACTIONS.KARTENPROTOKOLL_LEEREN = function () {
+  const P = PROFIL.kartenProtokoll, n = P.eintraege.length;
+  if (!n) return null;
+  P.eintraege = [];
+  return { modul: 'Karte', aktion: 'Protokoll geleert', detail: n + ' Einträge des Kartenprotokolls entfernt' };
+};
+function kartenReiter(aktiv) {
+  kpAufraeumen();
+  const n = PROFIL.kartenProtokoll.eintraege.length;
+  return h('div', { class: 'reiterleiste', role: 'tablist', 'aria-label': 'Bereiche der Karte' },
+    [['karte', 'Lagekarte'], ['protokoll', 'Protokoll (' + n + ')']].map(function (x) {
+      return h('button', { type: 'button', role: 'tab', id: 'ktab-' + x[0], 'aria-selected': aktiv === x[0] ? 'true' : 'false', class: aktiv === x[0] ? 'reiter on' : 'reiter', onclick: function () { VIEW.karte.reiter = x[0]; renderModule(); } }, x[1]);
+    }));
+}
+function kartenProtokollAnsicht() {
+  const P = PROFIL.kartenProtokoll, K = VIEW.karte, filter = KP_ARTEN.indexOf(K.kpFilter) >= 0 ? K.kpFilter : '';
+  kpAufraeumen();
+  const liste = P.eintraege.filter(function (x) { return !filter || x.art === filter; }).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
+  return panel('Kartenprotokoll', [h('span', { class: 'badge' }, String(liste.length))],
+    h('p', { class: 'note pad' }, 'Vorgänge mit Kartenbezug: Sichtungen, Zonen, Pins, Zugriffspunkte, Kartenpositionen und Ausgangsorte. Mausbewegungen, Zoom und Auswahl werden nicht erfasst. Der Verfall entfernt nur den Protokolleintrag, nicht die Sichtung, Zone oder den Pin selbst.'),
+    h('div', { class: 'row pad' },
+      h('label', { for: 'kp-frist' }, 'Verfall nach'),
+      h('select', { id: 'kp-frist', 'aria-label': 'Verfall der Protokolleinträge', onchange: function (ev) {
+        const f = Number(ev.target.value), weg = f ? kpVerfall(f, true) : 0;
+        if (weg) { renderModule(); bestaetigen('Protokollfrist verkürzen', weg + ' Protokolleinträge sind älter als ' + f + ' Stunden und werden entfernt.', 'Frist setzen', function () { dispatch({ type: 'KARTENPROTOKOLL_FRIST', stunden: f }); }); return; }
+        dispatch({ type: 'KARTENPROTOKOLL_FRIST', stunden: f });
+      } }, KP_FRISTEN.map(function (x) { return h('option', { value: String(x[0]), selected: x[0] === P.frist }, x[1]); })),
+      h('label', { for: 'kp-filter' }, 'Art'),
+      h('select', { id: 'kp-filter', 'aria-label': 'Art der Einträge', onchange: function (ev) { K.kpFilter = ev.target.value; renderModule(); } },
+        [h('option', { value: '' }, 'alle')].concat(KP_ARTEN.map(function (a) { return h('option', { value: a, selected: a === filter }, a); }))),
+      h('button', { type: 'button', id: 'kp-leeren', disabled: !P.eintraege.length, onclick: function () {
+        bestaetigen('Kartenprotokoll leeren', 'Alle ' + P.eintraege.length + ' Einträge des Kartenprotokolls werden entfernt. Sichtungen, Zonen und Pins bleiben bestehen.', 'Protokoll leeren', function () { dispatch({ type: 'KARTENPROTOKOLL_LEEREN' }); });
+      } }, 'Protokoll leeren')),
+    tabelle(['Zeit (UTC)', 'Art', 'Vorgang', 'Einzelheiten', 'Verfällt (UTC)'], liste.map(function (x) {
+      return [td('nw', fmtZ(x.t)), td('nw', x.art), td('nw', x.aktion), td('txt', x.text || '–'), td('nw', P.frist ? fmtZ(new Date(Date.parse(x.t) + P.frist * 3600000).toISOString()) : 'nie')];
+    }), filter ? 'Keine Einträge dieser Art.' : 'Noch keine Einträge.'));
+}
 function renderKarte(m) {
   const K = VIEW.karte, def = STATE.vorlauf ? null : KM();
+  if (K.reiter === 'protokoll') return [modKopf(m), kartenReiter('protokoll'), kartenProtokollAnsicht()];
   if (!K.init) { karteGrundansicht(); K.init = true; }
   const svg = s('svg', { id: 'k-svg', class: 'karte-svg' + (K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen ? ' pick' : '') + (K.messen ? ' messen' : ''), viewBox: '0 0 ' + KW + ' ' + KH, role: 'application', tabindex: '-1', 'aria-label': 'Karte, mit Maus ziehen und Mausrad zoomen' });
   const st = karteSteuerung(svg); KARTE_ST = st;
@@ -1404,6 +1506,7 @@ function renderKarte(m) {
       h('p', { class: 'k-eb-note' }, 'Roter Ring: Stufe 4 oder 5. Gestrichelter Ring um eine Sichtung: Unschärfe; er wächst mit dem Alter der Sichtung.')) : null);
   const res = [
     modKopf(m),
+    kartenReiter('karte'),
     panel('Lagekarte', null,
       pickE ? h('div', { class: 'row k-pickbar' }, h('span', null, 'Klick auf die Karte setzt die Position von ' + pickE.id + ' ' + pickE.name + '.'),
         knopf('k-pick-x', 'Abbrechen', function () { K.pick = null; renderModule(); })) : null,

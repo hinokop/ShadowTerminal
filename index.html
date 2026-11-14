@@ -5084,7 +5084,10 @@ const ACTIONS = {
     const hoechste = PROFIL.pins.reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0);
     PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, hoechste) + 1;
     const id = 'PIN-' + p3(PROFIL.seq.pin);
-    PROFIL.pins.push({ id: id, name: 'Pin ' + nr, ll: [Number(a.ll[0]), Number(a.ll[1])], zwecke: [], umgebung: {}, notiz: '', t: nowIso() });
+    const eigen = typeof a.name === 'string' && a.name.trim() ? a.name.trim().slice(0, 60) : '', de = a.dossier ? entitaet(a.dossier) : null;
+    const px = { id: id, name: eigen || 'Pin ' + nr, ll: [Number(a.ll[0]), Number(a.ll[1])], zwecke: [], umgebung: {}, notiz: typeof a.notiz === 'string' ? a.notiz.slice(0, 1500) : '', t: nowIso() };
+    if (de) px.dossier = de.id;                                   /* Bezug zum Dossier (Sichtungsentwurf) */
+    PROFIL.pins.push(px);
     VIEW.karte.auswahl = id;
     return { modul: 'Karte', aktion: 'Pin gesetzt', detail: id + ' bei ' + Number(a.ll[0]).toFixed(4) + ', ' + Number(a.ll[1]).toFixed(4) };
   },
@@ -5168,7 +5171,12 @@ const ACTIONS = {
     aenderungenAnwenden();
     ['eigen', 'kante', 'galerie', 'ausgang'].forEach(function (k) { PROFIL.seq[k] = Math.max(PROFIL.seq[k] || 0, (q.seq && q.seq[k]) || 0); });
     profilEinspielen(STATE);
-    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') };
+    /* Recherche, Identität, Fristen: zusammengeführt statt verworfen; die lokale Identität bleibt, wenn eine gewählt ist */
+    let rchText = '';
+    if (!PROFIL.identitaet && typeof q.identitaet === 'string' && legende(q.identitaet)) PROFIL.identitaet = q.identitaet;
+    Object.keys(q.dokFristen || {}).forEach(function (k) { if (!(k in PROFIL.dokFristen)) PROFIL.dokFristen[k] = q.dokFristen[k]; });
+    if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q);
+    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + rchText };
   },
   PROFIL_LEEREN: function () {
     const ids = STATE.dossiers.eigene.map(function (e) { return e.id; });
@@ -5176,6 +5184,7 @@ const ACTIONS = {
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];
     const alt = PROFIL.leer(), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
     ['eigene', 'eigeneKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten'].forEach(function (k) { PROFIL[k] = alt[k]; });
+    if (PROFIL.kartenProtokoll) PROFIL.kartenProtokoll.eintraege = [];
     PROFIL.pins = []; PROFIL.seq.pin = pinZaehler;     /* IDs werden auch nach dem Leeren nie neu vergeben */
     Object.keys(STATE.dossiers.entitaeten).forEach(function (id) { const x = STATE.dossiers.entitaeten[id]; if (x && Array.isArray(x.notizen)) x.notizen = []; });
     aenderungenAnwenden();
@@ -5258,6 +5267,8 @@ const ACTIONS = {
     const id = 'SI-' + p3(STATE.seq.sichtung), t = nowIso();
     const guete = SCENARIO.guete[a.guete] ? a.guete : 'unbewertet';
     d.sichtungen.push({ id: id, t: t, ort: ort, text: text, guete: guete, quelle: a.quelle || 'Eintrag', zone: a.zone || undefined });
+    const pinX = a.pin ? (PROFIL.pins || []).find(function (y) { return y.id === a.pin && y.dossier === e.id; }) : null;
+    if (pinX) pinX.sichtung = id;                                 /* der Entwurf ist damit als Sichtung eingetragen */
     d.aktualisiert = t;
     delete VIEW.draft['si-ort-' + e.id]; delete VIEW.draft['si-text-' + e.id];
     return { modul: 'Dossier', aktion: a.quelle === 'Meldung' ? 'Sichtung gemeldet' : 'Sichtung eingetragen', detail: e.id + ' ' + e.name + ', ' + id + (ort ? ' bei ' + kuerzen(ort, 60) : '') + (text ? ': ' + kuerzen(text, 100) : '') };
@@ -5494,17 +5505,19 @@ function dispatch(action) {
   const ergebnis = handler(action);                      /* (1) */
   if (!ergebnis) return;
   const t = nowIso(), liste = Array.isArray(ergebnis) ? ergebnis : [ergebnis];
+  let kpNeu = false;
   liste.forEach(function (e) {                           /* (2) */
     STATE.seq.log += 1;
     const eintrag = { id: STATE.seq.log, t: e.t || t, modul: e.modul, aktion: e.aktion, detail: e.detail || '' };
     if (e.krit) eintrag.krit = true;
     STATE.log.push(eintrag);
+    try { if (typeof kartenProtokollErfassen === 'function' && kartenProtokollErfassen(eintrag, e, action.type)) kpNeu = true; } catch (ex) { /* das Kartenprotokoll darf den Ablauf nicht stoppen */ }
   });
   try { zustandAus(action, liste); } catch (ex) { /* Zustandsmodell darf den Ablauf nicht stoppen */ }
   try { abdPruefen(); } catch (ex) { /* Spurenmodell darf den Ablauf nicht stoppen */ }
   if (STATE.log.length > LOG_LIMIT) STATE.log.splice(0, STATE.log.length - LOG_LIMIT);
   Store.save(STATE);                                     /* (3) */
-  if (PROFIL_AKTIONEN[action.type] && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
+  if ((PROFIL_AKTIONEN[action.type] || kpNeu) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
   render(liste.every(function (e) { return e.leicht; })); /* (4) */
 }
 
@@ -5767,7 +5780,7 @@ function ausgangPanel() {
           h('button', { type: 'button', class: 'link', 'data-ag': x.id, onclick: function () {
             VIEW.karte.pick = x.id; VIEW.karte.auswahl = null;
             if (x.ll) { VIEW.karte.lat = x.ll[0]; VIEW.karte.lon = x.ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 12); }
-            dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte setzen'),
+            VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte setzen'),
           ' ',
           h('button', { type: 'button', class: 'link', onclick: function () {
             bestaetigen('Ausgangsort löschen', 'Ausgangsort ' + x.id + ' ' + x.name + ' wird aus dem Profil entfernt.', 'Löschen', function () { dispatch({ type: 'AUSGANG_GELOESCHT', id: x.id }); }, { klartext: 'Ausgangsort löschen?' });
@@ -5816,7 +5829,7 @@ function renderProfil(m) {
           h('label', { for: 'aw-name' }, 'Ausweichort'),
           h('input', { type: 'text', id: 'aw-name', placeholder: 'Bezeichnung', maxlength: '40', value: VIEW.draft['aw-name'] || '', oninput: function (ev) { VIEW.draft['aw-name'] = ev.target.value; } }),
           h('input', { type: 'text', id: 'aw-koord', placeholder: 'Breite, Länge', value: VIEW.draft['aw-koord'] || '', oninput: function (ev) { VIEW.draft['aw-koord'] = ev.target.value; } }),
-          h('button', { type: 'button', id: 'btn-aw-karte', onclick: function () { VIEW.karte.pick = 'CI-AUS'; VIEW.karte.auswahl = null; dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte wählen')),
+          h('button', { type: 'button', id: 'btn-aw-karte', onclick: function () { VIEW.karte.pick = 'CI-AUS'; VIEW.karte.auswahl = null; VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte wählen')),
         h('div', { class: 'row top' },
           h('label', { for: 'aw-grund' }, 'Begründung'),
           h('input', { type: 'text', id: 'aw-grund', placeholder: 'optional, warum dieser Ort', value: VIEW.draft['aw-grund'] || '', oninput: function (ev) { VIEW.draft['aw-grund'] = ev.target.value; } }),
@@ -6256,7 +6269,7 @@ function zpFelder(def, z, praefix) {
 function zpVerschieben(z) {
   VIEW.karte.pick = z.id; VIEW.karte.auswahl = null;
   if (z.ll) { VIEW.karte.lat = z.ll[0]; VIEW.karte.lon = z.ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 13); }
-  dispatch({ type: 'NAVIGATION', modul: 'karte' });
+  VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
   renderModule();
 }
 function zpAnlegen(def, karte) {
@@ -6508,7 +6521,7 @@ function eigenesPanel(e) {
       entwurf('input', 'ko-text', 'ko-' + e.id, { type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'Breite, Länge (z. B. 52.5200, 13.4050)', 'aria-label': 'Koordinaten von ' + e.id,
         style: 'flex:1 1 240px;min-width:0', value: VIEW.draft['ko-' + e.id] != null ? VIEW.draft['ko-' + e.id] : (ll ? ll[0] + ', ' + ll[1] : '') }),
       h('button', { type: 'button', id: 'btn-ko', onclick: function () { dispatch({ type: 'DOSSIER_ORT', id: e.id, text: $('ko-text').value }); delete VIEW.draft['ko-' + e.id]; } }, 'Setzen'),
-      h('button', { type: 'button', id: 'btn-ko-karte', onclick: function () { VIEW.karte.pick = e.id; VIEW.karte.auswahl = null; if (ll) { VIEW.karte.lat = ll[0]; VIEW.karte.lon = ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 9); } dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte wählen'),
+      h('button', { type: 'button', id: 'btn-ko-karte', onclick: function () { VIEW.karte.pick = e.id; VIEW.karte.auswahl = null; if (ll) { VIEW.karte.lat = ll[0]; VIEW.karte.lon = ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 9); } VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte wählen'),
       llEigen ? h('button', { type: 'button', id: 'btn-ko-x', onclick: function () { dispatch({ type: 'DOSSIER_ORT', id: e.id, ll: null }); delete VIEW.draft['ko-' + e.id]; } }, 'Position entfernen') : null,
       h('span', { class: 'note' }, 'Koordinaten lassen sich in jedem Kartendienst per Rechtsklick kopieren. Sie bleiben nur lokal im Profil.')),
     h('h3', null, 'Verbindung hinzufügen'),
@@ -6596,7 +6609,7 @@ function kartenSprung(e, ll) {
   const K = VIEW.karte;
   K.ebenen[kartenEbeneFuer(e)] = true;
   K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, 11);
-  dispatch({ type: 'NAVIGATION', modul: 'karte' });
+  VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
   setTimeout(function () { karteWaehlen(e.id, true); }, 0);
 }
 function kartenKnopf(e) {
@@ -6607,6 +6620,41 @@ function kartenKnopf(e) {
       kartenSprung(e, ll);
     } }, 'Auf der Karte zeigen'),
     h('span', { class: 'note' }, 'Vermuteter Standort: ' + ll[0].toFixed(4) + ', ' + ll[1].toFixed(4)));
+}
+/* Sichtung: Karte am letzten bekannten Punkt, dort ein vorgefertigter Pin (M-01, M-02 ...) als Entwurf */
+function sichtungsStart(e) {
+  const d = STATE.dossiers.entitaeten[e.id], L = ((d && d.sichtungen) || []).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
+  for (let i = 0; i < L.length; i++) { const k = typeof sichtungKoord === 'function' ? sichtungKoord(L[i]) : null; if (k) return { ll: k.ll, bez: 'letzte Sichtung ' + L[i].id }; }
+  const ll = karteKoord(e.id);
+  return ll ? { ll: ll, bez: 'Standort laut Dossier' } : null;
+}
+function sichtungsPinName() {
+  let n = 1; const belegt = {};
+  (PROFIL.pins || []).forEach(function (y) { belegt[y.name] = 1; });
+  while (belegt['M-' + (n < 10 ? '0' : '') + n]) n++;
+  return 'M-' + (n < 10 ? '0' : '') + n;
+}
+function sichtungKnopf(e) {
+  const st = sichtungsStart(e);
+  return h('div', { class: 'row pad' },
+    h('button', { type: 'button', id: 'btn-dk-sichtung', onclick: function () {
+      const s2 = sichtungsStart(e);
+      if (!s2) { VIEW.dtab = 'sichtungen'; renderModule(); meldung('Kein bekannter Standort. Die Sichtung mit Ortsangabe im Reiter Sichtungen eintragen.'); return; }
+      dispatch({ type: 'PIN_ANGELEGT', ll: s2.ll, name: sichtungsPinName(), dossier: e.id, notiz: 'Sichtungsentwurf zu ' + e.id + ' ' + e.name + ' (Ausgangspunkt: ' + s2.bez + ')' });
+      const K = VIEW.karte; K.pick = null; K.lat = s2.ll[0]; K.lon = s2.ll[1]; K.zoom = Math.max(K.zoom, 14);
+      const pid = K.auswahl;
+      VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
+      setTimeout(function () { if (typeof karteWaehlen === 'function') karteWaehlen(pid, true); }, 0);          /* zentriert und wählt den Entwurfs-Pin */
+    } }, 'Sichtung auf der Karte'),
+    h('span', { class: 'note' }, st ? 'Setzt einen Entwurfs-Pin am Punkt: ' + st.bez + ' (' + st.ll[0].toFixed(4) + ', ' + st.ll[1].toFixed(4) + ').' : 'Kein Standort bekannt; die Sichtung wird im Reiter Sichtungen eingetragen.'));
+}
+function sichtungsEntwuerfe(e) {
+  const L = (PROFIL.pins || []).filter(function (y) { return y.dossier === e.id; });
+  if (!L.length) return null;
+  return [h('h3', null, 'Sichtungsentwürfe (' + L.length + ')'), tabelle(['Pin', 'Position', 'Notiz', ''], L.map(function (y) {
+    return [td('nw', y.name), td('nw', y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5)), td('txt', y.notiz || '–'),
+      td('nw', y.sichtung ? 'eingetragen als ' + y.sichtung : h('button', { type: 'button', class: 'link', id: 'si-pin-' + y.id, onclick: function () { dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5), text: 'Aus Entwurf ' + y.name, guete: 'unbewertet', pin: y.id }); } }, 'als Sichtung eintragen'))];
+  }), '')];
 }
 function dossierTabs(e) {
   const tab = VIEW.dtab || 'info', n = (STATE.dossiers.entitaeten[e.id].sichtungen || []).length;
@@ -6640,6 +6688,7 @@ function sichtungenBlock(e) {
           return [td('nw', fmtZ(a.t)), td('nw', a.id), td('txt', (a.wert ? SCENARIO.abfragen.aussagen.wissenJa : SCENARIO.abfragen.aussagen.wissenNein) + ' (' + a.text + ')'), td('nw', h('span', { class: 'label ' + (a.status === 'gilt' ? 's-accent' : a.status === 'unklar' ? 's-warn' : 's-dim') }, a.status))];
         }), '')] : null];
     })(),
+    sichtungsEntwuerfe(e),
     h('div', { class: 'row top' },
       entwurf('input', 'si-ort', 'si-ort-' + e.id, { type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Ort der Sichtung', placeholder: 'Ort, z. B. Sonnenallee 14, Zufahrt', style: 'flex:1 1 200px;min-width:0' }),
       entwurf('input', 'si-text', 'si-text-' + e.id, { type: 'text', autocomplete: 'off', 'aria-label': 'Beobachtung', placeholder: 'Beobachtung, z. B. steigt in dunklen Transporter', style: 'flex:2 1 260px;min-width:0',
@@ -6769,6 +6818,7 @@ function dossierAnsicht(e) {
       PROFIL.aenderungen[e.id] ? h('span', { class: 'label s-warn' }, 'bearbeitet') : null),
     zusatzZeile(e),
     kartenKnopf(e),
+    sichtungKnopf(e),
     zielpersonKnopf(e),
     haltungDossierPanel(e),
     h('h3', null, 'Verbindungen (' + vs.length + ')'),
@@ -7653,8 +7703,8 @@ function renderSysbar() {
   const kb = Store.groesseKb();
   if (kb > 3500 && !renderSysbar.gewarnt) { renderSysbar.gewarnt = true; meldung('Archiv zu ' + Math.round(kb / 50) + ' % belegt (' + kb + ' KB von etwa 5000 KB). Export anlegen und alte Verläufe bereinigen.'); }
   $('sys-info').textContent = Store.isPersistent()
-    ? 'Archiv FT-ARCHIV verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X'
-    : 'Archiv FT-ARCHIV nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X';
+    ? 'Archiv pgcl-eu3.arch07 verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X'
+    : 'Archiv pgcl-eu3.arch07 nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X';
 }
 function meldung(text) { $('sys-msg').textContent = text ? dtg(new Date()) + ' · ' + text : ''; }
 /* Kurze, sichtbare Bestätigung einer Handlung (verschwindet nach etwa 4 Sekunden) */
