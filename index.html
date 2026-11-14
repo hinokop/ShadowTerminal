@@ -5184,6 +5184,7 @@ const ACTIONS = {
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];
     const alt = PROFIL.leer(), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
     ['eigene', 'eigeneKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten'].forEach(function (k) { PROFIL[k] = alt[k]; });
+    if (PROFIL.kartenProtokoll) PROFIL.kartenProtokoll.eintraege = [];
     PROFIL.pins = []; PROFIL.seq.pin = pinZaehler;     /* IDs werden auch nach dem Leeren nie neu vergeben */
     Object.keys(STATE.dossiers.entitaeten).forEach(function (id) { const x = STATE.dossiers.entitaeten[id]; if (x && Array.isArray(x.notizen)) x.notizen = []; });
     aenderungenAnwenden();
@@ -5504,17 +5505,19 @@ function dispatch(action) {
   const ergebnis = handler(action);                      /* (1) */
   if (!ergebnis) return;
   const t = nowIso(), liste = Array.isArray(ergebnis) ? ergebnis : [ergebnis];
+  let kpNeu = false;
   liste.forEach(function (e) {                           /* (2) */
     STATE.seq.log += 1;
     const eintrag = { id: STATE.seq.log, t: e.t || t, modul: e.modul, aktion: e.aktion, detail: e.detail || '' };
     if (e.krit) eintrag.krit = true;
     STATE.log.push(eintrag);
+    try { if (typeof kartenProtokollErfassen === 'function' && kartenProtokollErfassen(eintrag, e, action.type)) kpNeu = true; } catch (ex) { /* das Kartenprotokoll darf den Ablauf nicht stoppen */ }
   });
   try { zustandAus(action, liste); } catch (ex) { /* Zustandsmodell darf den Ablauf nicht stoppen */ }
   try { abdPruefen(); } catch (ex) { /* Spurenmodell darf den Ablauf nicht stoppen */ }
   if (STATE.log.length > LOG_LIMIT) STATE.log.splice(0, STATE.log.length - LOG_LIMIT);
   Store.save(STATE);                                     /* (3) */
-  if (PROFIL_AKTIONEN[action.type] && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
+  if ((PROFIL_AKTIONEN[action.type] || kpNeu) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
   render(liste.every(function (e) { return e.leicht; })); /* (4) */
 }
 
@@ -5777,7 +5780,7 @@ function ausgangPanel() {
           h('button', { type: 'button', class: 'link', 'data-ag': x.id, onclick: function () {
             VIEW.karte.pick = x.id; VIEW.karte.auswahl = null;
             if (x.ll) { VIEW.karte.lat = x.ll[0]; VIEW.karte.lon = x.ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 12); }
-            dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte setzen'),
+            VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte setzen'),
           ' ',
           h('button', { type: 'button', class: 'link', onclick: function () {
             bestaetigen('Ausgangsort löschen', 'Ausgangsort ' + x.id + ' ' + x.name + ' wird aus dem Profil entfernt.', 'Löschen', function () { dispatch({ type: 'AUSGANG_GELOESCHT', id: x.id }); }, { klartext: 'Ausgangsort löschen?' });
@@ -5826,7 +5829,7 @@ function renderProfil(m) {
           h('label', { for: 'aw-name' }, 'Ausweichort'),
           h('input', { type: 'text', id: 'aw-name', placeholder: 'Bezeichnung', maxlength: '40', value: VIEW.draft['aw-name'] || '', oninput: function (ev) { VIEW.draft['aw-name'] = ev.target.value; } }),
           h('input', { type: 'text', id: 'aw-koord', placeholder: 'Breite, Länge', value: VIEW.draft['aw-koord'] || '', oninput: function (ev) { VIEW.draft['aw-koord'] = ev.target.value; } }),
-          h('button', { type: 'button', id: 'btn-aw-karte', onclick: function () { VIEW.karte.pick = 'CI-AUS'; VIEW.karte.auswahl = null; dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte wählen')),
+          h('button', { type: 'button', id: 'btn-aw-karte', onclick: function () { VIEW.karte.pick = 'CI-AUS'; VIEW.karte.auswahl = null; VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte wählen')),
         h('div', { class: 'row top' },
           h('label', { for: 'aw-grund' }, 'Begründung'),
           h('input', { type: 'text', id: 'aw-grund', placeholder: 'optional, warum dieser Ort', value: VIEW.draft['aw-grund'] || '', oninput: function (ev) { VIEW.draft['aw-grund'] = ev.target.value; } }),
@@ -6266,7 +6269,7 @@ function zpFelder(def, z, praefix) {
 function zpVerschieben(z) {
   VIEW.karte.pick = z.id; VIEW.karte.auswahl = null;
   if (z.ll) { VIEW.karte.lat = z.ll[0]; VIEW.karte.lon = z.ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 13); }
-  dispatch({ type: 'NAVIGATION', modul: 'karte' });
+  VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
   renderModule();
 }
 function zpAnlegen(def, karte) {
@@ -6518,7 +6521,7 @@ function eigenesPanel(e) {
       entwurf('input', 'ko-text', 'ko-' + e.id, { type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'Breite, Länge (z. B. 52.5200, 13.4050)', 'aria-label': 'Koordinaten von ' + e.id,
         style: 'flex:1 1 240px;min-width:0', value: VIEW.draft['ko-' + e.id] != null ? VIEW.draft['ko-' + e.id] : (ll ? ll[0] + ', ' + ll[1] : '') }),
       h('button', { type: 'button', id: 'btn-ko', onclick: function () { dispatch({ type: 'DOSSIER_ORT', id: e.id, text: $('ko-text').value }); delete VIEW.draft['ko-' + e.id]; } }, 'Setzen'),
-      h('button', { type: 'button', id: 'btn-ko-karte', onclick: function () { VIEW.karte.pick = e.id; VIEW.karte.auswahl = null; if (ll) { VIEW.karte.lat = ll[0]; VIEW.karte.lon = ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 9); } dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte wählen'),
+      h('button', { type: 'button', id: 'btn-ko-karte', onclick: function () { VIEW.karte.pick = e.id; VIEW.karte.auswahl = null; if (ll) { VIEW.karte.lat = ll[0]; VIEW.karte.lon = ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 9); } VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte wählen'),
       llEigen ? h('button', { type: 'button', id: 'btn-ko-x', onclick: function () { dispatch({ type: 'DOSSIER_ORT', id: e.id, ll: null }); delete VIEW.draft['ko-' + e.id]; } }, 'Position entfernen') : null,
       h('span', { class: 'note' }, 'Koordinaten lassen sich in jedem Kartendienst per Rechtsklick kopieren. Sie bleiben nur lokal im Profil.')),
     h('h3', null, 'Verbindung hinzufügen'),
@@ -6606,7 +6609,7 @@ function kartenSprung(e, ll) {
   const K = VIEW.karte;
   K.ebenen[kartenEbeneFuer(e)] = true;
   K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, 11);
-  dispatch({ type: 'NAVIGATION', modul: 'karte' });
+  VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
   setTimeout(function () { karteWaehlen(e.id, true); }, 0);
 }
 function kartenKnopf(e) {
@@ -6640,7 +6643,7 @@ function sichtungKnopf(e) {
       dispatch({ type: 'PIN_ANGELEGT', ll: s2.ll, name: sichtungsPinName(), dossier: e.id, notiz: 'Sichtungsentwurf zu ' + e.id + ' ' + e.name + ' (Ausgangspunkt: ' + s2.bez + ')' });
       const K = VIEW.karte; K.pick = null; K.lat = s2.ll[0]; K.lon = s2.ll[1]; K.zoom = Math.max(K.zoom, 14);
       const pid = K.auswahl;
-      dispatch({ type: 'NAVIGATION', modul: 'karte' });
+      VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
       setTimeout(function () { if (typeof karteWaehlen === 'function') karteWaehlen(pid, true); }, 0);          /* zentriert und wählt den Entwurfs-Pin */
     } }, 'Sichtung auf der Karte'),
     h('span', { class: 'note' }, st ? 'Setzt einen Entwurfs-Pin am Punkt: ' + st.bez + ' (' + st.ll[0].toFixed(4) + ', ' + st.ll[1].toFixed(4) + ').' : 'Kein Standort bekannt; die Sichtung wird im Reiter Sichtungen eingetragen.'));
