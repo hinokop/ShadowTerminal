@@ -689,7 +689,7 @@ function pinPopup(x, fertig) {
       h('label', { for: 'pin-notiz' }, 'Notiz'), h('textarea', { id: 'pin-notiz', rows: '3', maxlength: '1500', onchange: function (ev) { ab({ notiz: ev.target.value }); } }, x.notiz || '')),
     h('p', { class: 'k-pop-meta' }, n.length ? 'In der Nähe: ' + n.map(function (q) { return q.id + ' ' + kuerzen(q.name, 24) + ' (' + Math.round(q.d) + ' m)'; }).join('; ') : 'Keine bekannten Punkte im Umkreis von 1 km.'),
     h('div', { class: 'k-pop-akt' },
-      h('button', { type: 'button', class: 'link', id: 'pin-zentrum', onclick: function () { karteFlug(x.ll[0], x.ll[1], Math.max(K.zoom, 16.5), karteAuswahlAnzeige); } }, 'Zentrieren'),
+      h('button', { type: 'button', class: 'link', id: 'pin-zentrum', onclick: function () { karteFlug(x.ll[0], x.ll[1], Math.max(K.zoom, 16.5), karteAuswahlAnzeige, x.id); } }, 'Zentrieren'),
       h('button', { type: 'button', class: 'link', id: 'pin-export', title: 'Lageblatt als Textdatei speichern', onclick: function () { pinExport([x]); } }, 'Lageblatt als Text'),
       VIEW.draft['pin-weg'] === x.id ? h('button', { type: 'button', id: 'pin-weg-ja', onclick: function () { delete VIEW.draft['pin-weg']; K.auswahl = null; dispatch({ type: 'PIN_ENTFERNT', id: x.id }); } }, 'Wirklich entfernen')
         : h('button', { type: 'button', class: 'link', id: 'pin-weg', onclick: function () { VIEW.draft['pin-weg'] = x.id; karteAuswahlAnzeige(); } }, 'Entfernen'))]);
@@ -820,6 +820,7 @@ const WETTER = { cache: {}, laufend: false, zuletzt: 0 };
 function windRichtung(grad) { return ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'][Math.round(((grad % 360) + 360) % 360 / 45) % 8]; }
 function wetterStand(lat, lon) {
   if (!VIEW.karte.wetter || typeof fetch !== 'function') return null;
+  if (VIEW.karte.ebenen && VIEW.karte.ebenen.kacheln === false) return { offline: true };      /* Offline: keine externe Abfrage, auch nicht beim Zentrieren */
   const key = lat.toFixed(1) + ',' + lon.toFixed(1), c = WETTER.cache[key], jetzt = Date.now();
   if (c && jetzt - c.t < 15 * 60000) return c;
   if (!WETTER.laufend && jetzt - WETTER.zuletzt > 8000) {
@@ -830,37 +831,71 @@ function wetterStand(lat, lon) {
       .catch(function () { WETTER.cache[key] = { t: Date.now(), fehler: true }; })
       .then(function () { WETTER.laufend = false; karteStatusAkt(); });
   }
+  else if (!WETTER.retry) {                                /* gesperrt (laufende oder zu junge Abfrage): einmal nachfassen, damit der aktuelle Bezugspunkt nicht dauerhaft auf „wird abgerufen“ bleibt */
+    WETTER.retry = setTimeout(function () { WETTER.retry = null; karteStatusAkt(); }, Math.max(1000, 8200 - (jetzt - WETTER.zuletzt)));
+  }
   return c || { laden: true };
 }
 function wetterText(w) {
   if (!w) return '–';
+  if (w.offline) return 'Offline, keine Abfrage';
   if (w.laden) return 'wird abgerufen …';
   if (w.fehler || !w.c) return 'nicht erreichbar';
   const c = w.c, sicht = c.visibility != null ? (c.visibility >= 10000 ? ' · Sicht ' + Math.round(c.visibility / 1000) + ' km' : ' · Sicht ' + (c.visibility / 1000).toFixed(1).replace('.', ',') + ' km') : '';
   return Math.round(c.temperature_2m) + ' °C, ' + (WMO_TEXT[c.weather_code] || 'Wettercode ' + c.weather_code) + ' · Wind ' + Math.round(c.wind_speed_10m) + ' km/h ' + windRichtung(c.wind_direction_10m)
     + (c.wind_gusts_10m > c.wind_speed_10m + 15 ? ', Böen ' + Math.round(c.wind_gusts_10m) : '') + (c.precipitation > 0 ? ' · Niederschlag ' + String(c.precipitation).replace('.', ',') + ' mm' : '') + sicht + ' · ' + String(c.time || '').slice(11, 16) + 'Z';
 }
+/* Objektkontext der Lage-Box: Kennung des Objekts, auf das gezielt gesprungen wurde (Zone, Pin, Sichtung, Dossierort, Ausgangsort). */
+function karteBezugVon(id) {
+  if (!id) return null;
+  const zn = typeof karteZoneFinden === 'function' ? karteZoneFinden(id) : null;
+  if (zn) return { id: id, typ: zn.art === 'zugriff' ? 'Zugriffspunkt' : 'Zone', name: zn.profil ? zn.name : (zn.name || zn.id), ll: zn.ll, stand: zn.profil ? (zn.stand || zn.t) : null, filter: !!zn.profil };
+  const pn = (PROFIL.pins || []).find(function (x) { return x.id === id; });
+  if (pn && pn.ll) return { id: id, typ: 'Pin', name: pn.name, ll: pn.ll, stand: null, filter: true };
+  const ao = (PROFIL.ausgang || []).find(function (x) { return x.id === id; });
+  if (ao && ao.ll) return { id: id, typ: 'Ausgangsort', name: ao.name, ll: ao.ll, stand: null, filter: false };
+  const m = karteMarker().find(function (x) { return x.id === id; });
+  if (m && m.ll) return { id: id, typ: m.kat === 'sichtung' ? 'Sichtung' : 'Standort', name: m.name || id, ll: m.ll, stand: null, filter: false };
+  const e = entitaet(id), ll = e ? karteKoord(id) : null;
+  if (e && ll) return { id: id, typ: 'Dossier ' + e.typ, name: e.name, ll: ll, stand: null, filter: false };
+  return null;
+}
+function karteBezugSetzen(id) {
+  const K = VIEW.karte;
+  K.bezug = id && karteBezugVon(id) ? id : null;
+  if (K.bezug) K.statusOffen = true;
+}
 function karteStatusAkt() {
   const box = $('k-status');
   if (!box) return;
-  const def = STATE.vorlauf ? null : KM(), FL = karteFensterLage(), ci = STATE.agent && STATE.agent.checkin;
-  const stufen = pool().filter(function (e) { return e.typ !== 'Ort' && !infoGesperrt(e); }).map(function (e) { return bedrohung(e).stufe; });
-  const hoechst = stufen.length ? Math.max.apply(null, stufen) : null;
+  const K = VIEW.karte, def = STATE.vorlauf ? null : KM();
+  const bz = K.bezug ? karteBezugVon(K.bezug) : null;
+  if (K.bezug && !bz) K.bezug = null;
+  const ref = bz ? bz.ll : [K.lat, K.lon];
   const zeile = function (k, v, id) { return h('div', { class: 'k-st-z' }, h('span', { class: 'k-st-k' }, k), h('span', { class: 'k-st-v', id: id }, v)); };
-  let fenster = '–';
-  if (def) fenster = FL.aktiv.length ? 'aktiv: ' + FL.aktiv.map(function (w) { return w.id; }).join(', ') : FL.kommend.length ? 'nächstes in ' + dauerText((FL.kommend[0].von - FL.kommend[0].T) / 60000) : FL.liste.length ? 'keine offen' : 'keine';
-  const ciT = ci && ci.t && ci.standortId ? fmtZ(ci.t).slice(11, 16) + 'Z · vor ' + dauerText(Math.max(0, (Date.now() - Date.parse(ci.t)) / 60000)) : '–';
-  const kurz = (hoechst == null ? 'ohne Bewertung' : 'Stufe ' + hoechst) + (def ? ' · ' + offeneZiele() + ' von ' + def.ziele.length + ' Zielen offen' : '');
-  box.classList.toggle('offen', !!VIEW.karte.statusOffen);
-  box.replaceChildren.apply(box, [h('button', { type: 'button', class: 'k-st-kopf', id: 'k-st-t', 'aria-expanded': VIEW.karte.statusOffen ? 'true' : 'false', title: 'Gesamtlage ein- oder ausklappen. Die Lage je Standort zeigen die Zonen auf der Karte.', onclick: function () { VIEW.karte.statusOffen = !VIEW.karte.statusOffen; karteStatusAkt(); } },
-      h('span', null, 'LAGE'), h('span', { class: 'k-st-kurz' }, kurz), h('span', { class: 'k-eb-pfeil' }, VIEW.karte.statusOffen ? '▴' : '▾')),
-    VIEW.karte.statusOffen ? h('div', { class: 'k-st-body' },
-      zeile('Höchste Stufe im Bestand', hoechst == null ? '–' : hoechst + ' · ' + SCENARIO.bedrohungsstufen[hoechst], 'k-st-stufe'),
-      zeile('Letzter Check-in', ciT, 'k-st-ci'),
-      zeile('Offene Ziele', def ? offeneZiele() + ' von ' + def.ziele.length : '–', 'k-st-ziele'),
-      zeile('Zeitfenster', fenster, 'k-st-fenster'),
-      zeile('Licht', lichtText(VIEW.karte.lat, VIEW.karte.lon, Date.now() + VIEW.karte.dt * 3600000), 'k-st-licht'),
-      VIEW.karte.wetter ? zeile('Wetter', wetterText(wetterStand(VIEW.karte.lat, VIEW.karte.lon)) + (VIEW.karte.dt ? ' (Stand jetzt)' : ''), 'k-st-wetter') : null) : null].filter(Boolean));
+  let kurz = bz ? bz.typ + ' · ' + bz.name : 'Kartenmitte';
+  const zeilen = [];
+  if (bz) {
+    zeilen.push(zeile('Objekt', bz.typ + ' · ' + bz.name, 'k-st-objekt'), zeile('Position', bz.ll[0].toFixed(5) + ', ' + bz.ll[1].toFixed(5), 'k-st-pos'));
+    if (bz.stand) zeilen.push(zeile('Stand', fmtZ(bz.stand), 'k-st-stand'));
+    if (bz.filter) zeilen.push(h('div', { class: 'k-st-z' }, h('button', { type: 'button', class: 'link', id: 'k-st-protokoll', onclick: function () { K.kpObjekt = bz.id; K.kpFilter = ''; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen')));
+  } else zeilen.push(zeile('Position', 'Kartenmitte ' + K.lat.toFixed(3) + ', ' + K.lon.toFixed(3), 'k-st-pos'));
+  if (def) {                                         /* Auftragszeilen nur während eines Auftrags */
+    const FL = karteFensterLage(), ci = STATE.agent && STATE.agent.checkin;
+    const stufen = pool().filter(function (e) { return e.typ !== 'Ort' && !infoGesperrt(e); }).map(function (e) { return bedrohung(e).stufe; });
+    const hoechst = stufen.length ? Math.max.apply(null, stufen) : null;
+    let fenster = FL.aktiv.length ? 'aktiv: ' + FL.aktiv.map(function (w) { return w.id; }).join(', ') : FL.kommend.length ? 'nächstes in ' + dauerText((FL.kommend[0].von - FL.kommend[0].T) / 60000) : FL.liste.length ? 'keine offen' : 'keine';
+    const ciT = ci && ci.t && ci.standortId ? fmtZ(ci.t).slice(11, 16) + 'Z · vor ' + dauerText(Math.max(0, (Date.now() - Date.parse(ci.t)) / 60000)) : '–';
+    kurz = (bz ? bz.typ + ' · ' + bz.name + ' · ' : '') + (hoechst == null ? 'ohne Bewertung' : 'Stufe ' + hoechst) + ' · ' + offeneZiele() + ' von ' + def.ziele.length + ' Zielen offen';
+    zeilen.push(zeile('Höchste Stufe im Bestand', hoechst == null ? '–' : hoechst + ' · ' + SCENARIO.bedrohungsstufen[hoechst], 'k-st-stufe'),
+      zeile('Letzter Check-in', ciT, 'k-st-ci'), zeile('Offene Ziele', offeneZiele() + ' von ' + def.ziele.length, 'k-st-ziele'), zeile('Zeitfenster', fenster, 'k-st-fenster'));
+  }
+  zeilen.push(zeile('Licht', lichtText(ref[0], ref[1], Date.now() + K.dt * 3600000), 'k-st-licht'));
+  if (K.wetter) zeilen.push(zeile('Wetter', wetterText(wetterStand(ref[0], ref[1])) + (K.dt ? ' (Stand jetzt)' : ''), 'k-st-wetter'));
+  box.classList.toggle('offen', !!K.statusOffen);
+  box.replaceChildren.apply(box, [h('button', { type: 'button', class: 'k-st-kopf', id: 'k-st-t', 'aria-expanded': K.statusOffen ? 'true' : 'false', title: 'Lage ein- oder ausklappen. Die Lage je Standort zeigen die Zonen auf der Karte.', onclick: function () { K.statusOffen = !K.statusOffen; karteStatusAkt(); } },
+      h('span', null, 'LAGE'), h('span', { class: 'k-st-kurz' }, kurz), h('span', { class: 'k-eb-pfeil' }, K.statusOffen ? '▴' : '▾')),
+    K.statusOffen ? h('div', { class: 'k-st-body' }, zeilen) : null].filter(Boolean));
 }
 function karteFensterListe() {
   const liste = karteFenster(), K = VIEW.karte, T = Date.now() + K.dt * 3600000;
@@ -964,7 +999,7 @@ function zugriffPopup(zn, fertig) {
       h('label', { for: 'zp-r' }, 'Radius'), h('select', { id: 'zp-r', 'aria-label': 'Radius des Zugriffspunkts', onchange: function (ev) { dispatch({ type: 'ZONE_GEAENDERT', id: zn.id, r: Number(ev.target.value) }); } }, ZUGRIFF_RADIEN.map(function (r) { return h('option', { value: String(r), selected: r === zn.r }, r + ' m'); })),
       h('label', { for: 'zp-notiz' }, 'Notiz'), feldNotiz),
     h('p', { class: 'k-pop-meta' }, 'Potenzieller Zugriffspunkt, nicht bestätigt. Er gilt nur für diese Karte; die Streckenanalyse reichst du weiterhin im Auftrag ein.'),
-    h('div', { class: 'k-pop-akt' }, h('button', { type: 'button', class: 'link', id: 'k-pop-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 16.5), karteAuswahlAnzeige); } }, 'Zentrieren'),
+    h('div', { class: 'k-pop-akt' }, h('button', { type: 'button', class: 'link', id: 'k-pop-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 16.5), karteAuswahlAnzeige, zn.id); } }, 'Zentrieren'),
       h('button', { type: 'button', class: 'link', id: 'zp-lage', title: 'Führt die Markierung als Lagezone mit Bewertung und Meldungen', onclick: function () { dispatch({ type: 'ZONEN_MEHRFACH', ids: [zn.id], op: 'art', wert: 'lage' }); } }, 'Als Lagezone führen'),
       h('button', { type: 'button', class: 'link', id: 'zn-weg', onclick: function () { K.auswahl = null; dispatch({ type: 'ZONE_ENTFERNT', id: zn.id }); } }, 'Entfernen'))]);
 }
@@ -1017,7 +1052,7 @@ function eigeneZonePopup(zn, fertig) {
     h('div', { class: 'k-pop-akt' },
       h('button', { type: 'button', id: 'oz-stand', onclick: function () { const t = VIEW.draft['oz-bem-' + zn.id] || ''; delete VIEW.draft['oz-bem-' + zn.id]; dispatch({ type: 'OZONE_STAND', id: zn.id, bemerkung: t }); } }, 'Stand aktualisieren'),
       h('button', { type: 'button', class: 'link', id: 'oz-protokoll', onclick: function () { K.kpObjekt = zn.id; K.kpFilter = ''; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen'),
-      h('button', { type: 'button', class: 'link', id: 'oz-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 15), karteAuswahlAnzeige); } }, 'Zentrieren'),
+      h('button', { type: 'button', class: 'link', id: 'oz-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 15), karteAuswahlAnzeige, zn.id); } }, 'Zentrieren'),
       VIEW.draft['oz-weg'] === zn.id ? h('button', { type: 'button', id: 'oz-weg-ja', onclick: function () { delete VIEW.draft['oz-weg']; K.auswahl = null; dispatch({ type: 'OZONE_ENTFERNT', id: zn.id }); } }, 'Wirklich entfernen')
         : h('button', { type: 'button', class: 'link', id: 'oz-weg', onclick: function () { VIEW.draft['oz-weg'] = zn.id; karteAuswahlAnzeige(); } }, 'Entfernen'))].filter(Boolean));
 }
@@ -1045,7 +1080,7 @@ function zonePopup(zn, fertig) {
     !zn.auto && zn.verlauf && zn.verlauf.length ? feld('Verlauf', zn.verlauf.slice(-4).reverse().reduce(function (acc, v, k) { if (k) acc.push(h('br')); acc.push(fmtZ(v.t).slice(11, 16) + 'Z · ' + kuerzen(v.text.replace(/^ZN-\d+ „[^“]*“: /, ''), 110)); return acc; }, []), 'full') : null
   ];
   const selR = function (id) { return h('select', { id: 'zn-r', 'aria-label': 'Radius der Zone', onchange: function (ev) { dispatch({ type: id.indexOf('ZA-') === 0 ? 'ZONE_URTEIL' : 'ZONE_GEAENDERT', id: id, r: Number(ev.target.value) }); } }, Zt.radien.map(function (r) { return h('option', { value: String(r), selected: r === zn.r }, r + ' m'); })); };
-  const zentrum = h('button', { type: 'button', class: 'link', id: 'k-pop-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 13.5), karteAuswahlAnzeige); } }, 'Zentrieren');
+  const zentrum = h('button', { type: 'button', class: 'link', id: 'k-pop-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 13.5), karteAuswahlAnzeige, zn.id); } }, 'Zentrieren');
   if (zn.auto) {
     const u = zn.urteil, wahl = VIEW.draft['zu-stufe-' + zn.id], offen = u && u.status === 'beantragt';
     const stufeSel = h('select', { id: 'zu-stufe', 'aria-label': 'Eigene Einstufung', onchange: function (ev) {
@@ -1086,13 +1121,14 @@ function karteWaehlen(id, zentrieren) {
   const K = VIEW.karte, m = id ? (karteMarker().find(function (x) { return x.id === id; }) || (karteKoord(id) ? { ll: karteKoord(id) } : null) || (karteZoneFinden(id) ? { ll: karteZoneFinden(id).ll } : null)) : null;
   K.auswahl = id; K.mehr = [];
   const svg = $('k-svg');
-  if (zentrieren && m) { karteFlug(m.ll[0], m.ll[1], Math.max(K.zoom, 11), karteAuswahlAnzeige); }
+  if (zentrieren && m) { karteFlug(m.ll[0], m.ll[1], Math.max(K.zoom, 11), karteAuswahlAnzeige, id); }
   else if (svg) zeichneKarte(svg);
   karteAuswahlAnzeige();
   if (K.ansicht3d) karte3dSenden({ typ: 'karte3d-auswahl', id: id || null });
 }
 /* Weiche Kamerafahrt (550 ms); ohne Bewegungsreduktion */
-function karteFlug(lat, lon, zoom, fertig) {
+function karteFlug(lat, lon, zoom, fertig, bezugId) {
+  karteBezugSetzen(bezugId);                      /* gezielter Sprung setzt den Objektkontext der Lage-Box; Region, Europa und Welt löschen ihn */
   if (VIEW.karte.ansicht3d) { karte3dSenden({ typ: 'karte3d-flug', center: [lon, lat], zoom: Math.max(15, zoom || 15) }); if (fertig) fertig(); return; }
   const K = VIEW.karte, a = { lat: K.lat, lon: K.lon, zoom: K.zoom }, t0 = performance.now();
   if (K.flug) cancelAnimationFrame(K.flug);
@@ -1249,6 +1285,7 @@ function karteSteuerung(svg) {
     const r = svg.getBoundingClientRect(), f = KW / r.width, dx = (ev.clientX - zug.x) * f, dy = (ev.clientY - zug.y) * f;
     if (!zug.bewegt && Math.abs(dx) + Math.abs(dy) < 4) return;
     zug.bewegt = true; zug.x = ev.clientX; zug.y = ev.clientY;
+    if (K.bezug) { K.bezug = null; karteStatusAkt(); }          /* eigenes Verschieben: die Box fällt auf die Kartenmitte zurück (die Zentrieranimation löst das nicht aus) */
     const Wd = 256 * Math.pow(2, K.zoom);
     K.lon -= dx / Wd * 360; K.lat = Math.max(-80, Math.min(80, mercInv(merc(K.lat) + dy * 2 * Math.PI / Wd)));
     neu();
