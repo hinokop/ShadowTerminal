@@ -14,6 +14,7 @@ const BEKANNT = { m1flow: 'Missionsablauf, auch auf main rot', abd: 'unzuverläs
 const FEHLER = /(^|\s)FAIL\b|FEHLER: [1-9]|Fehlschläge: [1-9]|Error/;
 const ausgabe = path.join(process.env.TMPDIR || os.tmpdir(), 'ft-out'); fs.mkdirSync(ausgabe, { recursive: true });
 const wahl = process.argv.slice(2);
+if (!fs.existsSync(path.join(__dirname, '..', 'kartenschluessel.js'))) console.log('Hinweis: ../kartenschluessel.js fehlt (lokale Datei, nie einchecken). Ohne sie erscheint ein Startfehler, einige Tests (zum Beispiel zn, pn) scheitern dann.\n');
 function lauf(name) {
   return new Promise(res => {
     const datei = path.join(__dirname, name + '.js');
