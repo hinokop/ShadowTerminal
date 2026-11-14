@@ -29,6 +29,9 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   const dateiHashOk = man.dateien.length === 1 && man.dateien[0].sha256 === sha && man.dateien[0].status === 'ok';
   /* ganzes Profil für den Profilimport-Test */
   const profil = await A.evaluate(() => { profilSpeichern(); const o = {}; Object.keys(PROFIL).forEach(k => { if (k !== 'leer') o[k] = PROFIL[k]; }); return JSON.stringify(o); });
+  /* zweites Paket mit zwei Dateien und einer Unterlage ohne Fundstelle */
+  const paket2 = await A.evaluate(async () => { const d = STATE.dossiers.auswahl, f = PROFIL.recherche.faelle[0].id, blob = new Blob([new Uint8Array([7, 7, 7, 7, 1])], { type: 'application/pdf' }); await RIDB.put('ANH-paket2', blob); const hash = await rchHash(blob);
+    dispatch({ type: 'RECHERCHE_BELEG', dossier: d, fall: f, neuerFall: null, art: 'Datei', herkunft: '', notiz: '', fassung: { dateiname: 'zwei.pdf', groesse: blob.size, typ: 'application/pdf', hash: hash, anhang: 'ANH-paket2' }, fundstelle: { typ: 'Seite', wert: '1' }, zitat: '' }); return (await rchPaketBauen(f)).text; });
   /* --- Zielprofil B (leer) --- */
   const B = await neu();
   const lade = (p, text, name) => p.evaluate(async ([t, n]) => { rchPaketLaden(new File([t], n, { type: 'application/json' })); await new Promise(r => setTimeout(r, 1800)); return document.getElementById('sys-msg').textContent; }, [text, name || 'paket.json']);
@@ -41,6 +44,22 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   const msg2 = await lade(B, paket); const b2 = await stand(B);
   /* Manipulation: Inhalt, Datei */
   const Pi = JSON.parse(paket); Pi.inhalt.beobachtungen[0].zitat = 'verfälscht'; const msgInh = await lade(B, JSON.stringify(Pi)); const b3 = await stand(B);
+  /* Wiederherstellung: Datensätze vorhanden, Datei fehlt; dasselbe Paket legt sie wieder ab */
+  const schl = await B.evaluate(() => PROFIL.recherche.fassungen.find(x => x.anhang).anhang);
+  await B.evaluate(k => RIDB.del(k), schl); const w0 = await stand(B);
+  const msgW = await lade(B, paket); const w1 = await stand(B);
+  const wDatei = await B.evaluate(async k => { const bl = await RIDB.get(k); return bl ? await rchHash(bl) : null; }, schl);
+  /* Dateikollision: unter demselben Schlüssel liegt anderer Inhalt; Wiederholungsimport ergibt dieselbe Zuordnung */
+  const G = await neu();
+  const kol = JSON.parse(paket).manifest.dateien[0].key;
+  await G.evaluate(k => RIDB.put(k, new Blob(['fremd'], { type: 'application/pdf' })), kol);
+  const anhaenge = p => p.evaluate(() => PROFIL.recherche.fassungen.map(x => x.anhang).filter(Boolean).sort().join(','));
+  await lade(G, paket); const g1 = await stand(G), ga1 = await anhaenge(G); await lade(G, paket); const g2 = await stand(G), ga2 = await anhaenge(G);
+  /* Abbruch bei der zweiten Datei: die erste bleibt nicht zurück */
+  const H = await neu(); const h0 = await stand(H);
+  const msgH = await H.evaluate(async t => { const orig = RIDB.put; let n = 0; RIDB.put = function (k, bl) { n += 1; return n === 2 ? Promise.reject(new Error('Schreibfehler')) : orig.call(RIDB, k, bl); };
+    rchPaketLaden(new File([t], 'p2.json')); await new Promise(r => setTimeout(r, 1800)); RIDB.put = orig; return document.getElementById('sys-msg').textContent; }, paket2);
+  const h1 = await stand(H);
   /* --- Profil C mit Nummernkonflikt: eigener Fall F-001 anderer Inhalt, Dossier mit gleicher Nummer anderer Name --- */
   const C = await neu();
   await C.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Andere Person', land: 'DE' }); const d = STATE.dossiers.eigene[0];
@@ -73,8 +92,11 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
     vollerSpeicher: d1.f === 0 && d1.q === 0 && d1.b === 0 && d1.a === 0 && d1.dos === d0.dos && d1.keys === d0.keys && d1.log === 0 && /nicht gespeichert/i.test(voll),
     profilimportKonflikt: pm.faelle === 1 && pm.aussagen === 1 && /nicht zuordenbar/.test(pm.msg) && /Belegdateien sind nicht Teil/.test(pm.msg),
     profilimportRecherche: pf.a === 1 && pf.b === 2 && pf.ei === 'dafuer' && pf.dossier && pf.gespeichert === 1,
+    dateiWiederhergestellt: w0.keys === w1.keys - 1 && w1.b === w0.b && w1.q === w0.q && wDatei === sha && /wiederhergestellt/.test(msgW),
+    dateikollisionWiederholung: g1.b === 2 && g2.b === 2 && g1.keys === 2 && g2.keys === 2 && ga1 === ga2 && ga1.indexOf(kol + '-') >= 0 && g1.q === g2.q && g1.v === g2.v,
+    abbruchRaeumtAuf: h0.keys === 0 && h1.keys === 0 && h1.f === 0 && h1.b === 0 && h1.log === 0 && /nicht übernommen/.test(msgH),
     keineFehler: err.length === 0
   };
-  console.log(JSON.stringify({ r, msg1, msg2, msgInh, msgK, voll, pm, konflikt, err }));
+  console.log(JSON.stringify({ r, msgW, msgH, g1, g2, w0, w1, msg1, msg2, msgInh, msgK, voll, pm, konflikt, err }));
   await b.close(); process.exit(Object.values(r).every(v => v === true) ? 0 : 1);
 })();

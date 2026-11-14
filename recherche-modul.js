@@ -62,10 +62,12 @@ function rchWiederherstellen(sicher) {
 }
 /* Führt eine Aktion aus und nimmt sie samt Protokolleintrag zurück, wenn sie das Profil ändert, dieses aber nicht gespeichert werden kann. Liefert true bei Erfolg. */
 function rchSchreiben(aktion, aktionsName, zurueck) {
+  rchSchreiben.fehler = false;
   const R = PROFIL.recherche, sicher = JSON.stringify(R), logN = STATE.log.length;
   dispatch(aktion);
   if (JSON.stringify(R) === sicher && !(typeof zurueck === 'function' && zurueck.geaendert && zurueck.geaendert())) return false;   /* nichts geändert (abgelehnt) */
   if (profilSpeichern()) return true;
+  rchSchreiben.fehler = true;                                           /* Speichern gescheitert (nicht: nichts zu ändern) */
   rchWiederherstellen(sicher);
   if (typeof zurueck === 'function') zurueck();
   for (let i = STATE.log.length - 1; i >= logN && i >= 0; i--) { if (STATE.log[i].detail && STATE.log[i].aktion === aktionsName) { STATE.log.splice(i, 1); break; } }
@@ -523,17 +525,20 @@ function rchPaketLaden(file) {
   r.onerror = function () { meldung('Fallpaket nicht lesbar.'); };
   r.onload = function () {
     let o = null; try { o = JSON.parse(String(r.result)); } catch (x) { /* ungültig */ }
+    const neu = [];                                                     /* nur Dateien dieses Importversuchs */
+    const aufraeumen = function () { return Promise.all(neu.map(function (k) { return RIDB.del(k).catch(function () {}); })); };
     rchPaketPruefen(o).then(function (p) {
       if (p.fehler.length) { meldung('Fallpaket abgelehnt, nichts übernommen: ' + p.fehler.join('; ') + '.'); return null; }
-      const neu = [], dateiKey = {};
+      const dateiKey = {};
       return Object.keys(p.blobs).reduce(function (kette, k) {
         return kette.then(function () {
           return RIDB.get(k).then(function (vorhanden) {
-            if (!vorhanden) { return RIDB.put(k, p.blobs[k].blob).then(function () { neu.push(k); }); }
+            if (!vorhanden) { return RIDB.put(k, p.blobs[k].blob).then(function () { neu.push(k); }); }          /* fehlende Datei: wird (wieder) abgelegt */
             return rchHash(vorhanden).then(function (h1) {
               if (h1 === p.blobs[k].hash) return null;                                  /* dieselbe Datei liegt schon vor */
-              const k2 = 'ANH-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-              dateiKey[k] = k2; return RIDB.put(k2, p.blobs[k].blob).then(function () { neu.push(k2); });
+              /* anderer Inhalt unter demselben Schlüssel: Ersatzschlüssel aus dem Inhalt, damit ein Wiederholungsimport dieselbe Zuordnung ergibt */
+              const k2 = k + '-' + p.blobs[k].hash.slice(0, 12); dateiKey[k] = k2;
+              return RIDB.get(k2).then(function (da) { return da ? null : RIDB.put(k2, p.blobs[k].blob).then(function () { neu.push(k2); }); });
             });
           });
         });
@@ -547,13 +552,14 @@ function rchPaketLaden(file) {
         zurueck.geaendert = function () { return STATE.dossiers.eigene.length !== vorEigene.length; };
         const ok = rchSchreiben({ type: 'RECHERCHE_PAKET_IMPORT', inhalt: o.inhalt, dateiKey: dateiKey, datei: file.name }, 'Fallpaket geladen', zurueck);
         if (!ok) {
-          neu.forEach(function (k) { RIDB.del(k).catch(function () {}); });             /* nichts bleibt halb übernommen */
-          if (RCH_LETZTER && !(RCH_LETZTER.z.neu || RCH_LETZTER.z.neueNr || RCH_LETZTER.dossiers)) meldung('Fallpaket ' + o.inhalt.fall.id + ' ist bereits vollständig vorhanden, nichts geändert.');
+          if (rchSchreiben.fehler || !RCH_LETZTER) { aufraeumen(); }                      /* gescheitert: nichts bleibt halb übernommen */
+          else if (neu.length) meldung('Fallpaket ' + o.inhalt.fall.id + ': ' + neu.length + ' fehlende Belegdatei(en) wiederhergestellt, Datensätze unverändert.');
+          else meldung('Fallpaket ' + o.inhalt.fall.id + ' ist bereits vollständig vorhanden, nichts geändert.');
         } else if (!p.fehlend.length) meldung('Fallpaket ' + o.inhalt.fall.id + ' geladen: ' + rchZusammenfassung(RCH_LETZTER.z) + (RCH_LETZTER.dossiers ? '; ' + RCH_LETZTER.dossiers + ' Dossier(s) neu angelegt' : '') + '.');
         else if (p.fehlend.length) meldung('Hinweis: ' + p.fehlend.length + ' Belegdatei(en) fehlten schon im Paket (' + p.fehlend.join(', ') + ').');
         renderModule();
       });
-    }).catch(function () { meldung('Fallpaket konnte nicht übernommen werden (Browserspeicher nicht verfügbar).'); });
+    }).catch(function () { aufraeumen(); meldung('Fallpaket konnte nicht übernommen werden (Browserspeicher nicht verfügbar); nichts übernommen.'); });
   };
   r.readAsText(file);
 }
