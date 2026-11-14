@@ -5089,7 +5089,7 @@ const ACTIONS = {
     if (de) px.dossier = de.id;                                   /* Bezug zum Dossier (Sichtungsentwurf) */
     PROFIL.pins.push(px);
     VIEW.karte.auswahl = id;
-    return { modul: 'Karte', aktion: 'Pin gesetzt', detail: id + ' bei ' + Number(a.ll[0]).toFixed(4) + ', ' + Number(a.ll[1]).toFixed(4) };
+    return { modul: 'Karte', aktion: 'Pin gesetzt', detail: px.name + ' bei ' + Number(a.ll[0]).toFixed(4) + ', ' + Number(a.ll[1]).toFixed(4) };
   },
   PIN_GEAENDERT: function (a) {
     const x = (PROFIL.pins || []).find(function (y) { return y.id === a.id; });
@@ -5099,14 +5099,14 @@ const ACTIONS = {
     if (a.umgebung && typeof a.umgebung === 'object') PIN_UMGEBUNG.forEach(function (u) { if (typeof a.umgebung[u[0]] === 'string') { const t = a.umgebung[u[0]].trim().slice(0, 300); if (t) x.umgebung[u[0]] = t; else delete x.umgebung[u[0]]; } });
     if (typeof a.notiz === 'string') x.notiz = a.notiz.slice(0, 1500);
     x.stand = nowIso();
-    return { modul: 'Karte', aktion: 'Pin geändert', leicht: true, detail: x.id + ' ' + x.name };
+    return { modul: 'Karte', aktion: 'Pin geändert', leicht: true, detail: x.name };
   },
   PIN_ENTFERNT: function (a) {
     const i = (PROFIL.pins || []).findIndex(function (y) { return y.id === a.id; });
     if (i < 0) return null;
     const x = PROFIL.pins.splice(i, 1)[0];
     if (VIEW.karte.auswahl === x.id) VIEW.karte.auswahl = null;
-    return { modul: 'Karte', aktion: 'Pin entfernt', detail: x.id + ' ' + x.name };
+    return { modul: 'Karte', aktion: 'Pin entfernt', detail: x.name };
   },
   AUSGANG_ANGELEGT: function (a) {
     const name = String(a.name || '').trim().slice(0, 80);
