@@ -346,7 +346,7 @@ fieldset:disabled .opt{color:var(--text-dim)}
 .k-zone.ruhig{--zc:#5B8DB8}.k-zone.leicht{--zc:#C9A04A}.k-zone.bedroht{--zc:#D9824A}.k-zone.akut{--zc:#C4605A}
 .k-zone.sel .k-zone-ring{stroke-width:2.2;stroke-dasharray:none}.k-zone.sel .k-zone-fl{fill-opacity:.16}
 .k-zone.eigen .k-zone-ring{stroke-dasharray:2 3}
-.k-zone.profil{--zc:#8FA3B8}.k-zone.profil .k-zone-ring{stroke-dasharray:6 2}
+.k-zone.profil{--zc:#E08A00}.k-zone.profil .k-zone-ring{stroke-dasharray:6 2}
 .k-zone.zugriff{--zc:#5FB3A8}.k-zone.zugriff .k-zone-ring{stroke-dasharray:1 3}.k-zone .k-zone-kreuz{stroke:var(--zc);stroke-width:1.3}
 .k-zone.mehr .k-zone-ring{stroke:#fff;stroke-width:2.4;stroke-dasharray:none}.k-zone.mehr .k-zone-fl{fill-opacity:.18}
 .k-ziel{fill:none;stroke:#E0E4E8;stroke-width:1;stroke-dasharray:1.5 2.5;opacity:.9}
@@ -363,7 +363,7 @@ fieldset:disabled .opt{color:var(--text-dim)}
 .k-popup.links{transform:translate(calc(-100% - 18px),-24px)}
 .k-popup.unten{transform:translate(18px,calc(-100% + 24px))}
 .k-popup.links.unten{transform:translate(calc(-100% - 18px),calc(-100% + 24px))}
-.k-pop-kopf{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.k-pop-kopf{cursor:move;touch-action:none;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)}
 .k-pop-x{font-size:16px;line-height:1;padding:0 4px}
 .k-pop-body{padding:8px 10px 10px}
 .k-pop-body p{margin:0 0 6px}
@@ -5134,6 +5134,7 @@ const ACTIONS = {
     if (Array.isArray(a.zwecke)) x.zwecke = PIN_ZWECKE.filter(function (z) { return a.zwecke.indexOf(z) >= 0; });
     if (a.umgebung && typeof a.umgebung === 'object') PIN_UMGEBUNG.forEach(function (u) { if (typeof a.umgebung[u[0]] === 'string') { const t = a.umgebung[u[0]].trim().slice(0, 300); if (t) x.umgebung[u[0]] = t; else delete x.umgebung[u[0]]; } });
     if (typeof a.notiz === 'string') x.notiz = a.notiz.slice(0, 1500);
+    if ('dossier' in a) { const de = a.dossier ? entitaet(a.dossier) : null; if (de) x.dossier = de.id; else delete x.dossier; }
     x.stand = nowIso();
     return { modul: 'Karte', aktion: 'Pin geändert', leicht: true, objekt: x.id, objektName: x.name, detail: x.name };
   },
