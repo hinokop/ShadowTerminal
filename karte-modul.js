@@ -1161,7 +1161,7 @@ function karte3dHost() {
 function karte3dRahmen() {
   if (!webglVorhanden()) return h('div', { class: 'k-3d k-3d-hinweis', id: 'k-3d-hinweis' },
     h('p', null, 'Die 3D-Ansicht benötigt Grafikbeschleunigung (WebGL). In diesem Fenster ist sie abgeschaltet.'),
-    h('p', { class: 'dim' }, 'Der Start über START_3D.bat lässt sie zu. Die Starter START.bat, START_LOKAL.bat, START_SICHER.bat und START.vbs schalten die Grafikbeschleunigung bewusst ab, weil sie auf manchen Rechnern ein schwarzes Fenster verursacht.'));
+    h('p', { class: 'dim' }, 'Der Start über START_3D.bat lässt sie zu.'));
   karte3dHost();
   const platz = h('div', { class: 'k-3d-platz' });
   KARTE3D.platz = platz;

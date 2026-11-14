@@ -82,3 +82,6 @@ Umgesetzt (Modul 8, `recherche-modul.js`): Fall, Quelle, Fassung, Beobachtung, F
 - Verschlüsselung: entschieden, nicht gefordert. Das Werkzeug ist ein privates Einzelnutzer-Werkzeug auf privaten Geräten und im privaten Repository. Die Zugangskulisse (Kennwort, Startsequenz) bleibt Stilmittel und wird nicht als Schutz dargestellt. Die Oberfläche zeigt „lokaler Speicher“, ohne Sicherheitsversprechen.
 - Karte: bleibt wie sie ist (2D und 3D, Start über `START_3D.bat`). Der Vertrag macht dazu keine Vorgabe.
 - Referenzfall: Radweg (Beschluss Juni, Pressemitteilung Juli, zwei Medien zitieren dieselbe Mitteilung).
+
+## Umsetzungsstand Aussagenregister
+Umgesetzt: Aussage (A-nnn) je Fall und Dossier, Status, stützende und widersprechende Belege mit Prüfstand je Verknüpfung, Einschätzung nur mit Begründung und nur mit passendem Beleg (positiv: mindestens ein stützender, negativ: mindestens ein widersprechender), "strittig" und "ohne Fundstelle" werden angezeigt, nicht gerechnet. Wird der letzte stützende Beleg gelöst, entfällt eine positive Einschätzung, die Begründung bleibt. Nicht umgesetzt: Export im Fallpaket.
