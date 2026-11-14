@@ -147,6 +147,7 @@ body.emb #bar{left:auto;right:56px}
       else if(d.typ==='karte3d-auswahl'){ auswahl(d.id); }
       else if(d.typ==='karte3d-flug'){ map.flyTo({center:d.center,zoom:Math.max(map.getZoom(),d.zoom||16),duration:900}); }
     });
+    map.on('dragstart',function(){parent.postMessage({typ:'karte3d-nutzer-bewegt'},'*');});   /* nur eigenes Ziehen; flyTo löst dragstart nicht aus, moveend dagegen auch nach Animationen */
     map.on('moveend',function(){var c=map.getCenter();parent.postMessage({typ:'karte3d-kamera',kamera:{center:[c.lng,c.lat],zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()}},'*');});
   } else {
     var sc=document.createElement('script'); sc.src='szenario.js';
