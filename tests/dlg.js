@@ -1,6 +1,6 @@
 const {JSDOM}=require('jsdom'); const fs=require('fs');
-let html=fs.readFileSync('/home/claude/index.html','utf8');
-const sz=fs.readFileSync('/home/claude/szenario.js','utf8'), dl=fs.readFileSync('/home/claude/dialog.js','utf8');
+let html=fs.readFileSync(require('path').join(require('./_pfad.js').ROOT, 'index.html'),'utf8');
+const sz=fs.readFileSync(require('path').join(require('./_pfad.js').ROOT, 'szenario.js'),'utf8'), dl=fs.readFileSync(require('path').join(require('./_pfad.js').ROOT, 'dialog.js'),'utf8');
 const noDlg=process.argv[2]==='nodlg';
 html=html.replace('<script src="szenario.js"></script>','<script>'+sz+'</script>').replace('<script src="dialog.js"></script>',noDlg?'':'<script>'+dl+'</script>')
  .replace('const AUFBAU_STUFE_MS = [1200, 2800];','const AUFBAU_STUFE_MS = [60, 80];').replace('const AUFBAU_KURZ_MS = [450, 800];','const AUFBAU_KURZ_MS = [20, 30];');

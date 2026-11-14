@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1000}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});MS('M1').beginn=new Date(Date.now()-3600000).toISOString();alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});});
 const chat=(k,t)=>p.evaluate(([k,t])=>{dispatch({type:'NACHRICHT_GESENDET',kanal:k,text:t,dringlichkeit:'Routine'});const q=STATE.plan||[];return null},[k,t]);

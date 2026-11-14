@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:900}});
 const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(500);
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(500);
 await p.fill('#gate-pw','geheim-pw-123');await p.fill('#gate-pw2','geheim-pw-123');await p.click('#gate-go');
 await p.waitForSelector('body:not(.locked)',{timeout:20000});await p.waitForTimeout(600);
 await p.screenshot({path:'/tmp/t/r_profil.png'});

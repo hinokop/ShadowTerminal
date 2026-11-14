@@ -1,6 +1,6 @@
 const {JSDOM}=require('jsdom'); const fs=require('fs');
-let html=fs.readFileSync('/home/claude/index.html','utf8');
-const sz=fs.readFileSync('/home/claude/szenario.js','utf8');
+let html=fs.readFileSync(require('path').join(require('./_pfad.js').ROOT, 'index.html'),'utf8');
+const sz=fs.readFileSync(require('path').join(require('./_pfad.js').ROOT, 'szenario.js'),'utf8');
 html=html.replace('<script src="szenario.js"></script>','<script>'+sz+'</script>');
 // verkürzte Zeiten für den Test
 html=html.replace('const SPERRE_SEK = [60, 120, 300];','const SPERRE_SEK = [2, 3, 5];')

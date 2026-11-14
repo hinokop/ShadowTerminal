@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1920,height:1080}})).newPage();let n=0;
 p.on('request',r=>{if(r.url().includes('cartocdn'))n++});
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});await p.keyboard.press('6');await p.waitForTimeout(400);
 await p.evaluate(()=>{VIEW.karte.anbieter='eigen';VIEW.karte.url='https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=TEST';VIEW.karte.ebenen.kacheln=true;VIEW.karte.lat=52.49;VIEW.karte.lon=13.45;VIEW.karte.zoom=13.8;renderModule()});await p.waitForTimeout(2500);
 console.log('Erstansicht',n);let a=n;

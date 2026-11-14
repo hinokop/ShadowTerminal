@@ -1,7 +1,7 @@
 /* Regressionstest aus dem Erkennungsprotokoll 2026-11-11 plus Strukturfälle */
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:1000}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
-await p.addInitScript(()=>{window.__ARGUS_ERGEBNIS='direkt'});await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.addInitScript(()=>{window.__ARGUS_ERGEBNIS='direkt'});await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});});
 await p.evaluate(()=>{STATE.plan.filter(x=>x.typ==='verlauf'&&Date.parse(x.faelligAm)<Date.now()+120000).forEach(x=>{x.faelligAm=new Date(Date.now()-1000).toISOString()});});await p.waitForTimeout(4000);
