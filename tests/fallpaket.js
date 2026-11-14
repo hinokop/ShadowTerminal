@@ -25,7 +25,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
     dispatch({ type: 'RECHERCHE_PRUEFSTAND', aussage: x.id, beob: R.beobachtungen[0].id, stand: 'geprueft' }); return x.id; });
   const paket = await A.evaluate(async f => (await rchPaketBauen(f)).text, fall);
   const P = JSON.parse(paket); const man = P.manifest;
-  const hashOk = await A.evaluate(async t => { const o = JSON.parse(t); return (await rchTextHash(rchKanon(o.inhalt))) === o.manifest.inhaltHash; }, paket);
+  const hashOk = await A.evaluate(async t => { const o = JSON.parse(t); return (await rchTextHash(rchKanon({ inhalt: o.inhalt, dateien: o.manifest.dateien }))) === o.manifest.inhaltHash; }, paket);
   const dateiHashOk = man.dateien.length === 1 && man.dateien[0].sha256 === sha && man.dateien[0].status === 'ok';
   /* ganzes Profil für den Profilimport-Test */
   const profil = await A.evaluate(() => { profilSpeichern(); const o = {}; Object.keys(PROFIL).forEach(k => { if (k !== 'leer') o[k] = PROFIL[k]; }); return JSON.stringify(o); });
@@ -60,6 +60,10 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   const msgH = await H.evaluate(async t => { const orig = RIDB.put; let n = 0; RIDB.put = function (k, bl) { n += 1; return n === 2 ? Promise.reject(new Error('Schreibfehler')) : orig.call(RIDB, k, bl); };
     rchPaketLaden(new File([t], 'p2.json')); await new Promise(r => setTimeout(r, 1800)); RIDB.put = orig; return document.getElementById('sys-msg').textContent; }, paket2);
   const h1 = await stand(H);
+  /* Dateiinhalt verändert: einmal mit altem Manifest, einmal mit nachgezogener Dateiprüfsumme im Manifest; beides wird abgelehnt */
+  const T1 = JSON.parse(paket), kt = Object.keys(T1.dateien)[0]; T1.dateien[kt] = Buffer.from('anderer Inhalt').toString('base64');
+  const T2 = JSON.parse(JSON.stringify(T1)); T2.manifest.dateien[0].sha256 = crypto.createHash('sha256').update('anderer Inhalt').digest('hex');
+  const bt0 = await stand(B); const msgT1 = await lade(B, JSON.stringify(T1)); const msgT2 = await lade(B, JSON.stringify(T2)); const bt1 = await stand(B);
   /* --- Profil C mit Nummernkonflikt: eigener Fall F-001 anderer Inhalt, Dossier mit gleicher Nummer anderer Name --- */
   const C = await neu();
   await C.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Andere Person', land: 'DE' }); const d = STATE.dossiers.eigene[0];
@@ -92,6 +96,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
     vollerSpeicher: d1.f === 0 && d1.q === 0 && d1.b === 0 && d1.a === 0 && d1.dos === d0.dos && d1.keys === d0.keys && d1.log === 0 && /nicht gespeichert/i.test(voll),
     profilimportKonflikt: pm.faelle === 1 && pm.aussagen === 1 && /nicht zuordenbar/.test(pm.msg) && /Belegdateien sind nicht Teil/.test(pm.msg),
     profilimportRecherche: pf.a === 1 && pf.b === 2 && pf.ei === 'dafuer' && pf.dossier && pf.gespeichert === 1,
+    dateiManipulationAbgelehnt: JSON.stringify(bt0) === JSON.stringify(bt1) && /abgelehnt/.test(msgT1) && /abgelehnt/.test(msgT2),
     dateiWiederhergestellt: w0.keys === w1.keys - 1 && w1.b === w0.b && w1.q === w0.q && wDatei === sha && /wiederhergestellt/.test(msgW),
     dateikollisionWiederholung: g1.b === 2 && g2.b === 2 && g1.keys === 2 && g2.keys === 2 && ga1 === ga2 && ga1.indexOf(kol + '-') >= 0 && g1.q === g2.q && g1.v === g2.v,
     abbruchRaeumtAuf: h0.keys === 0 && h1.keys === 0 && h1.f === 0 && h1.b === 0 && h1.log === 0 && /nicht übernommen/.test(msgH),
