@@ -1020,6 +1020,7 @@ function kartenObjektZeigen(id) {
   dispatch({ type: 'NAVIGATION', modul: 'karte' });
   if (typeof karteBezugSetzen === 'function') karteBezugSetzen(id);
   renderModule();
+  if (K.ansicht3d) karteFlug(ziel.ll[0], ziel.ll[1], K.zoom);
 }
 /* Eigene Zone (Profil): neutrale Darstellung ohne Bewertung, Handler und Zeitgeber; Schaltflächen benennen ihre tatsächliche Wirkung */
 function eigeneZonePopup(zn, fertig) {

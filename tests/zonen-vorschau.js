@@ -56,6 +56,10 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   ok.unterlageZeigtZone = await p.evaluate(() => !!document.getElementById('rch-karte-B-001')) || await p.evaluate(() => { const e = entitaet(STATE.dossiers.auswahl), n = rchUnterlageZeile(e, rchUnterlagen(e, 'F-001', true)[0]); document.body.appendChild(n); const t = !!document.getElementById('rch-karte-B-001'); n.remove(); return t; });
   await p.click('#rch-orte [data-ort="ZO-001"]'); await p.waitForTimeout(500);
   ok.zeigenSpringtZurKarte = await p.evaluate(() => STATE.ui.modul === 'karte' && VIEW.karte.auswahl === 'ZO-001' && !!document.querySelector('.k-zone.profil[data-id="ZO-001"]'));
+  /* Rücksprung bei aktiver 3D-Ansicht: Kamerafahrt zum Ziel */
+  await p.evaluate(() => { VIEW.karte.ansicht3d = true; VIEW.karte.auswahl = null; window.__gesendet = []; kartenObjektZeigen('ZO-001'); });
+  ok.rueckbezug3DKamera = await p.evaluate(() => { const z = PROFIL.zonen[0]; return window.__gesendet.some(m => m.typ === 'karte3d-flug' && Math.abs(m.center[0] - z.ll[1]) < 1e-9 && Math.abs(m.center[1] - z.ll[0]) < 1e-9); });
+  await p.evaluate(() => { VIEW.karte.ansicht3d = false; renderModule(); });
   ok.keineFehler = err.length === 0;
   console.log(JSON.stringify(ok, null, 1)); if (err.length) console.log(err.slice(0, 5));
   await b.close(); process.exit(Object.values(ok).every(Boolean) ? 0 : 1);
