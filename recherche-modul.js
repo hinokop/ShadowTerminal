@@ -9,7 +9,7 @@ VIEW.recherche = VIEW.recherche || {};
 PROFIL.recherche = PROFIL.recherche || { faelle: [], quellen: [], fassungen: [], beobachtungen: [], aussagen: [], seq: { fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 } };
 ['faelle', 'quellen', 'fassungen', 'beobachtungen', 'aussagen'].forEach(function (k) { PROFIL.recherche[k] = PROFIL.recherche[k] || []; });
 PROFIL.recherche.seq = Object.assign({ fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 }, PROFIL.recherche.seq || {});
-PROFIL_AKTIONEN.RECHERCHE_BELEG = 1;
+PROFIL_AKTIONEN.RECHERCHE_BELEG = 1; PROFIL_AKTIONEN.RECHERCHE_PAKET_IMPORT = 1;
 
 const RCH_MAX = 20 * 1024 * 1024;
 const RCH_FUNDSTELLEN = ['Seite', 'Absatz', 'Zeitmarke', 'Zeichenbereich', 'ganze Datei'];
@@ -61,12 +61,15 @@ function rchWiederherstellen(sicher) {
   R.seq = Object.assign({ fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 }, alt.seq);
 }
 /* Führt eine Aktion aus und nimmt sie samt Protokolleintrag zurück, wenn sie das Profil ändert, dieses aber nicht gespeichert werden kann. Liefert true bei Erfolg. */
-function rchSchreiben(aktion, aktionsName) {
+function rchSchreiben(aktion, aktionsName, zurueck) {
+  rchSchreiben.fehler = false;
   const R = PROFIL.recherche, sicher = JSON.stringify(R), logN = STATE.log.length;
   dispatch(aktion);
-  if (JSON.stringify(R) === sicher) return false;                       /* nichts geändert (abgelehnt) */
+  if (JSON.stringify(R) === sicher && !(typeof zurueck === 'function' && zurueck.geaendert && zurueck.geaendert())) return false;   /* nichts geändert (abgelehnt) */
   if (profilSpeichern()) return true;
+  rchSchreiben.fehler = true;                                           /* Speichern gescheitert (nicht: nichts zu ändern) */
   rchWiederherstellen(sicher);
+  if (typeof zurueck === 'function') zurueck();
   for (let i = STATE.log.length - 1; i >= logN && i >= 0; i--) { if (STATE.log[i].detail && STATE.log[i].aktion === aktionsName) { STATE.log.splice(i, 1); break; } }
   meldung('Nicht gespeichert: Profilspeicher voll oder nicht beschreibbar. Die Eingabe bleibt erhalten.');
   return false;
@@ -231,17 +234,17 @@ function rechercheBelege(e) {
       h('div', { class: 'row' }, h('label', { for: 'rch-fall' }, 'Fall'),
         sel('rch-fall', 'Fall wählen', fallOpt, fallWahl, function (ev) { VIEW.draft['rch-fall'] = ev.target.value; renderModule(); })),
       fallWahl === '__neu' ? h('div', { class: 'row' },
-        entwurf('input', 'rch-fall-titel', 'rch-fall-titel', { type: 'text', 'aria-label': 'Titel des neuen Falls', placeholder: 'Titel des Falls', maxlength: '120', style: 'flex:1 1 220px;min-width:0' }),
-        entwurf('input', 'rch-fall-frage', 'rch-fall-frage', { type: 'text', 'aria-label': 'Recherchefrage', placeholder: 'Recherchefrage (optional)', maxlength: '300', style: 'flex:2 1 300px;min-width:0' })) : null,
+        entwurf('input', 'rch-fall-titel', 'rch-fall-titel', { autocomplete: 'off', type: 'text', 'aria-label': 'Titel des neuen Falls', placeholder: 'Titel des Falls', maxlength: '120', style: 'flex:1 1 220px;min-width:0' }),
+        entwurf('input', 'rch-fall-frage', 'rch-fall-frage', { autocomplete: 'off', type: 'text', 'aria-label': 'Recherchefrage', placeholder: 'Recherchefrage (optional)', maxlength: '300', style: 'flex:2 1 300px;min-width:0' })) : null,
       h('div', { class: 'row' }, h('label', { for: 'rch-datei' }, 'Datei'), h('input', { type: 'file', id: 'rch-datei', 'aria-label': 'Beleg als Datei' }),
-        entwurf('input', 'rch-herkunft', 'rch-herkunft', { type: 'text', 'aria-label': 'Herkunft oder Adresse', placeholder: 'Herkunft oder Adresse (optional; wird nicht abgerufen)', maxlength: '300', style: 'flex:1 1 260px;min-width:0' })),
+        entwurf('input', 'rch-herkunft', 'rch-herkunft', { autocomplete: 'off', type: 'text', 'aria-label': 'Herkunft oder Adresse', placeholder: 'Herkunft oder Adresse (optional; wird nicht abgerufen)', maxlength: '300', style: 'flex:1 1 260px;min-width:0' })),
       h('div', { class: 'row' }, entwurf('textarea', 'rch-text', 'rch-text', { 'aria-label': 'Textauszug', placeholder: 'Textauszug (wörtlich; ohne Datei Pflicht)', rows: '3', maxlength: '2000', style: 'flex:1 1 100%;min-width:0' })),
       h('div', { class: 'row' }, h('label', { for: 'rch-ft-typ' }, 'Fundstelle'),
         sel('rch-ft-typ', 'Art der Fundstelle', RCH_FUNDSTELLEN.map(function (x) { return [x, x]; }), ftTyp, function (ev) { VIEW.draft['rch-ft-typ'] = ev.target.value; renderModule(); }),
         ftTyp === 'ganze Datei' ? h('span', { class: 'note' }, 'Schwächste Fundstelle: der Beleg verweist nicht auf eine Stelle.')
-          : entwurf('input', 'rch-ft-wert', 'rch-ft-wert', { type: 'text', 'aria-label': 'Wert der Fundstelle', placeholder: ftTyp === 'Seite' ? 'Seitenzahl, z. B. 4' : ftTyp === 'Zeitmarke' ? 'z. B. 00:12:30' : 'z. B. Absatz 3 oder Zeichen 120-340', maxlength: '60', style: 'flex:1 1 200px;min-width:0' })),
+          : entwurf('input', 'rch-ft-wert', 'rch-ft-wert', { autocomplete: 'off', type: 'text', 'aria-label': 'Wert der Fundstelle', placeholder: ftTyp === 'Seite' ? 'Seitenzahl, z. B. 4' : ftTyp === 'Zeitmarke' ? 'z. B. 00:12:30' : 'z. B. Absatz 3 oder Zeichen 120-340', maxlength: '60', style: 'flex:1 1 200px;min-width:0' })),
       h('div', { class: 'row' },
-        entwurf('input', 'rch-notiz', 'rch-notiz', { type: 'text', 'aria-label': 'Anmerkung zum Beleg', placeholder: 'Anmerkung (optional)', maxlength: '300', style: 'flex:1 1 300px;min-width:0' }),
+        entwurf('input', 'rch-notiz', 'rch-notiz', { autocomplete: 'off', type: 'text', 'aria-label': 'Anmerkung zum Beleg', placeholder: 'Anmerkung (optional)', maxlength: '300', style: 'flex:1 1 300px;min-width:0' }),
         h('button', { type: 'button', id: 'rch-ok', onclick: function () { rchErfassen(e); } }, 'Beleg erfassen')),
       liste.length ? tabelle(['ID', 'Fall', 'Art', 'Fundstelle', 'Prüfsumme', 'Erfasst (UTC)', ''], liste.map(function (z) {
         return [td('nw', z.q.id || '–'), td('txt', z.fall ? z.fall.id + ' ' + z.fall.titel : '–'), td('nw', z.q.art || '–'),
@@ -260,7 +263,7 @@ function rchAussagenFelder(e) {
   const formular = h('div', null,
     h('div', { class: 'row' }, h('label', { for: 'rca-fall' }, 'Fall'),
       sel('rca-fall', 'Fall der Aussage', [['', '– Fall wählen –']].concat(R.faelle.map(function (f) { return [f.id, f.id + ' ' + f.titel]; })), neuFall, function (ev) { VIEW.draft['rch-a-fall'] = ev.target.value; }),
-      entwurf('input', 'rca-text', 'rch-a-text', { type: 'text', 'aria-label': 'Aussage', placeholder: 'Überprüfbarer Satz, z. B. "Der Radweg wurde im Juni eröffnet."', maxlength: '500', style: 'flex:1 1 320px;min-width:0' }),
+      entwurf('input', 'rca-text', 'rch-a-text', { autocomplete: 'off', type: 'text', 'aria-label': 'Aussage', placeholder: 'Überprüfbarer Satz, z. B. "Der Radweg wurde im Juni eröffnet."', maxlength: '500', style: 'flex:1 1 320px;min-width:0' }),
       h('button', { type: 'button', id: 'rca-neu', onclick: function () {
         const f = VIEW.draft['rch-a-fall'] || '', t = (VIEW.draft['rch-a-text'] || '').trim();
         if (!f) { meldung(R.faelle.length ? 'Bitte einen Fall wählen.' : 'Zuerst einen Beleg erfassen, damit ein Fall besteht.'); return; }
@@ -294,7 +297,7 @@ function rchAussagenFelder(e) {
           if ((VIEW.draft[bk] || '').trim() && VIEW.draft[bk].trim() !== x.begruendung) { if (!rchSchreiben({ type: 'RECHERCHE_AUSSAGE_SETZEN', id: x.id, begruendung: VIEW.draft[bk].trim() }, 'Aussage geändert')) { renderModule(); return; } }
           sieh('RECHERCHE_AUSSAGE_SETZEN', { id: x.id, einschaetzung: st }); delete VIEW.draft[bk];
         })),
-      h('div', { class: 'row' }, entwurf('input', 'rca-begr-' + x.id, bk, { type: 'text', 'aria-label': 'Begründung ' + x.id, placeholder: 'Begründung der Einschätzung', maxlength: '1000', value: VIEW.draft[bk] != null ? VIEW.draft[bk] : x.begruendung, style: 'flex:1 1 360px;min-width:0' }),
+      h('div', { class: 'row' }, entwurf('input', 'rca-begr-' + x.id, bk, { autocomplete: 'off', type: 'text', 'aria-label': 'Begründung ' + x.id, placeholder: 'Begründung der Einschätzung', maxlength: '1000', value: VIEW.draft[bk] != null ? VIEW.draft[bk] : x.begruendung, style: 'flex:1 1 360px;min-width:0' }),
         h('button', { type: 'button', id: 'rca-begr-ok-' + x.id, onclick: function () { const t = (VIEW.draft[bk] != null ? VIEW.draft[bk] : x.begruendung).trim(); if (!t && x.einschaetzung) { meldung('Die Begründung kann nicht geleert werden, solange eine Einschätzung gesetzt ist. Zuerst die Einschätzung zurücknehmen.'); return; } if (sieh('RECHERCHE_AUSSAGE_SETZEN', { id: x.id, begruendung: t })) delete VIEW.draft[bk]; } }, 'Begründung speichern')),
       zeilen.length ? tabelle(['Beleg', 'Rolle', 'Fundstelle', 'Inhalt', 'Prüfstand', ''], zeilen) : null,
       kand.length ? h('div', { class: 'row' }, h('label', { for: gk }, 'Beleg'),
@@ -311,4 +314,271 @@ function rechercheAussagen(e) {
     h('div', { class: 'pad' }, h('p', { class: 'note' }, 'Überprüfbare Sätze zu diesem Dossier mit Belegen dafür und dagegen. Die Einschätzung ist Ihr Urteil mit Begründung; die Anwendung rechnet nichts und schlägt nichts vor. Ohne stützenden Beleg mit Fundstelle ist keine positive Einschätzung möglich.'), F.formular),
     F.bloecke);
 }
-function rechercheDossier(e) { return [rechercheBelege(e), rechercheAussagen(e)]; }
+function rechercheDossier(e) { return [rechercheBelege(e), rechercheAussagen(e), rechercheFallpaket()]; }
+
+/* =====================================================================
+   FALLPAKET: ein Fall als eine Datei (Datensätze, benötigte Dossierangaben, Belegdateien), mit Manifest und Prüfsummen.
+   Prüfen vor Übernehmen (alles oder nichts), Zusammenführen ohne Überschreiben: abweichende Nummern erhalten neue Nummern.
+   ===================================================================== */
+const RCH_PLURAL = { fall: 'faelle', quelle: 'quellen', fassung: 'fassungen', beobachtung: 'beobachtungen', aussage: 'aussagen' };
+function rchKanon(o) {
+  if (Array.isArray(o)) return '[' + o.map(rchKanon).join(',') + ']';
+  if (o && typeof o === 'object') return '{' + Object.keys(o).sort().filter(function (k) { return o[k] !== undefined; }).map(function (k) { return JSON.stringify(k) + ':' + rchKanon(o[k]); }).join(',') + '}';
+  return JSON.stringify(o === undefined ? null : o);
+}
+function rchHex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+function rchTextHash(t) { return crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)).then(rchHex); }
+function rchBase64(blob) {
+  return new Promise(function (ok, nein) {
+    const r = new FileReader(); r.onerror = function () { nein(r.error); };
+    r.onload = function () { ok(String(r.result).split(',')[1] || ''); }; r.readAsDataURL(blob);
+  });
+}
+function rchAusBase64(b64, typ) {
+  const bin = atob(b64), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return new Blob([u], { type: typ || 'application/octet-stream' });
+}
+function rchKopie(o) { return JSON.parse(JSON.stringify(o)); }
+
+/* ---------- Export ---------- */
+function rchPaketBauen(fallId) {
+  const R = PROFIL.recherche, fall = R.faelle.find(function (f) { return f.id === fallId; });
+  if (!fall) return Promise.reject(new Error('Fall nicht gefunden.'));
+  const quellen = R.quellen.filter(function (q) { return q.fall === fall.id; }), qid = {}; quellen.forEach(function (q) { qid[q.id] = 1; });
+  const fassungen = R.fassungen.filter(function (f) { return qid[f.quelle]; }), fid = {}; fassungen.forEach(function (f) { fid[f.id] = 1; });
+  const beobachtungen = R.beobachtungen.filter(function (b) { return fid[b.fassung]; });
+  const aussagen = R.aussagen.filter(function (a) { return a.fall === fall.id; });
+  const dids = {}; beobachtungen.concat(aussagen).forEach(function (x) { (x.dossiers || []).forEach(function (d) { dids[d] = 1; }); });
+  const dossiers = Object.keys(dids).sort().map(function (id) {
+    const e = entitaet(id);
+    if (!e) return { id: id, name: '(unbekannt)', typ: 'Person', land: 'DE', fehlt: true };
+    const d = { id: e.id, typ: e.typ, name: e.name, land: e.land, aliase: e.aliase || [], rolle: e.rolle || '', eckdaten: e.eckdaten || [], bedrohung: e.bedrohung || null, eigen: !!e.eigen };
+    if (PROFIL.koord[e.id]) d.koord = PROFIL.koord[e.id];
+    return d;
+  });
+  const inhalt = rchKopie({ fall: fall, quellen: quellen, fassungen: fassungen, beobachtungen: beobachtungen, aussagen: aussagen, dossiers: dossiers });
+  const dateien = {}, liste = [];
+  const mitDatei = fassungen.filter(function (f) { return f.anhang; });
+  return mitDatei.reduce(function (kette, f) {
+    return kette.then(function () {
+      return RIDB.get(f.anhang).then(function (blob) {
+        const eintrag = { key: f.anhang, dateiname: f.dateiname, groesse: f.groesse, typ: f.typ, hashImBeleg: f.hash || null };
+        if (!blob) { eintrag.status = 'fehlt'; eintrag.sha256 = null; liste.push(eintrag); return null; }
+        return rchHash(blob).then(function (hash) {
+          eintrag.sha256 = hash; eintrag.groesse = blob.size;
+          eintrag.status = !hash ? 'ohne Prüfsumme' : f.hash && f.hash !== hash ? 'abweichend' : 'ok';
+          liste.push(eintrag);
+          return rchBase64(blob).then(function (b64) { dateien[f.anhang] = b64; });
+        });
+      });
+    });
+  }, Promise.resolve()).then(function () {
+    return rchTextHash(rchKanon({ inhalt: inhalt, dateien: liste }));                 /* die Prüfsummen der Dateien sind selbst gesichert */
+  }).then(function (inhaltHash) {
+    const manifest = { erstellt: nowIso(), programm: 'Field Terminal', fall: { id: fall.id, titel: fall.titel },
+      zaehler: { quellen: quellen.length, fassungen: fassungen.length, beobachtungen: beobachtungen.length, aussagen: aussagen.length, dossiers: dossiers.length, dateien: Object.keys(dateien).length },
+      dateien: liste, inhaltHash: inhaltHash,
+      hinweis: 'Das Paket enthält nur die für den Fall benötigten Dossierangaben (ohne Bilder und Notizen) und die Belegdateien. Die Dateien sind einzeln mit SHA-256 gesichert.' };
+    const warn = liste.filter(function (x) { return x.status !== 'ok'; });
+    return { text: JSON.stringify({ format: 'fieldterminal-fallpaket', v: 1, manifest: manifest, inhalt: inhalt, dateien: dateien }), manifest: manifest, warnungen: warn };
+  });
+}
+function rchPaketSichern(fallId) {
+  if (!fallId) { meldung('Bitte zuerst einen Fall wählen.'); return; }
+  rchPaketBauen(fallId).then(function (p) {
+    const datei = 'fallpaket-' + fallId + '-' + dtg(new Date()) + '.json';
+    const blob = new Blob([p.text], { type: 'application/json' }), url = URL.createObjectURL(blob), a = h('a', { href: url, download: datei });
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    const z = p.manifest.zaehler;
+    meldung('Fallpaket gesichert: ' + datei + ' (' + z.quellen + ' Quellen, ' + z.beobachtungen + ' Belege, ' + z.aussagen + ' Aussagen, ' + z.dateien + ' Dateien)' +
+      (p.warnungen.length ? '. ACHTUNG: ' + p.warnungen.map(function (x) { return x.key + ' ' + x.status; }).join(', ') + ' (im Manifest vermerkt)' : '') + '.');
+  }).catch(function (e) { meldung('Fallpaket nicht erstellt: ' + (e && e.message ? e.message : 'unbekannter Fehler') + '.'); });
+}
+
+/* ---------- Prüfen (vor jeder Änderung) ---------- */
+function rchPaketPruefen(o) {
+  const fehler = [];
+  const nok = function (t) { fehler.push(t); return Promise.resolve({ fehler: fehler }); };
+  if (!o || o.format !== 'fieldterminal-fallpaket' || o.v !== 1) return nok('kein Fallpaket dieser Version');
+  const i = o.inhalt, m = o.manifest;
+  if (!i || !m || !i.fall || typeof i.fall.id !== 'string' || !['quellen', 'fassungen', 'beobachtungen', 'aussagen', 'dossiers'].every(function (k) { return Array.isArray(i[k]); })) return nok('Aufbau unvollständig');
+  const muster = { fall: /^F-\d+$/, quelle: /^Q-\d+$/, fassung: /^V-\d+$/, beobachtung: /^B-\d+$/, aussage: /^A-\d+$/ };
+  if (!muster.fall.test(i.fall.id)) return nok('ungültige Fallnummer');
+  const ids = function (l, art) { const s = {}; l.forEach(function (x) { if (!x || !muster[art].test(x.id || '') || s[x.id]) fehler.push('ungültige oder doppelte Nummer in ' + RCH_PLURAL[art] + ': ' + (x && x.id)); else s[x.id] = 1; }); return s; };
+  const q = ids(i.quellen, 'quelle'), f = ids(i.fassungen, 'fassung'), b = ids(i.beobachtungen, 'beobachtung'); ids(i.aussagen, 'aussage');
+  i.quellen.forEach(function (x) { if (x.fall !== i.fall.id) fehler.push(x.id + ' gehört nicht zum Fall'); });
+  i.fassungen.forEach(function (x) { if (!q[x.quelle]) fehler.push(x.id + ': Quelle ' + x.quelle + ' fehlt'); });
+  i.beobachtungen.forEach(function (x) { if (!f[x.fassung]) fehler.push(x.id + ': Fassung ' + x.fassung + ' fehlt'); });
+  i.aussagen.forEach(function (x) { if (x.fall !== i.fall.id) fehler.push(x.id + ' gehört nicht zum Fall'); ['stuetzend', 'widersprechend'].forEach(function (k) { if (!Array.isArray(x[k])) fehler.push(x.id + ': ' + k + ' fehlt'); else x[k].forEach(function (l) { if (!b[l.beob]) fehler.push(x.id + ': Beleg ' + l.beob + ' fehlt'); }); }); });
+  if (fehler.length) return Promise.resolve({ fehler: fehler.slice(0, 8) });
+  if (!(window.crypto && crypto.subtle)) return nok('Prüfsummen sind in diesem Browser nicht berechenbar; das Paket wird nicht übernommen');
+  return rchTextHash(rchKanon({ inhalt: i, dateien: Array.isArray(m.dateien) ? m.dateien : [] })).then(function (h1) {
+    if (h1 !== m.inhaltHash) return { fehler: ['Inhalt oder Dateiliste stimmen nicht mit der Prüfsumme im Manifest überein (Paket verändert oder beschädigt)'] };
+    const blobs = {}, fehlend = [], liste = Array.isArray(m.dateien) ? m.dateien : [];
+    const keys = {}; i.fassungen.forEach(function (x) { if (x.anhang) keys[x.anhang] = x; });
+    return liste.reduce(function (kette, d) {
+      return kette.then(function () {
+        if (!d || !keys[d.key]) { fehler.push('Manifest nennt Datei ohne Beleg: ' + (d && d.key)); return null; }
+        if (d.status === 'fehlt') { fehlend.push(d.key); return null; }
+        if (d.status === 'ok' && keys[d.key].hash && keys[d.key].hash !== d.sha256) { fehler.push('Manifest und Beleg widersprechen sich bei ' + d.key + ' (Prüfsumme)'); return null; }
+        const b64 = o.dateien && o.dateien[d.key];
+        if (typeof b64 !== 'string') { fehler.push('Datei fehlt im Paket: ' + d.key); return null; }
+        let blob; try { blob = rchAusBase64(b64, d.typ); } catch (x) { fehler.push('Datei nicht lesbar: ' + d.key); return null; }
+        if (blob.size > RCH_MAX) { fehler.push('Datei über 20 MB: ' + d.key); return null; }
+        return rchHash(blob).then(function (hash) {
+          if (!hash || hash !== d.sha256) fehler.push('Prüfsumme der Datei ' + d.key + ' (' + d.dateiname + ') stimmt nicht');
+          else blobs[d.key] = { blob: blob, hash: hash };
+        });
+      });
+    }, Promise.resolve()).then(function () {
+      Object.keys(keys).forEach(function (k) { if (!blobs[k] && fehlend.indexOf(k) < 0 && !fehler.length) fehler.push('Datei ' + k + ' ist im Manifest nicht aufgeführt'); });
+      return { fehler: fehler.slice(0, 8), blobs: blobs, fehlend: fehlend };
+    });
+  });
+}
+
+/* ---------- Zusammenführen (gemeinsam für Fallpaket und Profilimport) ---------- */
+let RCH_LETZTER = null;
+function rchZusammenfuehren(inh, opt) {
+  if (!inh.faelle && inh.fall) inh = Object.assign({}, inh, { faelle: [inh.fall] });             /* Fallpaket: ein Fall; Profil: Liste */
+  const R = PROFIL.recherche, z = { neu: 0, gleich: 0, neueNr: 0, ohneDossier: 0, verlorenVerkn: 0, einschaetzungZurueck: 0, verworfen: 0 };
+  const map = { fall: {}, quelle: {}, fassung: {}, beobachtung: {}, aussage: {} };
+  Object.keys(RCH_PLURAL).forEach(function (art) {                   /* eingehende Nummern vorab reservieren, damit Ersatznummern nie kollidieren */
+    const k = RCH_ID[art][1], hoechst = (inh[RCH_PLURAL[art]] || []).reduce(function (mx, x) { const n = /^[A-Z]-(\d+)$/.exec(x && x.id || ''); return n ? Math.max(mx, Number(n[1])) : mx; }, 0);
+    R.seq[k] = Math.max(R.seq[k] || 0, hoechst);
+  });
+  const inhaltVon = function (y) { const c = rchKopie(y); delete c.id; delete c.importVon; delete c.aktuelleFassung; delete c._af; return rchKanon(c); };
+  const schritt = function (art, umbau) {
+    (inh[RCH_PLURAL[art]] || []).forEach(function (x) {
+      const liste = R[RCH_PLURAL[art]], c = umbau(rchKopie(x));
+      if (!c) { z.verworfen += 1; return; }
+      const lokal = liste.find(function (y) { return y.id === x.id; });
+      if (!lokal) { liste.push(c); map[art][x.id] = c.id; z.neu += 1; return; }
+      if (inhaltVon(lokal) === inhaltVon(c)) { map[art][x.id] = lokal.id; z.gleich += 1; return; }
+      const kopie = liste.find(function (y) { return y.importVon === x.id && inhaltVon(y) === inhaltVon(c); });
+      if (kopie) { map[art][x.id] = kopie.id; z.gleich += 1; return; }
+      c.id = rchNr(art); c.importVon = x.id; liste.push(c); map[art][x.id] = c.id; z.neueNr += 1;
+    });
+  };
+  const dos = function (l) { const aus = []; (l || []).forEach(function (d) { const n = opt.dossier(d); if (n) { if (aus.indexOf(n) < 0) aus.push(n); } else z.ohneDossier += 1; }); return aus; };
+  schritt('fall', function (c) { return c; });
+  schritt('quelle', function (c) { c.fall = map.fall[c.fall]; if (!c.fall) return null; c._af = c.aktuelleFassung; c.aktuelleFassung = null; return c; });
+  schritt('fassung', function (c) { c.quelle = map.quelle[c.quelle]; if (!c.quelle) return null; if (c.anhang && opt.dateiKey && opt.dateiKey[c.anhang]) c.anhang = opt.dateiKey[c.anhang]; return c; });
+  R.quellen.forEach(function (qq) { if (qq._af !== undefined) { qq.aktuelleFassung = map.fassung[qq._af] || null; delete qq._af; } });
+  schritt('beobachtung', function (c) { c.fassung = map.fassung[c.fassung]; if (!c.fassung) return null; c.dossiers = dos(c.dossiers); return c; });
+  schritt('aussage', function (c) {
+    c.fall = map.fall[c.fall]; if (!c.fall) return null; c.dossiers = dos(c.dossiers);
+    ['stuetzend', 'widersprechend'].forEach(function (k) {
+      const vor = (c[k] || []).length; c[k] = (c[k] || []).filter(function (l) { return map.beobachtung[l.beob]; }).map(function (l) { return Object.assign({}, l, { beob: map.beobachtung[l.beob] }); }); z.verlorenVerkn += vor - c[k].length;
+    });
+    if ((c.einschaetzung === 'gestuetzt' || c.einschaetzung === 'dafuer') && !c.stuetzend.length) { c.einschaetzung = null; z.einschaetzungZurueck += 1; }
+    if ((c.einschaetzung === 'widerlegt' || c.einschaetzung === 'dagegen') && !c.widersprechend.length) { c.einschaetzung = null; z.einschaetzungZurueck += 1; }
+    return c;
+  });
+  return z;
+}
+function rchZusammenfassung(z) {
+  return z.neu + ' neue Datensätze, ' + z.gleich + ' bereits vorhanden' + (z.neueNr ? ', ' + z.neueNr + ' mit abweichendem Inhalt unter neuer Nummer übernommen' : '') +
+    (z.ohneDossier ? ', ' + z.ohneDossier + ' Dossierverknüpfung(en) nicht zuordenbar (nicht übernommen)' : '') + (z.verlorenVerkn ? ', ' + z.verlorenVerkn + ' Belegverknüpfung(en) nicht übernommen' : '') +
+    (z.einschaetzungZurueck ? ', ' + z.einschaetzungZurueck + ' Einschätzung(en) zurückgenommen (Beleg fehlt)' : '') + (z.verworfen ? ', ' + z.verworfen + ' Datensatz/Datensätze unvollständig, nicht übernommen' : '');
+}
+/* Profilimport: Dossiernummern gelten nur, wenn das lokale Dossier dasselbe ist */
+function rchProfilZusammenfuehren(rq, q) {
+  if (!rq || !['faelle', 'quellen', 'fassungen', 'beobachtungen', 'aussagen'].every(function (k) { return Array.isArray(rq[k] || []); })) return '; Recherchedaten im Profil unlesbar, nicht übernommen';
+  const eing = {}; (q.eigene || []).forEach(function (e) { eing[e.id] = e; });
+  const z = rchZusammenfuehren(rq, { dossier: function (id) {
+    const lok = entitaet(id), e = eing[id];
+    if (e) return lok && lok.name === e.name && lok.typ === e.typ ? id : null;
+    return lok ? id : null;
+  } });
+  const mitDatei = (rq.fassungen || []).some(function (f) { return f && f.anhang; });
+  return '; Recherche: ' + rchZusammenfassung(z) + (mitDatei ? '. Belegdateien sind nicht Teil der Profilsicherung; dafür Fallpakete verwenden' : '');
+}
+
+/* ---------- Übernehmen ---------- */
+ACTIONS.RECHERCHE_PAKET_IMPORT = function (a) {
+  const i = a.inhalt; if (!i || !Array.isArray(i.dossiers)) return null;
+  const t = nowIso(), neueDossiers = [], dmap = {};
+  i.dossiers.forEach(function (d) {
+    const lok = entitaet(d.id);
+    if (lok && lok.name === d.name && lok.typ === d.typ) { dmap[d.id] = lok.id; return; }
+    const kopie = STATE.dossiers.eigene.find(function (e) { return e.importVon && e.importVon.id === d.id && e.importVon.name === d.name && e.typ === d.typ; });
+    if (kopie) { dmap[d.id] = kopie.id; return; }
+    const typ = ['Person', 'Organisation', 'Ort'].indexOf(d.typ) >= 0 ? d.typ : 'Person', name = String(d.name || '').trim().slice(0, 120) || '(ohne Namen)';
+    const zl = function (l) { return (Array.isArray(l) ? l : []).map(function (x) { return String(x).slice(0, 200); }).filter(Boolean).slice(0, 30); };
+    STATE.seq.eigen = (STATE.seq.eigen || 0) + 1;
+    const id = (typ === 'Person' ? 'P' : typ === 'Organisation' ? 'O' : 'L') + '-' + (9100 + STATE.seq.eigen);
+    const b = d.bedrohung && typeof d.bedrohung === 'object' ? { stufe: Math.min(5, Math.max(1, Number(d.bedrohung.stufe) || 2)), begruendung: String(d.bedrohung.begruendung || 'Aus Fallpaket übernommen.').slice(0, 300) } : { stufe: 2, begruendung: 'Aus Fallpaket übernommen.' };
+    STATE.dossiers.eigene.push({ id: id, typ: typ, land: SCENARIO.laender[d.land] ? d.land : 'DE', mission: 'STD', name: name, bild: null, aliase: zl(d.aliase), reg: 'ohne', verteiler: 'Eigener Eintrag',
+      rolle: String(d.rolle || '').slice(0, 500) || 'Aus Fallpaket übernommen.', eckdaten: zl(d.eckdaten), bedrohung: b, nachtraege: [], eigen: true, importVon: { id: d.id, name: d.name } });
+    STATE.dossiers.entitaeten[id] = { status: null, statusAm: null, notizen: [], aktualisiert: t };
+    if (Array.isArray(d.koord) && d.koord.length === 2 && d.koord.every(function (x) { return typeof x === 'number' && isFinite(x); })) PROFIL.koord[id] = d.koord;
+    dmap[d.id] = id; neueDossiers.push(id);
+  });
+  const z = rchZusammenfuehren(i, { dossier: function (id) { return dmap[id] || null; }, dateiKey: a.dateiKey || {} });
+  RCH_LETZTER = { z: z, dossiers: neueDossiers.length };
+  if (!(z.neu || z.neueNr || neueDossiers.length)) return null;
+  return { modul: 'Dossier', aktion: 'Fallpaket geladen', detail: a.datei + ': Fall ' + i.fall.id + ' ' + kuerzen(String(i.fall.titel || ''), 60) + ': ' + rchZusammenfassung(z) + (neueDossiers.length ? '; ' + neueDossiers.length + ' Dossier(s) neu angelegt' : '') };
+};
+function rchPaketLaden(file) {
+  const r = new FileReader();
+  r.onerror = function () { meldung('Fallpaket nicht lesbar.'); };
+  r.onload = function () {
+    let o = null; try { o = JSON.parse(String(r.result)); } catch (x) { /* ungültig */ }
+    const neu = [];                                                     /* nur Dateien dieses Importversuchs */
+    const aufraeumen = function () { return Promise.all(neu.map(function (k) { return RIDB.del(k).catch(function () {}); })); };
+    rchPaketPruefen(o).then(function (p) {
+      if (p.fehler.length) { meldung('Fallpaket abgelehnt, nichts übernommen: ' + p.fehler.join('; ') + '.'); return null; }
+      const dateiKey = {};
+      return Object.keys(p.blobs).reduce(function (kette, k) {
+        return kette.then(function () {
+          return RIDB.get(k).then(function (vorhanden) {
+            if (!vorhanden) { return RIDB.put(k, p.blobs[k].blob).then(function () { neu.push(k); }); }          /* fehlende Datei: wird (wieder) abgelegt */
+            return rchHash(vorhanden).then(function (h1) {
+              if (h1 === p.blobs[k].hash) return null;                                  /* dieselbe Datei liegt schon vor */
+              /* anderer Inhalt unter demselben Schlüssel: Ersatzschlüssel aus dem Inhalt, damit ein Wiederholungsimport dieselbe Zuordnung ergibt */
+              const k2 = k + '-' + p.blobs[k].hash.slice(0, 12); dateiKey[k] = k2;
+              return RIDB.get(k2).then(function (da) {
+                if (!da) return RIDB.put(k2, p.blobs[k].blob).then(function () { neu.push(k2); });
+                /* Der Ersatzschlüssel ist bereits belegt: nur dieselbe Datei gilt als vorhanden. Eine abweichende wird nicht überschrieben, der Import bricht ab. */
+                return rchHash(da).then(function (h2) {
+                  if (h2 !== p.blobs[k].hash) throw { abbruch: 'Fallpaket abgelehnt, nichts übernommen: Die vorhandene Belegdatei ' + k2 + ' stimmt nicht mit der Prüfsumme im Paket überein (beschädigt oder verändert). Sie wurde nicht überschrieben' };
+                  return null;
+                });
+              });
+            });
+          });
+        });
+      }, Promise.resolve()).then(function () {
+        RCH_LETZTER = null;
+        const vorKoord = JSON.stringify(PROFIL.koord), vorEigene = STATE.dossiers.eigene.slice(), vorSeq = STATE.seq.eigen, vorEnt = Object.keys(STATE.dossiers.entitaeten);
+        const zurueck = function () {
+          STATE.dossiers.eigene = vorEigene; STATE.seq.eigen = vorSeq; PROFIL.koord = JSON.parse(vorKoord);
+          Object.keys(STATE.dossiers.entitaeten).forEach(function (id) { if (vorEnt.indexOf(id) < 0) delete STATE.dossiers.entitaeten[id]; });
+        };
+        zurueck.geaendert = function () { return STATE.dossiers.eigene.length !== vorEigene.length; };
+        const ok = rchSchreiben({ type: 'RECHERCHE_PAKET_IMPORT', inhalt: o.inhalt, dateiKey: dateiKey, datei: file.name }, 'Fallpaket geladen', zurueck);
+        if (!ok) {
+          if (rchSchreiben.fehler || !RCH_LETZTER) { aufraeumen(); }                      /* gescheitert: nichts bleibt halb übernommen */
+          else if (neu.length) meldung('Fallpaket ' + o.inhalt.fall.id + ': ' + neu.length + ' fehlende Belegdatei(en) wiederhergestellt, Datensätze unverändert.');
+          else meldung('Fallpaket ' + o.inhalt.fall.id + ' ist bereits vollständig vorhanden, nichts geändert.');
+        } else if (!p.fehlend.length) meldung('Fallpaket ' + o.inhalt.fall.id + ' geladen: ' + rchZusammenfassung(RCH_LETZTER.z) + (RCH_LETZTER.dossiers ? '; ' + RCH_LETZTER.dossiers + ' Dossier(s) neu angelegt' : '') + '.');
+        else if (p.fehlend.length) meldung('Hinweis: ' + p.fehlend.length + ' Belegdatei(en) fehlten schon im Paket (' + p.fehlend.join(', ') + ').');
+        renderModule();
+      });
+    }).catch(function (fe) { aufraeumen(); meldung(fe && fe.abbruch ? fe.abbruch + '.' : 'Fallpaket konnte nicht übernommen werden (Browserspeicher nicht verfügbar); nichts übernommen.'); });
+  };
+  r.readAsText(file);
+}
+function rechercheFallpaket() {
+  const R = PROFIL.recherche;
+  return panel('Fallpaket', [h('span', { class: 'badge' }, String(R.faelle.length))],
+    h('div', { class: 'pad' }, h('p', { class: 'note' }, 'Ein Fall mit allen Quellen, Belegen, Aussagen, Belegdateien und den benötigten Dossierangaben als eine Datei. Beim Laden wird vor jeder Änderung geprüft; Vorhandenes wird nie überschrieben.'),
+      h('div', { class: 'row' }, h('label', { for: 'rfp-fall' }, 'Fall'),
+        h('select', { id: 'rfp-fall', 'aria-label': 'Fall für das Fallpaket', onchange: function (ev) { VIEW.draft['rch-fp-fall'] = ev.target.value; } },
+          [h('option', { value: '' }, '– Fall wählen –')].concat(R.faelle.map(function (f) { return h('option', { value: f.id, selected: f.id === VIEW.draft['rch-fp-fall'] }, f.id + ' ' + f.titel); }))),
+        h('button', { type: 'button', id: 'rfp-ex', onclick: function () { rchPaketSichern(VIEW.draft['rch-fp-fall'] || ''); } }, 'Fallpaket sichern'),
+        h('label', { for: 'rfp-in' }, 'Fallpaket laden'),
+        h('input', { type: 'file', id: 'rfp-in', accept: 'application/json,.json', onchange: function (ev) { const fl = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (fl) rchPaketLaden(fl); } }))));
+}

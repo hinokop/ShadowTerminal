@@ -5168,7 +5168,12 @@ const ACTIONS = {
     aenderungenAnwenden();
     ['eigen', 'kante', 'galerie', 'ausgang'].forEach(function (k) { PROFIL.seq[k] = Math.max(PROFIL.seq[k] || 0, (q.seq && q.seq[k]) || 0); });
     profilEinspielen(STATE);
-    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') };
+    /* Recherche, Identität, Fristen: zusammengeführt statt verworfen; die lokale Identität bleibt, wenn eine gewählt ist */
+    let rchText = '';
+    if (!PROFIL.identitaet && typeof q.identitaet === 'string' && legende(q.identitaet)) PROFIL.identitaet = q.identitaet;
+    Object.keys(q.dokFristen || {}).forEach(function (k) { if (!(k in PROFIL.dokFristen)) PROFIL.dokFristen[k] = q.dokFristen[k]; });
+    if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q);
+    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + rchText };
   },
   PROFIL_LEEREN: function () {
     const ids = STATE.dossiers.eigene.map(function (e) { return e.id; });
@@ -7653,8 +7658,8 @@ function renderSysbar() {
   const kb = Store.groesseKb();
   if (kb > 3500 && !renderSysbar.gewarnt) { renderSysbar.gewarnt = true; meldung('Archiv zu ' + Math.round(kb / 50) + ' % belegt (' + kb + ' KB von etwa 5000 KB). Export anlegen und alte Verläufe bereinigen.'); }
   $('sys-info').textContent = Store.isPersistent()
-    ? 'Archiv FT-ARCHIV verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X'
-    : 'Archiv FT-ARCHIV nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X';
+    ? 'Archiv pgcl-eu3.arch07 verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X'
+    : 'Archiv pgcl-eu3.arch07 nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X';
 }
 function meldung(text) { $('sys-msg').textContent = text ? dtg(new Date()) + ' · ' + text : ''; }
 /* Kurze, sichtbare Bestätigung einer Handlung (verschwindet nach etwa 4 Sekunden) */
