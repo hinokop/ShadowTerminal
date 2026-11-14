@@ -83,7 +83,11 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.evaluate(() => { dispatch({ type: 'KENNWORT_SCHALTER', an: false }); dispatch({ type: 'STATUS_GESETZT', status: 'Standby' }); dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); dispatch({ type: 'MISSION_BEGINN_JETZT' }); VIEW.karte.bezug = null; VIEW.karte.statusOffen = true; dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; renderModule(); });
   await p.waitForTimeout(800);
   ok.mitAuftragZeilen = await p.evaluate(() => !!zDef() && ['k-st-stufe', 'k-st-ci', 'k-st-ziele', 'k-st-fenster', 'k-st-licht'].every(i => !!document.getElementById(i)));
-  ok.keineFehler = err.length === 0;
+  /* Rücksprung bei aktiver 3D-Ansicht behält den Objektbezug der Lage-Box (Kamerafahrt darf ihn nicht löschen) */
+  await p.evaluate(() => { dispatch({ type: 'OZONE_ANGELEGT', ll: [52.51, 13.41] }); const id = PROFIL.zonen[PROFIL.zonen.length - 1].id; window.__zid = id; VIEW.karte.bezug = null; VIEW.karte.ansicht3d = true; kartenObjektZeigen(id); });
+  ok.bezugNach3DRuecksprung = await p.evaluate(() => VIEW.karte.bezug === window.__zid);
+  await p.evaluate(() => { VIEW.karte.ansicht3d = false; renderModule(); });
+
   console.log(JSON.stringify(ok, null, 1)); if (err.length) console.log(err.slice(0, 5));
   await b.close(); process.exit(Object.values(ok).every(Boolean) ? 0 : 1);
 })();
