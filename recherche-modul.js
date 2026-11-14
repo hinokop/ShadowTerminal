@@ -626,7 +626,14 @@ function rchPaketLaden(file) {
               if (h1 === p.blobs[k].hash) return null;                                  /* dieselbe Datei liegt schon vor */
               /* anderer Inhalt unter demselben Schlüssel: Ersatzschlüssel aus dem Inhalt, damit ein Wiederholungsimport dieselbe Zuordnung ergibt */
               const k2 = k + '-' + p.blobs[k].hash.slice(0, 12); dateiKey[k] = k2;
-              return RIDB.get(k2).then(function (da) { return da ? null : RIDB.put(k2, p.blobs[k].blob).then(function () { neu.push(k2); }); });
+              return RIDB.get(k2).then(function (da) {
+                if (!da) return RIDB.put(k2, p.blobs[k].blob).then(function () { neu.push(k2); });
+                /* Der Ersatzschlüssel ist bereits belegt: nur dieselbe Datei gilt als vorhanden. Eine abweichende wird nicht überschrieben, der Import bricht ab. */
+                return rchHash(da).then(function (h2) {
+                  if (h2 !== p.blobs[k].hash) throw { abbruch: 'Fallpaket abgelehnt, nichts übernommen: Die vorhandene Belegdatei ' + k2 + ' stimmt nicht mit der Prüfsumme im Paket überein (beschädigt oder verändert). Sie wurde nicht überschrieben' };
+                  return null;
+                });
+              });
             });
           });
         });
@@ -647,7 +654,7 @@ function rchPaketLaden(file) {
         else if (p.fehlend.length) meldung('Hinweis: ' + p.fehlend.length + ' Belegdatei(en) fehlten schon im Paket (' + p.fehlend.join(', ') + ').');
         renderModule();
       });
-    }).catch(function () { aufraeumen(); meldung('Fallpaket konnte nicht übernommen werden (Browserspeicher nicht verfügbar); nichts übernommen.'); });
+    }).catch(function (fe) { aufraeumen(); meldung(fe && fe.abbruch ? fe.abbruch + '.' : 'Fallpaket konnte nicht übernommen werden (Browserspeicher nicht verfügbar); nichts übernommen.'); });
   };
   r.readAsText(file);
 }
