@@ -13,11 +13,15 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   /* --- Quellprofil A --- */
   const A = await neu();
   await A.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Paketperson', land: 'DE' }); const d = STATE.dossiers.eigene.find(x => x.name === 'Paketperson'); STATE.dossiers.auswahl = d.id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); });
-  await A.waitForSelector('#rch-ok');
-  await A.selectOption('#rch-fall', '__neu'); await A.fill('#rch-fall-titel', 'Radweg'); await A.selectOption('#rch-ft-typ', 'Seite'); await A.fill('#rch-ft-wert', '2');
-  await A.setInputFiles('#rch-datei', { name: 'blatt.pdf', mimeType: 'application/pdf', buffer: buf }); await A.click('#rch-ok'); await A.waitForTimeout(800);
-  const fall = await A.evaluate(() => PROFIL.recherche.faelle[0].id);
-  await A.selectOption('#rch-fall', fall); await A.fill('#rch-text', 'Eröffnung erst im August'); await A.selectOption('#rch-ft-typ', 'Absatz'); await A.fill('#rch-ft-wert', '3'); await A.click('#rch-ok'); await A.waitForTimeout(500);
+  await A.waitForSelector('#rch-neu');
+  const fall = await A.evaluate(async bytes => {
+    const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }), key = 'ANH-paket1', hash = await rchHash(blob), d = STATE.dossiers.auswahl;
+    await RIDB.put(key, blob);
+    dispatch({ type: 'RECHERCHE_BELEG', dossier: d, fall: null, neuerFall: { titel: 'Radweg', frage: '' }, art: 'Datei', herkunft: '', notiz: '', fassung: { dateiname: 'blatt.pdf', groesse: blob.size, typ: 'application/pdf', hash: hash, anhang: key }, fundstelle: { typ: 'Seite', wert: '2' }, zitat: '' });
+    const f = PROFIL.recherche.faelle[0].id;
+    dispatch({ type: 'RECHERCHE_BELEG', dossier: d, fall: f, neuerFall: null, art: 'Text', herkunft: '', notiz: '', fassung: { dateiname: null, groesse: 24, typ: 'text/plain', hash: null, anhang: false }, fundstelle: { typ: 'Absatz', wert: '3' }, zitat: 'Eröffnung erst im August' });
+    return f;
+  }, Array.from(buf));
   const aid = await A.evaluate(() => { const R = PROFIL.recherche, d = STATE.dossiers.auswahl;
     dispatch({ type: 'RECHERCHE_AUSSAGE_NEU', dossier: d, fall: R.faelle[0].id, text: 'Der Radweg wurde im Juni eröffnet.' }); const x = R.aussagen[0];
     dispatch({ type: 'RECHERCHE_BELEG_VERKNUEPFT', aussage: x.id, beob: R.beobachtungen[0].id, rolle: 'stuetzend' }); dispatch({ type: 'RECHERCHE_BELEG_VERKNUEPFT', aussage: x.id, beob: R.beobachtungen[1].id, rolle: 'widersprechend' });

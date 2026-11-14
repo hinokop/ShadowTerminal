@@ -80,6 +80,8 @@ function karteKoord(id) {
 function sichtungKoord(s) {
   const roh = String(s.ort || '').trim();
   if (!roh) return null;
+  const kk = parseKoord(roh);                                     /* Koordinatenangabe (aus einem Entwurfs-Pin): genau dieser Punkt */
+  if (kk) return { ll: kk, genau: 'Koordinate', bez: roh };
   const richtung = /^richtung\b/i.test(roh), name = erkFold(roh.replace(/^richtung\s+/i, '')).replace(/[^a-z0-9 ]/g, ' ').trim();
   if (name.length < 4) return null;
   const norm = function (t) { return erkFold(t).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }, q = name.replace(/\s+/g, ' ');
