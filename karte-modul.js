@@ -1325,7 +1325,7 @@ const KP_ARTEN = ['Sichtung', 'Zone', 'Pin', 'Zugriffspunkt', 'Position', 'Ausga
 const KP_AKTIONEN = {
   SICHTUNG_HINZU: 'Sichtung', SICHTUNG_ENTFERNT: 'Sichtung',
   PIN_ANGELEGT: 'Pin', PIN_GEAENDERT: 'Pin', PIN_ENTFERNT: 'Pin',
-  ZONE_ANGELEGT: 'Zone', ZONE_GEAENDERT: 'Zone', ZONE_URTEIL: 'Zone', ZONE_ENTFERNT: 'Zone',
+  ZONE_ANGELEGT: 'Zone', ZONE_GEAENDERT: 'Zone', ZONEN_MEHRFACH: 'Zone', ZONE_URTEIL: 'Zone', ZONE_ENTFERNT: 'Zone',
   DOSSIER_ORT: 'Position',
   AUSGANG_ANGELEGT: 'Ausgangsort', AUSGANG_GELOESCHT: 'Ausgangsort', AUSGANG_ORT: 'Ausgangsort'
 };
@@ -1358,7 +1358,14 @@ function kpAufraeumen() {
   if (n) profilSpeichern();
   return n;
 }
-kpVerfall();   /* nach dem Neuladen gelten Fristen sofort */
+/* Beim Laden: abgelaufene Einträge entfernen und nur das Protokoll im gespeicherten Profil nachziehen. profilSpeichern() ist hier
+   nicht zulässig, weil es den Stand der Dossiers aus STATE übernähme, bevor die Anwendung gestartet ist. */
+if (kpVerfall()) {
+  try {
+    const roh = window.localStorage.getItem(PROFIL_KEY), o = roh ? JSON.parse(roh) : null;
+    if (o && o.v === 1) { o.kartenProtokoll = PROFIL.kartenProtokoll; window.localStorage.setItem(PROFIL_KEY, JSON.stringify(o)); }
+  } catch (ex) { /* bleibt im Arbeitsspeicher; die nächste Speicherung zieht es nach */ }
+}
 ACTIONS.KARTENPROTOKOLL_FRIST = function (a) {
   const f = Number(a.stunden), P = PROFIL.kartenProtokoll;
   if (!KP_FRISTEN.some(function (x) { return x[0] === f; }) || f === P.frist) return null;

@@ -75,6 +75,16 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.selectOption('#kp-filter', ''); await p.click('#kp-leeren'); await p.waitForTimeout(300);
   await p.evaluate(() => { const d = document.getElementById('dlg'); const btn = Array.from(d.querySelectorAll('button')).find(x => /Protokoll leeren/.test(x.textContent)); btn && btn.click(); }); await p.waitForTimeout(300);
   ok.leeren = (await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length)) === 0 && await p.evaluate(i => (STATE.dossiers.entitaeten[i].sichtungen || []).length >= 1, id);
+  /* Mehrfachänderung an Zonen wird erfasst */
+  const vorM = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
+  await p.evaluate(() => { dispatch({ type: 'ZONE_ANGELEGT', ll: [52.55, 13.45] }); dispatch({ type: 'ZONEN_MEHRFACH', ids: ['ZN-001', 'ZN-002'], op: 'radius', wert: 500 }); dispatch({ type: 'ZONEN_MEHRFACH', ids: ['ZN-001', 'ZN-002'], op: 'art', wert: 'zugriff' }); });
+  const mehr = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.map(x => x.aktion).filter(a => /Mehrfachauswahl/.test(a)).length);
+  ok.mehrfachErfasst = mehr >= 1;
+  /* Echter Reload: abgelaufener Eintrag im gespeicherten Profil verschwindet beim Laden, ohne dass die Karte geöffnet wird */
+  await p.evaluate(() => { PROFIL.kartenProtokoll.frist = 24; PROFIL.kartenProtokoll.eintraege = [{ id: 'KP-900', t: new Date(Date.now() - 100 * 3600000).toISOString(), art: 'Pin', aktion: 'Pin gesetzt', text: 'alt' }, { id: 'KP-901', t: new Date().toISOString(), art: 'Pin', aktion: 'Pin gesetzt', text: 'neu' }]; profilSpeichern(); });
+  await p.reload(); await p.waitForTimeout(1500);
+  const roh = await p.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k => /profil$/.test(k)))).kartenProtokoll.eintraege.map(x => x.id));
+  ok.reloadBereinigtGespeichert = roh.length === 1 && roh[0] === 'KP-901';
   ok.keineFehler = err.length === 0;
   console.log(JSON.stringify(ok, null, 1)); if (err.length) console.log(err.slice(0, 5));
   await b.close(); process.exit(Object.values(ok).every(Boolean) ? 0 : 1);
