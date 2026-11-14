@@ -38,7 +38,9 @@ const RIDB = {
     });
   },
   put: function (k, blob) { return RIDB.tun('readwrite', function (st) { return st.put(blob, k); }); },
-  get: function (k) { return RIDB.tun('readonly', function (st) { return st.get(k); }); }
+  get: function (k) { return RIDB.tun('readonly', function (st) { return st.get(k); }); },
+  del: function (k) { return RIDB.tun('readwrite', function (st) { return st.delete(k); }); },
+  schluessel: function () { return RIDB.tun('readonly', function (st) { return st.getAllKeys(); }); }
 };
 
 function rchHash(blob) {
@@ -94,27 +96,44 @@ function rchOeffnen(z) {
 function rchEntwurf(k) { return VIEW.draft['rch-' + k] || ''; }
 function rchSetze(k) { return function (ev) { VIEW.draft['rch-' + k] = ev.target.value; }; }
 function rchErfassen(e) {
-  const R = PROFIL.recherche, fallWahl = rchEntwurf('fall'), datei = $('rch-datei') && $('rch-datei').files && $('rch-datei').files[0];
-  const text = rchEntwurf('text').trim(), ftTyp = rchEntwurf('ft-typ') || RCH_FUNDSTELLEN[0], ftWert = rchEntwurf('ft-wert').trim();
-  if (!fallWahl) { meldung('Bitte zuerst einen Fall wählen oder einen neuen anlegen.'); return; }
-  const neu = fallWahl === '__neu', titel = rchEntwurf('fall-titel').trim();
-  if (neu && !titel) { meldung('Für einen neuen Fall fehlt der Titel.'); return; }
-  if (!datei && !text) { meldung('Weder Datei noch Textauszug angegeben.'); return; }
+  const R = PROFIL.recherche, datei = $('rch-datei') && $('rch-datei').files && $('rch-datei').files[0];
+  /* Alle Angaben werden beim Klick gemeinsam erfasst; der weitere (asynchrone) Ablauf liest keine Eingaben mehr */
+  const eing = { fall: rchEntwurf('fall'), titel: rchEntwurf('fall-titel').trim(), frage: rchEntwurf('fall-frage'), text: rchEntwurf('text').trim(), ftTyp: rchEntwurf('ft-typ') || RCH_FUNDSTELLEN[0],
+    ftWert: rchEntwurf('ft-wert').trim(), herkunft: rchEntwurf('herkunft'), notiz: rchEntwurf('notiz') };
+  const gesendet = { 'fall': eing.fall, 'fall-titel': VIEW.draft['rch-fall-titel'], 'fall-frage': VIEW.draft['rch-fall-frage'], 'text': VIEW.draft['rch-text'], 'ft-typ': VIEW.draft['rch-ft-typ'], 'ft-wert': VIEW.draft['rch-ft-wert'],
+    'herkunft': VIEW.draft['rch-herkunft'], 'notiz': VIEW.draft['rch-notiz'] };
+  if (!eing.fall) { meldung('Bitte zuerst einen Fall wählen oder einen neuen anlegen.'); return; }
+  const neu = eing.fall === '__neu';
+  if (neu && !eing.titel) { meldung('Für einen neuen Fall fehlt der Titel.'); return; }
+  if (!datei && !eing.text) { meldung('Weder Datei noch Textauszug angegeben.'); return; }
   if (datei && datei.size > RCH_MAX) { meldung('Datei über 20 MB, nicht angenommen.'); return; }
-  if (ftTyp !== 'ganze Datei' && !ftWert) { meldung('Die Fundstelle braucht einen Wert (oder "ganze Datei" wählen).'); return; }
-  const fundstelle = { typ: ftTyp, wert: ftTyp === 'ganze Datei' ? '' : ftWert };
+  if (eing.ftTyp !== 'ganze Datei' && !eing.ftWert) { meldung('Die Fundstelle braucht einen Wert (oder "ganze Datei" wählen).'); return; }
+  const fundstelle = { typ: eing.ftTyp, wert: eing.ftTyp === 'ganze Datei' ? '' : eing.ftWert };
   const fertig = function (fassung) {
-    dispatch({ type: 'RECHERCHE_BELEG', dossier: e.id, fall: neu ? null : fallWahl, neuerFall: neu ? { titel: titel, frage: rchEntwurf('fall-frage') } : null,
-      art: datei ? 'Datei' : 'Text', herkunft: rchEntwurf('herkunft'), notiz: rchEntwurf('notiz'), fassung: fassung, fundstelle: fundstelle, zitat: text });
-    ['fall', 'fall-titel', 'fall-frage', 'text', 'ft-typ', 'ft-wert', 'herkunft', 'notiz'].forEach(function (k) { delete VIEW.draft['rch-' + k]; });
+    const sicher = JSON.stringify(R);                                  /* Stand vor dem Anlegen, für die Rücknahme */
+    dispatch({ type: 'RECHERCHE_BELEG', dossier: e.id, fall: neu ? null : eing.fall, neuerFall: neu ? { titel: eing.titel, frage: eing.frage } : null,
+      art: datei ? 'Datei' : 'Text', herkunft: eing.herkunft, notiz: eing.notiz, fassung: fassung, fundstelle: fundstelle, zitat: eing.text });
+    if (JSON.stringify(R) === sicher) { if (fassung.anhang) RIDB.del(fassung.anhang).catch(function () {}); return; }          /* Aktion hat nichts angelegt */
+    if (!profilSpeichern()) {                                          /* Profil nicht gesichert: Eintrag zurücknehmen, Datei aufräumen, Entwurf behalten */
+      const alt = JSON.parse(sicher);
+      ['faelle', 'quellen', 'fassungen', 'beobachtungen'].forEach(function (k) { R[k].length = 0; alt[k].forEach(function (x) { R[k].push(x); }); });
+      R.seq = alt.seq;
+      for (let i = STATE.log.length - 1; i >= 0 && i >= STATE.log.length - 5; i--) { if (STATE.log[i].aktion === 'Recherchebeleg erfasst') { STATE.log.splice(i, 1); break; } }
+      if (fassung.anhang) RIDB.del(fassung.anhang).catch(function () {});
+      meldung('Beleg nicht gespeichert: Profilspeicher voll oder nicht beschreibbar. Die Eingabe bleibt erhalten.');
+      renderModule();
+      return;
+    }
+    /* Nur die gesendeten Eingaben löschen; ein inzwischen neuer Entwurf bleibt erhalten */
+    Object.keys(gesendet).forEach(function (k) { if (VIEW.draft['rch-' + k] === gesendet[k]) delete VIEW.draft['rch-' + k]; });
     renderModule();
   };
-  if (!datei) { fertig({ dateiname: null, groesse: text.length, typ: 'text/plain', hash: null, anhang: false }); return; }
+  if (!datei) { fertig({ dateiname: null, groesse: eing.text.length, typ: 'text/plain', hash: null, anhang: false }); return; }
   /* Datei zuerst sichern; erst danach entstehen die Datensätze */
   const schluessel = 'ANH-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);      /* eigener Dateischlüssel, unabhängig von der Fassungsnummer */
   rchHash(datei).then(function (hash) {
     return RIDB.put(schluessel, datei).then(function () { fertig({ dateiname: datei.name, groesse: datei.size, typ: datei.type || 'application/octet-stream', hash: hash, anhang: schluessel }); });
-  }).catch(function () { meldung('Beleg konnte nicht gespeichert werden (Browserspeicher nicht verfügbar).'); });
+  }).catch(function () { RIDB.del(schluessel).catch(function () {}); meldung('Beleg konnte nicht gespeichert werden (Browserspeicher nicht verfügbar).'); });
 }
 
 /* ---------- Ansicht ---------- */

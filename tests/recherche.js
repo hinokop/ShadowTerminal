@@ -40,6 +40,33 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   /* Öffnen: Prüfsumme stimmt; danach manipulierte Datei */
   await p.evaluate(() => { const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); rchOeffnen(rchBelege(e)[0]); }); await p.waitForTimeout(800); const msgOk = await sys();
   await p.evaluate(async () => { const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); const z = rchBelege(e)[0]; await RIDB.put(z.f.anhang, new Blob(['verändert'], { type: 'application/pdf' })); rchOeffnen(z); }); await p.waitForTimeout(800); const msgManip = await sys();
+  /* Regression 1: Profilspeicher voll: Eintrag zurücknehmen, Datei aufräumen, Entwurf behalten, kein Protokolleintrag */
+  const vor = await p.evaluate(async () => {
+    const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); STATE.dossiers.auswahl = e.id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule();
+    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Recherchebeleg erfasst').length, fall: PROFIL.recherche.faelle[0].id };
+  });
+  const voll = await p.evaluate(async (vor) => {
+    const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest');
+    Object.assign(VIEW.draft, { 'rch-fall': vor.fall, 'rch-text': 'Auszug voll', 'rch-ft-typ': 'Absatz', 'rch-ft-wert': '9', 'rch-herkunft': 'H-voll' }); renderModule();
+    const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array([1, 2, 3, 4])], 'voll.bin', { type: 'application/octet-stream' })); document.getElementById('rch-datei').files = dt.files;
+    const orig = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (String(k).endsWith('.profil')) throw new Error('quota'); return orig.call(this, k, v); };
+    rchErfassen(e); await new Promise(r => setTimeout(r, 900)); Storage.prototype.setItem = orig;
+    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Recherchebeleg erfasst').length, text: VIEW.draft['rch-text'], herkunft: VIEW.draft['rch-herkunft'],
+      gespeichertN: JSON.parse(localStorage.getItem(PROFIL_KEY)).recherche.beobachtungen.length, meldung: document.getElementById('sys-msg').textContent };
+  }, vor);
+  for (const k of ['rch-fall', 'rch-text', 'rch-ft-typ', 'rch-ft-wert', 'rch-herkunft']) await p.evaluate(k => { delete VIEW.draft[k]; }, k);
+  /* Regression 2: Eingaben werden beim Klick gemeinsam erfasst; ein neuer Entwurf geht beim Abschluss nicht verloren */
+  const misch = await p.evaluate(async (vor) => {
+    const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); renderModule();
+    Object.assign(VIEW.draft, { 'rch-fall': vor.fall, 'rch-text': 'Auszug A', 'rch-ft-typ': 'Absatz', 'rch-ft-wert': '1', 'rch-herkunft': 'Herkunft A', 'rch-notiz': 'Notiz A' }); renderModule();
+    const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array([9, 9, 9])], 'a.bin', { type: 'application/octet-stream' })); document.getElementById('rch-datei').files = dt.files;
+    rchErfassen(e);
+    VIEW.draft['rch-herkunft'] = 'Herkunft B'; VIEW.draft['rch-notiz'] = 'Notiz B'; VIEW.draft['rch-text'] = 'Auszug B';     /* neuer Entwurf, während A gespeichert wird */
+    await new Promise(r => setTimeout(r, 900));
+    const R = PROFIL.recherche, q = R.quellen[R.quellen.length - 1], bz = R.beobachtungen[R.beobachtungen.length - 1];
+    return { herkunft: q.herkunft, notiz: q.notiz, zitat: bz.zitat, datei: R.fassungen[R.fassungen.length - 1].dateiname, dHerkunft: VIEW.draft['rch-herkunft'], dNotiz: VIEW.draft['rch-notiz'], dText: VIEW.draft['rch-text'] };
+  }, vor);
+  console.log(JSON.stringify({ vor, voll, misch }));
   console.log(JSON.stringify({ v0, ohneFall, a: { faelle: a.faelle, q: a.q, v: a.v, b: a.b, ft: a.ft, dossier: a.dossier, dok: a.dok, hashGespeichert: a.f && a.f.hash === sha, name: a.f && a.f.dateiname }, t, n: { belege: n.belege, blobGroesse: n.blobGroesse, hashGleich: n.hash === sha } }));
   console.log(msgOhneFall); console.log(msgOk); console.log(msgManip);
   let ok = true; const chk = (m, c) => { console.log((c ? 'OK   ' : 'FAIL ') + m); if (!c) ok = false; };
@@ -52,6 +79,10 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   chk('Textbeleg im bestehenden Fall ohne neuen Fall', t.b === 2 && t.faelle === 1 && t.art === 'Text');
   chk('Nach Neustart und Reset: Belege vorhanden', n.belege === 2); chk('Nach Neustart und Reset: Datei bytegetreu (Größe und Hash)', n.blobGroesse === buf.length && n.hash === sha);
   chk('Ansicht zeigt Fall und Fundstellen nach Neustart', zeilen); chk('Öffnen meldet stimmende Prüfsumme und Fundstelle', /Prüfsumme stimmt/.test(msgOk) && /Seite 2/.test(msgOk));
-  chk('Veränderte Datei wird angezeigt', /ABWEICHENDE PRÜFSUMME/.test(msgManip)); chk('keine Seitenfehler', err.length === 0); if (err.length) console.log(err.join('|'));
+  chk('Veränderte Datei wird angezeigt', /ABWEICHENDE PRÜFSUMME/.test(msgManip)); chk('Speicher voll: kein zusätzlicher Beleg in App und Profil', voll.n === vor.n && voll.gespeichertN === vor.n); chk('Speicher voll: Datei aufgeräumt', voll.keys === vor.keys);
+  chk('Speicher voll: Entwurf bleibt erhalten', voll.text === 'Auszug voll' && voll.herkunft === 'H-voll'); chk('Speicher voll: Fehler gemeldet, kein Protokolleintrag', /nicht gespeichert/.test(voll.meldung) && voll.log === vor.log);
+  chk('Beleg enthält die Angaben vom Klick (Herkunft, Notiz, Auszug, Datei)', misch.herkunft === 'Herkunft A' && misch.notiz === 'Notiz A' && misch.zitat === 'Auszug A' && misch.datei === 'a.bin');
+  chk('Neuer Entwurf geht beim Abschluss nicht verloren', misch.dHerkunft === 'Herkunft B' && misch.dNotiz === 'Notiz B' && misch.dText === 'Auszug B');
+  chk('keine Seitenfehler', err.length === 0); if (err.length) console.log(err.join('|'));
   await b.close(); process.exit(ok ? 0 : 1);
 })();
