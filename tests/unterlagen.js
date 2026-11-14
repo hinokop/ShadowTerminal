@@ -97,9 +97,9 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
     aussagenBleiben: aus.frueher && !aus.maske && aus.n === 1,
     gegenprobeOhneFundstelle: gp.e1 === null && gp.e2 === null && gp.e3 === null && gp.e4 === 'dagegen' && gp.marke === true && gp.fs === null,
     sichtungOhneOrt: ohneOrt.pins === 0 && ohneOrt.tab === 'sichtungen',
-    sichtungPin: s1.name === 'S-01' && Math.abs(s1.ll[0] - 52.5) < 1e-6 && Math.abs(s1.ll[1] - 13.4) < 1e-6 && s1.dossier && s1.mod === 'karte' && Math.abs(s1.lat - 52.5) < 1e-6 && s1.auswahl && s1.marker,
+    sichtungPin: s1.name === 'M-01' && Math.abs(s1.ll[0] - 52.5) < 1e-6 && Math.abs(s1.ll[1] - 13.4) < 1e-6 && s1.dossier && s1.mod === 'karte' && Math.abs(s1.lat - 52.5) < 1e-6 && s1.auswahl && s1.marker,
     sichtungAusPin: s2.n === 1 && /^SI-/.test(s2.id) && s2.pin === s2.id && s2.ll && Math.abs(s2.ll[0] - 52.5) < 1e-4 && s2.markerSichtung,
-    sichtungLetzterPunkt: s3.name === 'S-02' && Math.abs(s3.ll[0] - 52.61) < 1e-6 && Math.abs(s3.ll[1] - 13.51) < 1e-6 && s3.n === 2,
+    sichtungLetzterPunkt: s3.name === 'M-02' && Math.abs(s3.ll[0] - 52.61) < 1e-6 && Math.abs(s3.ll[1] - 13.51) < 1e-6 && s3.n === 2,
     keineFehler: err.length === 0
   };
   console.log(JSON.stringify({ r, a1, a2, a3, oText, oVideo, oBild, oPdf, m2, voll2, aus, ohneOrt, s1, s2, s3, msgOeffnen, err }));

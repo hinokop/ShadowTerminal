@@ -6618,7 +6618,7 @@ function kartenKnopf(e) {
     } }, 'Auf der Karte zeigen'),
     h('span', { class: 'note' }, 'Vermuteter Standort: ' + ll[0].toFixed(4) + ', ' + ll[1].toFixed(4)));
 }
-/* Sichtung: Karte am letzten bekannten Punkt, dort ein vorgefertigter Pin (S-01, S-02 ...) als Entwurf */
+/* Sichtung: Karte am letzten bekannten Punkt, dort ein vorgefertigter Pin (M-01, M-02 ...) als Entwurf */
 function sichtungsStart(e) {
   const d = STATE.dossiers.entitaeten[e.id], L = ((d && d.sichtungen) || []).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   for (let i = 0; i < L.length; i++) { const k = typeof sichtungKoord === 'function' ? sichtungKoord(L[i]) : null; if (k) return { ll: k.ll, bez: 'letzte Sichtung ' + L[i].id }; }
@@ -6628,8 +6628,8 @@ function sichtungsStart(e) {
 function sichtungsPinName() {
   let n = 1; const belegt = {};
   (PROFIL.pins || []).forEach(function (y) { belegt[y.name] = 1; });
-  while (belegt['S-' + (n < 10 ? '0' : '') + n]) n++;
-  return 'S-' + (n < 10 ? '0' : '') + n;
+  while (belegt['M-' + (n < 10 ? '0' : '') + n]) n++;
+  return 'M-' + (n < 10 ? '0' : '') + n;
 }
 function sichtungKnopf(e) {
   const st = sichtungsStart(e);
