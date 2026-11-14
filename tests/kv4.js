@@ -24,7 +24,7 @@ R.nachWechsel=await p.evaluate(()=>VIEW.karte.messen);
 R.preset=await p.$$eval('.k-seg button',n=>n.map(x=>x.textContent+':'+x.classList.contains('aktiv')));
 await p.click('#k-p-zeit');R.zeit=await p.$$eval('.k-seg button',n=>n.map(x=>x.textContent+':'+x.classList.contains('aktiv')));
 await p.click('#k-p-gesamt');await p.waitForTimeout(400);
-await p.screenshot({path:'/tmp/t/kv4.png'});
+await p.screenshot({path:'kv4.png'});
 // Handler fragen Antwort
 await p.evaluate(()=>karteWaehlen('P-9054',false));await p.click('#k-pop-frage');
 R.draft=await p.evaluate(()=>VIEW.draft['km-handler']);

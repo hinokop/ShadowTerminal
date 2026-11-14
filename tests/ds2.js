@@ -20,8 +20,8 @@ chk(await p.evaluate(i=>{const x=IZ()[i].einschaetzung;return x&&x.quelleArt==='
 await p.click('#btn-einreichen');await p.waitForTimeout(400);
 chk(await p.evaluate(i=>!(IZ()[i]||{}).eingereicht,id),'ohne Beleg nicht eingereicht');
 // Upload
-fs.writeFileSync('/tmp/t/beleg.png',Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==','base64'));
-await p.setInputFiles('#rb-datei','/tmp/t/beleg.png');await p.fill('#rb-notiz','Foto vom Hof');await p.click('#btn-beleg');await p.waitForTimeout(800);
+fs.writeFileSync('beleg.png',Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==','base64'));
+await p.setInputFiles('#rb-datei','beleg.png');await p.fill('#rb-notiz','Foto vom Hof');await p.click('#btn-beleg');await p.waitForTimeout(800);
 chk(await p.evaluate(i=>dossierBelege(entitaet(i)).length===1,id),'Beleg gespeichert');
 chk(await p.evaluate(i=>einreichPruefung(entitaet(i)).ok,id),'Prüfung ok mit Dokument statt Sichtung');
 await p.screenshot({path:'ds2_b.png'});

@@ -10,5 +10,5 @@ await p.click('#k-b-carto');await p.evaluate(()=>{VIEW.karte.zoom=11;VIEW.karte.
 const box=await p.locator('.k-marker[data-id="P-9054"] .k-treffer').boundingBox();
 await p.mouse.move(box.x+box.width/2,box.y+box.height/2);await p.waitForTimeout(250);
 console.log(JSON.stringify(await p.evaluate(()=>({hat:document.getElementById('k-svg').classList.contains('hat-fokus'),nah:document.querySelectorAll('.k-nah').length,tip:document.getElementById('k-tip').textContent}))));
-await p.screenshot({path:'/tmp/t/kv3.png'});
+await p.screenshot({path:'kv3.png'});
 console.log(net.slice(0,4).join('\n')||'keine Kachelantworten');console.log('Fehler:',e.join('|')||'keine');await b.close()})();

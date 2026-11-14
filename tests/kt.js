@@ -7,5 +7,5 @@ await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({ty
  dispatch({type:'NAVIGATION',modul:'karte'});});
 await p.waitForTimeout(800);
 await p.evaluate(()=>{VIEW.karte.zoom=9.4;VIEW.karte.lat=52.40;VIEW.karte.lon=13.40;zeichneKarte($('k-svg'))});await p.waitForTimeout(300);
-await p.screenshot({path:'/tmp/t/k1.png'});
+await p.screenshot({path:'k1.png'});
 console.log('Fehler:',e.join(' | ')||'keine');await b.close()})();

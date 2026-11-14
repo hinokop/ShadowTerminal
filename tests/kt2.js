@@ -13,7 +13,7 @@ R.unbek=await p.evaluate(()=>alleEntitaeten().filter(e=>wissen(e)==='unbekannt')
 const id=R.marker.find(x=>x.startsWith('P-'));
 await p.evaluate(i=>karteWaehlen(i,false),id);await p.waitForTimeout(200);
 R.popup=await p.$eval('#k-auswahl',n=>({hidden:n.hidden,text:n.textContent.slice(0,200)}));
-await p.screenshot({path:'/tmp/t/k2.png'});
+await p.screenshot({path:'k2.png'});
 await p.evaluate(()=>{VIEW.karte.ebenen.personen=false;zeichneKarte($('k-svg'))});
 R.ohnePers=await p.$$eval('.k-marker',n=>n.filter(x=>x.dataset.id.startsWith('P-')).length);
 R.verb=await p.$$eval('.k-verb-hit',n=>n.length);

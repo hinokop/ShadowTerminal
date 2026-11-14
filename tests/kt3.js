@@ -11,5 +11,5 @@ const vh=await p.$$eval('.k-verb-hit',n=>n.length);console.log('Kanten',vh);
 if(vh){await p.evaluate(()=>{const v=document.querySelector('.k-verb-hit');v.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));v.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));v.dispatchEvent(new MouseEvent('click',{bubbles:true}))});}
 const btn=await p.$('#k-auswahl button:has-text("P-0001")');if(btn){await btn.click();await p.waitForTimeout(300);console.log('Pfad',await p.textContent('#tb-path'));}
 await p.evaluate(()=>{dispatch({type:'NAVIGATION',modul:'karte'})});await p.waitForTimeout(300);
-await p.evaluate(()=>{VIEW.karte.dt=36;renderModule()});await p.waitForTimeout(500);await p.screenshot({path:'/tmp/t/k3.png'});
+await p.evaluate(()=>{VIEW.karte.dt=36;renderModule()});await p.waitForTimeout(500);await p.screenshot({path:'k3.png'});
 console.log('Fehler:',e.join('|')||'keine');await b.close()})();

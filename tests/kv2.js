@@ -16,12 +16,12 @@ R.auswahl=await p.evaluate(()=>VIEW.karte.auswahl);R.popup=await p.$eval('#k-aus
 const box=await p.locator('.k-marker[data-id="P-0001"] .k-treffer').boundingBox();
 await p.mouse.move(box.x+box.width/2,box.y+box.height/2);await p.waitForTimeout(200);
 R.fokus=await p.evaluate(()=>({hat:document.getElementById('k-svg').classList.contains('hat-fokus'),nah:document.querySelectorAll('.k-nah').length,tip:document.getElementById('k-tip').textContent}));
-await p.screenshot({path:'/tmp/t/kv2a.png'});
+await p.screenshot({path:'kv2a.png'});
 // Messen
 await p.click('#k-messen');
 await p.evaluate(()=>{const P=karteProj();VIEW.karte.messPts=[[52.52,13.40],[52.39,13.81]];zeichneKarte($('k-svg'))});
 R.mess=await p.$eval('.k-mess-t',n=>n.textContent);
-await p.screenshot({path:'/tmp/t/kv2b.png'});
+await p.screenshot({path:'kv2b.png'});
 await p.click('#k-messen');
 // Wiedergabe
 await p.click('#k-spiel');await p.waitForTimeout(1200);R.dt=await p.evaluate(()=>VIEW.karte.dt);await p.click('#k-spiel');

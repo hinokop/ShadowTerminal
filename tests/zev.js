@@ -42,5 +42,5 @@ await p.evaluate(()=>{STATE.agent.status='Standby'});
 // Popup Verlauf
 await p.evaluate(()=>{karteWaehlen('ZN-001',false)});await p.waitForTimeout(500);
 chk(await p.evaluate(()=>/Verlauf/i.test(document.body.innerText)),'Popup zeigt Verlauf');
-await p.screenshot({path:'/tmp/t/zev.png'});
+await p.screenshot({path:'zev.png'});
 console.log(e.join('\n')||'keine Seitenfehler');console.log(fail?'FEHLER: '+fail:'ALLE OK');await b.close()})();

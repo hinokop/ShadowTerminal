@@ -8,7 +8,7 @@ ok(await p.locator('#reiter-tarn').count()===1,'Reiter im Vorlauf');
 await p.click('#reiter-tarn');await p.waitForTimeout(300);
 ok(await p.locator('input[id^=lb-]').count()===3,'3 Legenden mit Upload (Vorlauf)');
 ok(await p.evaluate(()=>document.body.innerText.includes('Piotr Wasilewski')&&document.body.innerText.includes('Daniel Rohde')&&document.body.innerText.includes('Sven Albrecht')),'Namen');
-await p.setInputFiles('#lb-grenz','/tmp/t/foto.png');await p.waitForTimeout(800);
+await p.setInputFiles('#lb-grenz','foto.png');await p.waitForTimeout(800);
 ok(await p.locator('#lbx-grenz').count()===1,'Foto gesetzt');
 ok(await p.evaluate(()=>!!PROFIL.bilder['legende-grenz']),'in PROFIL');
 await p.screenshot({path:'tn1.png',fullPage:true});

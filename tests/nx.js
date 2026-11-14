@@ -29,7 +29,7 @@ if(await p.evaluate(()=>!!LM())){
  ok(r2==='angenommen','sauberer Plan angenommen');
  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'mission'}));await p.waitForTimeout(400);
  ok(await p.evaluate(()=>!!document.getElementById('btn-pace')&&!!document.getElementById('btn-zp-karte')&&!document.getElementById('wi-g-P-9102')),'Panels: PACE und Karten-Button da, Wissensstände weg');
- await p.screenshot({path:'/tmp/auftrag.png',fullPage:true});
+ await p.screenshot({path:'auftrag.png',fullPage:true});
 }
 if(await p.evaluate(()=>!!LM())){
  await p.evaluate(()=>dispatch({type:'ZUGRIFF_ANGELEGT',typ:'Zugriff',bezug:'L-9052',text:'',r:'100'}));

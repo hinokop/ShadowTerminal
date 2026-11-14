@@ -4,4 +4,4 @@ await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fil
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'akten'}));await p.waitForTimeout(500);
 await p.click('#ak-open-D-STD-01').catch(()=>{});await p.click('#ak-open-D-STD-01').catch(()=>{});await p.waitForTimeout(300);
-await p.screenshot({path:'/tmp/ak1.png',fullPage:true});console.log(e.join('|')||'ok');await b.close()})();
+await p.screenshot({path:'ak1.png',fullPage:true});console.log(e.join('|')||'ok');await b.close()})();
