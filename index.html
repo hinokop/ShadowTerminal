@@ -7009,7 +7009,7 @@ function renderDossier(m) {
   let e = entitaet(STATE.dossiers.auswahl);
   if (!e || !freigeschaltet(e.mission) || wissen(e) === 'unbekannt') e = pool()[0];
   return [modKopf(m),
-    h('div', { class: 'split' }, dossierListe(), h('div', null, dossierAnsicht(e), infoGesperrt(e) ? null : beziehungsansicht(e), profilPanel()))];
+    h('div', { class: 'split' }, dossierListe(), h('div', null, dossierAnsicht(e), infoGesperrt(e) || typeof rechercheBelege !== 'function' ? null : rechercheBelege(e), infoGesperrt(e) ? null : beziehungsansicht(e), profilPanel()))];
 }
 
 /* =====================================================================
@@ -8468,5 +8468,6 @@ else window.addEventListener('load', function () { Zugang.start(init); });   /* 
 </script>
 <script src="karte-modul.js"></script>
 <script src="akten-modul.js"></script>
+<script src="recherche-modul.js"></script>
 </body>
 </html>

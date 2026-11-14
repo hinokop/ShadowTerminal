@@ -12,6 +12,7 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 - Weitere Auslagerungskandidaten: Dossiers (Modul 3), Dialogkern; immer einzeln, mit vollem Testlauf (tests, runall).
 - karte.js / karte2.js: Kartendaten; kartenschluessel.js: lokal, NIE committen (.gitignore)
 - tests/: Playwright-Skripte (Passwort 'pw-test-123'); bekannt unstabil: abd, wk3, dp
+- recherche-modul.js: Modul 8 Recherchebelege (Fall, Quelle, Fassung, Beobachtung am Dossier ohne Auftrag; PROFIL.recherche, Dateien in eigener IndexedDB); nach dem Hauptskript geladen, Vertrag in docs/datenvertrag.md
 - karte3d.html: MapLibre-3D-Ansicht (eingebettet in die Karte; eigenständig nutzt sie szenario.js)
 
 ## Arbeitsweise
