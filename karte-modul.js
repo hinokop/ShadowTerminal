@@ -1102,6 +1102,24 @@ function karte3dDaten() {
 function webglVorhanden() {
   try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; }
 }
+/* Zoom und Mitte der beiden Ansichten bleiben beim Umschalten gekoppelt (feste Differenz von 0,5 Stufen in beide Richtungen, damit Hin- und Rückwechsel stabil sind) */
+const KARTE_ZOOM_3D = 0.5;
+function karteKameraUebernehmen(kamera) {
+  const K = VIEW.karte;
+  if (!kamera || !Array.isArray(kamera.center)) return;
+  K.kamera3d = kamera;
+  K.lon = kamera.center[0]; K.lat = kamera.center[1];
+  if (isFinite(kamera.zoom)) K.zoom = Math.max(1.6, Math.min(19, kamera.zoom + KARTE_ZOOM_3D));
+}
+function karte3dUmschalten() {
+  const K = VIEW.karte;
+  if (K.ansicht3d) { if (K.kamera3d) karteKameraUebernehmen(K.kamera3d); }                       /* zurück nach 2D: letzte 3D-Kamera übernehmen */
+  else if (K.kamera3d) {                                                                         /* nach 3D: aktuelle 2D-Ansicht als Kamera, Neigung und Richtung bleiben (erster Aufruf: Ausgangslogik in karte3dDaten) */
+    const alt = K.kamera3d;
+    K.kamera3d = { center: [K.lon, K.lat], zoom: Math.max(1, K.zoom - KARTE_ZOOM_3D), pitch: alt.pitch != null ? alt.pitch : 60, bearing: alt.bearing != null ? alt.bearing : -20 };
+  }
+  K.ansicht3d = !K.ansicht3d; renderModule();
+}
 function karte3dSenden(nachricht) {
   const fr = document.getElementById('k-3d-frame');
   if (fr && fr.contentWindow) { try { fr.contentWindow.postMessage(nachricht, '*'); } catch (e) { /* ohne 3D */ } }
@@ -1159,9 +1177,7 @@ if (typeof window !== 'undefined' && !window.__karte3dHoerer) {
     else if (d.typ === 'karte3d-klick') karte3dKlick(d);
     else if (d.typ === 'karte3d-fehler') { if (!KARTE3D.fehlerGemeldet) { KARTE3D.fehlerGemeldet = true; meldung('3D-Ansicht: ' + d.grund + '. Die 2D-Karte bleibt nutzbar.'); } }
     else if (d.typ === 'karte3d-kamera' && d.kamera) {
-      VIEW.karte.kamera3d = d.kamera;
-      /* 2D-Mitte nachführen, damit der Wechsel zurück an derselben Stelle landet */
-      VIEW.karte.lon = d.kamera.center[0]; VIEW.karte.lat = d.kamera.center[1];
+      karteKameraUebernehmen(d.kamera);
     }
   });
 }
@@ -1327,7 +1343,7 @@ function renderKarte(m) {
     h('button', { type: 'button', id: 'k-zugriff-neu', class: K.zugriffSetzen ? 'aktiv' : '', 'aria-pressed': K.zugriffSetzen ? 'true' : 'false', disabled: !def, title: def ? 'Wiederholt auf die Karte klicken: markiert mögliche Zugriffspunkte (Zufahrt, Tor, Seiteneingang …). Ende mit Esc oder erneutem Klick' : 'Nur mit laufendem Auftrag', onclick: function () { K.zugriffSetzen = !K.zugriffSetzen; K.zoneSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zugriffSetzen ? 'Zugriffspunkte: klicken, Ende mit Esc' : 'Zugriffspunkte markieren'),
     h('button', { type: 'button', id: 'k-mehr', class: K.mehrModus ? 'aktiv' : '', 'aria-pressed': K.mehrModus ? 'true' : 'false', title: 'Zonen nacheinander anklicken, um mehrere gemeinsam zu bearbeiten (auch mit Umschalt- oder Strg-Klick)', onclick: function () { K.mehrModus = !K.mehrModus; if (!K.mehrModus) { K.mehr = []; } K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; renderModule(); } }, K.mehrModus ? 'Mehrfach: Zonen anklicken' : 'Mehrfach'),
     h('button', { type: 'button', id: 'k-messen', class: K.messen ? 'aktiv' : '', 'aria-pressed': K.messen ? 'true' : 'false', title: 'Zwei Punkte oder Markierungen anklicken: Entfernung und Fahrzeit', onclick: function () { if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; } else { K.messen = true; K.auswahl = null; } renderModule(); } }, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen'),
-    h('button', { type: 'button', id: 'k-3d', class: K.ansicht3d ? 'aktiv' : '', 'aria-pressed': K.ansicht3d ? 'true' : 'false', title: 'Wechselt zwischen der flachen Karte und der geneigten Ansicht mit Gebäuden (benötigt Internetverbindung)', onclick: function () { K.ansicht3d = !K.ansicht3d; renderModule(); } }, K.ansicht3d ? '2D' : '3D')];
+    h('button', { type: 'button', id: 'k-3d', class: K.ansicht3d ? 'aktiv' : '', 'aria-pressed': K.ansicht3d ? 'true' : 'false', title: 'Wechselt zwischen der flachen Karte und der geneigten Ansicht mit Gebäuden (benötigt Internetverbindung)', onclick: karte3dUmschalten }, K.ansicht3d ? '2D' : '3D')];
   const preset = function (name, sets) {
     const aktiv = Object.keys(sets).every(function (k) { return !!K.ebenen[k] === sets[k]; });
     return h('button', { type: 'button', class: aktiv ? 'aktiv' : '', 'aria-pressed': aktiv ? 'true' : 'false', id: 'k-p-' + name.toLowerCase(), onclick: function () { Object.keys(sets).forEach(function (k) { K.ebenen[k] = sets[k]; }); karteWahlSichern(); renderModule(); } }, name);
