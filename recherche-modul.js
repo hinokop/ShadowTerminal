@@ -457,7 +457,7 @@ function rchPaketBauen(fallId) {
       });
     });
   }, Promise.resolve()).then(function () {
-    return rchTextHash(rchKanon(inhalt));
+    return rchTextHash(rchKanon({ inhalt: inhalt, dateien: liste }));                 /* die Prüfsummen der Dateien sind selbst gesichert */
   }).then(function (inhaltHash) {
     const manifest = { erstellt: nowIso(), programm: 'Field Terminal', fall: { id: fall.id, titel: fall.titel },
       zaehler: { quellen: quellen.length, fassungen: fassungen.length, beobachtungen: beobachtungen.length, aussagen: aussagen.length, dossiers: dossiers.length, dateien: Object.keys(dateien).length },
@@ -496,14 +496,15 @@ function rchPaketPruefen(o) {
   i.aussagen.forEach(function (x) { if (x.fall !== i.fall.id) fehler.push(x.id + ' gehört nicht zum Fall'); ['stuetzend', 'widersprechend'].forEach(function (k) { if (!Array.isArray(x[k])) fehler.push(x.id + ': ' + k + ' fehlt'); else x[k].forEach(function (l) { if (!b[l.beob]) fehler.push(x.id + ': Beleg ' + l.beob + ' fehlt'); }); }); });
   if (fehler.length) return Promise.resolve({ fehler: fehler.slice(0, 8) });
   if (!(window.crypto && crypto.subtle)) return nok('Prüfsummen sind in diesem Browser nicht berechenbar; das Paket wird nicht übernommen');
-  return rchTextHash(rchKanon(i)).then(function (h1) {
-    if (h1 !== m.inhaltHash) return { fehler: ['Inhalt stimmt nicht mit der Prüfsumme im Manifest überein (Paket verändert oder beschädigt)'] };
+  return rchTextHash(rchKanon({ inhalt: i, dateien: Array.isArray(m.dateien) ? m.dateien : [] })).then(function (h1) {
+    if (h1 !== m.inhaltHash) return { fehler: ['Inhalt oder Dateiliste stimmen nicht mit der Prüfsumme im Manifest überein (Paket verändert oder beschädigt)'] };
     const blobs = {}, fehlend = [], liste = Array.isArray(m.dateien) ? m.dateien : [];
     const keys = {}; i.fassungen.forEach(function (x) { if (x.anhang) keys[x.anhang] = x; });
     return liste.reduce(function (kette, d) {
       return kette.then(function () {
         if (!d || !keys[d.key]) { fehler.push('Manifest nennt Datei ohne Beleg: ' + (d && d.key)); return null; }
         if (d.status === 'fehlt') { fehlend.push(d.key); return null; }
+        if (d.status === 'ok' && keys[d.key].hash && keys[d.key].hash !== d.sha256) { fehler.push('Manifest und Beleg widersprechen sich bei ' + d.key + ' (Prüfsumme)'); return null; }
         const b64 = o.dateien && o.dateien[d.key];
         if (typeof b64 !== 'string') { fehler.push('Datei fehlt im Paket: ' + d.key); return null; }
         let blob; try { blob = rchAusBase64(b64, d.typ); } catch (x) { fehler.push('Datei nicht lesbar: ' + d.key); return null; }
