@@ -1015,7 +1015,7 @@ const Store = (function () {
    ===================================================================== */
 const PROFIL_KEY = STORAGE_KEY + '.profil';
 const PROFIL = (function () {
-  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], daten: {}, seq: { eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
+  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], daten: {}, seq: { eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
   let p = leer();
   try {
     const raw = window.localStorage.getItem(PROFIL_KEY);
@@ -1069,7 +1069,7 @@ function zonenImportieren(q, abbildung) {
   });
   return (neu ? '; ' + neu + ' Zone(n) übernommen' : '') + (neuId ? '; ' + neuId + ' Zone(n) mit gleicher Kennung, aber abweichendem Inhalt unter neuer Kennung übernommen' : '') + (doppelt ? '; ' + doppelt + ' Zone(n) bereits vorhanden' : '') + (verworfen ? '; ' + verworfen + ' Bezug/Bezüge zu Dossier oder Unterlage nicht eindeutig zuzuordnen und weggelassen' : '');
 }
-const PROFIL_AKTIONEN = { LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, VERBINDUNG_GELOESCHT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1 };
+const PROFIL_AKTIONEN = { LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, VERBINDUNG_GELOESCHT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, DOSSIER_SPERREN: 1, DOSSIER_ENTSPERREN: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1 };
 function profilSpeichern() {
   if (STATE && STATE.dossiers) {
     const d = STATE.dossiers, daten = {};
@@ -3461,6 +3461,51 @@ function infoStufe(e) {
 }
 function infoFrei(e) { return wissen(e) === 'frei'; }
 function infoGesperrt(e) { return !infoFrei(e); }
+/* Sperre durch den Nutzer (unabhängig von der Missionsfreigabe): ein gesperrtes Dossier erscheint nur mit seiner Nummer;
+   Entsperren verlangt die Zugangskennung der Anmeldung. Reine Oberflächensperre, die Daten bleiben unverändert gespeichert. */
+function dossierGesperrt(e) { return !!e && (PROFIL.gesperrt || []).indexOf(e.id) >= 0; }
+function kennungPruefen(pw) {
+  const rec = typeof authLaden === 'function' ? authLaden() : null;
+  if (!rec || !pw) return Promise.resolve(false);
+  return kennungHash(pw, rec.salt, rec.algo).then(function (hx) { return gleich(hx, rec.hash); }, function () { return false; });
+}
+let SPERRE_MASKE = { stand: '', re: null, ids: {} };
+function sperreMaske() {
+  const ids = (PROFIL && PROFIL.gesperrt) || [], stand = ids.join(',') + '|' + (STATE && STATE.dossiers ? STATE.dossiers.eigene.length : 0);
+  if (SPERRE_MASKE.stand === stand) return SPERRE_MASKE;
+  const map = {}, namen = [];
+  ids.forEach(function (id) {
+    const e = entitaet(id); if (!e) return;
+    [e.name].concat((e.aliase || []).filter(function (a) { return String(a).length >= 5; })).forEach(function (n) { if (n && String(n).length >= 3) { map[String(n).toLowerCase()] = id; namen.push(String(n)); } });
+  });
+  namen.sort(function (a, b) { return b.length - a.length; });
+  SPERRE_MASKE = { stand: stand, ids: map, re: namen.length ? new RegExp(namen.map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|'), 'gi') : null };
+  return SPERRE_MASKE;
+}
+/* Text für Ziele außerhalb des Hauptfensters (eingebettete 3D-Karte): Namen gesperrter Dossiers durch die Nummer ersetzen */
+function sperreText(t) {
+  const m = sperreMaske(); if (!m.re || t == null) return t;
+  m.re.lastIndex = 0; return String(t).replace(m.re, function (x) { return m.ids[x.toLowerCase()] || x; });
+}
+function sperreMaskieren(wurzel) {
+  const m = sperreMaske(); if (!m.re || !wurzel) return;
+  const ers = function (t) { m.re.lastIndex = 0; return t.replace(m.re, function (x) { return m.ids[x.toLowerCase()] || x; }); };
+  if (wurzel.nodeType === 3) { const t = wurzel.nodeValue; m.re.lastIndex = 0; if (t && m.re.test(t)) wurzel.nodeValue = ers(t); return; }
+  if (wurzel.nodeType !== 1) return;
+  const w = document.createTreeWalker(wurzel, NodeFilter.SHOW_TEXT, null); let n;
+  while ((n = w.nextNode())) { m.re.lastIndex = 0; if (m.re.test(n.nodeValue)) n.nodeValue = ers(n.nodeValue); }
+  const el = wurzel.querySelectorAll ? [wurzel].concat([].slice.call(wurzel.querySelectorAll('[title],[aria-label],[placeholder],[alt]'))) : [];
+  el.forEach(function (x) { ['title', 'aria-label', 'placeholder', 'alt'].forEach(function (a) { const v = x.getAttribute && x.getAttribute(a); if (v) { m.re.lastIndex = 0; if (m.re.test(v)) x.setAttribute(a, ers(v)); } }); });
+}
+if (typeof MutationObserver === 'function' && typeof document !== 'undefined') {
+  new MutationObserver(function (liste) {
+    if (!((typeof PROFIL !== 'undefined' && PROFIL.gesperrt) || []).length) return;
+    liste.forEach(function (mu) {
+      if (mu.type === 'characterData') sperreMaskieren(mu.target);
+      else [].forEach.call(mu.addedNodes, function (n) { sperreMaskieren(n); });
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+}
 function infoMaske(e) { return e.name.replace(/[^\s,().\-"„“]/g, '█'); }
 function infoRueck() { return STATE.infoRueck && Date.now() - Date.parse(STATE.infoRueck.t) < 600000 ? STATE.infoRueck : null; }
 function infoBewerten(e, bg) {
@@ -5146,6 +5191,17 @@ const ACTIONS = {
     return { modul: 'Karte', aktion: 'Pin entfernt', objekt: x.id, objektName: x.name, detail: x.name };
   },
   /* Eigene Zonen: gehören zum Profil, nicht zum Auftrag. Keine Bewertung, keine Zeitgeber, keine simulierten Meldungen. */
+  DOSSIER_SPERREN: function (a) {
+    const e = entitaet(a.id);
+    if (!e || dossierGesperrt(e)) return null;
+    PROFIL.gesperrt = (PROFIL.gesperrt || []).concat([e.id]);
+    return { modul: 'Dossier', aktion: 'Dossier gesperrt', detail: e.id };
+  },
+  DOSSIER_ENTSPERREN: function (a) {       /* nur nach geprüfter Zugangskennung aufrufen (Oberfläche) */
+    if (!(PROFIL.gesperrt || []).some(function (i) { return i === a.id; })) return null;
+    PROFIL.gesperrt = PROFIL.gesperrt.filter(function (i) { return i !== a.id; });
+    return { modul: 'Dossier', aktion: 'Dossier entsperrt', detail: a.id };
+  },
   OZONE_ANGELEGT: function (a) {
     if (!Array.isArray(a.ll) || !isFinite(a.ll[0]) || !isFinite(a.ll[1])) return null;
     PROFIL.zonen = PROFIL.zonen || [];
@@ -5271,7 +5327,7 @@ const ACTIONS = {
     ids.forEach(function (id) { delete STATE.dossiers.entitaeten[id]; });
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];
     const alt = PROFIL.leer(), zoneZaehler = Math.max((PROFIL.seq && PROFIL.seq.zone) || 0, (PROFIL.zonen || []).reduce(function (m, y) { const k = /^ZO-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0)), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
-    ['eigene', 'eigeneKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten'].forEach(function (k) { PROFIL[k] = alt[k]; });
+    ['eigene', 'eigeneKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten', 'gesperrt'].forEach(function (k) { PROFIL[k] = alt[k]; });
     if (PROFIL.kartenProtokoll) PROFIL.kartenProtokoll.eintraege = [];
     PROFIL.pins = []; PROFIL.seq.pin = pinZaehler;     /* IDs werden auch nach dem Leeren nie neu vergeben */
     PROFIL.seq.zone = zoneZaehler; PROFIL.zonen = [];
@@ -6650,6 +6706,7 @@ function dossierListe() {
     if (bedrohung(e).stufe < F.stufe) return false;
     if (F.status === 'mit' ? !st.status : (F.status !== 'Alle' && st.status !== F.status)) return false;
     if (!q) return true;
+    if (dossierGesperrt(e)) return e.id.toLowerCase().indexOf(q) >= 0;
     return (infoGesperrt(e) ? e.name : e.id + ' ' + e.name + ' ' + e.aliase.join(' ') + ' ' + e.rolle + ' ' + e.reg).toLowerCase().indexOf(q) >= 0;
   });
   const neu = function () { renderModule(); };
@@ -6677,8 +6734,8 @@ function dossierListe() {
         const st = STATE.dossiers.entitaeten[e.id];
         return h('li', null, h('button', { type: 'button', id: 'dl-' + e.id, 'aria-current': e.id === STATE.dossiers.auswahl ? 'true' : null,
             onclick: function () { oeffneDossier(e.id); } },
-          icon(e.typ), h('span', { class: 'nm' }, e.name), h('span', { class: 'meta' }, infoGesperrt(e) ? 'Rudiment · S' + bedrohung(e).stufe : 'S' + bedrohung(e).stufe + ' · ' + e.land),
-          h('span', { class: 'sub' }, infoGesperrt(e) ? e.typ + ' · nur Rudiment, Freigabe offen' : e.id + ' · ' + e.typ + ' · ' + dossierQuelle(e) + (st.status ? ' · ' + statusDef(st.status).label : ''))));
+          icon(e.typ), h('span', { class: 'nm' }, dossierGesperrt(e) ? e.id : e.name), dossierGesperrt(e) ? null : h('span', { class: 'meta' }, infoGesperrt(e) ? 'Rudiment · S' + bedrohung(e).stufe : 'S' + bedrohung(e).stufe + ' · ' + e.land),
+          dossierGesperrt(e) ? null : h('span', { class: 'sub' }, infoGesperrt(e) ? e.typ + ' · nur Rudiment, Freigabe offen' : e.id + ' · ' + e.typ + ' · ' + dossierQuelle(e) + (st.status ? ' · ' + statusDef(st.status).label : ''))));
       }) : h('li', { class: 'note' }, 'Keine Entität entspricht dem Filter.')),
     h('div', { class: 'legend', 'aria-label': 'Identität Typen' },
       ['Person', 'Organisation', 'Ort'].map(function (t) { return h('span', null, icon(t), t); }),
@@ -6863,6 +6920,18 @@ function rudimentAnsicht(e) {
 }
 function dossierAnsicht(e) {
   const st = STATE.dossiers.entitaeten[e.id], vs = verbindungenVon(e.id);
+  if (dossierGesperrt(e)) {
+    const pruefen = function () {
+      const pw = $('dg-pw').value; $('dg-pw').value = '';
+      kennungPruefen(pw).then(function (ok) { if (ok) dispatch({ type: 'DOSSIER_ENTSPERREN', id: e.id }); else { const f = $('dg-fehler'); if (f) f.textContent = 'Kennung falsch.'; } });
+    };
+    return panel('Dossier ' + e.id, [h('span', { class: 'label s-warn' }, 'gesperrt')],
+      h('div', { class: 'pad' }, h('div', { class: 'row' },
+        h('label', { for: 'dg-pw' }, 'Zugangskennung'),
+        h('input', { type: 'password', id: 'dg-pw', autocomplete: 'off', spellcheck: 'false', onkeydown: function (ev) { if (ev.key === 'Enter') pruefen(); } }),
+        h('button', { type: 'button', id: 'dg-auf', onclick: pruefen }, 'Entsperren')),
+        h('p', { class: 'note', id: 'dg-fehler', role: 'alert' }, '')));
+  }
   if (wissen(e) === 'bekannt') return rudimentAnsicht(e);
   if (infoGesperrt(e)) {
     const B = SCENARIO.abfragen.info;
@@ -6874,7 +6943,8 @@ function dossierAnsicht(e) {
   if (VIEW.dtab === 'chronik') return panel('Dossier ' + e.id + ' · ' + e.name, [h('span', { class: 'label' }, 'Chronik')], dossierTabs(e), chronikBlock(e));
   if (VIEW.dtab === 'sichtungen') return panel('Dossier ' + e.id + ' · ' + e.name, [h('span', { class: 'label' }, 'Sichtungen')], dossierTabs(e), sichtungenBlock(e));
   return panel('Dossier ' + e.id, [h('span', { class: 'label ' + stufeKlasse(bedrohung(e).stufe) }, 'Stufe ' + bedrohung(e).stufe + ' – ' + SCENARIO.bedrohungsstufen[bedrohung(e).stufe]),
-      st.status ? dossierStatusLabel(st.status) : null],
+      st.status ? dossierStatusLabel(st.status) : null,
+      h('button', { type: 'button', id: 'dg-sperren', style: 'margin-left:8px', onclick: function () { dispatch({ type: 'DOSSIER_SPERREN', id: e.id }); } }, 'Sperren')],
     dossierTabs(e),
     h('div', { class: 'mitfoto' }, bildFeld(bildPfad(e, e.id), 'Bild ' + e.id, 'Kein Bild'), h('dl', { class: 'fields' },
       feld('Name', e.name), feld('Typ', e.typ),
@@ -7150,7 +7220,7 @@ function renderDossier(m) {
   let e = entitaet(STATE.dossiers.auswahl);
   if (!e || !freigeschaltet(e.mission) || wissen(e) === 'unbekannt') e = pool()[0];
   return [modKopf(m),
-    h('div', { class: 'split' }, dossierListe(), h('div', null, dossierAnsicht(e), infoGesperrt(e) || typeof rechercheDossier !== 'function' ? null : rechercheDossier(e), infoGesperrt(e) ? null : beziehungsansicht(e), profilPanel()))];
+    h('div', { class: 'split' }, dossierListe(), h('div', null, dossierAnsicht(e), infoGesperrt(e) || dossierGesperrt(e) || typeof rechercheDossier !== 'function' ? null : rechercheDossier(e), infoGesperrt(e) || dossierGesperrt(e) ? null : beziehungsansicht(e), profilPanel()))];
 }
 
 /* =====================================================================

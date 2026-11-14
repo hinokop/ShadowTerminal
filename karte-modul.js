@@ -114,7 +114,7 @@ function karteMarker() {
   if (def && Z.route !== false) MS(def.id).zugriff.forEach(function (z) { if (z.ll) out.push({ id: z.id, kat: 'zugriff', name: z.typ + ' ' + z.id, ll: z.ll, r: z.r || 0, zp: z }); });
   if (Z.pins !== false) (PROFIL.pins || []).forEach(function (x) { if (x.ll) out.push({ id: x.id, kat: 'pin', name: x.name, ll: x.ll }); });
   if (Z.sichtungen !== false) pool().forEach(function (e) {
-    if (infoGesperrt(e)) return;
+    if (infoGesperrt(e) || dossierGesperrt(e)) return;
     const d = STATE.dossiers.entitaeten[e.id];
     ((d && d.sichtungen) || []).slice(-3).forEach(function (si) {
       const k = sichtungKoord(si);
@@ -126,7 +126,7 @@ function karteMarker() {
   pool().forEach(function (e) {
     const ll = karteKoord(e.id);
     if (!ll) return;
-    if (infoGesperrt(e)) return;
+    if (infoGesperrt(e) || dossierGesperrt(e)) return;
     if (e.typ === 'Ort') { if (Z.orte) out.push({ id: e.id, kat: 'ort', typ: 'Ort', name: e.name, ll: ll, land: e.land, entitaet: true, stufe: bedrohung(e).stufe }); }
     else if (e.typ === 'Person' ? Z.personen : Z.organisationen) out.push({ id: e.id, kat: 'figur', typ: e.typ, name: e.name, ll: ll, land: e.land, entitaet: true, stufe: bedrohung(e).stufe, zusatz: zusatzIds[e.id] || false, asset: karteAssetId(e) });
   });
@@ -1204,8 +1204,8 @@ function karteFokus(svg, id) {
    die Kamera der 3D-Ansicht wird gemerkt, damit ein Neuaufbau des Moduls sie nicht zurücksetzt. */
 function karte3dDaten() {
   const K = VIEW.karte;
-  const marker = karteMarker().filter(function (m) { return m.ll; }).map(function (m) { return { id: m.id, kat: m.kat, typ: m.typ, stufe: m.stufe || 0, name: m.name, ll: m.ll }; });
-  const zonen = karteZonen().filter(function (z) { return z.ll; }).map(function (z) { return { id: z.id, name: z.name, ll: z.ll, r: z.r }; });
+  const marker = karteMarker().filter(function (m) { return m.ll; }).map(function (m) { return { id: m.id, kat: m.kat, typ: m.typ, stufe: m.stufe || 0, name: typeof sperreText === 'function' ? sperreText(m.name) : m.name, ll: m.ll }; });
+  const zonen = karteZonen().filter(function (z) { return z.ll; }).map(function (z) { return { id: z.id, name: typeof sperreText === 'function' ? sperreText(z.name) : z.name, ll: z.ll, r: z.r }; });
   /* Ohne gemerkte Kamera: bei weiter Ausgangsansicht auf den ersten Standort (sonst erste Markierung) gehen, sonst die aktuelle Mitte nehmen */
   const ziel = K.zoom < 9 ? (marker.find(function (m) { return m.kat === 'standort'; }) || marker[0]) : null;
   const kamera = K.kamera3d || (ziel
