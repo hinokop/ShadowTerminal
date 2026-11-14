@@ -40,7 +40,7 @@ Beim Erfassen von Text, Link oder Eigenbeobachtung entsteht die erste Fassung au
 
 ### 2c. Zuordnung zu einem Fall
 
-Quellen, Fassungen, Beobachtungen, Aussagen und Ereignisse gehören zu genau einem Fall. Es gibt keinen stillen Standardfall: Beim ersten Beleg zeigt die Oberfläche, welchem Fall er zugeordnet wird, und verlangt eine ausdrückliche Wahl oder die Anlage eines Falls. Belege am Dossier ohne laufenden Auftrag laufen über einen eigenen Schreib- und Lesepfad. Der alte Missionspfad (`DOKUMENT_EINGEREICHT`, `MS(def.id).dokumente`) bleibt unverändert, bis die Mission entfällt.
+Quellen, Fassungen, Beobachtungen, Aussagen und Ereignisse gehören zu genau einem Fall. Es gibt keinen stillen Standardfall: Beim ersten Beleg zeigt die Oberfläche, welchem Fall er zugeordnet wird, und verlangt eine ausdrückliche Wahl oder die Anlage eines Falls. Belege am Dossier ohne laufenden Auftrag laufen über einen eigenen Schreib- und Lesepfad. Der alte Missionspfad (`DOKUMENT_EINGEREICHT`, `MS(def.id).dokumente`) bleibt unverändert, bis die Mission entfällt. In der Übergangszeit liest die Dossieransicht beide Pfade getrennt und kennzeichnet die Herkunft; neue Belege gehen ausschließlich in den neuen Pfad. Der alte Pfad wird mit der Mission entfernt, nicht vorher umgebaut (Begründung: er hängt an Bewertung, Quellenliste und Dossierstatus der Spiellogik).
 
 ## 3. Quellenketten und Abhängigkeit
 
