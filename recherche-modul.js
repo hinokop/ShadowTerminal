@@ -219,6 +219,7 @@ function rchUnterlageZeile(e, z) {
   const zeile = function (k, v) { return h('div', null, h('span', { class: 'dim' }, k + ': '), v); };
   return h('div', { class: 'pad', id: 'rch-u-' + b.id, style: 'border-top:1px dashed #33425a;min-width:0;overflow-wrap:anywhere' },
     h('div', null, h('strong', null, titel), ' ', ok ? h('span', { class: 'label s-accent' }, 'geprüft und nützlich') : null, fremd ? h('span', { class: 'label s-dim' }, ' anderes Dossier: ' + (b.dossiers || []).join(', ')) : null),
+    (function () { const zs = (PROFIL.zonen || []).filter(function (y) { return (y.unterlagen || []).indexOf(b.id) >= 0; }); return zs.length ? h('div', { class: 'note', id: 'rch-karte-' + b.id }, 'Auf der Karte: ', zs.map(function (y) { return [h('button', { type: 'button', class: 'link', 'data-zone': y.id, onclick: function () { if (typeof kartenObjektZeigen === 'function') kartenObjektZeigen(y.id); } }, 'Zone ' + y.name), ' ']; })) : null; })(),
     h('div', { class: 'note' }, 'Quelle: ' + (z.q.herkunft || 'nicht angegeben') + (b.fundstelle && b.fundstelle.typ ? ' · Fundstelle: ' + rchFundstelleText(b.fundstelle) : '')),
     z.b.zitat && z.f.dateiname ? h('details', { id: 'rch-z-' + b.id }, h('summary', null, 'Textauszug'), h('div', { class: 'note', style: 'white-space:pre-wrap', 'data-vollstaendig': '1' }, b.zitat))
       : (b.zitat ? h('details', { id: 'rch-z-' + b.id }, h('summary', null, 'Vollständigen Textauszug anzeigen'), h('div', { class: 'note', style: 'white-space:pre-wrap', 'data-vollstaendig': '1' }, b.zitat)) : null),
@@ -280,7 +281,18 @@ function rechercheBelege(e) {
       : h('p', { class: 'note pad' }, !R.faelle.length ? 'Noch keine Unterlagen. Mit "Unterlage hinzufügen" beginnen.' : !fallId ? 'Bitte einen Fall wählen, um seine Unterlagen zu sehen.' : 'In diesem Fall liegen zu diesem Dossier noch keine Unterlagen.'));
 }
 
-function rechercheDossier(e) { return [rechercheBelege(e), rechercheFallpaket()]; }
+/* Orte zum Dossier: Zonen und Pins, die auf dieses Dossier verweisen (Rückbezug der Verknüpfung auf der Karte) */
+function rechercheOrte(e) {
+  const liste = (PROFIL.zonen || []).filter(function (z) { return z.dossier === e.id; }).map(function (z) { return { id: z.id, art: 'Zone', name: z.name, zusatz: 'Radius ' + z.r + ' m' }; })
+    .concat((PROFIL.pins || []).filter(function (x) { return x.dossier === e.id; }).map(function (x) { return { id: x.id, art: 'Pin', name: x.name, zusatz: '' }; }));
+  if (!liste.length) return null;
+  return panel('Orte zu diesem Dossier', [h('span', { class: 'badge' }, String(liste.length))],
+    h('div', { class: 'pad', id: 'rch-orte' }, liste.map(function (o) {
+      return h('div', { class: 'row' }, h('span', null, o.art + ' ' + o.name + (o.zusatz ? ' · ' + o.zusatz : '')),
+        h('button', { type: 'button', class: 'link', 'data-ort': o.id, onclick: function () { if (typeof kartenObjektZeigen === 'function') kartenObjektZeigen(o.id); } }, 'Auf der Karte zeigen'));
+    })));
+}
+function rechercheDossier(e) { return [rechercheBelege(e), rechercheOrte(e), rechercheFallpaket()].filter(Boolean); }
 
 /* =====================================================================
    FALLPAKET: ein Fall als eine Datei (Datensätze, benötigte Dossierangaben, Belegdateien), mit Manifest und Prüfsummen.
