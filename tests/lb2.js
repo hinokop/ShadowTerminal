@@ -2,7 +2,7 @@ const {chromium}=require('playwright');
 const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1000}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
 const req=[];p.on('request',r=>{const u=r.url();if(/gdi\.berlin|cartocdn/.test(u))req.push(u.replace(/key=[^&]+/,'key=***'))});
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'NAVIGATION',modul:'karte'});});await p.waitForTimeout(800);
 await p.click('#k-b-hybrid');await p.waitForTimeout(300);req.length=0;

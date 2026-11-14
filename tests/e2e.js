@@ -5,7 +5,7 @@ const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
  const p=await ctx.newPage();const errs=[];
  p.on('pageerror',e=>errs.push('PAGE '+e.message));p.on('console',m=>{if(m.type()==='error')errs.push('CON '+m.text())});
  await p.addInitScript(()=>{window.__close=0;window.close=()=>{window.__close++}});
- await p.goto('file:///home/claude/index.html');await p.waitForTimeout(700);
+ await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(700);
  ok(await p.isVisible('#gate-boot'),'Boot sichtbar'); ok(!(await p.isVisible('#gate-box')),'Zugangsfeld während Boot verborgen');
  await p.screenshot({path:'boot.png'});
  ok((await p.textContent('#tb-st'))==='getrennt' && (await p.textContent('#tb-n'))==='0','Relais 0/3 getrennt');

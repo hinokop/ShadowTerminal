@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1000}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
 await p.addInitScript(()=>{window.__ARGUS_ERGEBNIS='direkt'});
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});MS('M1').beginn=new Date(Date.now()-60000).toISOString();dispatch({type:'NAVIGATION',modul:'karte'});
 dispatch({type:'ZONE_ANGELEGT',ll:[52.4817,13.4352]});});
@@ -42,5 +42,5 @@ await p.evaluate(()=>{STATE.agent.status='Standby'});
 // Popup Verlauf
 await p.evaluate(()=>{karteWaehlen('ZN-001',false)});await p.waitForTimeout(500);
 chk(await p.evaluate(()=>/Verlauf/i.test(document.body.innerText)),'Popup zeigt Verlauf');
-await p.screenshot({path:'/tmp/t/zev.png'});
+await p.screenshot({path:'zev.png'});
 console.log(e.join('\n')||'keine Seitenfehler');console.log(fail?'FEHLER: '+fail:'ALLE OK');await b.close()})();

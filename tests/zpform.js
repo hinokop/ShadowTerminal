@@ -8,4 +8,4 @@ await p.evaluate(()=>{dispatch({type:'ZONE_ANGELEGT',art:'zugriff',ll:[52.4905,1
 const id=await p.evaluate(()=>{const z=karteZonen().find(m=>/^ZG-/.test(m.id));return z?z.id:null});console.log('id',id);
 await p.evaluate(i=>karteWaehlen(i,false),id);await p.waitForTimeout(500);
 const m=await p.evaluate(()=>{const c=[...document.querySelectorAll('#k-auswahl input[type=checkbox]')].map(x=>Math.round(x.getBoundingClientRect().width));const pop=document.getElementById('k-auswahl').getBoundingClientRect();return {cb:c,pw:Math.round(pop.width),ph:Math.round(pop.height)}});console.log(JSON.stringify(m));
-await p.locator('#k-auswahl').screenshot({path:'/tmp/zpform.png'});console.log(e.join('|')||'ok');await b.close()})();
+await p.locator('#k-auswahl').screenshot({path:'zpform.png'});console.log(e.join('|')||'ok');await b.close()})();

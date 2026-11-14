@@ -1,9 +1,9 @@
-const PF=require('/home/claude/shadowterminal/tests/_pfad.js');const {chromium}=require('playwright');
+const PF=require('./_pfad.js');const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:950}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
 let anfragen=[];
 await p.route(/api\.open-meteo\.com/,r=>{anfragen.push(r.request().url());r.fulfill({json:{current:{time:'2026-11-13T17:15',temperature_2m:6.4,precipitation:0.3,weather_code:61,cloud_cover:90,wind_speed_10m:14.2,wind_direction_10m:225,wind_gusts_10m:38,visibility:8200}},headers:{'access-control-allow-origin':'*'}})});
 await p.route(/geobasis|eox|gdi\.berlin|cartocdn/,r=>r.abort());
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',ein:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'NAVIGATION',modul:'karte'})});await p.waitForTimeout(800);
 await p.evaluate(()=>{VIEW.karte.statusOffen=true;VIEW.karte.lat=52.4905;VIEW.karte.lon=13.426;VIEW.karte.zoom=15;renderModule()});await p.waitForTimeout(800);

@@ -2,3 +2,4 @@ kartenschluessel.js
 profil/
 *.zip
 node_modules/
+tests/*.png

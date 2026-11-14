@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1150}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
 const net=[];p.on('response',r=>{if(/cartocdn|openstreetmap/.test(r.url()))net.push(r.status()+' '+r.url().slice(0,70))});
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});
  ['P-0002','P-0003','P-9054','P-9063','O-9051','P-9053'].forEach(i=>{IZ()[i]={status:'frei'}});dispatch({type:'NAVIGATION',modul:'karte'});});
@@ -10,5 +10,5 @@ await p.click('#k-b-carto');await p.evaluate(()=>{VIEW.karte.zoom=11;VIEW.karte.
 const box=await p.locator('.k-marker[data-id="P-9054"] .k-treffer').boundingBox();
 await p.mouse.move(box.x+box.width/2,box.y+box.height/2);await p.waitForTimeout(250);
 console.log(JSON.stringify(await p.evaluate(()=>({hat:document.getElementById('k-svg').classList.contains('hat-fokus'),nah:document.querySelectorAll('.k-nah').length,tip:document.getElementById('k-tip').textContent}))));
-await p.screenshot({path:'/tmp/t/kv3.png'});
+await p.screenshot({path:'kv3.png'});
 console.log(net.slice(0,4).join('\n')||'keine Kachelantworten');console.log('Fehler:',e.join('|')||'keine');await b.close()})();

@@ -25,4 +25,4 @@ const r=await p.evaluate(async()=>{
  const nach=svg.querySelectorAll('image').length;
  VIEW.karte.zoom=18.5;zeichneKarte(svg);const direkt=[...svg.querySelectorAll('image')].filter(i=>i.getAttribute('display')!=='none').length;
  return {l0,loadsNach:loads-l0,ms:ms.toFixed(1),imgs:nach,ersterTrennungen:weg,sichtNachZoom:direkt,kachelnMap:KACHELN.size};});
-console.log(JSON.stringify(r),'requests',reqs);console.log(e.join('|')||'keine Seitenfehler');await p.screenshot({path:'/tmp/kperf.png'});await b.close()})();
+console.log(JSON.stringify(r),'requests',reqs);console.log(e.join('|')||'keine Seitenfehler');await p.screenshot({path:'kperf.png'});await b.close()})();

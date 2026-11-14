@@ -15,6 +15,6 @@ const fr=p.frames().find(f=>f.url().includes('karte3d'));
 const r=fr?await fr.evaluate(()=>({pts:karte3d.getSource('punkte')._data.features.length,zon:karte3d.getSource('zonen')._data.features.length,opt:document.querySelectorAll('#ort option').length,kam:[karte3d.getCenter().lat.toFixed(4),karte3d.getZoom()]})):'kein Frame';
 console.log(JSON.stringify(r));
 console.log('btn',await p.textContent('#k-3d'));
-await p.screenshot({path:'/tmp/k3d.png'});
+await p.screenshot({path:'k3d.png'});
 await p.click('#k-3d');await p.waitForTimeout(600);console.log('zurueck',await p.textContent('#k-3d'),await p.evaluate(()=>!document.getElementById('k-3d-frame')));
 console.log(e.join('|')||'keine Seitenfehler');await b.close()})();

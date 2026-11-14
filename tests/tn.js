@@ -1,14 +1,14 @@
 const {chromium}=require('playwright');
 const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:1200}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.keyboard.press('1');await p.waitForTimeout(400);
 ok(await p.locator('#reiter-tarn').count()===1,'Reiter im Vorlauf');
 await p.click('#reiter-tarn');await p.waitForTimeout(300);
 ok(await p.locator('input[id^=lb-]').count()===3,'3 Legenden mit Upload (Vorlauf)');
 ok(await p.evaluate(()=>document.body.innerText.includes('Piotr Wasilewski')&&document.body.innerText.includes('Daniel Rohde')&&document.body.innerText.includes('Sven Albrecht')),'Namen');
-await p.setInputFiles('#lb-grenz','/tmp/t/foto.png');await p.waitForTimeout(800);
+await p.setInputFiles('#lb-grenz','foto.png');await p.waitForTimeout(800);
 ok(await p.locator('#lbx-grenz').count()===1,'Foto gesetzt');
 ok(await p.evaluate(()=>!!PROFIL.bilder['legende-grenz']),'in PROFIL');
 await p.screenshot({path:'tn1.png',fullPage:true});

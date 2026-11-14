@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1150}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));p.on('console',m=>{if(m.type()==='error')e.push('console:'+m.text())});
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});
  ['P-0002','P-0003','P-9054','P-9063','O-9051','P-9053'].forEach(i=>{IZ()[i]={status:'frei'}});dispatch({type:'NAVIGATION',modul:'karte'});});
@@ -16,12 +16,12 @@ R.auswahl=await p.evaluate(()=>VIEW.karte.auswahl);R.popup=await p.$eval('#k-aus
 const box=await p.locator('.k-marker[data-id="P-0001"] .k-treffer').boundingBox();
 await p.mouse.move(box.x+box.width/2,box.y+box.height/2);await p.waitForTimeout(200);
 R.fokus=await p.evaluate(()=>({hat:document.getElementById('k-svg').classList.contains('hat-fokus'),nah:document.querySelectorAll('.k-nah').length,tip:document.getElementById('k-tip').textContent}));
-await p.screenshot({path:'/tmp/t/kv2a.png'});
+await p.screenshot({path:'kv2a.png'});
 // Messen
 await p.click('#k-messen');
 await p.evaluate(()=>{const P=karteProj();VIEW.karte.messPts=[[52.52,13.40],[52.39,13.81]];zeichneKarte($('k-svg'))});
 R.mess=await p.$eval('.k-mess-t',n=>n.textContent);
-await p.screenshot({path:'/tmp/t/kv2b.png'});
+await p.screenshot({path:'kv2b.png'});
 await p.click('#k-messen');
 // Wiedergabe
 await p.click('#k-spiel');await p.waitForTimeout(1200);R.dt=await p.evaluate(()=>VIEW.karte.dt);await p.click('#k-spiel');

@@ -1,11 +1,11 @@
 const {chromium}=require('playwright');
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1100}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));p.on('console',m=>{if(m.type()==='error')e.push('console:'+m.text())});
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});
  ['P-0002','P-0003'].forEach(i=>{IZ()[i]={status:'frei'}});IZ()['P-9054']={status:'frei'};IZ()['P-9063']={status:'frei'};IZ()['O-9051']={status:'frei'};IZ()['P-9053']={status:'frei'};
  dispatch({type:'NAVIGATION',modul:'karte'});});
 await p.waitForTimeout(800);
 await p.evaluate(()=>{VIEW.karte.zoom=9.4;VIEW.karte.lat=52.40;VIEW.karte.lon=13.40;zeichneKarte($('k-svg'))});await p.waitForTimeout(300);
-await p.screenshot({path:'/tmp/t/k1.png'});
+await p.screenshot({path:'k1.png'});
 console.log('Fehler:',e.join(' | ')||'keine');await b.close()})();

@@ -1,6 +1,6 @@
 const {JSDOM}=require('jsdom'); const fs=require('fs');
-let html=fs.readFileSync('/home/claude/index.html','utf8');
-html=html.replace('<script src="szenario.js"></script>','<script>'+fs.readFileSync('/home/claude/szenario.js','utf8')+'</script>').replace('<script src="dialog.js"></script>','<script>'+fs.readFileSync('/home/claude/dialog.js','utf8')+'</script>')
+let html=fs.readFileSync(require('path').join(require('./_pfad.js').ROOT, 'index.html'),'utf8');
+html=html.replace('<script src="szenario.js"></script>','<script>'+fs.readFileSync(require('path').join(require('./_pfad.js').ROOT, 'szenario.js'),'utf8')+'</script>').replace('<script src="dialog.js"></script>','<script>'+fs.readFileSync(require('path').join(require('./_pfad.js').ROOT, 'dialog.js'),'utf8')+'</script>')
  .replace('const AUFBAU_STUFE_MS = [1200, 2800];','const AUFBAU_STUFE_MS = [60, 80];').replace('const AUFBAU_KURZ_MS = [450, 800];','const AUFBAU_KURZ_MS = [20, 30];');
 const errs=[];
 const dom=new JSDOM(html,{runScripts:'dangerously',pretendToBeVisual:true,url:'http://localhost/',

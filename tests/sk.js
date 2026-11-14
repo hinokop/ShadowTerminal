@@ -2,7 +2,7 @@ const {chromium}=require('playwright');
 const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
 (async()=>{const b=await chromium.launch();const e=[];
 const p=await (await b.newContext({viewport:{width:1400,height:1300}})).newPage();p.on('pageerror',x=>e.push(x.message));
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 const due=(typ)=>p.evaluate((typ)=>{STATE.plan.filter(x=>!typ||x.typ===typ).forEach(x=>{x.faelligAm=new Date(Date.now()-1000).toISOString()});STATE.plan.slice().forEach(x=>{if(STATE.plan.includes(x)&&(!typ||x.typ===typ))dispatch({type:'FAELLIG',id:x.id})})},typ);
 const send=(t,k='asset')=>p.evaluate(([t,k])=>dispatch({type:'NACHRICHT_GESENDET',kanal:k,text:t,dringlichkeit:'Routine'}),[t,k]);

@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:1200}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>dispatch({type:'STATUS_GESETZT',status:'Standby'}));
 // alles fällig machen: Einweisung, Prüfsatz und Folgeauftrag

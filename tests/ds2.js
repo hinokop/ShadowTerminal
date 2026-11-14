@@ -1,6 +1,6 @@
 const {chromium}=require('playwright');const fs=require('fs');
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1500,height:1100}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});});
 let fail=0;const chk=(ok,t)=>{if(!ok)fail++;console.log((ok?'OK  ':'FAIL')+' '+t)};
@@ -20,8 +20,8 @@ chk(await p.evaluate(i=>{const x=IZ()[i].einschaetzung;return x&&x.quelleArt==='
 await p.click('#btn-einreichen');await p.waitForTimeout(400);
 chk(await p.evaluate(i=>!(IZ()[i]||{}).eingereicht,id),'ohne Beleg nicht eingereicht');
 // Upload
-fs.writeFileSync('/tmp/t/beleg.png',Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==','base64'));
-await p.setInputFiles('#rb-datei','/tmp/t/beleg.png');await p.fill('#rb-notiz','Foto vom Hof');await p.click('#btn-beleg');await p.waitForTimeout(800);
+fs.writeFileSync('beleg.png',Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==','base64'));
+await p.setInputFiles('#rb-datei','beleg.png');await p.fill('#rb-notiz','Foto vom Hof');await p.click('#btn-beleg');await p.waitForTimeout(800);
 chk(await p.evaluate(i=>dossierBelege(entitaet(i)).length===1,id),'Beleg gespeichert');
 chk(await p.evaluate(i=>einreichPruefung(entitaet(i)).ok,id),'Prüfung ok mit Dokument statt Sichtung');
 await p.screenshot({path:'ds2_b.png'});

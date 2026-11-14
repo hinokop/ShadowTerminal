@@ -4,7 +4,7 @@ const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
  const b=await chromium.launch();const ctx=await b.newContext({viewport:{width:1280,height:900}});
  const p=await ctx.newPage();const errs=[];
  p.on('pageerror',e=>errs.push('PAGE '+e.message));p.on('console',m=>{if(m.type()==='error')errs.push('CON '+m.text())});
- await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);
+ await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);
  await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
  await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
  await p.keyboard.press('6');await p.waitForTimeout(500);

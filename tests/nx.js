@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 const ok=(c,m)=>console.log((c?'OK   ':'FAIL ')+m);
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1400,height:1200}})).newPage();const e=[];p.on('pageerror',x=>e.push(x.message));
-await p.goto('file:///home/claude/index.html');await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 const due=async(typ)=>p.evaluate((t)=>{const l=STATE.plan.filter(x=>x.typ===t);l.forEach(x=>dispatch({type:'FAELLIG',id:x.id}));return l.length},typ);
 const send=(t,k='handler')=>p.evaluate(([t,k])=>dispatch({type:'NACHRICHT_GESENDET',kanal:k,text:t,dringlichkeit:'Routine'}),[t,k]);
@@ -29,7 +29,7 @@ if(await p.evaluate(()=>!!LM())){
  ok(r2==='angenommen','sauberer Plan angenommen');
  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'mission'}));await p.waitForTimeout(400);
  ok(await p.evaluate(()=>!!document.getElementById('btn-pace')&&!!document.getElementById('btn-zp-karte')&&!document.getElementById('wi-g-P-9102')),'Panels: PACE und Karten-Button da, Wissensstände weg');
- await p.screenshot({path:'/tmp/auftrag.png',fullPage:true});
+ await p.screenshot({path:'auftrag.png',fullPage:true});
 }
 if(await p.evaluate(()=>!!LM())){
  await p.evaluate(()=>dispatch({type:'ZUGRIFF_ANGELEGT',typ:'Zugriff',bezug:'L-9052',text:'',r:'100'}));
