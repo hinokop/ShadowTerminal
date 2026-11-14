@@ -1038,26 +1038,23 @@ const OZONE_RADIEN = [50, 100, 200, 300, 500, 1000, 2000];
 /* Profilimport eigener Zonen, wie bei Pins: keine Doppelung derselben Zone, gleiche Kennung mit anderem Inhalt unter neuer Kennung,
    zweiter Import derselben Datei ohne weitere Kopie. Bezüge zu Dossier und Unterlage bleiben nur erhalten, wenn sie eindeutig zuzuordnen sind;
    sonst bleibt die Zone ohne den Bezug importierbar. */
-function zonenImportieren(q) {
+function zonenImportieren(q, abbildung) {
   PROFIL.zonen = PROFIL.zonen || [];
   const eing = (Array.isArray(q.zonen) ? q.zonen : []).filter(function (x) { return x && typeof x.id === 'string' && Array.isArray(x.ll) && x.ll.length === 2 && isFinite(x.ll[0]) && isFinite(x.ll[1]); });
   const nr = function (y) { const k = /^ZO-(\d+)$/.exec(y.id || ''); return k ? Number(k[1]) : 0; };
   PROFIL.seq.zone = Math.max(PROFIL.seq.zone || 0, (q.seq && q.seq.zone) || 0, eing.concat(PROFIL.zonen).reduce(function (m, y) { return Math.max(m, nr(y)); }, 0));
   const dq = {}; (q.eigene || []).forEach(function (e) { dq[e.id] = e; });
-  const R = PROFIL.recherche || { beobachtungen: [], fassungen: [] }, Rq = q.recherche || { beobachtungen: [], fassungen: [] };
-  const hash = function (L, bid) { const b = (L.beobachtungen || []).find(function (x) { return x.id === bid; }), f = b ? (L.fassungen || []).find(function (x) { return x.id === b.fassung; }) : null; return b ? JSON.stringify([b.zitat || null, b.fundstelle || null, f ? f.hash || null : null]) : null; };
+  const bmap = (abbildung && abbildung.beobachtung) || {};     /* tatsächlich zugeordnete lokale Unterlagen-Nummern aus dem Import der Recherche */
   let verworfen = 0, doppelt = 0, neuId = 0, neu = 0;
   const bereinigt = function (x) {
     const c = JSON.parse(JSON.stringify(x));
     if (c.dossier) {
+      /* Standard- und Auftragsdossiers sind in jeder Installation dieselben; ein eigenes Dossier gilt nur mit passendem Quelldatensatz (Name und Typ) */
       const lok = entitaet(c.dossier), e = dq[c.dossier];
-      if (!lok || (e && (lok.name !== e.name || lok.typ !== e.typ))) { delete c.dossier; verworfen += 1; }
+      if (!lok || (lok.eigen ? !e || lok.name !== e.name || lok.typ !== e.typ : false)) { delete c.dossier; verworfen += 1; }
     }
-    c.unterlagen = (Array.isArray(c.unterlagen) ? c.unterlagen : []).filter(function (u) {
-      const g = hash(Rq, u);
-      if (g && g === hash(R, u)) return true;
-      verworfen += 1; return false;
-    });
+    c.unterlagen = (Array.isArray(c.unterlagen) ? c.unterlagen : []).map(function (u) { return bmap[u] || null; }).filter(function (u, i, a) { return u && a.indexOf(u) === i; }).filter(function (u) { return PROFIL.recherche.beobachtungen.some(function (b) { return b.id === u; }); });
+    verworfen += (Array.isArray(x.unterlagen) ? x.unterlagen.length : 0) - c.unterlagen.length;
     return c;
   };
   const inhalt = function (y) { const c = Object.assign({}, y); delete c.importVon; delete c.importName; delete c.id; delete c.name; return JSON.stringify(c); };
@@ -5265,7 +5262,7 @@ const ACTIONS = {
     if (!PROFIL.identitaet && typeof q.identitaet === 'string' && legende(q.identitaet)) PROFIL.identitaet = q.identitaet;
     Object.keys(q.dokFristen || {}).forEach(function (k) { if (!(k in PROFIL.dokFristen)) PROFIL.dokFristen[k] = q.dokFristen[k]; });
     if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q);
-    const zr = zonenImportieren(q);
+    const zr = zonenImportieren(q, q.recherche && typeof rchProfilZusammenfuehren === 'function' ? rchProfilZusammenfuehren.abbildung : null);
     return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + zr + rchText };
   },
   PROFIL_LEEREN: function () {

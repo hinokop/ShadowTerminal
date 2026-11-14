@@ -440,6 +440,7 @@ function rchZusammenfuehren(inh, opt) {
     });
     return c;
   });
+  z.map = map;
   return z;
 }
 function rchZusammenfassung(z) {
@@ -449,6 +450,7 @@ function rchZusammenfassung(z) {
 }
 /* Profilimport: Dossiernummern gelten nur, wenn das lokale Dossier dasselbe ist */
 function rchProfilZusammenfuehren(rq, q) {
+  rchProfilZusammenfuehren.abbildung = null;      /* eingehende → lokale Nummern des letzten Laufs, für Verweise aus anderen Objekten (Zonen) */
   if (!rq || !['faelle', 'quellen', 'fassungen', 'beobachtungen', 'aussagen'].every(function (k) { return Array.isArray(rq[k] || []); })) return '; Recherchedaten im Profil unlesbar, nicht übernommen';
   const eing = {}; (q.eigene || []).forEach(function (e) { eing[e.id] = e; });
   const z = rchZusammenfuehren(rq, { dossier: function (id) {
@@ -456,6 +458,7 @@ function rchProfilZusammenfuehren(rq, q) {
     if (e) return lok && lok.name === e.name && lok.typ === e.typ ? id : null;
     return lok ? id : null;
   } });
+  rchProfilZusammenfuehren.abbildung = z.map;
   const mitDatei = (rq.fassungen || []).some(function (f) { return f && f.anhang; });
   return '; Recherche: ' + rchZusammenfassung(z) + (mitDatei ? '. Belegdateien sind nicht Teil der Profilsicherung; dafür Fallpakete verwenden' : '');
 }

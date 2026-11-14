@@ -1016,7 +1016,7 @@ function eigeneZonePopup(zn, fertig) {
       h('span', null), h('button', { type: 'button', id: 'oz-unt-ja', onclick: function () { dispatch({ type: 'OZONE_UNTERLAGE', id: zn.id, unterlage: $('oz-unt').value, op: 'verknuepfen' }); } }, 'Unterlage verknüpfen')) : null,
     h('div', { class: 'k-pop-akt' },
       h('button', { type: 'button', id: 'oz-stand', onclick: function () { const t = VIEW.draft['oz-bem-' + zn.id] || ''; delete VIEW.draft['oz-bem-' + zn.id]; dispatch({ type: 'OZONE_STAND', id: zn.id, bemerkung: t }); } }, 'Stand aktualisieren'),
-      h('button', { type: 'button', class: 'link', id: 'oz-protokoll', onclick: function () { K.kpObjekt = zn.id; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen'),
+      h('button', { type: 'button', class: 'link', id: 'oz-protokoll', onclick: function () { K.kpObjekt = zn.id; K.kpFilter = ''; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen'),
       h('button', { type: 'button', class: 'link', id: 'oz-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 15), karteAuswahlAnzeige); } }, 'Zentrieren'),
       VIEW.draft['oz-weg'] === zn.id ? h('button', { type: 'button', id: 'oz-weg-ja', onclick: function () { delete VIEW.draft['oz-weg']; K.auswahl = null; dispatch({ type: 'OZONE_ENTFERNT', id: zn.id }); } }, 'Wirklich entfernen')
         : h('button', { type: 'button', class: 'link', id: 'oz-weg', onclick: function () { VIEW.draft['oz-weg'] = zn.id; karteAuswahlAnzeige(); } }, 'Entfernen'))].filter(Boolean));

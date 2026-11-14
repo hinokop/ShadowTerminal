@@ -64,6 +64,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   ok.nachNeuladen3D = await p.evaluate(() => { const z = karte3dDaten().zonen.find(x => x.id === 'ZO-001'); return !!z && z.name === 'Hafenzufahrt' && z.r === 500; });
   /* Objektfilter im Protokoll */
   await p.evaluate(() => { VIEW.karte.auswahl = 'ZO-001'; renderModule(); }); await p.waitForTimeout(400);
+  await p.evaluate(() => { VIEW.karte.kpFilter = 'Pin'; });   /* alter Artfilter darf die Zone nicht verdecken */
   await p.click('#oz-protokoll'); await p.waitForTimeout(500);
   const prot = await p.evaluate(() => ({ filter: $('kp-objekt').value, zeilen: [...document.querySelectorAll('table tbody tr')].map(r => r.innerText) }));
   ok.protokollFilter = prot.filter === 'ZO-001' && prot.zeilen.length === 7 && prot.zeilen.every(t => /Hafenzufahrt/.test(t));
@@ -88,19 +89,37 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   const fremd = await p.evaluate(() => PROFIL.zonen.find(z => z.id === 'ZO-077'));
   ok.importOhneBezug = !!fremd && !fremd.dossier && (fremd.unterlagen || []).length === 0;
   ok.importBezugEindeutig = await p.evaluate(() => { const z = PROFIL.zonen.find(y => y.id === 'ZO-001'); return z.unterlagen.join() === 'B-001' && !!z.dossier; });
+  /* Gegenprobe Verweise: gleiche Unterlagen-Nummer, anderer Fall und andere Quelle -> Verweis folgt der tatsächlich zugeordneten Nummer, nie der lokalen B-001 */
+  const dosEigen = await p.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', name: 'Lokal Eigen', typ: 'Person' }); return STATE.dossiers.eigene[STATE.dossiers.eigene.length - 1].id; });
+  const q4 = JSON.parse(JSON.stringify(q)); q4.recherche.faelle[0].titel = 'Ganz anderer Fall'; q4.recherche.quellen[0].art = 'Link';
+  q4.eigene = []; q4.seq.zone = 100;
+  q4.zonen = [{ id: 'ZO-100', name: 'Verweise', ll: [52.2, 13.2], r: 200, notiz: '', unterlagen: ['B-001'], dossier: dosEigen, t: '2026-11-01T10:00:00.000Z', stand: '2026-11-01T10:00:00.000Z' },
+              { id: 'ZO-101', name: 'Standarddossier', ll: [52.3, 13.2], r: 200, notiz: '', unterlagen: [], dossier: dos, t: '2026-11-01T10:00:00.000Z', stand: '2026-11-01T10:00:00.000Z' }];
+  await p.evaluate(q => dispatch({ type: 'PROFIL_IMPORT', profil: q, datei: 'd.json' }), q4);
+  const v1 = await p.evaluate(() => { const z = PROFIL.zonen.find(y => y.id === 'ZO-100'), lok = PROFIL.recherche.beobachtungen; return { z: z, bs: lok.map(b => b.id), fall: lok.map(b => b.id + ':' + (PROFIL.recherche.fassungen.find(f => f.id === b.fassung) || {}).quelle) }; });
+  ok.verweisFolgtZuordnung = !!v1.z && v1.bs.length === 2 && v1.z.unterlagen.length === 1 && v1.z.unterlagen[0] !== 'B-001' && v1.bs.indexOf(v1.z.unterlagen[0]) >= 0;
+  ok.eigenesDossierOhneQuelle = !!v1.z && !v1.z.dossier;
+  ok.standarddossierBleibt = await p.evaluate(d => (PROFIL.zonen.find(y => y.id === 'ZO-101') || {}).dossier === d, dos);
+  const n1 = await p.evaluate(() => PROFIL.zonen.length + '|' + PROFIL.recherche.beobachtungen.length);
+  await p.evaluate(q => dispatch({ type: 'PROFIL_IMPORT', profil: q, datei: 'd.json' }), q4);
+  ok.verweisImportWiederholt = (await p.evaluate(() => PROFIL.zonen.length + '|' + PROFIL.recherche.beobachtungen.length)) === n1;
+  /* ohne Recherche im Importprofil: kein Verweis auf lokale Unterlagen */
+  const q5 = JSON.parse(JSON.stringify(q4)); delete q5.recherche; q5.zonen = [{ id: 'ZO-120', name: 'OhneRecherche', ll: [52.4, 13.2], r: 200, notiz: '', unterlagen: ['B-001'], t: '2026-11-01T10:00:00.000Z', stand: '2026-11-01T10:00:00.000Z' }]; q5.seq.zone = 120;
+  await p.evaluate(q => dispatch({ type: 'PROFIL_IMPORT', profil: q, datei: 'e.json' }), q5);
+  ok.ohneRechercheKeinVerweis = await p.evaluate(() => { const z = PROFIL.zonen.find(y => y.id === 'ZO-120'); return !!z && z.unterlagen.length === 0; });
   /* Profil leeren: Zonen weg, Zähler bleibt */
   await p.evaluate(() => dispatch({ type: 'PROFIL_LEEREN' }));
-  ok.leerenZonenWeg = await p.evaluate(() => PROFIL.zonen.length === 0 && PROFIL.seq.zone >= 77);
+  ok.leerenZonenWeg = await p.evaluate(() => PROFIL.zonen.length === 0 && PROFIL.seq.zone >= 120);
   await p.evaluate(() => dispatch({ type: 'OZONE_ANGELEGT', ll: [52.5, 13.4] }));
-  ok.zaehlerBleibt = await p.evaluate(() => PROFIL.zonen[0].id === 'ZO-078');
+  ok.zaehlerBleibt = await p.evaluate(() => PROFIL.zonen[0].id === 'ZO-121');
   /* Gegenprobe: mit Auftrag bleibt die Auftragszone auf ihrem Pfad */
   await p.evaluate(() => { dispatch({ type: 'KENNWORT_SCHALTER', an: false }); dispatch({ type: 'STATUS_GESETZT', status: 'Standby' }); dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); dispatch({ type: 'MISSION_BEGINN_JETZT' }); dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; renderModule(); });
   await p.waitForTimeout(800);
   await p.evaluate(() => dispatch({ type: 'ZONE_ANGELEGT', ll: [52.4738, 13.4515] }));
-  ok.auftragszoneBleibt = await p.evaluate(() => { const z = karteZonen(); const a = z.find(x => /^ZN-/.test(x.id)), o = z.find(x => x.id === 'ZO-078'); return !!a && !a.profil && a.wertung === 'ruhig' && !!o && o.profil === true && !!zonenEigene(zDef()).find(x => x.id === a.id) && !PROFIL.zonen.some(x => x.id === a.id); });
+  ok.auftragszoneBleibt = await p.evaluate(() => { const z = karteZonen(); const a = z.find(x => /^ZN-/.test(x.id)), o = z.find(x => x.id === 'ZO-121'); return !!a && !a.profil && a.wertung === 'ruhig' && !!o && o.profil === true && !!zonenEigene(zDef()).find(x => x.id === a.id) && !PROFIL.zonen.some(x => x.id === a.id); });
   await p.evaluate(() => { VIEW.karte.auswahl = 'ZN-001'; renderModule(); }); await p.waitForTimeout(400);
   ok.auftragPopup = await p.evaluate(() => !!$('zn-melden') && !!$('zn-frage') && !$('oz-stand'));
-  await p.evaluate(() => { VIEW.karte.auswahl = 'ZO-078'; renderModule(); }); await p.waitForTimeout(400);
+  await p.evaluate(() => { VIEW.karte.auswahl = 'ZO-121'; renderModule(); }); await p.waitForTimeout(400);
   ok.eigenPopupMitAuftrag = await p.evaluate(() => !$('zn-melden') && !!$('oz-stand'));
   ok.keineFehler = err.length === 0;
   console.log(JSON.stringify(ok, null, 1)); if (err.length) console.log(err.slice(0, 5));
