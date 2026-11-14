@@ -41,7 +41,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   ok.unterlageSichtbar = await p.evaluate(() => !!$('oz-unt-ja'));
   await p.click('#oz-unt-ja'); await p.waitForTimeout(300);
   ok.unterlageVerknuepft = await p.evaluate(() => (PROFIL.zonen[0].unterlagen || []).join() === 'B-001');
-  const dos = await p.evaluate(() => poolAlle()[0].id);
+  const dos = await p.evaluate(() => pool()[0].id);
   await p.selectOption('#oz-dossier', dos); await p.waitForTimeout(300);
   ok.dossierVerknuepft = await p.evaluate(d => PROFIL.zonen[0].dossier === d, dos);
   /* Stand aktualisieren: eigene Prüfung mit Zeitstempel, keine Antwort, keine Sichtung */
@@ -55,7 +55,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   const dar = await p.evaluate(() => { const g = document.querySelector('.k-zone[data-id="ZO-001"]'); return g ? { klasse: g.getAttribute('class'), text: g.textContent } : null; });
   ok.neutral2D = !!dar && /\bprofil\b/.test(dar.klasse) && !/ruhig|leicht|bedroht|akut|auto/.test(dar.klasse) && /Hafenzufahrt/.test(dar.text);
   const popup = await p.evaluate(() => $('k-auswahl').innerText);
-  ok.popupOhneHandler = !/Handler|ARGUS|Bewertung|Lage bestätigen|Lage erfragen|informieren/.test(popup) && /Stand aktualisieren/.test(popup) && /Protokoll öffnen/.test(popup) && /Unterlage verknüpfen|Keine Unterlage|B-001/.test(popup);
+  ok.popupOhneHandler = !/Handler|ARGUS|Bewertung|Lage bestätigen|Lage erfragen|informieren/.test(popup) && /Stand aktualisieren/.test(popup) && /Protokoll öffnen/.test(popup) && /Unterlage verknüpfen|Keine Unterlage|Tor offen/.test(popup);
   /* Neuladen: bleibt in 2D und in der 3D-Brücke */
   await anmelden();
   await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; VIEW.karte.lat = PROFIL.zonen[0].ll[0]; VIEW.karte.lon = PROFIL.zonen[0].ll[1]; VIEW.karte.zoom = 14; renderModule(); });

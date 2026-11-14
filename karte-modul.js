@@ -675,7 +675,7 @@ function pinExport(liste) {
   a.href = u; a.download = 'lageblatt-' + (liste.length === 1 ? liste[0].id : 'pins') + '.txt'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 2000);
 }
 function pinPopup(x, fertig) {
-  const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: x.id }, patch)); };
+  const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: x.id }, patch)); karteNeuZeichnen(); };
   const n = pinNaehe(x, 1000);
   fertig(x.name, [   /* die interne Kennung PIN-nnn bleibt verborgen; sie dient nur den Verweisen */
     h('p', { class: 'k-pop-sub' }, x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5)),
@@ -686,6 +686,8 @@ function pinPopup(x, fertig) {
         return h('label', { class: 'pin-chip' + (hat ? ' an' : '') }, h('input', { type: 'checkbox', 'data-pin-zweck': z, checked: hat, onchange: function () { ab({ zwecke: PIN_ZWECKE.filter(function (y) { return y === z ? !hat : (x.zwecke || []).indexOf(y) >= 0; }) }); } }), h('span', null, z));
       })),
       PIN_UMGEBUNG.map(function (u) { return [h('label', { for: 'pin-u-' + u[0] }, u[1]), h('input', { type: 'text', id: 'pin-u-' + u[0], maxlength: '300', value: (x.umgebung && x.umgebung[u[0]]) || '', onchange: function (ev) { const o = {}; o[u[0]] = ev.target.value; ab({ umgebung: o }); } })]; }),
+      h('label', { for: 'pin-dossier' }, 'Dossier'), h('select', { id: 'pin-dossier', 'aria-label': 'Dossier zum Pin', onchange: function (ev) { ab({ dossier: ev.target.value || null }); karteNeuZeichnen(); } },
+        [h('option', { value: '' }, 'keines')].concat(dossierOptionen(x.dossier))),
       h('label', { for: 'pin-notiz' }, 'Notiz'), h('textarea', { id: 'pin-notiz', rows: '3', maxlength: '1500', onchange: function (ev) { ab({ notiz: ev.target.value }); } }, x.notiz || '')),
     h('p', { class: 'k-pop-meta' }, n.length ? 'In der Nähe: ' + n.map(function (q) { return q.id + ' ' + kuerzen(q.name, 24) + ' (' + Math.round(q.d) + ' m)'; }).join('; ') : 'Keine bekannten Punkte im Umkreis von 1 km.'),
     h('div', { class: 'k-pop-akt' },
@@ -913,8 +915,21 @@ function karteFensterListe() {
   const z = $('k-zeit');
   if (z) z.textContent = (K.dt === 0 ? 'jetzt' : (K.dt > 0 ? '+' : '−') + Math.abs(K.dt) + ' h') + ' · ' + fmtZ(T).slice(0, 16) + 'Z';
 }
+/* Popup per Titelleiste verschieben (gilt bis zur nächsten Auswahl); verschiebt nur das Fenster, nie das Objekt */
+function kartePopupZiehbar(kopf, box) {
+  kopf.addEventListener('pointerdown', function (ev) {
+    if (ev.button > 0 || (ev.target.closest && ev.target.closest('button'))) return;
+    const K = VIEW.karte, v0 = K.popupVersatz || { x: 0, y: 0 }, x0 = ev.clientX, y0 = ev.clientY;
+    try { kopf.setPointerCapture(ev.pointerId); } catch (e) { /* ohne Capture */ }
+    const bew = function (e2) { K.popupVersatz = { x: v0.x + e2.clientX - x0, y: v0.y + e2.clientY - y0 }; box.style.translate = K.popupVersatz.x + 'px ' + K.popupVersatz.y + 'px'; };
+    const ende = function () { kopf.removeEventListener('pointermove', bew); kopf.removeEventListener('pointerup', ende); kopf.removeEventListener('pointercancel', ende); };
+    kopf.addEventListener('pointermove', bew); kopf.addEventListener('pointerup', ende); kopf.addEventListener('pointercancel', ende);
+    ev.preventDefault();
+  });
+}
 function kartePopupPos() {
   const box = $('k-auswahl'), K = VIEW.karte;
+  if (box) box.style.translate = K.popupVersatz ? K.popupVersatz.x + 'px ' + K.popupVersatz.y + 'px' : '';
   if (box && K.ansicht3d) { if (box.hidden) return; box.style.visibility = 'visible'; box.style.left = 'auto'; box.style.right = '64px'; box.style.top = '64px'; box.style.transform = 'none'; return; }
   if (box) { box.style.right = ''; box.style.transform = ''; }
   const ref = K.auswahl || (K.mehr && K.mehr.length ? K.mehr[K.mehr.length - 1] : null);   /* Mehrfachauswahl: Popup an der zuletzt gewählten Zone */
@@ -939,7 +954,7 @@ function karteAuswahlAnzeige() {
   const box = $('k-auswahl'), id = VIEW.karte.auswahl;
   if (!box) return;
   const zu = h('button', { type: 'button', class: 'link k-pop-x', id: 'k-pop-x', 'aria-label': 'Schließen', onclick: function () { karteWaehlen(null, false); } }, '×');
-  const fertig = function (kopf, nodes) { box.hidden = false; box.replaceChildren(h('div', { class: 'k-pop-kopf' }, h('strong', null, kopf), zu), h('div', { class: 'k-pop-body' }, nodes)); kartePopupPos(); };
+  const fertig = function (kopf, nodes) { box.hidden = false; const kk = h('div', { class: 'k-pop-kopf', title: 'Zum Verschieben ziehen' }, h('strong', null, kopf), zu); kartePopupZiehbar(kk, box); box.replaceChildren(kk, h('div', { class: 'k-pop-body' }, nodes)); kartePopupPos(); };
   if (VIEW.karte.mehr && VIEW.karte.mehr.length) { zonenMehrPanel(fertig); return; }
   if (!id) { box.hidden = true; box.replaceChildren(); return; }
   const v = kantenPool().find(function (x) { return x.id === id; });
@@ -1023,15 +1038,35 @@ function zonenMehrPanel(fertig) {
         : h('button', { type: 'button', class: 'link', id: 'mz-weg', disabled: !Z.length, onclick: function () { VIEW.draft['mz-weg'] = '1'; karteAuswahlAnzeige(); } }, 'Entfernen'),
       h('button', { type: 'button', class: 'link', id: 'mz-aus', onclick: function () { K.mehr = []; delete VIEW.draft['mz-weg']; K.auswahl = null; renderModule(); } }, 'Auswahl aufheben'))]);
 }
+/* Änderungen an Pin und eigener Zone sofort in 2D und 3D zeigen (die Aktionen sind „leicht“ und zeichnen die Karte nicht selbst) */
+function karteNeuZeichnen() {
+  const svg = $('k-svg'); if (svg) zeichneKarte(svg);
+  if (VIEW.karte.ansicht3d) karte3dSenden(karte3dDaten());
+  karteStatusAkt();
+}
+function dossierOptionen(gewaehlt) {
+  const liste = typeof pool === 'function' ? pool().slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'de'); }) : [];
+  return liste.map(function (e) { return h('option', { value: e.id, selected: e.id === gewaehlt }, kuerzen(e.name, 40) + ' (' + e.id + ')'); });
+}
+/* Zone oder Pin auf der Karte zeigen (aus Dossier und Unterlage); wählt das Objekt und zentriert */
+function kartenObjektZeigen(id) {
+  const K = VIEW.karte, ziel = (PROFIL.zonen || []).concat(PROFIL.pins || []).find(function (x) { return x.id === id; });
+  if (!ziel || !ziel.ll) return;
+  K.pick = null; K.lat = ziel.ll[0]; K.lon = ziel.ll[1]; K.zoom = Math.max(K.zoom, 15); K.reiter = 'karte'; K.auswahl = id; K.popupVersatz = null;
+  dispatch({ type: 'NAVIGATION', modul: 'karte' });
+  if (typeof karteBezugSetzen === 'function') karteBezugSetzen(id);
+  renderModule();
+  if (K.ansicht3d) karteFlug(ziel.ll[0], ziel.ll[1], K.zoom);
+}
 /* Eigene Zone (Profil): neutrale Darstellung ohne Bewertung, Handler und Zeitgeber; Schaltflächen benennen ihre tatsächliche Wirkung */
 function eigeneZonePopup(zn, fertig) {
-  const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'OZONE_GEAENDERT', id: zn.id }, patch)); };
-  const dossiers = typeof poolAlle === 'function' ? poolAlle().slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'de'); }) : [];
+  const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'OZONE_GEAENDERT', id: zn.id }, patch)); karteNeuZeichnen(); };
   const R = PROFIL.recherche || { beobachtungen: [] };
   const unterlageText = function (id) {
     const z = typeof rchZuBeobachtung === 'function' ? rchZuBeobachtung(id) : null;
     if (!z) return id + ' (nicht mehr vorhanden)';
-    return id + (z.fall ? ' · ' + kuerzen(z.fall.titel || z.fall.id, 30) : '') + ' · ' + (z.q.id || '') + ' · ' + (typeof rchFundstelleText === 'function' ? rchFundstelleText(z.b.fundstelle) : '');
+    const titel = (z.f && z.f.dateiname) || kuerzen(String(z.b.zitat || '').replace(/\s+/g, ' '), 40) || (z.q && z.q.herkunft) || id, ft = z.b.fundstelle && z.b.fundstelle.typ && typeof rchFundstelleText === 'function' ? ', ' + rchFundstelleText(z.b.fundstelle) : '';
+    return titel + (z.fall ? ' (' + kuerzen(z.fall.titel || z.fall.id, 30) + ft + ')' : '');
   };
   const frei = (R.beobachtungen || []).filter(function (b) { return (zn.unterlagen || []).indexOf(b.id) < 0; });
   fertig(zn.name, [
@@ -1040,10 +1075,11 @@ function eigeneZonePopup(zn, fertig) {
       h('label', { for: 'oz-name' }, 'Name'), h('input', { type: 'text', id: 'oz-name', maxlength: '60', value: zn.name, onchange: function (ev) { ab({ name: ev.target.value }); } }),
       h('label', { for: 'oz-r' }, 'Radius'), h('select', { id: 'oz-r', 'aria-label': 'Radius der Zone', onchange: function (ev) { ab({ r: Number(ev.target.value) }); } }, OZONE_RADIEN.map(function (r) { return h('option', { value: String(r), selected: r === zn.r }, r + ' m'); })),
       h('label', { for: 'oz-dossier' }, 'Dossier'), h('select', { id: 'oz-dossier', 'aria-label': 'Dossier zur Zone', onchange: function (ev) { ab({ dossier: ev.target.value || null }); } },
-        [h('option', { value: '' }, 'keines')].concat(dossiers.map(function (e) { return h('option', { value: e.id, selected: e.id === zn.dossier }, kuerzen(e.name, 40) + ' (' + e.id + ')'); }))),
+        [h('option', { value: '' }, 'keines')].concat(dossierOptionen(zn.dossier))),
       h('label', { for: 'oz-notiz' }, 'Notiz'), h('textarea', { id: 'oz-notiz', rows: '3', maxlength: '1500', onchange: function (ev) { ab({ notiz: ev.target.value }); } }, zn.notiz || '')),
     h('p', { class: 'k-pop-meta', id: 'oz-stand-text' }, 'Stand: ' + fmtZ(zn.stand || zn.t) + (zn.standBemerkung ? ' · ' + zn.standBemerkung : '') + '. Der Stand hält fest, wann Sie die Zone zuletzt selbst geprüft haben; er löst keine Meldung aus.'),
     h('div', { class: 'k-pop-form' }, h('label', { for: 'oz-bem' }, 'Bemerkung zur Prüfung'), h('input', { type: 'text', id: 'oz-bem', maxlength: '300', placeholder: 'optional', value: VIEW.draft['oz-bem-' + zn.id] || '', oninput: function (ev) { VIEW.draft['oz-bem-' + zn.id] = ev.target.value; } })),
+    h('p', { class: 'k-pop-meta' }, 'Verknüpfte Unterlagen und das Dossier erscheinen dort wieder: im Dossier unter „Orte zu diesem Dossier“, bei der Unterlage unter „Auf der Karte“.'),
     (zn.unterlagen || []).length ? h('ul', { class: 'k-pop-meta', id: 'oz-unterlagen' }, zn.unterlagen.map(function (u) {
       return h('li', null, unterlageText(u) + ' ', h('button', { type: 'button', class: 'link', 'data-oz-los': u, onclick: function () { dispatch({ type: 'OZONE_UNTERLAGE', id: zn.id, unterlage: u, op: 'loesen' }); } }, 'lösen'));
     })) : h('p', { class: 'k-pop-meta' }, 'Keine Unterlage verknüpft.'),
@@ -1120,6 +1156,7 @@ function zonePopup(zn, fertig) {
 }
 function karteWaehlen(id, zentrieren) {
   const K = VIEW.karte, m = id ? (karteMarker().find(function (x) { return x.id === id; }) || (karteKoord(id) ? { ll: karteKoord(id) } : null) || (karteZoneFinden(id) ? { ll: karteZoneFinden(id).ll } : null)) : null;
+  if (K.auswahl !== id) K.popupVersatz = null;       /* neue Auswahl: Popup wieder an der Standardstelle */
   K.auswahl = id; K.mehr = [];
   const svg = $('k-svg');
   if (zentrieren && m) { karteFlug(m.ll[0], m.ll[1], Math.max(K.zoom, 11), karteAuswahlAnzeige, id); }
