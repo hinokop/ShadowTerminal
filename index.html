@@ -3482,6 +3482,11 @@ function sperreMaske() {
   SPERRE_MASKE = { stand: stand, ids: map, re: namen.length ? new RegExp(namen.map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|'), 'gi') : null };
   return SPERRE_MASKE;
 }
+/* Text für Ziele außerhalb des Hauptfensters (eingebettete 3D-Karte): Namen gesperrter Dossiers durch die Nummer ersetzen */
+function sperreText(t) {
+  const m = sperreMaske(); if (!m.re || t == null) return t;
+  m.re.lastIndex = 0; return String(t).replace(m.re, function (x) { return m.ids[x.toLowerCase()] || x; });
+}
 function sperreMaskieren(wurzel) {
   const m = sperreMaske(); if (!m.re || !wurzel) return;
   const ers = function (t) { m.re.lastIndex = 0; return t.replace(m.re, function (x) { return m.ids[x.toLowerCase()] || x; }); };

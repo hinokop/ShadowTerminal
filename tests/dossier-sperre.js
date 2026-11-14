@@ -27,6 +27,11 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   }
   ok.keinModulZeigtName = treffer.length === 0; if (treffer.length) console.log('Name sichtbar in:', treffer.join(','));
   ok.karteOhneMarker = await p.evaluate(i => !karteMarker().some(m => m.entId === i || m.id === i), d.id);
+  /* 3D-Übergabe: Pin- und Zonennamen, die den gesperrten Namen enthalten, gehen nur mit der Nummer an den eingebetteten Kartenrahmen */
+  await p.evaluate(() => { dispatch({ type: 'PIN_ANGELEGT', ll: [52.5201, 13.4051], name: 'Notiz zu Quarzfeld Testmann' }); dispatch({ type: 'OZONE_ANGELEGT', ll: [52.5202, 13.4052] }); dispatch({ type: 'OZONE_GEAENDERT', id: PROFIL.zonen[PROFIL.zonen.length - 1].id, name: 'Bereich Quarzfeld Testmann' }); });
+  const daten3d = () => p.evaluate(() => JSON.stringify(karte3dDaten()));
+  const d3 = await daten3d();
+  ok.dreiDOhneName = !/Quarzfeld/i.test(d3) && new RegExp('Notiz zu ' + d.id).test(d3) && new RegExp('Bereich ' + d.id).test(d3);
   /* Suche: nur Nummer */
   await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); VIEW.dossier.q = 'quarz'; renderModule(); }); await p.waitForTimeout(300);
   ok.sucheNachNameOhneTreffer = await p.evaluate(i => !document.getElementById('dl-' + i), d.id);
@@ -42,6 +47,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.fill('#dg-pw', 'pw-test-123'); await p.click('#dg-auf'); await p.waitForTimeout(1500);
   ok.entsperrt = await p.evaluate(i => PROFIL.gesperrt.indexOf(i) < 0, d.id);
   ok.nameWieder = await sichtbar();
+  ok.dreiDNameWieder = /Notiz zu Quarzfeld Testmann/.test(await daten3d());
   ok.keineFehler = err.length === 0;
   console.log(JSON.stringify(ok, null, 1)); if (err.length) console.log(err.slice(0, 5));
   await b.close(); process.exit(Object.values(ok).every(Boolean) ? 0 : 1);
