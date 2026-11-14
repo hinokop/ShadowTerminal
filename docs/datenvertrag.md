@@ -96,3 +96,8 @@ Profilimport übernimmt Recherchedaten nach derselben Regel; Belegdateien sind n
 - Markierung "geprüft und nützlich" (`beobachtung.pruefung = { nuetzlich, am, notiz }`): gilt der Unterlage, nicht einer daraus abgeleiteten Behauptung, und ist ausdrücklich vom Prüfstand je Beleg einer Aussage getrennt.
 - Das Aussagenregister ist aus der Standardansicht genommen; vorhandene Aussagen bleiben unverändert erhalten und sind unter "Frühere Aussagen" erreichbar. Ungeprüfte Einzelangaben gehören in die Dossiernotizen und, wenn sie Orte betreffen, auf die Karte.
 - Sichtung: Der Knopf im Dossier legt am letzten bekannten Punkt (jüngste Sichtung mit Koordinate, sonst Dossierstandort) einen Entwurfs-Pin M-01, M-02 … mit Bezug zum Dossier an. Erst "als Sichtung eintragen" erzeugt die Sichtung (SI-nnn); Sichtungsorte dürfen jetzt auch Koordinaten sein.
+
+## Änderung: Aussagenregister entfernt
+- Entfernt: Oberfläche (auch „Frühere Aussagen"), die Aktionen `RECHERCHE_AUSSAGE_NEU`, `RECHERCHE_AUSSAGE_SETZEN`, `RECHERCHE_BELEG_VERKNUEPFT`, `RECHERCHE_PRUEFSTAND`, `RECHERCHE_BELEG_GELOEST` sowie die Fundstellenregel für Einschätzungen.
+- Erhalten: Datensätze in `PROFIL.recherche.aussagen` bleiben unverändert (Text, Status, Einschätzung, Begründung, Verknüpfungen, Prüfstand). Fallpaket (Version 1) exportiert, importiert und führt sie weiter zusammen; ein erneuter Export verliert nichts. Beim Import wird eine Einschätzung nicht mehr zurückgenommen, weil die Fundstellenregel entfällt.
+- Nicht mehr bearbeitbar. Das Fallpaket-Panel nennt die Zahl der früheren Aussagen. Test: `tests/aussagen-alt.js`.

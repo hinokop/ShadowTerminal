@@ -23,10 +23,10 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
     return f;
   }, Array.from(buf));
   const aid = await A.evaluate(() => { const R = PROFIL.recherche, d = STATE.dossiers.auswahl;
-    dispatch({ type: 'RECHERCHE_AUSSAGE_NEU', dossier: d, fall: R.faelle[0].id, text: 'Der Radweg wurde im Juni eröffnet.' }); const x = R.aussagen[0];
-    dispatch({ type: 'RECHERCHE_BELEG_VERKNUEPFT', aussage: x.id, beob: R.beobachtungen[0].id, rolle: 'stuetzend' }); dispatch({ type: 'RECHERCHE_BELEG_VERKNUEPFT', aussage: x.id, beob: R.beobachtungen[1].id, rolle: 'widersprechend' });
-    dispatch({ type: 'RECHERCHE_AUSSAGE_SETZEN', id: x.id, begruendung: 'Seite 2 nennt Juni.' }); dispatch({ type: 'RECHERCHE_AUSSAGE_SETZEN', id: x.id, einschaetzung: 'dafuer' });
-    dispatch({ type: 'RECHERCHE_PRUEFSTAND', aussage: x.id, beob: R.beobachtungen[0].id, stand: 'geprueft' }); return x.id; });
+    /* Altdaten: das Aussagenregister ist entfernt; die Aussage wird als vorhandener Datensatz angelegt */
+    const jetzt = new Date().toISOString(), x = { id: 'A-001', fall: R.faelle[0].id, text: 'Der Radweg wurde im Juni eröffnet.', status: 'entwurf', einschaetzung: 'dafuer', begruendung: 'Seite 2 nennt Juni.', dossiers: [d],
+      stuetzend: [{ beob: R.beobachtungen[0].id, pruefstand: 'geprueft', geprueftAm: jetzt }], widersprechend: [{ beob: R.beobachtungen[1].id, pruefstand: 'eingetragen', geprueftAm: null }], erfasst: jetzt, geaendert: jetzt };
+    R.aussagen.push(x); R.seq.aussage = 1; profilSpeichern(); return x.id; });
   const paket = await A.evaluate(async f => (await rchPaketBauen(f)).text, fall);
   const P = JSON.parse(paket); const man = P.manifest;
   const hashOk = await A.evaluate(async t => { const o = JSON.parse(t); return (await rchTextHash(rchKanon({ inhalt: o.inhalt, dateien: o.manifest.dateien }))) === o.manifest.inhaltHash; }, paket);
