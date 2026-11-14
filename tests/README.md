@@ -6,7 +6,7 @@ Passwort der Testanmeldung: `pw-test-123`. Alle Skripte beziehen Pfade über `_p
 
 Voraussetzung: die lokale Datei `kartenschluessel.js` im Projektordner (nie einchecken, steht in `.gitignore`). Fehlt sie, zeigt die Anwendung einen Startfehler und einige Tests (zum Beispiel `zn`, `pn`) scheitern.
 
-Gesamtlauf: `node runall.js` (im Ordner `tests/`), einzelne Skripte mit `node runall.js zev zp`. Je Gruppe laufen die Skripte parallel, Ausgaben liegen in `<TMP>/ft-out/`. Bekannt rot oder unzuverlässig: `m1flow`, `abd`, `wk3`, `dp`; sie lassen den Lauf nicht scheitern.
+Standardauswahl: `node runall.js` (im Ordner `tests/`), einzelne Skripte mit `node runall.js zev zp`. Die Standardauswahl umfasst nicht alle Skripte in diesem Ordner. Je Gruppe laufen die Skripte parallel; Ausgaben und von den Tests geschriebene Dateien (Screenshots) liegen in `<TMP>/ft-out/`. Ein Skript ohne jede Ausgabe gilt als ungeprüft und lässt den Lauf scheitern, ebenso ein ausdrücklich angefordertes, nicht vorhandenes Skript. Bekannt rot oder unzuverlässig: `m1flow`, `abd`, `wk3`, `dp`; sie lassen den Lauf nicht scheitern.
 
 Karte und 3D:
 - `kperf.js`: Kachelgruppe, Neuzeichnen
