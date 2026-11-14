@@ -19,8 +19,8 @@ Stand 13. November 2026. Gilt für das Recherchewerkzeug ohne Szenario, Handler,
 | --- | --- | --- |
 | Fall | id, titel, frage, zustand (offen, ruhend, abgeschlossen) | erfasst, geaendert, notiz |
 | Quelle | id, fall, art (Datei, Link, Text, Eigenbeobachtung) | herkunft, url, abruf, aktuelleFassung, guete (A–F, Begruendung), kette (siehe 3) |
-| Fassung | id, quelle, erfasst | hash (SHA-256), dateiname, groesse, typ, anhang (Verweis auf Binärspeicher), veroeffentlicht |
-| Beobachtung | id, fassung, fundstelle | zitat, ereignis (Intervall), ort (siehe 4), erfasst |
+| Fassung | id, quelle, erfasst | hash (SHA-256), dateiname, groesse, typ, anhang (Schlüssel im Binärspeicher, `false` ohne Datei), veroeffentlicht |
+| Beobachtung | id, fassung, fundstelle | zitat, ereignis (Intervall), ort (siehe 4), dossiers[] (profilweite Dossier-IDs), erfasst |
 | Aussage | id, fall, text, status (entwurf, offen, abgeschlossen), einschaetzung (siehe 2a, Ausgangswert „nicht eingeschätzt“) | stuetzend[], widersprechend[], begruendung, prueft (siehe 2a) |
 | Dossier | id, typ (Person, Organisation, Ort, Sache), name | aliase[], notizen. Profilweit (gehört keinem Fall); Aussagen verweisen auf Dossiers, nicht umgekehrt. |
 | Ereignis | id, fall, bezug (Objekt-ID) | ereignis (Intervall), veroeffentlicht, erfasst, beschreibung |
@@ -72,6 +72,10 @@ Die Startansicht zeigt je Fall: Frage, letzte Änderung, Zahl offener Aussagen, 
 5. Zwei Quellen, die denselben Bericht abschreiben, erscheinen als eine Kette.
 6. Ein fehlerhaftes Paket verändert den Zielbestand nicht.
 7. Der Testlauf liefert einen Exit-Code und bricht bei fehlenden Pfaden ab, statt auf Ersatzpfade auszuweichen.
+
+## 7a. Stand der Umsetzung
+
+Umgesetzt (Modul 8, `recherche-modul.js`): Fall, Quelle, Fassung, Beobachtung, Fundstelle, Dossierbezug, Prüfsumme, eigener Dateispeicher, Rücknahme bei Speicherfehler. Offen: Aussage mit Einschätzung und Prüfstand, Quellenketten, Ereigniszeit-Eingabe, Orte mit Genauigkeit, Fallpaket (Export, Import), Fall-Startansicht, Lösung der Missionsbindung (siehe 2c).
 
 ## 8. Offene Fragen
 
