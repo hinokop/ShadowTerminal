@@ -59,6 +59,10 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   await G.evaluate(k => RIDB.put(k, new Blob(['fremd'], { type: 'application/pdf' })), kol);
   const anhaenge = p => p.evaluate(() => PROFIL.recherche.fassungen.map(x => x.anhang).filter(Boolean).sort().join(','));
   await lade(G, paket); const g1 = await stand(G), ga1 = await anhaenge(G); await lade(G, paket); const g2 = await stand(G), ga2 = await anhaenge(G);
+  /* Ersatzschlüssel belegt, aber beschädigt: Import wird abgelehnt, die vorhandene Datei bleibt unverändert, nichts wird übernommen */
+  const k2 = ga1.split(',').find(x => x.indexOf(kol + '-') === 0);
+  await G.evaluate(k => RIDB.put(k, new Blob(['defekt'], { type: 'application/pdf' })), k2);
+  const gv = await stand(G), gMsg = await lade(G, paket), gn = await stand(G), gk2 = await G.evaluate(async k => { const bl = await RIDB.get(k); return bl ? await bl.text() : null; }, k2);
   /* Abbruch bei der zweiten Datei: die erste bleibt nicht zurück */
   const H = await neu(); const h0 = await stand(H);
   const msgH = await H.evaluate(async t => { const orig = RIDB.put; let n = 0; RIDB.put = function (k, bl) { n += 1; return n === 2 ? Promise.reject(new Error('Schreibfehler')) : orig.call(RIDB, k, bl); };
@@ -103,6 +107,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
     dateiManipulationAbgelehnt: JSON.stringify(bt0) === JSON.stringify(bt1) && /abgelehnt/.test(msgT1) && /abgelehnt/.test(msgT2),
     dateiWiederhergestellt: w0.keys === w1.keys - 1 && w1.b === w0.b && w1.q === w0.q && wDatei === sha && /wiederhergestellt/.test(msgW),
     dateikollisionWiederholung: g1.b === 2 && g2.b === 2 && g1.keys === 2 && g2.keys === 2 && ga1 === ga2 && ga1.indexOf(kol + '-') >= 0 && g1.q === g2.q && g1.v === g2.v,
+    ersatzschluesselBeschaedigt: !!k2 && gk2 === 'defekt' && JSON.stringify(gv) === JSON.stringify(gn) && /stimmt nicht mit der Prüfsumme/.test(gMsg) && /abgelehnt/.test(gMsg),
     abbruchRaeumtAuf: h0.keys === 0 && h1.keys === 0 && h1.f === 0 && h1.b === 0 && h1.log === 0 && /nicht übernommen/.test(msgH),
     keineFehler: err.length === 0
   };
