@@ -5,7 +5,7 @@
    Dateien liegen bytegetreu in einer eigenen IndexedDB ('fieldterminal.recherche'), die das Zurücksetzen des Zustands nicht leert.
    Klassisches Skript, wird nach dem Hauptskript geladen; vom Hauptskript nur zur Laufzeit referenziert.
    ===================================================================== */
-VIEW.recherche = Object.assign({ fall: '', offen: false, datei: null, alle: false, weitere: false }, VIEW.recherche || {});
+VIEW.recherche = Object.assign({ fall: '', offen: false, datei: null, weitere: false }, VIEW.recherche || {});
 PROFIL.recherche = PROFIL.recherche || { faelle: [], quellen: [], fassungen: [], beobachtungen: [], aussagen: [], seq: { fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 } };
 ['faelle', 'quellen', 'fassungen', 'beobachtungen', 'aussagen'].forEach(function (k) { PROFIL.recherche[k] = PROFIL.recherche[k] || []; });
 PROFIL.recherche.seq = Object.assign({ fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 }, PROFIL.recherche.seq || {});
@@ -154,8 +154,8 @@ function rchOeffnen(z) {
 function rchEntwurf(k) { return VIEW.draft['rch-' + k] || ''; }
 function rchSetze(k) { return function (ev) { VIEW.draft['rch-' + k] = ev.target.value; }; }
 function rchFallAuswahl(e) {
-  const R = PROFIL.recherche, K = VIEW.recherche;
-  if (K.fall && R.faelle.some(function (f) { return f.id === K.fall; })) return K.fall;
+  const K = VIEW.recherche;
+  if (K.fall && K.fallDossier === e.id && PROFIL.recherche.faelle.some(function (f) { return f.id === K.fall; })) return K.fall;
   const faelle = {}; rchBelege(e).forEach(function (z) { if (z.fall) faelle[z.fall.id] = 1; });
   const ids = Object.keys(faelle);
   return ids.length === 1 ? ids[0] : '';                                  /* nur wenn eindeutig, und dann sichtbar im Auswahlfeld */
@@ -190,7 +190,7 @@ function rchErfassen(e) {
     }
     /* Nur die gesendeten Eingaben löschen; ein inzwischen neuer Entwurf bleibt erhalten */
     Object.keys(gesendet).forEach(function (k) { if (VIEW.draft['rch-' + k] === gesendet[k]) delete VIEW.draft['rch-' + k]; });
-    K.fall = R.quellen[R.quellen.length - 1].fall; K.offen = false; if (K.datei === datei) K.datei = null;           /* der Fall bleibt sichtbar ausgewählt */
+    K.fall = R.quellen[R.quellen.length - 1].fall; K.fallDossier = e.id; K.offen = false; if (K.datei === datei) K.datei = null;           /* der Fall bleibt sichtbar ausgewählt */
     renderModule();
   };
   if (!datei) { fertig({ dateiname: null, groesse: eing.text.length, typ: 'text/plain', hash: null, anhang: false }); return; }
@@ -203,13 +203,6 @@ function rchErfassen(e) {
 
 /* ---------- Ansicht ---------- */
 /* ---------- Ansicht: Unterlagen zum Fall ---------- */
-function rchUnterlagen(e, fallId, alle) {
-  const R = PROFIL.recherche;
-  return R.beobachtungen.filter(function (b) { return alle || (b.dossiers || []).indexOf(e.id) >= 0; }).map(function (b) {
-    const f = R.fassungen.find(function (x) { return x.id === b.fassung; }) || {}, q = R.quellen.find(function (x) { return x.id === f.quelle; }) || {};
-    return { b: b, f: f, q: q, fall: R.faelle.find(function (x) { return x.id === q.fall; }) || null };
-  }).filter(function (z) { return z.fall && z.fall.id === fallId; });
-}
 function rchUnterlageZeile(e, z) {
   const b = z.b, p = b.pruefung || null, ok = !!(p && p.nuetzlich), nk = 'rch-n-' + b.id;
   const titel = z.f.dateiname || kuerzen(String(b.zitat || '').replace(/\s+/g, ' '), 90) || z.q.id;
@@ -236,9 +229,8 @@ function rchUnterlageZeile(e, z) {
 }
 function rechercheBelege(e) {
   const R = PROFIL.recherche, K = VIEW.recherche, fallId = rchFallAuswahl(e), alt = typeof dossierBelege === 'function' ? dossierBelege(e).length : 0;
-  const liste = fallId ? rchUnterlagen(e, fallId, K.alle) : [];
+  const liste = rchBelege(e).filter(function (z) { return !!z.fall; });
   const sel = function (id, label, opts, wert, onch) { return h('select', { id: id, 'aria-label': label, onchange: onch }, opts.map(function (o) { return h('option', { value: o[0], selected: o[0] === wert }, o[1]); })); };
-  const imFall = fallId ? rchUnterlagen(e, fallId, true).length : 0;
   let formular = null;
   if (K.offen) {
     const fallWahl = rchEntwurf('fall') || fallId, datei = K.datei, mat = rchMaterial(datei), erlaubt = RCH_FT_MATERIAL[mat] || [];
@@ -267,18 +259,13 @@ function rechercheBelege(e) {
         h('button', { type: 'button', id: 'rch-ok', onclick: function () { rchErfassen(e); } }, 'Unterlage speichern'),
         h('button', { type: 'button', id: 'rch-abbruch', onclick: function () { K.offen = false; renderModule(); } }, 'Abbrechen')));
   }
-  return panel('Unterlagen zum Fall', [h('span', { class: 'badge' }, String(liste.length))],
-    h('div', { class: 'pad' },
-      h('p', { class: 'note' }, 'Dokumente und Textauszüge zum gewählten Fall. Die Markierung "geprüft und nützlich" gilt der Unterlage selbst und bestätigt keine Behauptung, die daraus folgen könnte. Dateien bleiben unverändert, eine Prüfsumme weist spätere Änderungen nach.'
-        + (alt ? ' Missionsbelege (' + alt + ') stehen weiter im Abschnitt Aufklärung und Freigabe.' : '')),
-      h('div', { class: 'row' }, h('label', { for: 'rch-fall-sel' }, 'Fall'),
-        sel('rch-fall-sel', 'Fall der angezeigten Unterlagen', [['', '– Fall wählen –']].concat(R.faelle.map(function (f) { return [f.id, f.id + ' ' + f.titel]; })), fallId, function (ev) { K.fall = ev.target.value; renderModule(); }),
-        h('button', { type: 'button', id: 'rch-neu', 'aria-expanded': K.offen ? 'true' : 'false', onclick: function () { K.offen = !K.offen; renderModule(); } }, K.offen ? 'Formular schließen' : 'Unterlage hinzufügen'),
-        fallId && imFall > liste.length || K.alle ? h('label', { class: 'note' }, h('input', { type: 'checkbox', id: 'rch-alle', checked: K.alle, onchange: function (ev) { K.alle = ev.target.checked; renderModule(); } }), ' auch Unterlagen anderer Dossiers dieses Falls (' + imFall + ')') : null),
-      h('p', { class: 'note' }, 'Ungeprüfte Angaben, z. B. "Hauptstandort vermutlich Neukölln", gehören in die Dossiernotizen; Orte lassen sich mit Pin oder Sichtung auf der Karte festhalten.')),
+  return panel('Unterlagen zu diesem Dossier', [h('span', { class: 'badge' }, String(liste.length))],
+    h('div', { class: 'row pad' },
+      h('button', { type: 'button', id: 'rch-neu', 'aria-expanded': K.offen ? 'true' : 'false', onclick: function () { K.offen = !K.offen; renderModule(); } }, K.offen ? 'Formular schließen' : 'Unterlage hinzufügen'),
+      alt ? h('span', { class: 'note' }, 'Ältere Unterlagen aus Aufträgen liegen unter Aufklärung und Freigabe.') : null),
     formular,
     liste.length ? liste.map(function (z) { return rchUnterlageZeile(e, z); })
-      : h('p', { class: 'note pad' }, !R.faelle.length ? 'Noch keine Unterlagen. Mit "Unterlage hinzufügen" beginnen.' : !fallId ? 'Bitte einen Fall wählen, um seine Unterlagen zu sehen.' : 'In diesem Fall liegen zu diesem Dossier noch keine Unterlagen.'));
+      : h('p', { class: 'note pad' }, 'Diesem Dossier sind noch keine Unterlagen zugeordnet.'));
 }
 
 /* Orte zum Dossier: Zonen und Pins, die auf dieses Dossier verweisen (Rückbezug der Verknüpfung auf der Karte) */
@@ -292,7 +279,7 @@ function rechercheOrte(e) {
         h('button', { type: 'button', class: 'link', 'data-ort': o.id, onclick: function () { if (typeof kartenObjektZeigen === 'function') kartenObjektZeigen(o.id); } }, 'Auf der Karte zeigen'));
     })));
 }
-function rechercheDossier(e) { return [rechercheBelege(e), rechercheOrte(e), rechercheFallpaket()].filter(Boolean); }
+function rechercheDossier(e) { return [rechercheBelege(e), rechercheOrte(e), h('details', { class: 'pad', id: 'rch-datentransfer' }, h('summary', null, 'Datentransfer'), rechercheFallpaket())].filter(Boolean); }
 
 /* =====================================================================
    FALLPAKET: ein Fall als eine Datei (Datensätze, benötigte Dossierangaben, Belegdateien), mit Manifest und Prüfsummen.

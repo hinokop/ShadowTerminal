@@ -1068,7 +1068,14 @@ function eigeneZonePopup(zn, fertig) {
     const titel = (z.f && z.f.dateiname) || kuerzen(String(z.b.zitat || '').replace(/\s+/g, ' '), 40) || (z.q && z.q.herkunft) || id, ft = z.b.fundstelle && z.b.fundstelle.typ && typeof rchFundstelleText === 'function' ? ', ' + rchFundstelleText(z.b.fundstelle) : '';
     return titel + (z.fall ? ' (' + kuerzen(z.fall.titel || z.fall.id, 30) + ft + ')' : '');
   };
-  const frei = (R.beobachtungen || []).filter(function (b) { return (zn.unterlagen || []).indexOf(b.id) < 0; });
+  const frei = (R.beobachtungen || []).filter(function (b) {
+    const dossiers = b.dossiers || [];
+    return (zn.unterlagen || []).indexOf(b.id) < 0 &&
+      !dossiers.some(function (id) { return typeof dossierGesperrt === 'function' && dossierGesperrt(entitaet(id)); });
+  });
+  const auswahl = frei.filter(function (b) { return zn.dossier && (b.dossiers || []).indexOf(zn.dossier) >= 0; });
+  const andere = frei.filter(function (b) { return auswahl.indexOf(b) < 0; });
+  const optionen = function (L) { return L.map(function (b) { return h('option', { value: b.id }, unterlageText(b.id)); }); };
   fertig(zn.name, [
     h('p', { class: 'k-pop-sub' }, zn.ll[0].toFixed(5) + ', ' + zn.ll[1].toFixed(5) + ' · Radius ' + zn.r + ' m'),
     h('div', { class: 'k-pop-form' },
@@ -1079,13 +1086,20 @@ function eigeneZonePopup(zn, fertig) {
       h('label', { for: 'oz-notiz' }, 'Notiz'), h('textarea', { id: 'oz-notiz', rows: '3', maxlength: '1500', onchange: function (ev) { ab({ notiz: ev.target.value }); } }, zn.notiz || '')),
     h('p', { class: 'k-pop-meta', id: 'oz-stand-text' }, 'Stand: ' + fmtZ(zn.stand || zn.t) + (zn.standBemerkung ? ' · ' + zn.standBemerkung : '') + '. Der Stand hält fest, wann Sie die Zone zuletzt selbst geprüft haben; er löst keine Meldung aus.'),
     h('div', { class: 'k-pop-form' }, h('label', { for: 'oz-bem' }, 'Bemerkung zur Prüfung'), h('input', { type: 'text', id: 'oz-bem', maxlength: '300', placeholder: 'optional', value: VIEW.draft['oz-bem-' + zn.id] || '', oninput: function (ev) { VIEW.draft['oz-bem-' + zn.id] = ev.target.value; } })),
-    h('p', { class: 'k-pop-meta' }, 'Verknüpfte Unterlagen und das Dossier erscheinen dort wieder: im Dossier unter „Orte zu diesem Dossier“, bei der Unterlage unter „Auf der Karte“.'),
     (zn.unterlagen || []).length ? h('ul', { class: 'k-pop-meta', id: 'oz-unterlagen' }, zn.unterlagen.map(function (u) {
       return h('li', null, unterlageText(u) + ' ', h('button', { type: 'button', class: 'link', 'data-oz-los': u, onclick: function () { dispatch({ type: 'OZONE_UNTERLAGE', id: zn.id, unterlage: u, op: 'loesen' }); } }, 'lösen'));
     })) : h('p', { class: 'k-pop-meta' }, 'Keine Unterlage verknüpft.'),
-    frei.length ? h('div', { class: 'k-pop-form' }, h('label', { for: 'oz-unt' }, 'Unterlage'), h('select', { id: 'oz-unt', 'aria-label': 'Unterlage zur Zone' },
-      frei.map(function (b) { return h('option', { value: b.id }, unterlageText(b.id)); })),
-      h('span', null), h('button', { type: 'button', id: 'oz-unt-ja', onclick: function () { dispatch({ type: 'OZONE_UNTERLAGE', id: zn.id, unterlage: $('oz-unt').value, op: 'verknuepfen' }); } }, 'Unterlage verknüpfen')) : null,
+    frei.length ? h('details', { id: 'oz-unt-details' },
+      h('summary', null, 'Unterlage verknüpfen'),
+      h('div', { class: 'k-pop-form' }, h('label', { for: 'oz-unt' }, 'Unterlage'),
+        h('select', { id: 'oz-unt', 'aria-label': 'Unterlage zur Zone', onchange: function (ev) { $('oz-unt-ja').disabled = !ev.target.value; } },
+          h('option', { value: '', selected: true }, '– Unterlage wählen –'),
+          auswahl.length ? h('optgroup', { label: 'Dieses Dossier' }, optionen(auswahl)) : null,
+          andere.length ? h('optgroup', { label: auswahl.length ? 'Andere Unterlagen' : 'Vorhandene Unterlagen' }, optionen(andere)) : null),
+        h('span', null), h('button', { type: 'button', id: 'oz-unt-ja', disabled: true, onclick: function () {
+          const id = $('oz-unt').value;
+          if (id) dispatch({ type: 'OZONE_UNTERLAGE', id: zn.id, unterlage: id, op: 'verknuepfen' });
+        } }, 'Verknüpfen'))) : null,
     h('div', { class: 'k-pop-akt' },
       h('button', { type: 'button', id: 'oz-stand', onclick: function () { const t = VIEW.draft['oz-bem-' + zn.id] || ''; delete VIEW.draft['oz-bem-' + zn.id]; dispatch({ type: 'OZONE_STAND', id: zn.id, bemerkung: t }); } }, 'Stand aktualisieren'),
       h('button', { type: 'button', class: 'link', id: 'oz-protokoll', onclick: function () { K.kpObjekt = zn.id; K.kpFilter = ''; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen'),

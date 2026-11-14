@@ -90,7 +90,7 @@ body.emb #bar{left:auto;right:56px}
     offen=d; if(!bereit) return;
     fadenkreuz=!!d.fadenkreuz; map.getCanvas().style.cursor=fadenkreuz?'crosshair':'';
     var fz=(d.zonen||[]).map(function(z){return {type:'Feature',properties:{id:z.id,name:z.name||z.id},geometry:{type:'Polygon',coordinates:kreis(z.ll[0],z.ll[1],z.r||250)}};});
-    var fp=(d.marker||[]).map(function(m){return {type:'Feature',properties:{id:m.id,ico:symbolName(m),name:m.name||m.id,prio:m.stufe||0},geometry:{type:'Point',coordinates:[m.ll[1],m.ll[0]]}};});
+    var fp=(d.marker||[]).map(function(m){return {type:'Feature',properties:{id:m.id,ico:symbolName(m),kat:m.kat||'figur',name:m.name||m.id,prio:m.stufe||0},geometry:{type:'Point',coordinates:[m.ll[1],m.ll[0]]}};});
     map.getSource('zonen').setData({type:'FeatureCollection',features:fz});
     map.getSource('punkte').setData({type:'FeatureCollection',features:fp});
     var mp=d.mess||[], mf=[];
@@ -118,7 +118,12 @@ body.emb #bar{left:auto;right:56px}
     map.addLayer({id:'p-sym',type:'symbol',source:'punkte',layout:{
       'icon-image':['get','ico'],'icon-size':['interpolate',['linear'],['zoom'],8,.55,13,.75,17,1],'icon-allow-overlap':true,'icon-ignore-placement':true,
       'symbol-sort-key':['-',0,['get','prio']],
-      'text-field':['get','name'],'text-offset':[0,1.7],'text-anchor':'top','text-size':12.5,'text-font':['Noto Sans Bold'],'text-optional':true,'text-max-width':12},
+      'text-field':['case',['==',['get','kat'],'pin'],'',['get','name']],'text-offset':[0,1.7],'text-anchor':'top','text-size':12.5,'text-font':['Noto Sans Bold'],'text-optional':true,'text-max-width':12},
+      paint:{'text-color':'#10161d','text-halo-color':'#ffffff','text-halo-width':2}});
+    // Eigene Pins bleiben lesbar, auch wenn Basiskarten-Labels denselben Platz belegen.
+    map.addLayer({id:'p-pin-namen',type:'symbol',source:'punkte',filter:['==',['get','kat'],'pin'],layout:{
+      'text-field':['get','name'],'text-offset':[0,1.7],'text-anchor':'top','text-size':12.5,'text-font':['Noto Sans Bold'],
+      'text-allow-overlap':true,'text-ignore-placement':true,'text-max-width':12},
       paint:{'text-color':'#10161d','text-halo-color':'#ffffff','text-halo-width':2}});
     bereit=true; if(offen) setze(offen);
     if(emb) parent.postMessage({typ:'karte3d-bereit'},'*');
