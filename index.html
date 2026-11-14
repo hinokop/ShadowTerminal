@@ -5184,6 +5184,7 @@ const ACTIONS = {
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];
     const alt = PROFIL.leer(), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
     ['eigene', 'eigeneKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten'].forEach(function (k) { PROFIL[k] = alt[k]; });
+    if (PROFIL.kartenProtokoll) PROFIL.kartenProtokoll.eintraege = [];
     PROFIL.pins = []; PROFIL.seq.pin = pinZaehler;     /* IDs werden auch nach dem Leeren nie neu vergeben */
     Object.keys(STATE.dossiers.entitaeten).forEach(function (id) { const x = STATE.dossiers.entitaeten[id]; if (x && Array.isArray(x.notizen)) x.notizen = []; });
     aenderungenAnwenden();
@@ -5504,17 +5505,19 @@ function dispatch(action) {
   const ergebnis = handler(action);                      /* (1) */
   if (!ergebnis) return;
   const t = nowIso(), liste = Array.isArray(ergebnis) ? ergebnis : [ergebnis];
+  let kpNeu = false;
   liste.forEach(function (e) {                           /* (2) */
     STATE.seq.log += 1;
     const eintrag = { id: STATE.seq.log, t: e.t || t, modul: e.modul, aktion: e.aktion, detail: e.detail || '' };
     if (e.krit) eintrag.krit = true;
     STATE.log.push(eintrag);
+    try { if (typeof kartenProtokollErfassen === 'function' && kartenProtokollErfassen(eintrag, e)) kpNeu = true; } catch (ex) { /* das Kartenprotokoll darf den Ablauf nicht stoppen */ }
   });
   try { zustandAus(action, liste); } catch (ex) { /* Zustandsmodell darf den Ablauf nicht stoppen */ }
   try { abdPruefen(); } catch (ex) { /* Spurenmodell darf den Ablauf nicht stoppen */ }
   if (STATE.log.length > LOG_LIMIT) STATE.log.splice(0, STATE.log.length - LOG_LIMIT);
   Store.save(STATE);                                     /* (3) */
-  if (PROFIL_AKTIONEN[action.type] && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
+  if ((PROFIL_AKTIONEN[action.type] || kpNeu) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
   render(liste.every(function (e) { return e.leicht; })); /* (4) */
 }
 
