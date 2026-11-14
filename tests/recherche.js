@@ -1,4 +1,4 @@
-/* Recherchebelege ohne Auftrag: Fallwahl ohne Standardfall, Fundstelle, bytegetreue Datei mit Prüfsumme, Erhalt nach Neustart und Reset, Manipulationsanzeige.
+/* Unterlagen zum Fall ohne Auftrag: Fallwahl ohne Standardfall, Fundstelle, bytegetreue Datei mit Prüfsumme, Erhalt nach Neustart und Reset, Manipulationsanzeige.
    Exit-Code 1 bei Fehlschlag. */
 const PF = require('./_pfad.js'); const { chromium } = require('playwright'); const crypto = require('crypto');
 (async () => {
@@ -43,7 +43,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   /* Regression 1: Profilspeicher voll: Eintrag zurücknehmen, Datei aufräumen, Entwurf behalten, kein Protokolleintrag */
   const vor = await p.evaluate(async () => {
     const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); STATE.dossiers.auswahl = e.id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule();
-    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Recherchebeleg erfasst').length, fall: PROFIL.recherche.faelle[0].id };
+    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Unterlage erfasst').length, fall: PROFIL.recherche.faelle[0].id };
   });
   const voll = await p.evaluate(async (vor) => {
     const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest');
@@ -51,7 +51,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
     VIEW.recherche.datei = new File([new Uint8Array([1, 2, 3, 4])], 'voll.bin', { type: 'application/octet-stream' }); VIEW.recherche.offen = true; renderModule();
     const orig = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (String(k).endsWith('.profil')) throw new Error('quota'); return orig.call(this, k, v); };
     rchErfassen(e); await new Promise(r => setTimeout(r, 900)); Storage.prototype.setItem = orig;
-    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Recherchebeleg erfasst').length, text: VIEW.draft['rch-text'], herkunft: VIEW.draft['rch-herkunft'],
+    return { n: PROFIL.recherche.beobachtungen.length, keys: (await RIDB.schluessel()).length, log: STATE.log.filter(x => x.aktion === 'Unterlage erfasst').length, text: VIEW.draft['rch-text'], herkunft: VIEW.draft['rch-herkunft'],
       gespeichertN: JSON.parse(localStorage.getItem(PROFIL_KEY)).recherche.beobachtungen.length, meldung: document.getElementById('sys-msg').textContent };
   }, vor);
   for (const k of ['rch-fall', 'rch-text', 'rch-ft-typ', 'rch-ft-typ2', 'rch-ft-wert', 'rch-herkunft', 'rch-notiz']) await p.evaluate(k => { delete VIEW.draft[k]; }, k);

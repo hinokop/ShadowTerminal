@@ -1,6 +1,6 @@
 /* =====================================================================
-   MODUL 8: RECHERCHEBELEGE (Fallkern, erster Schnitt)
-   Belege am Dossier ohne laufenden Auftrag. Eigener Schreib- und Lesepfad, getrennt vom Missionspfad (ms.dokumente).
+   MODUL 8: RECHERCHE, UNTERLAGEN ZUM FALL (Fallkern)
+   Unterlagen am Dossier ohne laufenden Auftrag. Eigener Schreib- und Lesepfad, getrennt vom Missionspfad (ms.dokumente).
    Datenvertrag: docs/datenvertrag.md. Objekte: Fall, Quelle, Fassung, Beobachtung (PROFIL.recherche, im Profil gespeichert).
    Dateien liegen bytegetreu in einer eigenen IndexedDB ('fieldterminal.recherche'), die das Zurücksetzen des Zustands nicht leert.
    Klassisches Skript, wird nach dem Hauptskript geladen; vom Hauptskript nur zur Laufzeit referenziert.
@@ -103,7 +103,7 @@ ACTIONS.RECHERCHE_BELEG = function (a) {
   q.aktuelleFassung = f.id;
   const b = { id: rchNr('beobachtung'), fassung: f.id, fundstelle: ft, zitat: String(a.zitat || '').slice(0, 2000), ereignis: null, dossiers: [e.id], erfasst: t };
   R.quellen.push(q); R.fassungen.push(f); R.beobachtungen.push(b);
-  return { modul: 'Dossier', aktion: 'Recherchebeleg erfasst', detail: e.id + ' ' + e.name + ': ' + q.id + ' (' + q.art + ') im Fall ' + fall.id + (neuerFall ? ' (neu angelegt)' : '') + (ft ? ', Fundstelle ' + ft.typ + (ft.wert ? ' ' + ft.wert : '') : ', ohne Fundstelle') };
+  return { modul: 'Dossier', aktion: 'Unterlage erfasst', detail: e.id + ' ' + e.name + ': ' + q.id + ' (' + q.art + ') im Fall ' + fall.id + (neuerFall ? ' (neu angelegt)' : '') + (ft ? ', Fundstelle ' + ft.typ + (ft.wert ? ' ' + ft.wert : '') : ', ohne Fundstelle') };
 };
 
 /* ---------- Markierung einer Unterlage ---------- */
@@ -122,6 +122,10 @@ PROFIL_AKTIONEN.RECHERCHE_UNTERLAGE_MARKIERT = 1;
 
 /* ---------- Aussagen ---------- */
 function rchAussage(id) { return PROFIL.recherche.aussagen.find(function (x) { return x.id === id; }) || null; }
+/* Ein Beleg zählt für eine positive oder negative Einschätzung nur mit Fundstelle; eine Unterlage ohne Fundstelle bleibt ablegbar und markierbar, qualifiziert aber keine Aussage */
+function rchMitFundstelle(beobId) { const b = PROFIL.recherche.beobachtungen.find(function (x) { return x.id === beobId; }); return !!(b && b.fundstelle && b.fundstelle.typ); }
+function rchStuetzt(x) { return x.stuetzend.some(function (l) { return rchMitFundstelle(l.beob); }); }
+function rchWiderspricht(x) { return x.widersprechend.some(function (l) { return rchMitFundstelle(l.beob); }); }
 function rchVerknuepfung(a, beob) {
   const s = a.stuetzend.find(function (x) { return x.beob === beob; });
   if (s) return { l: s, rolle: 'stuetzend' };
@@ -143,8 +147,8 @@ ACTIONS.RECHERCHE_AUSSAGE_SETZEN = function (a) {
   if (a.einschaetzung !== undefined && (a.einschaetzung || null) !== x.einschaetzung) {
     const st = a.einschaetzung || null;
     if (st && !RCH_EINSCHAETZUNG.some(function (s) { return s[0] === st; })) return null;
-    if ((st === 'gestuetzt' || st === 'dafuer') && !x.stuetzend.length) return null;          /* ohne Fundstelle nie als belegt */
-    if ((st === 'widerlegt' || st === 'dagegen') && !x.widersprechend.length) return null;
+    if ((st === 'gestuetzt' || st === 'dafuer') && !rchStuetzt(x)) return null;          /* ohne Fundstelle nie als belegt */
+    if ((st === 'widerlegt' || st === 'dagegen') && !rchWiderspricht(x)) return null;
     if (st && !x.begruendung.trim()) return null;
     x.einschaetzung = st; teile.push('Einschätzung ' + (st || 'zurückgenommen'));
   }
@@ -171,8 +175,8 @@ ACTIONS.RECHERCHE_BELEG_GELOEST = function (a) {
   const x = rchAussage(a.aussage), v = x && rchVerknuepfung(x, a.beob); if (!v) return null;
   x[v.rolle] = x[v.rolle].filter(function (l) { return l.beob !== a.beob; });
   /* Eine Einschätzung, die ohne diesen Beleg nicht mehr zulässig ist, wird zurückgenommen und die Begründung bleibt stehen */
-  if ((x.einschaetzung === 'gestuetzt' || x.einschaetzung === 'dafuer') && !x.stuetzend.length) x.einschaetzung = null;
-  if ((x.einschaetzung === 'widerlegt' || x.einschaetzung === 'dagegen') && !x.widersprechend.length) x.einschaetzung = null;
+  if ((x.einschaetzung === 'gestuetzt' || x.einschaetzung === 'dafuer') && !rchStuetzt(x)) x.einschaetzung = null;
+  if ((x.einschaetzung === 'widerlegt' || x.einschaetzung === 'dagegen') && !rchWiderspricht(x)) x.einschaetzung = null;
   x.geaendert = nowIso();
   return { modul: 'Dossier', aktion: 'Beleg gelöst', detail: x.id + ': ' + a.beob };
 };
@@ -238,9 +242,9 @@ function rchErfassen(e) {
     if (JSON.stringify(R) === sicher) { if (fassung.anhang) RIDB.del(fassung.anhang).catch(function () {}); return; }          /* Aktion hat nichts angelegt */
     if (!profilSpeichern()) {                                          /* Profil nicht gesichert: Eintrag zurücknehmen, Datei aufräumen, Entwurf behalten */
       rchWiederherstellen(sicher);
-      for (let i = STATE.log.length - 1; i >= 0 && i >= STATE.log.length - 5; i--) { if (STATE.log[i].aktion === 'Recherchebeleg erfasst') { STATE.log.splice(i, 1); break; } }
+      for (let i = STATE.log.length - 1; i >= 0 && i >= STATE.log.length - 5; i--) { if (STATE.log[i].aktion === 'Unterlage erfasst') { STATE.log.splice(i, 1); break; } }
       if (fassung.anhang) RIDB.del(fassung.anhang).catch(function () {});
-      meldung('Beleg nicht gespeichert: Profilspeicher voll oder nicht beschreibbar. Die Eingabe bleibt erhalten.');
+      meldung('Unterlage nicht gespeichert: Profilspeicher voll oder nicht beschreibbar. Die Eingabe bleibt erhalten.');
       renderModule();
       return;
     }
@@ -254,7 +258,7 @@ function rchErfassen(e) {
   const schluessel = 'ANH-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);      /* eigener Dateischlüssel, unabhängig von der Fassungsnummer */
   rchHash(datei).then(function (hash) {
     return RIDB.put(schluessel, datei).then(function () { fertig({ dateiname: datei.name, groesse: datei.size, typ: datei.type || 'application/octet-stream', hash: hash, anhang: schluessel }); });
-  }).catch(function () { RIDB.del(schluessel).catch(function () {}); meldung('Beleg konnte nicht gespeichert werden (Browserspeicher nicht verfügbar).'); });
+  }).catch(function () { RIDB.del(schluessel).catch(function () {}); meldung('Unterlage konnte nicht gespeichert werden (Browserspeicher nicht verfügbar).'); });
 }
 
 /* ---------- Ansicht ---------- */
@@ -373,8 +377,8 @@ function rchAussagenFelder(e) {
         h('label', { for: 'rca-ei-' + x.id }, 'Einschätzung'),
         sel('rca-ei-' + x.id, 'Einschätzung ' + x.id, RCH_EINSCHAETZUNG, x.einschaetzung, function (ev) {
           const st = ev.target.value || null;
-          if ((st === 'gestuetzt' || st === 'dafuer') && !x.stuetzend.length) { meldung('Ohne stützenden Beleg mit Fundstelle ist diese Einschätzung nicht möglich.'); renderModule(); return; }
-          if ((st === 'widerlegt' || st === 'dagegen') && !x.widersprechend.length) { meldung('Ohne widersprechenden Beleg mit Fundstelle ist diese Einschätzung nicht möglich.'); renderModule(); return; }
+          if ((st === 'gestuetzt' || st === 'dafuer') && !rchStuetzt(x)) { meldung('Ohne stützenden Beleg mit Fundstelle ist diese Einschätzung nicht möglich.'); renderModule(); return; }
+          if ((st === 'widerlegt' || st === 'dagegen') && !rchWiderspricht(x)) { meldung('Ohne widersprechenden Beleg mit Fundstelle ist diese Einschätzung nicht möglich.'); renderModule(); return; }
           if (st && !x.begruendung.trim() && !(VIEW.draft[bk] || '').trim()) { meldung('Zuerst eine Begründung eintragen.'); renderModule(); return; }
           if ((VIEW.draft[bk] || '').trim() && VIEW.draft[bk].trim() !== x.begruendung) { if (!rchSchreiben({ type: 'RECHERCHE_AUSSAGE_SETZEN', id: x.id, begruendung: VIEW.draft[bk].trim() }, 'Aussage geändert')) { renderModule(); return; } }
           sieh('RECHERCHE_AUSSAGE_SETZEN', { id: x.id, einschaetzung: st }); delete VIEW.draft[bk];
@@ -555,8 +559,8 @@ function rchZusammenfuehren(inh, opt) {
     ['stuetzend', 'widersprechend'].forEach(function (k) {
       const vor = (c[k] || []).length; c[k] = (c[k] || []).filter(function (l) { return map.beobachtung[l.beob]; }).map(function (l) { return Object.assign({}, l, { beob: map.beobachtung[l.beob] }); }); z.verlorenVerkn += vor - c[k].length;
     });
-    if ((c.einschaetzung === 'gestuetzt' || c.einschaetzung === 'dafuer') && !c.stuetzend.length) { c.einschaetzung = null; z.einschaetzungZurueck += 1; }
-    if ((c.einschaetzung === 'widerlegt' || c.einschaetzung === 'dagegen') && !c.widersprechend.length) { c.einschaetzung = null; z.einschaetzungZurueck += 1; }
+    if ((c.einschaetzung === 'gestuetzt' || c.einschaetzung === 'dafuer') && !rchStuetzt(c)) { c.einschaetzung = null; z.einschaetzungZurueck += 1; }
+    if ((c.einschaetzung === 'widerlegt' || c.einschaetzung === 'dagegen') && !rchWiderspricht(c)) { c.einschaetzung = null; z.einschaetzungZurueck += 1; }
     return c;
   });
   return z;
