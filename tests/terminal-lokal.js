@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { randomBytes } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { mkdtemp, copyFile, mkdir, symlink, readFile, writeFile, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
@@ -16,6 +17,7 @@ const PF = require('./_pfad');
     await writeFile(join(db, 'dossiers', 'eins zwei.txt'), Array.from({length:12}, (_, i) => 'Zeile-' + (i + 1)).join('\n'));
     await writeFile(join(db, 'dossiers', '.intern'), 'verborgen');
     await writeFile(join(db, 'dossiers', 'probe.bin'), Buffer.from([0, 255, 128]));
+    await writeFile(join(db, 'dossiers', 'datei mit Leerzeichen.pdf'), Buffer.alloc(2 * 1024 * 1024, 0x41));
     await writeFile(join(sandbox, 'aussen.txt'), 'DARF NICHT ANGEZEIGT WERDEN');
     let link = false;
     try { await symlink(join(sandbox, 'aussen.txt'), join(db, 'dossiers', 'fremd.txt')); link = true; } catch (e) {
@@ -38,9 +40,12 @@ const PF = require('./_pfad');
     assert.equal((await call('ls', [], token, 'https://example.org')).status, 403);
     assert.equal((await fetch(address)).status, 501);
     for (const parts of [['..','aussen.txt'],['C:\\Windows'],['aussen.txt:secret'],['NUL.txt'],['dossiers','eins zwei.txt.']]) {
-      assert.equal((await (await call('wget', parts)).json()).error, 'Permission denied');
+      for (const op of ['wget', 'send']) assert.equal((await (await call(op, parts)).json()).error, 'Permission denied');
     }
-    if (link) assert.equal((await (await call('wget', ['dossiers','fremd.txt'])).json()).error, 'Permission denied');
+    if (link) for (const op of ['wget', 'send']) {
+      assert.equal((await (await call(op, ['dossiers','fremd.txt'])).json()).error, 'Permission denied');
+    }
+    assert.deepEqual(await (await call('send', ['dossiers','probe.bin'])).json(), {name:'probe.bin', bytes:3});
     b = await chromium.launch();
     const p = await b.newPage();
     const errors = [];
@@ -49,10 +54,11 @@ const PF = require('./_pfad');
     p.on('request', r => { if (/^https?:/.test(r.url())) netz.push(r.url()); });
     await p.route(/^https?:\/\//, r => r.request().url().startsWith('http://127.0.0.1:' + port + '/') ? r.continue() : r.abort());
     await p.goto(PF.APP + start);
-    await p.locator('#gate-pw').fill('pw-test-123');
-    if (await p.locator('#gate-pw2').isVisible()) await p.locator('#gate-pw2').fill('pw-test-123');
+    const passwort = randomBytes(16).toString('hex');
+    await p.locator('#gate-pw').fill(passwort);
+    if (await p.locator('#gate-pw2').isVisible()) await p.locator('#gate-pw2').fill(passwort);
     await p.click('#gate-go');
-    await p.getByText('Diagnoseterminal',{exact:true}).click();
+    await p.locator('#profil-terminal > summary').click();
     const out = p.locator('#profil-terminal-ausgabe');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.dateiLaeuft);
     async function cmd(zeile) {
@@ -92,7 +98,10 @@ const PF = require('./_pfad');
     assert.match(fehlend, /Datei oder Ordner nicht gefunden/);
     assert.doesNotMatch(fehlend, /100%|200 OK/);
     const netzVorher = netz.length;
+    const balken = p.locator('#profil-terminal-transfer');
+    const liveAnzeige = balken.waitFor({state:'visible'});
     const [download, protokoll] = await Promise.all([p.waitForEvent('download'), cmd('wget probe.bin')]);
+    await liveAnzeige;
     assert.match(protokoll, /https:\/\/relay-07\.pgcl-eu3\.inv\/pgcl-eu3\.arch07\/dossiers\/probe\.bin/);
     assert.match(protokoll, /200 OK/);
     assert.match(protokoll, /Länge: 3 \(3 B\)/);
@@ -107,6 +116,42 @@ const PF = require('./_pfad');
     await cmd('clear');
     assert.equal(await out.textContent(), '');
     assert.equal(await eingabe.getAttribute('placeholder'), null);
+    await p.emulateMedia({reducedMotion:'reduce'});
+    const prompt = p.locator('#profil-terminal-prompt');
+    const wartePrompt = text => p.waitForFunction(t => $('profil-terminal-prompt').textContent === t, text);
+    const oeffnen = async () => {
+      await cmd('secure-channel --connect --onion --ephemeral');
+      await wartePrompt('you >');
+    };
+    assert.match(await cmd('send probe.bin'), /im geöffneten Secure Channel/);
+    await oeffnen();
+    await tab('send /pg', 'send /pgcl-eu3.arch07/');
+    await tab('send /pgcl-eu3.arch07/dos', 'send /pgcl-eu3.arch07/dossiers/');
+    await tab('send /pgcl-eu3.arch07/dossiers/date', 'send "/pgcl-eu3.arch07/dossiers/datei mit Leerzeichen.pdf"');
+    const vorSend = netz.length;
+    await cmd('send /anderer-ordner/aussen.txt');
+    await cmd('send /pgcl-eu3.arch07/../aussen.txt');
+    assert.equal(netz.length, vorSend);
+    assert.match(await out.textContent(), /Dateipfad innerhalb/);
+    await cmd('send /pgcl-eu3.arch07/dossiers/fehlt.pdf');
+    await wartePrompt('you >');
+    assert.match(await out.textContent(), /send: Datei oder Ordner nicht gefunden/);
+    const netzVorSend = netz.length;
+    await p.emulateMedia({reducedMotion:'no-preference'});
+    await cmd('send "/pgcl-eu3.arch07/dossiers/datei mit Leerzeichen.pdf"');
+    await balken.waitFor({state:'visible'});
+    assert.match(await balken.textContent(), /2 MiB.*ETA/);
+    assert.equal(await prompt.textContent(), '…');
+    await wartePrompt('you >');
+    assert.match(await out.textContent(), /datei mit Leerzeichen\.pdf.*100%/);
+    assert.match(await out.textContent(), /Kanalpuffer vollständig \[2097152\/2097152\]/);
+    assert.deepEqual(netz.slice(netzVorSend), [address]);
+    await cmd('send /pgcl-eu3.arch07/dossiers/probe.bin');
+    await balken.waitFor({state:'visible'});
+    await eingabe.press('Escape');
+    assert.equal(await prompt.textContent(), 'root@terminal:/pgcl-eu3.arch07#');
+    assert.equal(await balken.isVisible(), false);
+
     const getrennt = 'successfully disconnected from relay-07.pgcl-eu3.inv:443';
     await p.emulateMedia({reducedMotion:'reduce'});
     await p.locator('#btn-end').focus();

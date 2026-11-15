@@ -238,6 +238,7 @@ function terminalSitzungTrennen() {
   terminalKanalAbbruch();
   if (!TERMINAL_BRUECKE) return;
   TERMINAL_ZUSTAND.version++;
+  terminalTransferStop();
   TERMINAL_ZUSTAND.ort = null;
   return terminalBruecke('disconnect');
 }
@@ -252,32 +253,60 @@ function terminalName(arg) {
   if (arg[0] === '"' || arg[0] === "'") return arg.length >= 2 && arg.endsWith(arg[0]) ? arg.slice(1, -1) : null;
   return arg;
 }
-function terminalDownload(d) {
-  const daten = Uint8Array.from(atob(d.data), function (c) { return c.charCodeAt(0); });
+function terminalDownload(d, daten) {
   const url = URL.createObjectURL(new Blob([daten], { type: 'application/octet-stream' }));
   const a = h('a', { href: url, download: d.name });
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
-  return daten.byteLength;
 }
-function terminalWgetProtokoll(antwort, pfad, von, dauer, bytes) {
-  const uri = 'https://' + antwort.endpoint + '/' + [TERMINAL_DB].concat(pfad).map(encodeURIComponent).join('/');
+function terminalDateigroesse(bytes) {
   const zahl = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
-  const menge = bytes >= 1048576 ? zahl.format(bytes / 1048576) + ' MiB' :
+  return bytes >= 1048576 ? zahl.format(bytes / 1048576) + ' MiB' :
     bytes >= 1024 ? zahl.format(bytes / 1024) + ' KiB' : bytes + ' B';
-  const sekunden = Math.max(0.001, dauer / 1000);
+}
+function terminalTransferZeile(name, gesamt, anteil, dauer, rest) {
+  const prozent = Math.floor(anteil * 100), fuellung = Math.floor(anteil * 30);
+  const balken = '='.repeat(fuellung) + '>'.padEnd(31 - fuellung, ' ');
+  const sek = (ms) => (ms / 1000).toLocaleString('de-DE', { maximumFractionDigits: 2 }) + ' s';
+  return name + '  ' + String(prozent).padStart(3) + '%[' + balken + ']  ' +
+    terminalDateigroesse(Math.floor(gesamt * anteil)) + ' / ' + terminalDateigroesse(gesamt) +
+    '  in ' + sek(dauer) + (rest ? '  ETA ' + sek(rest) : '');
+}
+function terminalTransferAktualisieren() {
+  const feld = $('profil-terminal-transfer');
+  if (!feld) return;
+  feld.textContent = TERMINAL_ZUSTAND.fortschritt;
+  feld.hidden = !TERMINAL_ZUSTAND.fortschritt;
+}
+function terminalTransferStop() {
+  TERMINAL_ZUSTAND.fortschritt = '';
+  terminalTransferAktualisieren();
+}
+async function terminalTransfer(name, bytes, weiter) {
+  const t = TERMINAL_ZUSTAND, start = performance.now();
+  // Animation for a local copy, not a measurement of a remote network.
+  const dauer = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 :
+    Math.min(6500, 550 + bytes / (1.5 * 1024));
+  do {
+    if (!weiter()) return null;
+    const zeit = performance.now() - start;
+    if (zeit >= dauer) return terminalTransferZeile(name, bytes, 1, zeit, 0);
+    t.fortschritt = terminalTransferZeile(name, bytes, zeit / dauer, zeit, dauer - zeit);
+    terminalTransferAktualisieren();
+    await new Promise(function (ok) { setTimeout(ok, Math.min(120, dauer - zeit)); });
+  } while (true);
+}
+function terminalWgetProtokoll(antwort, pfad, von, bytes) {
+  const uri = 'https://' + antwort.endpoint + '/' + [TERMINAL_DB].concat(pfad).map(encodeURIComponent).join('/');
   return [
     '--' + von.toISOString().slice(0, 19).replace('T', ' ') + 'Z--  ' + uri,
     'Verbindungsaufbau zu ' + antwort.endpoint + ':443 … verbunden (lokal).',
     'Antwort der Archivbrücke … 200 OK',
-    'Länge: ' + bytes + ' (' + menge + ')',
-    'Wird an den Browser-Download übergeben: »' + antwort.name + '«',
-    '',
-    antwort.name + '  100%[==============================>]  ' + menge + '  in ' + zahl.format(sekunden) + ' s',
-    'Empfangen [' + bytes + '/' + bytes + '] · Download gestartet'
-  ].join('\n');
+    'Länge: ' + bytes + ' (' + terminalDateigroesse(bytes) + ')',
+    'Wird an den Browser-Download übergeben: »' + antwort.name + '«'
+  ];
 }
 async function terminalDateiBefehl(befehl, arg, version) {
   const t = TERMINAL_ZUSTAND;
@@ -292,7 +321,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   if (!name && ['cat', 'head', 'tail', 'wget'].includes(befehl)) { terminalAusgabe('Dateiname fehlt'); return; }
   const pfad = t.ort ? terminalPfad(befehl === 'ls' ? '' : name) : [];
   if (!pfad) { terminalAusgabe('Permission denied'); return; }
-  const wgetStart = befehl === 'wget' ? { datum: new Date(), zeit: performance.now() } : null;
+  const wgetStart = befehl === 'wget' ? new Date() : null;
   const antwort = await terminalBruecke(befehl, pfad, arg === '-la' || arg === '-al');
   if (t.version !== version) return;
   if (antwort.error) { terminalAusgabe(antwort.error); return; }
@@ -307,12 +336,18 @@ async function terminalDateiBefehl(befehl, arg, version) {
     });
     terminalAusgabe(zeilen.join('\n') || '(leer)');
   } else if (befehl === 'wget') {
-    const bytes = terminalDownload(antwort);
-    terminalAusgabe(terminalWgetProtokoll(antwort, pfad, wgetStart.datum, performance.now() - wgetStart.zeit, bytes));
+    const daten = Uint8Array.from(atob(antwort.data), function (c) { return c.charCodeAt(0); });
+    const bytes = daten.byteLength;
+    terminalAusgabe(terminalWgetProtokoll(antwort, pfad, wgetStart, bytes));
+    const fertig = await terminalTransfer(antwort.name, bytes, function () { return t.version === version; });
+    if (t.version !== version) return;
+    terminalTransferStop();
+    terminalDownload(antwort, daten);
+    terminalAusgabe([fertig, 'Empfangen [' + bytes + '/' + bytes + '] · Download gestartet']);
   } else terminalAusgabe(antwort.text);
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, kanal: null };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, kanal: null, fortschritt: '' };
 function terminalAusgabe(zeile) {
   const t = TERMINAL_ZUSTAND;
   t.ausgabe = t.ausgabe.concat(zeile).slice(-45);
@@ -365,19 +400,32 @@ function terminalKanalPromptSync() {
 function terminalKanalAbbruch() {
   const t = TERMINAL_ZUSTAND;
   if (!t.kanal) return;
-  t.ausgabe = t.kanal.vorher;
+  const kanal = t.kanal;
+  t.ausgabe = kanal.vorher;
   t.kanal = null;
+  if (kanal.pauseBeenden) kanal.pauseBeenden();
+  terminalTransferStop();
   const eingabe = $('profil-terminal-eingabe');
   if (eingabe) eingabe.value = '';
   terminalKanalPromptSync();
   terminalAusgabe([]);
 }
-const TERMINAL_KANAL_TEMPO = { aufbau: 620, abbau: 650 };
+const TERMINAL_KANAL_TEMPO = { aufbau: 950, antwort: 15000, vorAbbau: 2000, abbau: 650 };
+function terminalKanalPause(kanal, ms) {
+  return new Promise(function (ok) {
+    const fertig = function () {
+      clearTimeout(timer);
+      kanal.pauseBeenden = null;
+      ok(TERMINAL_ZUSTAND.kanal === kanal);
+    };
+    const timer = setTimeout(fertig, ms);
+    kanal.pauseBeenden = fertig;
+  });
+}
 async function terminalKanalFolge(kanal, zeilen, pause) {
   const reduziert = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   for (const zeile of zeilen) {
-    await new Promise(function (ok) { setTimeout(ok, reduziert ? 0 : pause); });
-    if (TERMINAL_ZUSTAND.kanal !== kanal) return false;
+    if (!await terminalKanalPause(kanal, reduziert ? 0 : pause)) return false;
     terminalAusgabe(zeile);
   }
   return true;
@@ -392,7 +440,8 @@ async function terminalKanalStart() {
   const knoten = 'NODE-' + String(terminalKanalZufall(10000)).padStart(4, '0') + '-' + terminalKanalZeichen(abc.toUpperCase(), 1);
   const sitzung = [4, 4, 4].map(function (n) { return terminalKanalZeichen(hex, n); }).join('-');
   const kontakt = terminalKanalZeichen(abc, 14);
-  terminalAusgabe('[*] Local channel simulation');
+  kanal.knoten = knoten;
+  kanal.sitzung = sitzung;
   if (!await terminalKanalFolge(kanal, TERMINAL_KANAL_START, TERMINAL_KANAL_TEMPO.aufbau)) return;
   terminalAusgabe([
     'Connected to:  ' + knoten + '  (session: ' + sitzung + ')',
@@ -403,23 +452,83 @@ async function terminalKanalStart() {
   kanal.phase = 'eingabe';
   terminalKanalPromptSync();
 }
+function terminalArchivDateipfad(arg) {
+  const name = terminalName(arg);
+  if (!name) return null;
+  const prefix = '/' + TERMINAL_DB + '/';
+  if (name.startsWith(prefix)) {
+    const teile = name.slice(prefix.length).split('/');
+    return teile.every(function (x) {
+      return x !== '' && x !== '.' && x !== '..' && !/[:\\\u0000-\u001f\u007f]/.test(x);
+    }) ? teile : null;
+  }
+  return TERMINAL_ZUSTAND.ort && terminalPfad(name);
+}
+async function terminalKanalDatei(arg, kanal) {
+  const pfad = terminalArchivDateipfad(arg);
+  if (!pfad || !pfad.length) {
+    terminalAusgabe('send: Dateipfad innerhalb von /' + TERMINAL_DB + '/ erwartet.');
+    return;
+  }
+  const t = TERMINAL_ZUSTAND, start = new Date(), aktiv = function () { return t.kanal === kanal; };
+  kanal.phase = 'transfer';
+  terminalKanalPromptSync();
+  const antwort = await terminalBruecke('send', pfad);
+  if (!aktiv()) return;
+  if (antwort.error) {
+    terminalAusgabe('send: ' + antwort.error);
+  } else {
+    const name = antwort.name, bytes = antwort.bytes;
+    terminalAusgabe([
+      '--' + start.toISOString().slice(0, 19).replace('T', ' ') + 'Z--  SEND /' + [TERMINAL_DB].concat(pfad).join('/'),
+      'Empfänger: ' + kanal.knoten + '  (session: ' + kanal.sitzung + ')',
+      'Lokale Archivbrücke … 200 OK',
+      'Länge: ' + bytes + ' (' + terminalDateigroesse(bytes) + ')',
+      'Übergabe an Kanalpuffer: »' + name + '«'
+    ]);
+    const fertig = await terminalTransfer(name, bytes, aktiv);
+    if (!aktiv()) return;
+    terminalTransferStop();
+    terminalAusgabe([fertig, 'Kanalpuffer vollständig [' + bytes + '/' + bytes + '] · Übermittlung bestätigt']);
+  }
+  kanal.phase = 'eingabe';
+  terminalKanalPromptSync();
+}
 async function terminalKanalMeldung(zeile, kanal) {
   if (zeile === '/close' || zeile === 'clear') { terminalKanalAbbruch(); return; }
   if (kanal.phase !== 'eingabe') return;
+  if (/^send(?:\s|$)/.test(zeile)) {
+    terminalAusgabe('you > ' + zeile);
+    try {
+      await terminalKanalDatei(zeile.slice(4).trim(), kanal);
+    } catch (ex) {
+      if (TERMINAL_ZUSTAND.kanal === kanal) {
+        terminalTransferStop();
+        kanal.phase = 'eingabe';
+        terminalKanalPromptSync();
+        terminalAusgabe('send: Dateioperation fehlgeschlagen');
+      }
+    }
+    return;
+  }
   if (!/^auftrag (erledigt|gescheitert)\.?$/i.test(zeile)) {
     terminalAusgabe('Erwartet: Auftrag erledigt. / Auftrag gescheitert.');
     return;
   }
   kanal.phase = 'ende';
   terminalKanalPromptSync();
-  terminalAusgabe(['you > ' + zeile, '> Verstanden.', TERMINAL_KANAL_LINIE]);
+  terminalAusgabe('you > ' + zeile);
+  if (!await terminalKanalPause(kanal, TERMINAL_KANAL_TEMPO.antwort)) return;
+  terminalAusgabe(['> Verstanden.', TERMINAL_KANAL_LINIE]);
+  if (!await terminalKanalPause(kanal, TERMINAL_KANAL_TEMPO.vorAbbau)) return;
   const protokoll = [
     '[*] Closing channel...',
     '[*] Burning session keys...',
     '[*] Wiping memory buffers... (' + (16 + terminalKanalZufall(81)) + ' kb)',
     '[*] Connection terminated.'
   ];
-  if (!await terminalKanalFolge(kanal, protokoll, TERMINAL_KANAL_TEMPO.abbau)) return;
+  terminalAusgabe(protokoll[0]);
+  if (!await terminalKanalFolge(kanal, protokoll.slice(1), TERMINAL_KANAL_TEMPO.abbau)) return;
   terminalKanalAbbruch();
   terminalAusgabe(['> Verstanden.', TERMINAL_KANAL_LINIE].concat(protokoll));
 }
@@ -427,10 +536,22 @@ async function terminalKanalMeldung(zeile, kanal) {
 function terminalBefehl(zeile) {
   const m = /^(\S+)(?:\s+(.*))?$/.exec(zeile);
   const befehl = m[1], arg = m[2] || '', t = TERMINAL_ZUSTAND;
+  if (befehl === 'exit' && !arg) {
+    terminalKanalAbbruch();
+    t.version++;
+    terminalTransferStop();
+    t.offen = false;
+    const panel = $('profil-terminal');
+    if (panel) {
+      panel.open = false;
+      panel.querySelector('summary').focus();
+    }
+    return;
+  }
   if (t.kanal) { void terminalKanalMeldung(zeile, t.kanal); return; }
-  if (befehl === 'clear' && !arg) { t.version++; t.ausgabe = []; terminalAusgabe([]); return; }
+  if (befehl === 'clear' && !arg) { t.version++; terminalTransferStop(); t.ausgabe = []; terminalAusgabe([]); return; }
   terminalAusgabe(terminalPrompt() + ' ' + zeile);
-  if (befehl === 'help' && !arg) terminalAusgabe('ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · whoami · uname -a · date · ping relay · clear · ' + TERMINAL_KANAL_BEFEHL);
+  if (befehl === 'help' && !arg) terminalAusgabe('ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · send <datei> (im Kanal) · whoami · uname -a · date · ping relay · clear · exit · ' + TERMINAL_KANAL_BEFEHL);
   else if (befehl === 'pwd' && !arg) terminalAusgabe(t.ort ? '/' + [TERMINAL_DB].concat(t.ort).join('/') : '/');
   else if (befehl === 'whoami' && !arg) terminalAusgabe('root');
   else if (befehl === 'uname' && arg === '-a') terminalAusgabe(TERMINAL_UBUNTU);
@@ -438,7 +559,8 @@ function terminalBefehl(zeile) {
   else if (befehl === 'ping') {
     if (arg === 'relay') terminalPing();
     else terminalAusgabe('ping: verfügbares Ziel ist relay');
-  } else if (befehl === 'secure-channel') {
+  } else if (befehl === 'send') terminalAusgabe('send ist im geöffneten Secure Channel verfügbar.');
+  else if (befehl === 'secure-channel') {
     if (arg === '--connect --onion --ephemeral') void terminalKanalStart();
     else terminalAusgabe(TERMINAL_KANAL_BEFEHL);
   } else if (TERMINAL_DATEIBEFEHLE.includes(befehl)) {
@@ -451,7 +573,7 @@ function terminalBefehl(zeile) {
   } else terminalAusgabe('command not found');
 }
 const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
-const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'secure-channel']);
+const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit', 'secure-channel', 'send']);
 function terminalTabKandidaten(input, bisher, version, kopf, prefix, kandidaten, format) {
   if (!input.isConnected || input.value !== bisher || TERMINAL_ZUSTAND.version !== version ||
       document.activeElement !== input || input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
@@ -501,9 +623,43 @@ async function terminalTab(input, bisher, m) {
     return (quote && !anfang ? quote : '') + x + quote;
   });
 }
+async function terminalKanalTab(input, bisher, kanal) {
+  const m = /^send\s+(.*)$/.exec(bisher);
+  if (!m) return;
+  const anfang = m[1][0] === '"' || m[1][0] === "'" ? m[1][0] : '';
+  const pfad = anfang ? m[1].slice(1, m[1].endsWith('/' + anfang) ? -1 : undefined) : m[1];
+  if (anfang && pfad.includes(anfang)) return;
+  const version = TERMINAL_ZUSTAND.version;
+  const kopf = 'send ' + anfang;
+  const format = function (x) {
+    const quote = anfang || (/\s|^'/.test(x) ? '"' : '');
+    return (quote && !anfang ? quote : '') + x + quote;
+  };
+  const prefix = '/' + TERMINAL_DB + '/';
+  if (!pfad || (pfad.startsWith('/') && !pfad.startsWith(prefix))) {
+    terminalTabKandidaten(input, bisher, version, kopf, pfad, [prefix], format);
+    return;
+  }
+  if (!TERMINAL_BRUECKE) return;
+  const basis = pfad.slice(0, pfad.lastIndexOf('/') + 1);
+  const parent = basis.replace(/\/$/, '');
+  const teile = basis === prefix ? [] : basis ? terminalArchivDateipfad('"' + parent + '"') : TERMINAL_ZUSTAND.ort;
+  if (!teile) return;
+  const antwort = await terminalBruecke('ls', teile, pfad.slice(basis.length).startsWith('.'));
+  if (TERMINAL_ZUSTAND.kanal !== kanal || kanal.phase !== 'eingabe' || !antwort.entries) return;
+  terminalTabKandidaten(input, bisher, version, kopf, pfad, antwort.entries.map(function (x) {
+    return basis + x.name + (x.dir ? '/' : '');
+  }), format);
+}
 function terminalTabTaste(ev) {
   if (TERMINAL_ZUSTAND.kanal) {
-    if (ev.key === 'Escape') { ev.preventDefault(); terminalKanalAbbruch(); }
+    if (ev.key === 'Escape') { ev.preventDefault(); terminalKanalAbbruch(); return; }
+    const kanal = TERMINAL_ZUSTAND.kanal, input = ev.currentTarget, wert = input.value;
+    if (kanal.phase === 'eingabe' && ev.key === 'Tab' && !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !ev.isComposing &&
+        input.selectionStart === wert.length && input.selectionEnd === wert.length && /^send\s/.test(wert)) {
+      ev.preventDefault();
+      void terminalKanalTab(input, wert, kanal);
+    }
     return;
   }
   if (ev.key !== 'Tab' || ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || ev.isComposing) return;
@@ -519,16 +675,17 @@ function terminalTabTaste(ev) {
 function profilTerminalPanel() {
   const t = TERMINAL_ZUSTAND;
   const input = h('input', { id: 'profil-terminal-eingabe', type: 'text', 'aria-label': 'Terminalbefehl',
-    maxlength: 160, autocomplete: 'off', spellcheck: 'false', onkeydown: terminalTabTaste });
+    maxlength: 1024, autocomplete: 'off', spellcheck: 'false', onkeydown: terminalTabTaste });
   return h('details', { id: 'profil-terminal', class: 'panel profil-terminal', open: t.offen,
     ontoggle: function (ev) {
       if (!ev.currentTarget.isConnected) return;
       t.offen = ev.currentTarget.open;
       if (!t.offen) terminalKanalAbbruch();
     } },
-    h('summary', null, 'Diagnoseterminal'),
+    h('summary', null, 'Terminal'),
     h('div', { class: 'profil-terminal-kern' },
       h('pre', { id: 'profil-terminal-ausgabe', class: 'mono', role: 'log', 'aria-label': 'Terminalausgabe' }, t.ausgabe.join('\n')),
+      h('pre', { id: 'profil-terminal-transfer', class: 'mono', hidden: !t.fortschritt }, t.fortschritt),
       h('form', { onsubmit: function (ev) {
         ev.preventDefault();
         const zeile = input.value.trim();
