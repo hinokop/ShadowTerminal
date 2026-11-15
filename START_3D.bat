@@ -27,7 +27,7 @@ set "BASIS=%~dp0"
 set "URL=!BASIS:\=/!"
 set "URL=!URL: =%%20!"
 
-start "" "!EDGE!" --app="file:///!URL!index.html" --user-data-dir="%~dp0profil" --start-fullscreen --no-first-run --no-default-browser-check --window-size=1440,900
+start "" "!EDGE!" --app="file:///!URL!index.html!SHADOW_TERMINAL_FRAGMENT!" --user-data-dir="%~dp0profil" --start-fullscreen --no-first-run --no-default-browser-check --window-size=1440,900
 exit /b 0
 
 :fehlt
