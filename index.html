@@ -448,6 +448,9 @@ button.aktiv{background:var(--accent-bg,#1B3550);border-color:var(--accent,#5B9B
 .mitfoto{display:flex;align-items:flex-start}
 .mitfoto > dl{flex:1 1 auto;min-width:0;border-left:1px solid var(--border)}
 .foto{flex:none;width:96px;height:120px;margin:8px;border:1px solid var(--border-strong);background:var(--panel-raised);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.foto-wahl{flex:none;display:flex;flex-direction:column;align-items:flex-start}
+.foto-knopf{padding:0;border:0;background:none;cursor:pointer;color:inherit}
+.foto-knopf:hover .foto,.foto-knopf:focus-visible .foto{border-color:var(--accent)}
 .foto img{display:block;width:100%;height:100%;object-fit:cover}
 .foto .ph{font-family:var(--mono);font-size:11px;color:var(--text-dim);text-align:center;text-transform:uppercase;letter-spacing:.04em;padding:4px}
 .bausteine{padding-top:0;padding-bottom:0;gap:4px 12px}
@@ -612,8 +615,7 @@ body:not(.locked) #gate{display:none}
 <div class="banner" id="banner-top" role="note" aria-label="Einstufung"></div>
 
 <header class="hdr" aria-label="Lagekopf">
-  <div class="hf"><span class="k">Agent</span><span class="v" id="h-agent"></span></div>
-  <div class="hf"><span class="k">Vorgang</span><span class="v" id="h-op"></span></div>
+  <div class="hf"><span class="k">CN</span><span class="v" id="h-agent"></span></div>
   <div class="hf"><span class="k">Status</span><span class="v" id="h-status"></span></div>
   <div class="hf"><span class="k">Zeit (UTC)</span><span class="v"><span id="h-dtg"></span> <span class="dim" id="h-long"></span></span></div>
   <div class="hf"><span class="k">Ortszeit Region</span><span class="v" id="h-orts"></span></div>
@@ -882,17 +884,20 @@ function MS(id) {
 }
 function LM() { const m = KM(); return m && MS(m.id).status === 'laufend' ? m : null; }
 function zugewiesene() { return SCENARIO.missionen.find(function (m) { return MS(m.id).status === 'zugewiesen'; }) || null; }
+
 function freigeschaltet(mid) { return mid === 'STD' || !!(STATE.missionen[mid] && STATE.missionen[mid].angenommenAm); }
-function poolAlle() { return alleEntitaeten().filter(function (e) { return freigeschaltet(e.mission); }); }
+/* Dossiers sind im Recherchebetrieb unabhängig von einem angenommenen Auftrag sichtbar (alle Beispiele); im Missionsbetrieb gilt die alte Freischaltung */
+function dossierOffen(mid) { return !missionsbetrieb() || freigeschaltet(mid); }
+function poolAlle() { return alleEntitaeten().filter(function (e) { return dossierOffen(e.mission); }); }
 /* Sichtbare Entitäten: unbekannte Personen und Organisationen tauchen in keiner Liste, Auswahl oder Verbindung auf */
 function pool() { return poolAlle().filter(function (e) { return wissen(e) !== 'unbekannt'; }); }
 function kantenPool() {
   const alle = SCENARIO.verbindungen.concat(SCENARIO.standard.verbindungen, (STATE.dossiers && STATE.dossiers.eigeneKanten) || []);
-  return alle.filter(function (v) { const a = entitaet(v.von), b = entitaet(v.nach); return a && b && freigeschaltet(v.mission) && freigeschaltet(a.mission) && freigeschaltet(b.mission) && wissen(a) !== 'unbekannt' && wissen(b) !== 'unbekannt'; });
+  return alle.filter(function (v) { const a = entitaet(v.von), b = entitaet(v.nach); return a && b && dossierOffen(v.mission) && dossierOffen(a.mission) && dossierOffen(b.mission) && wissen(a) !== 'unbekannt' && wissen(b) !== 'unbekannt'; });
 }
 function kantenRoh() {
   const alle = SCENARIO.verbindungen.concat(SCENARIO.standard.verbindungen, (STATE.dossiers && STATE.dossiers.eigeneKanten) || []);
-  return alle.filter(function (v) { const a = entitaet(v.von), b = entitaet(v.nach); return a && b && freigeschaltet(v.mission) && freigeschaltet(a.mission) && freigeschaltet(b.mission); });
+  return alle.filter(function (v) { const a = entitaet(v.von), b = entitaet(v.nach); return a && b && dossierOffen(v.mission) && dossierOffen(a.mission) && dossierOffen(b.mission); });
 }
 /* Geltende Bedrohungsbewertung: Grundbewertung oder juengster freigeschalteter Nachtrag */
 function bedrohung(e) {
@@ -3013,13 +3018,18 @@ function antwortFuerRoh(kanalId, text, dringlichkeit, msgId) {
 /* Dossierstatus (Statuswerte aus SCENARIO.dossierStatus) */
 function statusDef(id) { return SCENARIO.dossierStatus.find(function (x) { return x.id === id; }) || null; }
 /* Wählbare Status: ohne Status, beobachtet, relevant, abgeschlossen, archiviert (ältere kritische Werte bleiben lesbar, werden aber nicht mehr angeboten) */
+function dossierVermerk(st) {
+  const t = new Date(st.aktualisiert);
+  if (isNaN(t)) return '–';
+  return (st.durch ? 'CN ' + st.durch.cn + ' · ' : '') + dtg(t) + ' ' + TAGE[t.getUTCDay()] + '., ' + fmtZ(t) + (st.durch ? ' · Schlüssel ' + st.durch.fp : ' · Kennung und Schlüssel nicht erfasst');
+}
 function dossierStatusWahl() { return SCENARIO.dossierStatus.filter(function (x) { return !x.kritisch; }); }
-function istBeispiel(e) { return !!e && e.mission === 'STD' && !e.eigen; }
+function istBeispiel(e) { return !!e && !e.eigen; }
 function dossierStatusLabel(id) { const d = statusDef(id); return d ? h('span', { class: 'label ' + d.klasse }, d.label) : h('span', { class: 'dim' }, 'ohne Status'); }
 function dossierStatusSetzen(e, status, anlass, out) {
   const d = STATE.dossiers.entitaeten[e.id], neu = statusDef(status), alt = statusDef(d.status);
   if ((d.status || null) === (neu ? neu.id : null)) return;
-  d.status = neu ? neu.id : null; d.statusAm = neu ? nowIso() : null; d.aktualisiert = nowIso();
+  d.status = neu ? neu.id : null; d.statusAm = neu ? nowIso() : null; dossierStempel(d, nowIso());
   out.push({ modul: 'Dossier', aktion: 'Dossierstatus geändert', krit: !!(neu && neu.kritisch),
              detail: e.id + ' ' + e.name + ': ' + (alt ? alt.label : 'ohne Status') + ' → ' + (neu ? neu.label : 'ohne Status') + (anlass ? '; Anlass: ' + anlass : '') });
 }
@@ -5055,7 +5065,7 @@ const ACTIONS = {
   },
   DOSSIER_STATUS: function (a) {
     const e = entitaet(a.id);
-    if (!e || !freigeschaltet(e.mission) || (a.status && !statusDef(a.status))) return null;
+    if (!e || !dossierOffen(e.mission) || (a.status && !statusDef(a.status))) return null;
     const out = [];
     dossierStatusSetzen(e, a.status || null, '', out);
     return out.length ? out : null;
@@ -5135,7 +5145,7 @@ const ACTIONS = {
   },
   DOSSIER_BILD: function (a) {
     const e = entitaet(a.id);
-    if (!e || !freigeschaltet(e.mission)) return null;
+    if (!e || !dossierOffen(e.mission)) return null;
     if (a.bild === null) {
       if (!PROFIL.bilder[e.id]) return null;
       delete PROFIL.bilder[e.id];
@@ -5147,7 +5157,7 @@ const ACTIONS = {
   },
   DOSSIER_FOTO_HINZU: function (a) {
     const e = entitaet(a.id);
-    if (!e || !freigeschaltet(e.mission) || !bildGueltig(a.bild)) return null;
+    if (!e || !dossierOffen(e.mission) || !bildGueltig(a.bild)) return null;
     const l = PROFIL.galerie[e.id] = PROFIL.galerie[e.id] || [];
     if (l.length >= 60) { meldung('Höchstens 60 Aufnahmen je Dossier.'); return null; }
     PROFIL.seq.galerie = (PROFIL.seq.galerie || 0) + 1;
@@ -5171,7 +5181,7 @@ const ACTIONS = {
   },
   DOSSIER_ORT: function (a) {
     const e = entitaet(a.id);
-    if (!e || !freigeschaltet(e.mission)) return null;
+    if (!e || !dossierOffen(e.mission)) return null;
     const leer = a.ll === null || (a.ll === undefined && !String(a.text || '').trim());
     if (leer) {
       if (!PROFIL.koord[e.id]) return null;
@@ -5407,7 +5417,7 @@ const ACTIONS = {
   },
   VERBINDUNG_ANGELEGT: function (a) {
     const von = entitaet(a.von), nach = entitaet(a.nach);
-    if (!von || !nach || von.id === nach.id || !freigeschaltet(von.mission) || !freigeschaltet(nach.mission)) return null;
+    if (!von || !nach || von.id === nach.id || !dossierOffen(von.mission) || !dossierOffen(nach.mission)) return null;
     if (SCENARIO.verbindungstypen.indexOf(a.typ) < 0 || !/^[A-F][1-6]$/.test(a.bewertung)) return null;
     STATE.seq.kante = (STATE.seq.kante || 0) + 1;
     const id = 'V-E' + STATE.seq.kante;
@@ -5446,7 +5456,7 @@ const ACTIONS = {
       if (gleich) delete PROFIL.aenderungen[e.id]; else PROFIL.aenderungen[e.id] = neu;
       aenderungenAnwenden();
     }
-    STATE.dossiers.entitaeten[e.id].aktualisiert = nowIso();
+    dossierStempel(STATE.dossiers.entitaeten[e.id], nowIso());
     if (altName !== e.name) { const nn = namenNachziehen(altName, e.name); if (nn) diff.push('Nachrichten angepasst: ' + nn); }
     return { modul: 'Dossier', aktion: 'Dossier bearbeitet', krit: /Stufe:/.test(diff.join(';')), detail: e.id + ': ' + diff.join('; ') };
   },
@@ -5457,7 +5467,7 @@ const ACTIONS = {
     delete PROFIL.aenderungen[e.id];
     aenderungenAnwenden();
     namenNachziehen(altName, e.name);
-    STATE.dossiers.entitaeten[e.id].aktualisiert = nowIso();
+    dossierStempel(STATE.dossiers.entitaeten[e.id], nowIso());
     return { modul: 'Dossier', aktion: 'Dossier auf Original zurückgesetzt', detail: e.id + ' ' + e.name };
   },
   DOSSIER_NOTIZ: function (a) {
@@ -5467,7 +5477,7 @@ const ACTIONS = {
     STATE.seq.notiz += 1;
     const id = 'DN-' + p3(STATE.seq.notiz), t = nowIso();
     d.notizen.push({ id: id, t: t, text: text });
-    d.aktualisiert = t;
+    dossierStempel(d, t);
     delete VIEW.draft['dn-' + e.id];
     return { modul: 'Dossier', aktion: 'Dossiernotiz hinzugefügt', detail: e.id + ' ' + e.name + ', ' + id + ': ' + kuerzen(text, 120) };
   },
@@ -5482,7 +5492,7 @@ const ACTIONS = {
     d.sichtungen.push({ id: id, t: t, ort: ort, text: text, guete: guete, quelle: a.quelle || 'Eintrag', zone: a.zone || undefined });
     const pinX = a.pin ? (PROFIL.pins || []).find(function (y) { return y.id === a.pin && y.dossier === e.id; }) : null;
     if (pinX) pinX.sichtung = id;                                 /* der Entwurf ist damit als Sichtung eingetragen */
-    d.aktualisiert = t;
+    dossierStempel(d, t);
     delete VIEW.draft['si-ort-' + e.id]; delete VIEW.draft['si-text-' + e.id];
     return { modul: 'Dossier', aktion: a.quelle === 'Meldung' ? 'Sichtung gemeldet' : 'Sichtung eingetragen', detail: e.id + ' ' + e.name + ', ' + id + (ort ? ' bei ' + kuerzen(ort, 60) : '') + (text ? ': ' + kuerzen(text, 100) : '') };
   },
@@ -5759,15 +5769,22 @@ function renderBanner() {
 function vollbild() {
   try { const d = document.documentElement; if (!document.fullscreenElement && d.requestFullscreen) { const r = d.requestFullscreen(); if (r && r.catch) r.catch(function () {}); } } catch (e) {}
 }
+function schluesselFp(ms) {
+  const hx = function (n) { return (n >>> 0).toString(16).toUpperCase().padStart(8, '0'); }, a = cyrb53(SCENARIO.agent.id + ':' + Math.floor(ms / 3600000), 7);
+  return hx(a).slice(0, 4) + '-' + hx(Math.floor(a / 4294967296)).slice(0, 4);
+}
+/* Änderungsvermerk eines Dossiers: Kennung (CN), Zeit und der zum Speichern angezeigte Schlüssel werden beim Speichern festgehalten */
+function dossierStempel(d, t) {
+  d.aktualisiert = t; d.durch = { cn: SCENARIO.agent.codename, fp: schluesselFp(Date.parse(t) || Date.now()) };
+}
 function kanalAnzeige() {
   const jetzt = Date.now(), fenster = Math.floor(jetzt / 3600000), rest = 3600 - Math.floor((jetzt % 3600000) / 1000);
   const hx = function (n) { return (n >>> 0).toString(16).toUpperCase().padStart(8, '0'); };
-  const a = cyrb53(SCENARIO.agent.id + ':' + fenster, 7), fp = hx(a).slice(0, 4) + '-' + hx(Math.floor(a / 4294967296)).slice(0, 4);
+  const fp = schluesselFp(jetzt);
   return 'Ende-zu-Ende · Schlüssel ' + fp + ' · Wechsel in ' + String(Math.floor(rest / 60)).padStart(2, '0') + ':' + String(rest % 60).padStart(2, '0');
 }
 function renderHeader() {
   $('h-agent').textContent = SCENARIO.agent.codename + ' / ' + SCENARIO.agent.id;
-  $('h-op').textContent = STATE.vorlauf ? 'kein Auftrag' : KM().nummer + ' ' + KM().name + ' · ' + MS(KM().id).status;
   $('h-status').replaceChildren(statusLabel(arbeitsProfilStatus()));
   $('h-kanal').textContent = kanalAnzeige();
   const sf = !!STATE.extraktion.standortfreigabe;                /* Schalter in der Kopfzeile: jederzeit erreichbar, nicht nur im Notfallmodul */
@@ -6571,6 +6588,16 @@ function graphFilter(v) {
 function oeffneDossier(id, ueber) { dispatch({ type: 'DOSSIER_GEOEFFNET', id: id, ueber: ueber }); }
 
 function feldZeile(label, id, el) { return h('div', { class: 'row', style: 'padding:4px 0' }, h('label', { for: id, style: 'min-width:120px' }, label), el); }
+/* Lichtbild im Dossier: Klick auf das Bildfeld öffnet den Dateidialog (setzt oder ersetzt das Bild); ein eigenes Foto lässt sich mit dem kleinen Link entfernen */
+function bildKlick(e) {
+  const wahl = bildWaehler('fx-bild', function (b) { dispatch({ type: 'DOSSIER_BILD', id: e.id, bild: b }); }), vorhanden = !!bildPfad(e, e.id);
+  wahl.style.display = 'none';
+  return h('div', { class: 'foto-wahl' },
+    h('button', { type: 'button', class: 'foto-knopf', id: 'fx-bild-knopf', title: vorhanden ? 'Lichtbild ersetzen' : 'Lichtbild wählen', 'aria-label': vorhanden ? 'Lichtbild ersetzen' : 'Lichtbild wählen', onclick: function () { wahl.click(); } },
+      bildFeld(bildPfad(e, e.id), 'Bild ' + e.id, 'Kein Bild')),
+    wahl,
+    PROFIL.bilder[e.id] ? h('button', { type: 'button', class: 'link', id: 'btn-fx', onclick: function () { dispatch({ type: 'DOSSIER_BILD', id: e.id, bild: null }); } }, 'Foto entfernen') : null);
+}
 function bildWaehler(id, onBild) {
   return h('input', { type: 'file', id: id, accept: 'image/*', 'aria-label': 'Lichtbild wählen', style: 'max-width:260px',
     onchange: function (ev) {
@@ -6619,13 +6646,8 @@ function eigenesPanel(e) {
   const mir = pool().filter(function (x) { return x.id !== e.id; });
   const kanten = ((STATE.dossiers.eigeneKanten) || []).filter(function (v) { return v.von === e.id || v.nach === e.id; });
   const Q = SCENARIO.admiralty;
-  const eigenBild = !!PROFIL.bilder[e.id], ll = karteKoord(e.id), llEigen = !!PROFIL.koord[e.id];
+  const ll = karteKoord(e.id), llEigen = !!PROFIL.koord[e.id];
   return [
-    h('h3', null, 'Lichtbild'),
-    h('div', { class: 'row' },
-      bildWaehler('fx-bild', function (b) { dispatch({ type: 'DOSSIER_BILD', id: e.id, bild: b }); }),
-      eigenBild ? h('button', { type: 'button', id: 'btn-fx', onclick: function () { dispatch({ type: 'DOSSIER_BILD', id: e.id, bild: null }); } }, 'Eigenes Foto entfernen') : null,
-      h('span', { class: 'note' }, 'Ersetzt die Datei bilder/' + e.id.toLowerCase() + '.jpg nur in diesem Terminal.')),
     h('h3', null, 'Kartenposition'),
     h('div', { class: 'row' },
       entwurf('input', 'ko-text', 'ko-' + e.id, { type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'Breite, Länge (z. B. 52.5200, 13.4050)', 'aria-label': 'Koordinaten von ' + e.id,
@@ -6901,12 +6923,12 @@ function dossierAnsicht(e) {
       st.status ? dossierStatusLabel(st.status) : null,
       h('button', { type: 'button', id: 'dg-sperren', style: 'margin-left:8px', onclick: function () { dispatch({ type: 'DOSSIER_SPERREN', id: e.id }); } }, 'Sperren')],
     dossierTabs(e),
-    h('div', { class: 'mitfoto' }, bildFeld(bildPfad(e, e.id), 'Bild ' + e.id, 'Kein Bild'), h('dl', { class: 'fields' },
+    h('div', { class: 'mitfoto' }, bildKlick(e), h('dl', { class: 'fields' },
       feld('Name', e.name), feld('Typ', e.typ),
       feld('Länderkennung', [land(e.land), ' ' + SCENARIO.laender[e.land] + (e.landHinweis ? ' (' + e.landHinweis + ')' : '')]),
       feld('Aliase', e.aliase.length ? e.aliase.join(', ') : 'keine bekannt'),
       feld('Status', st.status ? [dossierStatusLabel(st.status), ' seit ' + fmtZ(st.statusAm)] : 'ohne Status'),
-      feld('Registernummer', e.reg), feld('Letzte Aktualisierung', fmtZ(st.aktualisiert)),
+      feld('Registernummer', e.reg), feld('Zuletzt verändert durch', dossierVermerk(st), 'full'),
       e.typ === 'Ort' ? null : feld('Erkenntnislage', (function () { const el = erkenntnisLage(e); return el.anzahl ? [frischeLabel(el.juengste.fr), ' jüngste Spur: ' + el.juengste.art + ' ' + el.juengste.fr.text + (el.aktuell ? '' : '. Nichts Frisches: neue Sichtung, Beleg oder Einschätzung einholen.')] : 'Keine eigene Erkenntnis erfasst. Verbindungen und Angaben im Archiv altern ab Nutzungsbeginn.'; })(), 'full'),
       feld('Verteilerbeschränkung', e.verteiler, 'full'),
       feld('Beschreibung', schutz(e.rolle), 'full'),
@@ -7167,7 +7189,7 @@ function profilImportieren(file) {
 }
 function renderDossier(m) {
   let e = entitaet(STATE.dossiers.auswahl);
-  if (!e || !freigeschaltet(e.mission) || wissen(e) === 'unbekannt') e = pool()[0];
+  if (!e || !dossierOffen(e.mission) || wissen(e) === 'unbekannt') e = pool()[0];
   return [modKopf(m),
     h('div', { class: 'split' }, dossierListe(), h('div', null, dossierAnsicht(e), infoGesperrt(e) || dossierGesperrt(e) || typeof rechercheDossier !== 'function' ? null : rechercheDossier(e), infoGesperrt(e) || dossierGesperrt(e) ? null : beziehungsansicht(e), profilPanel()))];
 }

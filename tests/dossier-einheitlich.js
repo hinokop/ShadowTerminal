@@ -16,14 +16,16 @@ const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'altprof
   const oeffnen = id => p.evaluate(i => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); VIEW.dossier.q = ''; VIEW.dossier.typ = 'Alle'; VIEW.dossier.status = 'Alle'; STATE.dossiers.auswahl = i; VIEW.dtab = 'info'; renderModule(); }, id).then(() => p.waitForTimeout(250));
   await anmelden();
   /* --- frisches Profil: alle Beispiele sichtbar --- */
-  const bestand = await p.evaluate(() => { const P = pool(); return { n: P.length, typen: ['Person', 'Organisation', 'Ort'].map(t => P.filter(e => e.typ === t).length), std: P.filter(e => e.mission === 'STD' && !e.eigen).length, beispielIds: P.filter(e => e.mission === 'STD').map(e => e.id) }; });
-  ok.alleBeispieleSichtbar = bestand.typen.every(n => n > 0) && bestand.n === bestand.std && bestand.n >= 28;
+  const bestand = await p.evaluate(() => { const P = pool(); return { n: P.length, typen: ['Person', 'Organisation', 'Ort'].map(t => P.filter(e => e.typ === t).length), std: P.filter(e => !e.eigen).length, beispielIds: P.map(e => e.id) }; });
+  ok.alleBeispieleSichtbar = bestand.typen.every(n => n > 0) && bestand.n === bestand.std && bestand.n >= 31;
   await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); }); await p.waitForTimeout(300);
   ok.listeOhneStufenfilter = !(await p.$('#df-stufe'));
   ok.listeOhneVerbotenes = !VERBOTEN.test(await seite());
   ok.listeNenntBeispiel = await p.evaluate(() => /Beispiel/.test(document.querySelector('.elist').innerText));
   const statusOptionen = await p.evaluate(() => [...document.querySelectorAll('#df-status option')].map(o => o.textContent));
   ok.statusFilterEinheitlich = ['ohne Status', 'beobachtet', 'relevant', 'abgeschlossen', 'archiviert'].every(s => statusOptionen.indexOf(s) >= 0) && statusOptionen.every(s => !/beendet|Eliminiert/i.test(s));
+  ok.missionsdossiersAlsBeispiel = await p.evaluate(() => ['P-0001', 'P-0002', 'P-0003'].every(i => pool().some(e => e.id === i && istBeispiel(e))));
+  await oeffnen('P-0001'); ok.missionsdossierOhneVerbotenes = !VERBOTEN.test(await seite()) && /Beispiel/.test(await seite());
   /* --- Detailansicht je Typ --- */
   const probe = await p.evaluate(() => ['Person', 'Organisation', 'Ort'].map(t => poolAlle().find(e => e.typ === t && e.mission === 'STD' && !e.eigen).id));
   for (const id of probe) {
@@ -38,6 +40,22 @@ const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'altprof
   const pid = probe[0];
   await oeffnen(pid); await p.selectOption('#sel-dstatus', 'relevant'); await p.waitForTimeout(300);
   ok.statusGesetzt = await p.evaluate(i => STATE.dossiers.entitaeten[i].status === 'relevant', pid);
+  /* Kopfzeile: CN statt Agent, kein Vorgang */
+  ok.kopfzeileCN = await p.evaluate(() => { const k = [...document.querySelectorAll('.hf .k')].map(x => x.textContent.trim()); return k.indexOf('CN') >= 0 && k.indexOf('Agent') < 0 && k.indexOf('Vorgang') < 0 && !document.getElementById('h-op'); });
+  /* Zuletzt verändert durch: Kennung, Zeit mit Wochentag und Datum, Schlüssel; beim Speichern festgehalten (bleibt nach Schlüsselwechsel) */
+  ok.vermerkNachStatus = await p.evaluate(() => { const t = document.querySelector('.split').innerText; return /Zuletzt verändert durch/i.test(t) && /CN \S+ · \d{6}Z[A-Z]{3}\d\d (So|Mo|Di|Mi|Do|Fr|Sa)\., \d\d\.\d\d\.\d{4} \d\d:\d\d:\d\dZ · Schlüssel [0-9A-F]{4}-[0-9A-F]{4}/.test(t); });
+  ok.vermerkFestgehalten = await p.evaluate(i => { const d = STATE.dossiers.entitaeten[i]; return !!d.durch && /^[0-9A-F]{4}-[0-9A-F]{4}$/.test(d.durch.fp) && d.durch.cn === SCENARIO.agent.codename; }, pid);
+  /* Lichtbild: kein eigener Abschnitt, Klick auf das Bildfeld öffnet den Dateidialog, Entfernen-Link nur bei eigenem Foto */
+  ok.keinLichtbildAbschnitt = !(await p.evaluate(() => [...document.querySelectorAll('h3')].some(x => /Lichtbild/.test(x.textContent))));
+  const [fc] = await Promise.all([p.waitForEvent('filechooser', { timeout: 4000 }).catch(() => null), p.click('#fx-bild-knopf')]);
+  ok.klickOeffnetDateidialog = !!fc;
+  if (fc) {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    await fc.setFiles({ name: 'foto.png', mimeType: 'image/png', buffer: png }); await p.waitForTimeout(700);
+    ok.bildGesetzt = await p.evaluate(i => !!PROFIL.bilder[i], pid) && !!(await p.$('#btn-fx'));
+    await p.click('#btn-fx'); await p.waitForTimeout(300);
+    ok.bildEntfernt = await p.evaluate(i => !PROFIL.bilder[i], pid) && !(await p.$('#btn-fx'));
+  } else { ok.bildGesetzt = false; ok.bildEntfernt = false; }
   /* Bearbeiten ohne Stufe; gespeicherte Stufe bleibt */
   const stufeVor = await p.evaluate(i => JSON.stringify(entitaet(i).bedrohung), pid);
   await p.click('#btn-dbearb'); await p.waitForTimeout(250);
