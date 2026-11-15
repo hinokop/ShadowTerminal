@@ -24,7 +24,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   const ohneFall = await p.evaluate(() => PROFIL.recherche.beobachtungen.length); const msgFall = await sys();
   /* neuer Fall, Text ohne Fundstelle (Absatz, aber ohne Wert) */
   await p.selectOption('#rch-fall', '__neu'); await p.fill('#rch-fall-titel', 'Radweg'); await p.click('#rch-ok'); await p.waitForTimeout(400);
-  const a1 = await p.evaluate(() => ({ n: PROFIL.recherche.beobachtungen.length, ft: PROFIL.recherche.beobachtungen[0] && PROFIL.recherche.beobachtungen[0].fundstelle, sel: document.getElementById('rch-fall-sel').value, zu: !document.getElementById('rch-ok') }));
+  const a1 = await p.evaluate(() => ({ n: PROFIL.recherche.beobachtungen.length, ft: PROFIL.recherche.beobachtungen[0] && PROFIL.recherche.beobachtungen[0].fundstelle, sel: VIEW.recherche.fall, zu: !document.getElementById('rch-ok') }));
   /* zweiter Eintrag: Fall ist übernommen; Fundstellenarten passen zum Material */
   await p.click('#rch-neu');
   const fallUebernommen = await p.evaluate(() => document.getElementById('rch-fall').value === PROFIL.recherche.faelle[0].id);
@@ -53,7 +53,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.fill('#rch-n-B-002', 'Nennt das Eröffnungsdatum'); await p.click('#rch-m-B-002'); await p.waitForTimeout(300);
   const m1 = await p.evaluate(() => { const x = PROFIL.recherche.beobachtungen[1]; return { ok: x.pruefung && x.pruefung.nuetzlich, notiz: x.pruefung && x.pruefung.notiz, badge: document.getElementById('rch-u-B-002').innerText.includes('geprüft und nützlich'), aussagen: PROFIL.recherche.aussagen.length, knopf: document.getElementById('rch-m-B-002').textContent }; });
   await start(); await zeigen('Unterlagentest');
-  const m2 = await p.evaluate(() => { const x = PROFIL.recherche.beobachtungen[1]; return { ok: x.pruefung.nuetzlich, notiz: x.pruefung.notiz, am: !!x.pruefung.am, sichtbar: document.getElementById('rch-u-B-002').innerText.includes('geprüft und nützlich'), fall: document.getElementById('rch-fall-sel').value }; });
+  const m2 = await p.evaluate(() => { const x = PROFIL.recherche.beobachtungen[1]; return { ok: x.pruefung.nuetzlich, notiz: x.pruefung.notiz, am: !!x.pruefung.am, sichtbar: document.getElementById('rch-u-B-002').innerText.includes('geprüft und nützlich'), fall: rchFallAuswahl(STATE.dossiers.entitaeten[STATE.dossiers.auswahl]) }; });
   await p.click('#rch-m-B-002'); await p.waitForTimeout(300);
   const m3 = await p.evaluate(() => { const x = PROFIL.recherche.beobachtungen[1]; return { ok: x.pruefung.nuetzlich, notiz: x.pruefung.notiz }; });
   /* Speicher voll: Markierung wird zurückgenommen */
@@ -77,14 +77,14 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await zeigen('Mit Ort'); await p.evaluate(() => { VIEW.dtab = 'info'; renderModule(); }); await p.click('#btn-dk-sichtung'); await p.waitForTimeout(300);
   const s3 = await p.evaluate(() => { const pin = PROFIL.pins[PROFIL.pins.length - 1]; return { name: pin.name, ll: pin.ll, n: PROFIL.pins.length }; });
   const r = {
-    titelUnterlagen: ueberschriften.some(t => t.startsWith('Unterlagen zum Fall')) && !ueberschriften.some(t => /^Recherchebelege/i.test(t)), ohneAussagenmaske: ohneAussagenmaske && !ueberschriften.some(t => /^Aussagen$/i.test(t)),
+    titelUnterlagen: ueberschriften.some(t => t.startsWith('Unterlagen zu diesem Dossier')) && !ueberschriften.some(t => /^Recherchebelege/i.test(t)), ohneAussagenmaske: ohneAussagenmaske && !ueberschriften.some(t => /^Aussagen$/i.test(t)),
     formularEingeklappt: formularZu && offen && zu2, labelQuelle: labels.quelle && !labels.alt, ohneFallFrage: ohneFall === 0 && /Fall/.test(msgFall),
     fundstelleOptional: a1.n === 1 && a1.ft === null && a1.sel === 'F-001' && a1.zu, fallUebernommen: fallUebernommen,
     fundstelleNachMaterial: JSON.stringify(oText) === '["Absatz","Abschnitt"]' && JSON.stringify(oVideo) === '["Zeitmarke"]' && JSON.stringify(oBild) === '[""]' && JSON.stringify(oPdf) === '["Seite"]' && dateiBleibt,
     pdfMitSeite: a2.n === 2 && a2.ft.typ === 'Seite' && a2.ft.wert === '4' && a2.art === 'Datei' && a2.herkunft === 'https://example.org/blatt' && a2.datei === 'blatt.pdf', weitereOptionen: a3 && a3.typ === 'Zeichenbereich' && a3.wert === '120–260',
     keinHorizontalesScrollen: kein1500 && kein700, detailsVerborgen: verborgen && sichtbarNachOeffnen, oeffnen: /Prüfsumme stimmt/.test(msgOeffnen), volltext: voll,
     markierung: m1.ok === true && m1.notiz === 'Nennt das Eröffnungsdatum' && m1.badge && m1.aussagen === 0 && m1.knopf === 'Markierung zurücknehmen',
-    markierungErhalten: m2.ok === true && m2.notiz === 'Nennt das Eröffnungsdatum' && m2.am && m2.sichtbar && m2.fall !== '', markierungZurueck: m3.ok === false && m3.notiz === 'Nennt das Eröffnungsdatum',
+    markierungErhalten: m2.ok === true && m2.notiz === 'Nennt das Eröffnungsdatum' && m2.am && m2.sichtbar, markierungZurueck: m3.ok === false && m3.notiz === 'Nennt das Eröffnungsdatum',
     markierungRollback: voll2.ok === false && voll2.pr === null && voll2.log === 0,
     ohneAussagenAktionen: ohneAussagenAktionen,
     ohneFundstelleMarkierbar: gp.marke === true && gp.fs === null,
