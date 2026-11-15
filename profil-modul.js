@@ -346,7 +346,7 @@ function terminalBefehl(zeile) {
   else if (befehl === 'ping') {
     if (arg === 'relay') terminalPing();
     else terminalAusgabe('ping: verfügbares Ziel ist relay');
-  } else if (['ls', 'cd', 'cat', 'head', 'tail', 'wget'].includes(befehl)) {
+  } else if (TERMINAL_DATEIBEFEHLE.includes(befehl)) {
     if (t.dateiLaeuft) { terminalAusgabe('Datenbankanfrage läuft bereits'); return; }
     t.dateiLaeuft = true;
     const version = t.version;
@@ -355,10 +355,68 @@ function terminalBefehl(zeile) {
     }).finally(function () { t.dateiLaeuft = false; });
   } else terminalAusgabe('command not found');
 }
+const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
+const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear']);
+function terminalTabKandidaten(input, bisher, version, kopf, prefix, kandidaten, format) {
+  if (!input.isConnected || input.value !== bisher || TERMINAL_ZUSTAND.version !== version ||
+      document.activeElement !== input || input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
+  const treffer = kandidaten.filter(function (x) { return x.toLowerCase().startsWith(prefix.toLowerCase()); });
+  if (treffer.length === 1) { input.value = kopf + format(treffer[0]); return; }
+  if (treffer.length < 2) return;
+  let gemeinsam = treffer[0];
+  while (!treffer.every(function (x) { return x.startsWith(gemeinsam); })) gemeinsam = gemeinsam.slice(0, -1);
+  if (gemeinsam.length > prefix.length) input.value = kopf + gemeinsam;
+  else terminalAusgabe(treffer.join('  '));
+}
+async function terminalTab(input, bisher, m) {
+  const t = TERMINAL_ZUSTAND, version = t.version;
+  const befehl = m[1], arg = m[2];
+  const fertig = function (kopf, prefix, kandidaten, format) {
+    terminalTabKandidaten(input, bisher, version, kopf, prefix, kandidaten, format);
+  };
+  if (arg === undefined) {
+    fertig('', befehl, TERMINAL_BEFEHLE, function (x) { return x + ' '; });
+    return;
+  }
+  if (befehl === 'ping' || befehl === 'uname' || befehl === 'ls') {
+    fertig(befehl + ' ', arg, befehl === 'ping' ? ['relay'] : befehl === 'uname' ? ['-a'] : ['-l', '-la'], function (x) { return x; });
+    return;
+  }
+  const anfang = arg[0] === '"' || arg[0] === "'" ? arg[0] : '';
+  const pfad = anfang ? arg.slice(1, arg.endsWith('/' + anfang) ? -1 : undefined) : arg;
+  if ((anfang && pfad.includes(anfang)) || /^[\\/]|[:\\]|[\u0000-\u001f\u007f]/.test(pfad)) return;
+  if (!t.ort) {
+    if (befehl === 'cd') fertig('cd ' + anfang, pfad, [TERMINAL_DB], function (x) { return x + anfang; });
+    return;
+  }
+  const ort = t.ort, slash = pfad.lastIndexOf('/') + 1;
+  const basis = pfad.slice(0, slash), prefix = pfad.slice(slash);
+  const teile = terminalPfad(basis);
+  if (!teile || !TERMINAL_BRUECKE) return;
+  const antwort = await terminalBruecke('ls', teile, prefix.startsWith('.'));
+  if (t.ort !== ort || !antwort.entries) return;
+  const namen = antwort.entries.filter(function (x) { return x.dir || befehl !== 'cd'; })
+    .map(function (x) { return basis + x.name + (x.dir ? '/' : ''); });
+  fertig(befehl + ' ' + anfang, pfad, namen, function (x) {
+    const quote = anfang || (/\s|^'/.test(x) ? '"' : '');
+    return (quote && !anfang ? quote : '') + x + quote;
+  });
+}
+function terminalTabTaste(ev) {
+  if (ev.key !== 'Tab' || ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || ev.isComposing) return;
+  const input = ev.currentTarget, bisher = input.value;
+  if (input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
+  const m = /^(\S+)(?:\s+(.*))?$/.exec(bisher);
+  if (TERMINAL_ZUSTAND.dateiLaeuft || !m || (m[2] === undefined ? !TERMINAL_BEFEHLE.some(function (x) { return x.startsWith(m[1]); }) :
+    !['cd', 'cat', 'head', 'tail', 'wget', 'ping', 'uname', 'ls'].includes(m[1]))) return;
+  ev.preventDefault();
+  terminalTab(input, bisher, m).catch(function () {});
+}
+
 function profilTerminalPanel() {
   const t = TERMINAL_ZUSTAND;
   const input = h('input', { id: 'profil-terminal-eingabe', type: 'text', 'aria-label': 'Terminalbefehl',
-    placeholder: 'help', maxlength: 160, autocomplete: 'off', spellcheck: 'false' });
+    placeholder: 'help · Tab ergänzt', maxlength: 160, autocomplete: 'off', spellcheck: 'false', onkeydown: terminalTabTaste });
   return h('details', { id: 'profil-terminal', class: 'panel profil-terminal', open: t.offen,
     ontoggle: function (ev) { t.offen = ev.currentTarget.open; } },
     h('summary', null, 'Diagnoseterminal'),

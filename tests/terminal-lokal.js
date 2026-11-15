@@ -58,8 +58,24 @@ const PF = require('./_pfad');
       await p.waitForFunction(() => !TERMINAL_ZUSTAND.dateiLaeuft);
       return (await out.textContent()).split('\n' + (await p.locator('#profil-terminal-prompt').textContent()) + ' ').at(-1);
     }
-    await cmd('cd "pgcl-eu3.arch07"');
+    const eingabe = p.locator('#profil-terminal-eingabe');
+    async function tab(vorher, nachher) {
+      await eingabe.fill(vorher);
+      await eingabe.press('Tab');
+      await p.waitForFunction(wert => $('profil-terminal-eingabe').value === wert, nachher);
+    }
+    await tab('wg', 'wget ');
+    await tab('cd pg', 'cd pgcl-eu3.arch07');
+    await tab('cd "pg', 'cd "pgcl-eu3.arch07"');
+    await eingabe.press('Enter');
+    await p.waitForFunction(() => !TERMINAL_ZUSTAND.dateiLaeuft);
     assert.equal(await p.locator('#profil-terminal-prompt').textContent(), 'root@terminal:/pgcl-eu3.arch07#', await out.textContent());
+    await tab('cd dos', 'cd dossiers/');
+    await tab('cat dossiers/ein', 'cat "dossiers/eins zwei.txt"');
+    const vorher = netz.length;
+    await eingabe.fill('cat https://example.org');
+    await eingabe.press('Tab');
+    assert.equal(netz.length, vorher);
     await cmd('cd dossiers');
     assert.match(await cmd('pwd'), /\n\/pgcl-eu3\.arch07\/dossiers$/);
     assert.match(await cmd('ls -l'), /-r--\s+\d+.*eins zwei\.txt/);
@@ -82,6 +98,7 @@ const PF = require('./_pfad');
     assert.deepEqual(netz.slice(netzVorher), [address]);
     assert.equal(download.suggestedFilename(), 'probe.bin');
     assert.deepEqual(await readFile(await download.path()), Buffer.from([0,255,128]));
+    await tab('wget pr', 'wget probe.bin');
     await cmd('cd ../../../..');
     assert.equal(await p.locator('#profil-terminal-prompt').textContent(), 'root@terminal:/pgcl-eu3.arch07#');
     await cmd('clear');

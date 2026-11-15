@@ -205,17 +205,11 @@ def make_server(root, token):
 
 
 def startup_sequence(pause=time.sleep, output=print):
-    output("SHADOW TERMINAL  /  ARCHIV-START", flush=True)
-    output(f"Verbindung zu {ARCHIVE_ENDPOINT}:443 wird aufgebaut ...", flush=True)
-    for percent, phase, delay in (
-        (20, "Archivkennung gelesen", 0.6),
-        (50, "Lokaler Archivpfad bereit", 0.8),
-        (80, "Dateibruecke bereit", 0.8),
-        (100, "Uebergabe an Edge", 0.7),
-    ):
-        pause(delay)
+    for percent, delay in ((0, 0), (20, 0.6), (50, 0.8), (80, 0.8), (100, 0.7)):
+        if delay:
+            pause(delay)
         balken = ("=" * (percent // 5)).ljust(20, ".")
-        output(f"  [{balken}] {percent:>3}%  {phase}", flush=True)
+        output(f"\r[{balken}] {percent:>3}%", end="\n" if percent == 100 else "", flush=True)
 
 
 def main():
@@ -244,7 +238,8 @@ def main():
             result = subprocess.run(["cmd.exe", "/d", "/c", "START_3D.bat"], cwd=PROJECT, env=env, check=False)
             if result.returncode:
                 raise SystemExit(result.returncode)
-            input("Lokale Datenbank aktiv. Eingabetaste beendet die Verbindung.\n")
+            print(f"connected to: {DATABASE}", flush=True)
+            input()
         except (EOFError, KeyboardInterrupt):
             pass
         finally:
