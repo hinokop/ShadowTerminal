@@ -16,6 +16,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
     /* Altzustand, der früher unzulässig war: Einschätzung "dafuer" mit einer Unterlage ohne Fundstelle; der Import darf ihn nicht verändern */
     R.aussagen.push({ id: 'A-001', fall: R.faelle[0].id, text: 'Alte Aussage', status: 'offen', einschaetzung: 'dafuer', begruendung: 'Begründung', dossiers: [d], stuetzend: [{ beob: R.beobachtungen[0].id, pruefstand: 'geprueft', geprueftAm: jetzt }], widersprechend: [], erfasst: jetzt, geaendert: jetzt });
     R.seq.aussage = 1; profilSpeichern(); dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); return R.faelle[0].id; });
+  await A.locator('#rch-datentransfer > summary').click();
   const ui = await A.evaluate(() => ({ rca: !!document.querySelector('[id^="rca-"]'), panel: Array.from(document.querySelectorAll('section.panel > h2')).some(h => /Aussagen/.test(h.textContent)), notiz: document.body.innerText.includes('Frühere Aussagen (1)'),
     aktionen: Object.keys(ACTIONS).filter(k => /^RECHERCHE_(AUSSAGE|PRUEFSTAND|BELEG_VERKN|BELEG_GELOEST)/.test(k)).length }));
   const text1 = await A.evaluate(async f => (await rchPaketBauen(f)).text, fall); const aus1 = JSON.parse(text1).inhalt.aussagen;

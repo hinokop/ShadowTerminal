@@ -11,6 +11,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   await start();
   const buf = Buffer.from('%PDF-1.4\n% Testbeleg fuer die Recherche, Seite 2\n'.repeat(20)); const sha = crypto.createHash('sha256').update(buf).digest('hex');
   await p.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Belegtest', land: 'DE' }); dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); });
+  await p.locator('#rch-dossier-unterlagen > summary').click();
   await p.click('#rch-neu'); await p.waitForSelector('#rch-ok');
   const v0 = await p.evaluate(() => ({ mission: !!LM(), dok: STATE.seq.dok || 0, faelle: PROFIL.recherche.faelle.length, belege: PROFIL.recherche.beobachtungen.length }));
   /* ohne Fallwahl: nichts wird angelegt */
@@ -28,15 +29,22 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   await p.click('#rch-neu'); await p.selectOption('#rch-fall', fallId); await p.fill('#rch-text', 'Eröffnung am 12. Juli'); await p.selectOption('#rch-ft-typ', 'Absatz'); await p.fill('#rch-ft-wert', '3'); await p.click('#rch-ok'); await p.waitForTimeout(500);
   const t = await p.evaluate(() => ({ b: PROFIL.recherche.beobachtungen.length, faelle: PROFIL.recherche.faelle.length, art: PROFIL.recherche.quellen[1] && PROFIL.recherche.quellen[1].art }));
   /* Neustart */
-  await start(); await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); }); await p.waitForSelector('#rch-neu');
+  await start(); await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); }); await p.waitForSelector('#rch-neu', { state: 'attached' });
   const n = await p.evaluate(async () => {
     const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); STATE.dossiers.auswahl = e.id; renderModule();
     dispatch({ type: 'RESET' }); const z = rchBelege(e)[0]; const blob = await RIDB.get(z.f.anhang);
     const buf2 = blob ? new Uint8Array(await blob.arrayBuffer()) : null;
-    return { belege: rchBelege(e).length, tabelle: document.body.innerText.includes('Radweg Eröffnung') || true, blobGroesse: blob ? blob.size : -1, hash: await rchHash(blob), erste: buf2 ? Array.from(buf2.slice(0, 8)) : null };
+    return { belege: rchBelege(e).length, blobGroesse: blob ? blob.size : -1, hash: await rchHash(blob), erste: buf2 ? Array.from(buf2.slice(0, 8)) : null };
   });
-  await p.evaluate(() => { STATE.dossiers.auswahl = STATE.dossiers.eigene.find(x => x.name === 'Belegtest').id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); }); await p.waitForSelector('#rch-neu');
-  const zeilen = await p.evaluate(() => document.body.innerText.includes('Seite 2') && document.body.innerText.includes('Absatz 3') && document.body.innerText.includes('Radweg Eröffnung'));
+  await p.evaluate(() => { STATE.dossiers.auswahl = STATE.dossiers.eigene.find(x => x.name === 'Belegtest').id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); }); await p.waitForSelector('#rch-neu', { state: 'attached' });
+  if (await p.locator('#rch-dossier-unterlagen').getAttribute('open') === null) await p.locator('#rch-dossier-unterlagen > summary').click();
+  /* Der Fallname steht in den Details jeder Unterlage, die Fundstelle bleibt in der Zeile sichtbar. */
+  const dateiZeile = p.locator('#rch-u-B-001'), textZeile = p.locator('#rch-u-B-002');
+  await dateiZeile.locator('details[id^="rch-d-"] > summary').click();
+  await textZeile.locator('details[id^="rch-d-"] > summary').click();
+  const zeilen = /Fundstelle: Seite 2/.test(await dateiZeile.innerText()) &&
+    /Fundstelle: Absatz 3/.test(await textZeile.innerText()) &&
+    [await dateiZeile.innerText(), await textZeile.innerText()].every(zeile => zeile.includes('F-001 Radweg Eröffnung'));
   /* Öffnen: Prüfsumme stimmt; danach manipulierte Datei */
   await p.evaluate(() => { const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); rchOeffnen(rchBelege(e)[0]); }); await p.waitForTimeout(800); const msgOk = await sys();
   await p.evaluate(async () => { const e = STATE.dossiers.eigene.find(x => x.name === 'Belegtest'); const z = rchBelege(e)[0]; await RIDB.put(z.f.anhang, new Blob(['verändert'], { type: 'application/pdf' })); rchOeffnen(z); }); await p.waitForTimeout(800); const msgManip = await sys();

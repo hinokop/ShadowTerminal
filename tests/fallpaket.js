@@ -13,6 +13,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   /* --- Quellprofil A --- */
   const A = await neu();
   await A.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Paketperson', land: 'DE' }); const d = STATE.dossiers.eigene.find(x => x.name === 'Paketperson'); STATE.dossiers.auswahl = d.id; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); });
+  await A.locator('#rch-dossier-unterlagen > summary').click();
   await A.waitForSelector('#rch-neu');
   const fall = await A.evaluate(async bytes => {
     const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }), key = 'ANH-paket1', hash = await rchHash(blob), d = STATE.dossiers.auswahl;

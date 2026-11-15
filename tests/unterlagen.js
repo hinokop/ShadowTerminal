@@ -13,12 +13,13 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await start();
   await p.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Unterlagentest', land: 'DE' }); });
   await zeigen('Unterlagentest');
-  const ueberschriften = await p.evaluate(() => Array.from(document.querySelectorAll('section.panel > h2')).map(h => h.textContent.trim()));
+  const ueberschriften = await p.evaluate(() => Array.from(document.querySelectorAll('section.panel > h2, #rch-dossier-unterlagen > summary')).map(h => h.textContent.trim()));
   const formularZu = await p.evaluate(() => !document.getElementById('rch-ok') && !!document.getElementById('rch-neu'));
   const ohneAussagenmaske = await p.evaluate(() => !document.getElementById('rca-neu') && !document.getElementById('rca-text'));
+  await p.locator('#rch-dossier-unterlagen > summary').click();
   /* Formular öffnen, schließen, wieder öffnen */
   await p.click('#rch-neu'); const offen = await p.evaluate(() => !!document.getElementById('rch-ok')); await p.click('#rch-abbruch'); const zu2 = await p.evaluate(() => !document.getElementById('rch-ok')); await p.click('#rch-neu');
-  const labels = await p.evaluate(() => ({ quelle: !!document.querySelector('#rch-herkunft[placeholder^="Quelle oder URL"]'), alt: document.body.innerText.includes('Herkunft oder Adresse') }));
+  const labels = await p.evaluate(() => ({ quelle: document.querySelector('label[for="rch-herkunft"]')?.textContent === 'Quelle oder URL' && !document.getElementById('rch-herkunft').hasAttribute('placeholder'), alt: document.body.innerText.includes('Herkunft oder Adresse') }));
   /* ohne Fall: Frage nach der Zuordnung, nichts angelegt */
   await p.fill('#rch-text', 'Erster Auszug ohne Fundstelle'); await p.click('#rch-ok'); await p.waitForTimeout(200);
   const ohneFall = await p.evaluate(() => PROFIL.recherche.beobachtungen.length); const msgFall = await sys();
@@ -41,7 +42,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.fill('#rch-text', 'Dritter Auszug mit ' + 'sehr langem Inhalt, '.repeat(30) + 'ENDE-MARKE'); await p.click('#rch-ok'); await p.waitForTimeout(400);
   const a3 = await p.evaluate(() => PROFIL.recherche.beobachtungen[2] && PROFIL.recherche.beobachtungen[2].fundstelle);
   /* Liste: kein horizontales Scrollen, Details zunächst verborgen */
-  const layout = w => p.evaluate(w => { const s = Array.from(document.querySelectorAll('section.panel')).find(x => x.querySelector('h2') && x.querySelector('h2').textContent.startsWith('Unterlagen'));
+  const layout = w => p.evaluate(w => { const s = document.getElementById('rch-dossier-unterlagen');
     const alt = s.style.width; s.style.width = w ? w + 'px' : ''; const ok = s.scrollWidth <= s.clientWidth + 1 && !s.querySelector('.tw'); s.style.width = alt; return ok; }, w);
   const kein1500 = await layout(0), kein700 = await layout(520);
   const verborgen = await p.evaluate(() => { const t = document.getElementById('rch-u-B-002').innerText; return !/[0-9a-f]{64}/.test(t) && !t.includes('Q-002') && !t.includes('Erfasst'); });
@@ -53,6 +54,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.fill('#rch-n-B-002', 'Nennt das Eröffnungsdatum'); await p.click('#rch-m-B-002'); await p.waitForTimeout(300);
   const m1 = await p.evaluate(() => { const x = PROFIL.recherche.beobachtungen[1]; return { ok: x.pruefung && x.pruefung.nuetzlich, notiz: x.pruefung && x.pruefung.notiz, badge: document.getElementById('rch-u-B-002').innerText.includes('geprüft und nützlich'), aussagen: PROFIL.recherche.aussagen.length, knopf: document.getElementById('rch-m-B-002').textContent }; });
   await start(); await zeigen('Unterlagentest');
+  await p.locator('#rch-dossier-unterlagen > summary').click();
   const m2 = await p.evaluate(() => { const x = PROFIL.recherche.beobachtungen[1]; return { ok: x.pruefung.nuetzlich, notiz: x.pruefung.notiz, am: !!x.pruefung.am, sichtbar: document.getElementById('rch-u-B-002').innerText.includes('geprüft und nützlich'), fall: rchFallAuswahl(STATE.dossiers.entitaeten[STATE.dossiers.auswahl]) }; });
   await p.click('#rch-m-B-002'); await p.waitForTimeout(300);
   const m3 = await p.evaluate(() => { const x = PROFIL.recherche.beobachtungen[1]; return { ok: x.pruefung.nuetzlich, notiz: x.pruefung.notiz }; });
