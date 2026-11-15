@@ -15,14 +15,20 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   };
   const ok = {};
   /* --- Altprofil laden --- */
+  const alt = JSON.parse(JSON.stringify(FIX.state)), h0 = alt.komm.kanaele.handler.nachrichten[0];
+  alt.plan.push({ typ: 'antwort', kanal: 'handler', zu: h0.id, text: 'Alte Antwort des Ansprechpartners', faelligAm: h0.t, id: 'F-901' });               /* bereits fällige Handler-Antwort */
+  alt.komm.kanaele.handler.nachrichten.push({ id: 'N-900', von: 'agent', absender: 'Agent', t: h0.t, text: 'Alte eigene Nachricht', status: 'gesendet', dringlichkeit: 'Routine', lagerelevant: false });   /* Zustellung noch offen */
+  alt.seq.plan = Math.max(alt.seq.plan, 901);
   await anmelden();
-  await p.evaluate(a => { localStorage.setItem(STORAGE_KEY, a.state); localStorage.setItem(PROFIL_KEY, a.profil); }, { state: zurueck(JSON.stringify(FIX.state)), profil: zurueck(JSON.stringify(FIX.profil)) });
+  await p.evaluate(a => { localStorage.setItem(STORAGE_KEY, a.state); localStorage.setItem(PROFIL_KEY, a.profil); }, { state: zurueck(JSON.stringify(alt)), profil: zurueck(JSON.stringify(FIX.profil)) });
   await anmelden();
   const messen = () => p.evaluate(() => ({
     plan: STATE.plan.length, ereignisse: JSON.stringify(STATE.ereignisse || {}), abd: abdS().spuren.length, folge: JSON.stringify(STATE.serie.folge),
     komm: Object.values(STATE.komm.kanaele).reduce((n, k) => n + k.nachrichten.length, 0),
     mission: STATE.log.filter(l => !['System', 'Profil', 'Dossier', 'Karte', 'Recherche', 'Ablage'].includes(l.modul)).length,
-    lm: !!LM(), status: STATE.agent.status
+    lm: !!LM(), status: STATE.agent.status,
+    antwort: STATE.plan.some(x => x.id === 'F-901'), antwortNachricht: Object.values(STATE.komm.kanaele).some(k => k.nachrichten.some(m => m.text === 'Alte Antwort des Ansprechpartners')),
+    n900: (STATE.komm.kanaele.handler.nachrichten.find(m => m.id === 'N-900') || {}).status, statusLog: STATE.log.filter(l => l.aktion === 'Nachrichtenstatus geändert').length
   }));
   const vor = await messen();
   ok.altprofilGeladen = vor.lm && vor.status === 'Aktiv' && vor.plan >= 10;
@@ -31,6 +37,8 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   ok.keinePlaneintraegeAbgearbeitet = nach.plan === vor.plan;
   ok.keineMissionsereignisse = nach.mission === vor.mission && nach.komm === vor.komm;
   ok.keineFolgezuweisung = nach.folge === vor.folge;
+  ok.faelligeAntwortBleibtImPlan = vor.antwort && nach.antwort && !nach.antwortNachricht;
+  ok.keineAltzustellung = vor.n900 === 'gesendet' && nach.n900 === 'gesendet' && nach.statusLog === vor.statusLog;
   /* --- Recherche arbeitet auf dem Altprofil --- */
   const r = await p.evaluate(async () => {
     const e = STATE.dossiers.eigene.find(x => x.name === 'Altprofil Person'), R = PROFIL.recherche;
@@ -72,6 +80,9 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   await p.waitForTimeout(4500);
   const n1 = await p.evaluate(() => STATE.plan.filter(x => x.text === 'Prüfnachricht Missionsablauf').length);
   ok.missionsablaufLaeuft = n0 === 1 && n1 === 0;
+  await p.evaluate(() => { dispatch({ type: 'AUTOMATIK_GESETZT', ein: false }); planen(STATE, { typ: 'antwort', kanal: 'handler', text: 'Prüfantwort bei ausgeschalteter Automatik', faelligAm: new Date(Date.now() - 1000).toISOString() }); });
+  await p.waitForTimeout(3500);
+  ok.antwortImMissionsbetrieb = await p.evaluate(() => STATE.automatik === false && !STATE.plan.some(x => x.text === 'Prüfantwort bei ausgeschalteter Automatik') && STATE.komm.kanaele.handler.nachrichten.some(m => m.text === 'Prüfantwort bei ausgeschalteter Automatik'));
   ok.keineFehler = err.length === 0;
   console.log(JSON.stringify(ok, null, 1)); console.log(JSON.stringify({ vor, nach, spaet })); if (err.length) console.log(err.slice(0, 5));
   await b.close(); process.exit(Object.values(ok).every(Boolean) ? 0 : 1);

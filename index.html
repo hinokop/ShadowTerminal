@@ -1661,6 +1661,7 @@ function planeZustellung(kanalId, msg) {
 }
 function planeAlle() {
   zustellTimer.forEach(clearTimeout); zustellTimer = [];
+  if (!missionsbetrieb()) return;                         /* Altnachrichten eines früheren Auftrags erhalten im Recherchebetrieb keine Statuswechsel */
   Object.keys(STATE.komm.kanaele).forEach(function (kid) {
     STATE.komm.kanaele[kid].nachrichten.forEach(function (m) { if (m.von === 'agent' && m.status !== 'gelesen' && !m.blockiert) planeZustellung(kid, m); });
   });
@@ -5822,8 +5823,8 @@ function tick() {
     if ((bel.w >= 70 && (!bel.hinweis || (!bel.hinweisRuhe && !LM()))) || (bel.w >= 85 && !bel.sperre)) dispatch({ type: 'BELASTUNG_PRUEFUNG' });
   }
   if (mb && fo && !ruhend && !STATE.serie.ende && Date.parse(fo.faelligAm) <= jetzt && !kwSperrt() && !STATE.funkstille.aktiv && belS().w < 85) dispatch({ type: 'MISSION_ZUGEWIESEN', id: fo.mission });
-  /* Fällige Planeinträge; Antworten laufen auch bei ausgeschalteter Automatik */
-  let faellig = STATE.plan.filter(function (p) { return Date.parse(p.faelligAm) <= jetzt && (p.typ === 'antwort' || (mb && STATE.automatik && !ruhend)); })
+  /* Fällige Planeinträge (nur im Missionsbetrieb); Antworten laufen dort auch bei ausgeschalteter Automatik */
+  let faellig = STATE.plan.filter(function (p) { return Date.parse(p.faelligAm) <= jetzt && mb && (p.typ === 'antwort' || (STATE.automatik && !ruhend)); })
     .sort(function (a, b) { return Date.parse(a.faelligAm) - Date.parse(b.faelligAm); });
   /* Rückstau (z. B. nach Stunden ohne offenes Terminal): ältere Einträge nacheinander zustellen statt alle in derselben Sekunde */
   if (faellig.length > 1 && jetzt - Date.parse(faellig[0].faelligAm) > RUECKSTAU_SCHWELLE_MS) {
