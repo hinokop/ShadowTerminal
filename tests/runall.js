@@ -10,7 +10,7 @@ const { spawn } = require('child_process'); const fs = require('fs'); const os =
 const GRUPPEN = [
   ['kt', 'kv3', 'kv4', 'zn'], ['zn3', 'zev', 'dp', 'al', 'abd'], ['zb', 'ds2', 'wk', 'wk3', 'ev2'], ['fgy', 'fd', 'fg', 'rs', 'm1flow'],
   ['st', 'zp', 'un', 'tx', 'sm'], ['fc', 'sk', 'au', 'p2', 'p3', 'p4', 'pn', 'kwz', 'nx', 'kc', 'ak2'],
-  ['kartenprotokoll', 'pins', 'unterlagen', 'aussagen-alt', 'fallpaket', 'recherche'], ['kartensprung', 'identitaeten', 'verlaesslichkeit', 'arbeitsnavigation', 'kartenbereinigung', 'profil-arbeitsansicht'], ['profil-assessment', 'missionstrennung']
+  ['kartenprotokoll', 'pins', 'unterlagen', 'aussagen-alt', 'fallpaket', 'recherche'], ['kartensprung', 'identitaeten', 'verlaesslichkeit', 'arbeitsnavigation', 'kartenbereinigung', 'profil-arbeitsansicht'], ['profil-assessment', 'missionstrennung', 'dossier-einheitlich', 'dossier-kurzlage']
 ];
 const BEKANNT = { m1flow: 'Missionsablauf, auch auf main rot', abd: 'unzuverlässig', wk3: 'unzuverlässig', wk: 'prüft die Freigabe-Sichtbarkeit, durch die Dossier-Vereinheitlichung überholt (Löschung mit R5)', dp: 'unzuverlässig' };
 const FEHLER = /(^|\s)FAIL\b|FEHLER: [1-9]|Fehlschläge: [1-9]|Error/;

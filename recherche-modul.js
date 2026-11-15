@@ -210,7 +210,7 @@ function rchUnterlageZeile(e, z) {
   const speichern = function (d) { if (rchSchreiben(Object.assign({ type: 'RECHERCHE_UNTERLAGE_MARKIERT', beob: b.id }, d), 'Unterlage geprüft')) { delete VIEW.draft[nk]; renderModule(); } };
   const notizText = function () { return VIEW.draft[nk] != null ? VIEW.draft[nk] : (p && p.notiz) || ''; };
   const zeile = function (k, v) { return h('div', null, h('span', { class: 'dim' }, k + ': '), v); };
-  return h('div', { class: 'pad', id: 'rch-u-' + b.id, style: 'border-top:1px dashed #33425a;min-width:0;overflow-wrap:anywhere' },
+  return h('div', { class: 'pad', id: 'rch-u-' + b.id, tabindex: '-1', style: 'border-top:1px dashed #33425a;min-width:0;overflow-wrap:anywhere' },
     h('div', null, h('strong', null, titel), ' ', ok ? h('span', { class: 'label s-accent' }, 'geprüft und nützlich') : null, fremd ? h('span', { class: 'label s-dim' }, ' anderes Dossier: ' + (b.dossiers || []).join(', ')) : null),
     (function () { const zs = (PROFIL.zonen || []).filter(function (y) { return (y.unterlagen || []).indexOf(b.id) >= 0; }); return zs.length ? h('div', { class: 'note', id: 'rch-karte-' + b.id }, 'Auf der Karte: ', zs.map(function (y) { return [h('button', { type: 'button', class: 'link', 'data-zone': y.id, onclick: function () { if (typeof kartenObjektZeigen === 'function') kartenObjektZeigen(y.id); } }, 'Zone ' + y.name), ' ']; })) : null; })(),
     h('div', { class: 'note' }, 'Quelle: ' + (z.q.herkunft || 'nicht angegeben') + (b.fundstelle && b.fundstelle.typ ? ' · Fundstelle: ' + rchFundstelleText(b.fundstelle) : '')),

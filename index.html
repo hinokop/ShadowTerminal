@@ -595,6 +595,21 @@ body:not(.locked) #gate{display:none}
 .profil-radar-formular label{display:grid;gap:4px}
 .profil-radar-formular input{width:75px}
 @media(max-width:600px){.profil-radar-inhalt{grid-template-columns:minmax(0,1fr)}}
+/* Kurzlage: Grundformatierungen und dossierbezogene Unterlagenverweise. */
+.kl-kopf{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.fields .kl-kopf{margin-bottom:4px}
+.kl-kopf button,.kl-werkzeuge button,.kl-werkzeuge select,.kl-abschluss button{font-size:11px;padding:3px 7px}
+.kl-werkzeuge,.kl-abschluss{display:flex;align-items:center;flex-wrap:wrap;gap:5px}
+.kl-werkzeuge{padding:5px;border:1px solid #33425a;border-bottom:0}
+.kl-werkzeuge select{min-width:0;max-width:min(100%,28ch);text-overflow:ellipsis}
+.kl-abschluss{justify-content:flex-end;padding-top:5px}
+.kl-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.kl-text ul{margin:3px 0;padding-left:22px}
+.kl-eingabe{min-height:84px;padding:6px 8px;border:1px solid #33425a}
+.kl-eingabe:empty::before{content:'Kurzlage schreiben …';opacity:.6;pointer-events:none}
+.kl-eingabe:focus-visible{outline:1px solid #79a5c6}
+.kl-text .kl-verweis{color:#a8cde8}
+.kl-text button.kl-verweis{font:inherit;padding:0;vertical-align:baseline}
 </style>
 <link rel="stylesheet" href="profil-modul.css">
 </head>
@@ -1096,7 +1111,7 @@ function zonenImportieren(q, abbildung) {
   });
   return (neu ? '; ' + neu + ' Zone(n) übernommen' : '') + (neuId ? '; ' + neuId + ' Zone(n) mit gleicher Kennung, aber abweichendem Inhalt unter neuer Kennung übernommen' : '') + (doppelt ? '; ' + doppelt + ' Zone(n) bereits vorhanden' : '') + (verworfen ? '; ' + verworfen + ' Bezug/Bezüge zu Dossier oder Unterlage nicht eindeutig zuzuordnen und weggelassen' : '');
 }
-const PROFIL_AKTIONEN = { LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, VERBINDUNG_GELOESCHT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, DOSSIER_SPERREN: 1, DOSSIER_ENTSPERREN: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1 };
+const PROFIL_AKTIONEN = { LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, VERBINDUNG_GELOESCHT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_KURZLAGE: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, DOSSIER_SPERREN: 1, DOSSIER_ENTSPERREN: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1 };
 function profilSpeichern() {
   if (STATE && STATE.dossiers) {
     const d = STATE.dossiers, daten = {};
@@ -1109,7 +1124,10 @@ function profilSpeichern() {
       const x = d.entitaeten[e.id];
       if (!x) return;
       const std = !mid[e.id];
-      if ((x.notizen && x.notizen.length) || (x.sichtungen && x.sichtungen.length) || (std && x.status)) dd[e.id] = { status: std ? x.status : null, statusAm: std ? x.statusAm : null, notizen: x.notizen || [], sichtungen: x.sichtungen || [] };
+      if ((x.notizen && x.notizen.length) || (x.sichtungen && x.sichtungen.length) || (std && x.status) || x.reg || typeof x.kurzlage === 'string' || x.durch) {
+        dd[e.id] = { status: std ? x.status : null, statusAm: std ? x.statusAm : null, notizen: x.notizen || [], sichtungen: x.sichtungen || [] };
+        ['reg', 'kurzlage', 'durch', 'aktualisiert'].forEach(function (k) { if (x[k] || (k === 'kurzlage' && x[k] === '')) dd[e.id][k] = x[k]; });
+      }
     });
     PROFIL.dossierDaten = dd;
     PROFIL.seq.eigen = Math.max(PROFIL.seq.eigen || 0, STATE.seq.eigen || 0);
@@ -1143,6 +1161,11 @@ function profilEinspielen(z) {
       q.sichtungen.forEach(function (n) { const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) z.seq.sichtung = Math.max(z.seq.sichtung || 0, Number(m[1])); });
     }
     if (q.status && !x.status) { x.status = q.status; x.statusAm = q.statusAm; }
+    if (!x.reg && typeof q.reg === 'string') x.reg = q.reg;
+    if (typeof x.kurzlage !== 'string' && typeof q.kurzlage === 'string') x.kurzlage = q.kurzlage;
+    if (q.durch && (!x.durch || Date.parse(q.aktualisiert) > Date.parse(x.aktualisiert))) {
+      x.durch = kopie(q.durch); x.aktualisiert = q.aktualisiert;
+    }
   });
 }
 function profilGroesseKb() { try { return Math.round((window.localStorage.getItem(PROFIL_KEY) || '').length / 1024); } catch (e) { return 0; } }
@@ -3017,12 +3040,31 @@ function antwortFuerRoh(kanalId, text, dringlichkeit, msgId) {
 
 /* Dossierstatus (Statuswerte aus SCENARIO.dossierStatus) */
 function statusDef(id) { return SCENARIO.dossierStatus.find(function (x) { return x.id === id; }) || null; }
-/* Wählbare Status: ohne Status, beobachtet, relevant, abgeschlossen, archiviert (ältere kritische Werte bleiben lesbar, werden aber nicht mehr angeboten) */
+/* Vorhandene Archivnummern haben Vorrang. Neue Nummern werden nur beim Speichern vergeben. */
+function dossierRegisternummer(e, d) {
+  return [e.reg, d && d.reg].map(function (x) { return typeof x === 'string' ? x.trim() : ''; })
+    .find(function (x) { return x && !/^(ohne|–|-)$/i.test(x); }) || '';
+}
+function dossierRegisterBeiSpeichern(e, d) {
+  if (dossierRegisternummer(e, d)) return false;
+  const belegt = new Set(alleEntitaeten().map(function (x) { return dossierRegisternummer(x, STATE.dossiers.entitaeten[x.id]); }));
+  const zufall = new Uint32Array(2);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(zufall);
+  else for (let i = 0; i < zufall.length; i++) zufall[i] = Math.floor(Math.random() * 0x100000000);
+  let nummer;
+  do {
+    nummer = 'REG-' + Array.from(zufall, function (x) { return x.toString(16).padStart(8, '0'); }).join('-').toUpperCase();
+    zufall[1] += 1;
+  } while (belegt.has(nummer));
+  d.reg = nummer;
+  return true;
+}
 function dossierVermerk(st) {
   const t = new Date(st.aktualisiert);
   if (isNaN(t)) return '–';
   return (st.durch ? 'CN ' + st.durch.cn + ' · ' : '') + dtg(t) + ' ' + TAGE[t.getUTCDay()] + '., ' + fmtZ(t) + (st.durch ? ' · Schlüssel ' + st.durch.fp : ' · Kennung und Schlüssel nicht erfasst');
 }
+/* Ältere kritische Status bleiben lesbar, werden aber nicht mehr angeboten. */
 function dossierStatusWahl() { return SCENARIO.dossierStatus.filter(function (x) { return !x.kritisch; }); }
 function istBeispiel(e) { return !!e && !e.eigen; }
 function dossierStatusLabel(id) { const d = statusDef(id); return d ? h('span', { class: 'label ' + d.klasse }, d.label) : h('span', { class: 'dim' }, 'ohne Status'); }
@@ -5061,7 +5103,7 @@ const ACTIONS = {
     if (!wechsel && STATE.dossiers.auswahl === e.id) return null;
     STATE.dossiers.auswahl = e.id;
     if (wechsel) STATE.ui.modul = 'dossier';
-    return { modul: 'Dossier', aktion: 'Dossier geöffnet', detail: e.id + ' ' + e.name + ' (' + e.reg + ')' + (a.ueber ? ', über ' + a.ueber : '') };
+    return { modul: 'Dossier', aktion: 'Dossier geöffnet', detail: e.id + ' ' + e.name + ' (' + (dossierRegisternummer(e, STATE.dossiers.entitaeten[e.id]) || 'ohne') + ')' + (a.ueber ? ', über ' + a.ueber : '') };
   },
   DOSSIER_STATUS: function (a) {
     const e = entitaet(a.id);
@@ -5083,7 +5125,9 @@ const ACTIONS = {
     STATE.dossiers.eigene.push({ id: id, typ: typ, land: land, mission: 'STD', name: name, bild: null, aliase: zeilen(a.aliase, ','), reg: 'ohne',
       verteiler: 'Eigener Eintrag', rolle: String(a.rolle || '').trim() || 'Keine Beschreibung.', eckdaten: zeilen(a.eckdaten, '\n'),
       bedrohung: { stufe: stufe, begruendung: 'Eigene Einschätzung.' }, nachtraege: [], eigen: true });
-    STATE.dossiers.entitaeten[id] = { status: null, statusAm: null, notizen: [], aktualisiert: t };
+    const d = STATE.dossiers.entitaeten[id] = { status: null, statusAm: null, notizen: [] };
+    dossierRegisterBeiSpeichern(entitaet(id), d);
+    dossierStempel(d, t);
     if (bildbereit) PROFIL.bilder[id] = a.bild;
     const ll = parseKoord(a.koord); if (ll) PROFIL.koord[id] = ll;
     STATE.dossiers.auswahl = id;
@@ -5409,7 +5453,10 @@ const ACTIONS = {
     if (PROFIL.kartenProtokoll) PROFIL.kartenProtokoll.eintraege = [];
     PROFIL.pins = []; PROFIL.seq.pin = pinZaehler;     /* IDs werden auch nach dem Leeren nie neu vergeben */
     PROFIL.seq.zone = zoneZaehler; PROFIL.zonen = [];
-    Object.keys(STATE.dossiers.entitaeten).forEach(function (id) { const x = STATE.dossiers.entitaeten[id]; if (x && Array.isArray(x.notizen)) x.notizen = []; });
+    Object.keys(STATE.dossiers.entitaeten).forEach(function (id) {
+      const x = STATE.dossiers.entitaeten[id];
+      if (x) { if (Array.isArray(x.notizen)) x.notizen = []; delete x.reg; delete x.kurzlage; delete x.durch; }
+    });
     aenderungenAnwenden();
     STATE.seq.eigen = 0; STATE.seq.kante = 0;
     if (ids.indexOf(STATE.dossiers.auswahl) >= 0) STATE.dossiers.auswahl = SCENARIO.standard.dossiers[0].id;
@@ -5448,6 +5495,8 @@ const ACTIONS = {
     if (neu.eckdaten.join('|') !== e.eckdaten.join('|')) diff.push('Eckdaten');
     if (neu.bedrohung.stufe !== e.bedrohung.stufe) diff.push('Stufe: ' + e.bedrohung.stufe + ' → ' + neu.bedrohung.stufe);
     else if (neu.bedrohung.begruendung !== e.bedrohung.begruendung) diff.push('Begründung der Einschätzung');
+    const d = STATE.dossiers.entitaeten[e.id];
+    if (dossierRegisterBeiSpeichern(e, d)) diff.push('Registernummer vergeben');
     if (!diff.length) return null;
     if (e.eigen) Object.assign(e, neu);
     else {
@@ -5459,6 +5508,17 @@ const ACTIONS = {
     dossierStempel(STATE.dossiers.entitaeten[e.id], nowIso());
     if (altName !== e.name) { const nn = namenNachziehen(altName, e.name); if (nn) diff.push('Nachrichten angepasst: ' + nn); }
     return { modul: 'Dossier', aktion: 'Dossier bearbeitet', krit: /Stufe:/.test(diff.join(';')), detail: e.id + ': ' + diff.join('; ') };
+  },
+  DOSSIER_KURZLAGE: function (a) {
+    const e = entitaet(a.id), d = STATE.dossiers.entitaeten[a.id];
+    if (!e || !d || !dossierOffen(e.mission) || dossierGesperrt(e) || infoGesperrt(e) || typeof a.inhalt !== 'string' || a.inhalt.length > 24000) return null;
+    const inhalt = kurzlageKanon(a.inhalt);
+    if (inhalt === (d.kurzlage || '') && dossierRegisternummer(e, d)) return null;
+    if (!inhalt && !d.kurzlage) return null;
+    d.kurzlage = inhalt;
+    dossierRegisterBeiSpeichern(e, d);
+    dossierStempel(d, nowIso());
+    return { modul: 'Dossier', aktion: 'Kurzlage gespeichert', detail: e.id + ' ' + e.name };
   },
   DOSSIER_ZURUECKGESETZT: function (a) {
     const e = entitaet(a.id);
@@ -6690,7 +6750,7 @@ function dossierListe() {
     if (F.status === 'mit' ? !st.status : F.status === 'ohne' ? !!st.status : (F.status !== 'Alle' && st.status !== F.status)) return false;
     if (!q) return true;
     if (dossierGesperrt(e)) return e.id.toLowerCase().indexOf(q) >= 0;
-    return (e.id + ' ' + e.name + ' ' + e.aliase.join(' ') + ' ' + e.rolle + ' ' + e.reg).toLowerCase().indexOf(q) >= 0;
+    return (e.id + ' ' + e.name + ' ' + e.aliase.join(' ') + ' ' + e.rolle + ' ' + (dossierRegisternummer(e, STATE.dossiers.entitaeten[e.id]) || '')).toLowerCase().indexOf(q) >= 0;
   });
   const neu = function () { renderModule(); };
   return panel('Entitäten', [h('span', { class: 'badge' }, treffer.length + ' von ' + alle.length),
@@ -6895,8 +6955,122 @@ function rudimentAnsicht(e) {
       h('h3', null, 'Sichtungen'),
       sichtungenBlock(e)));
 }
+/* Nur Text, Grundformatierung und interne Unterlagen-IDs werden übernommen.
+   Beim Lesen wie beim Speichern wird der Inhalt aus erlaubten DOM-Knoten neu aufgebaut. */
+function kurzlageInhalt(inhalt, unterlagen, anzeigen) {
+  const vorlage = document.createElement('template'), aus = document.createDocumentFragment();
+  vorlage.innerHTML = typeof inhalt === 'string' ? inhalt.slice(0, 24000) : '';
+  const formen = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'DIV', 'P', 'UL', 'LI']);
+  const unbrauchbar = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'SVG', 'MATH', 'TEMPLATE']);
+  const kopieren = function (n, ziel) {
+    if (n.nodeType === 3) { ziel.appendChild(document.createTextNode(n.data)); return; }
+    if (n.nodeType !== 1 || unbrauchbar.has(n.tagName)) return;
+    const id = n.getAttribute('data-unterlage');
+    if (n.tagName === 'SPAN' && /^B-\d{1,12}$/.test(id || '')) {
+      ziel.appendChild(kurzlageVerweis(id, unterlagen.get(id), anzeigen));
+      return;
+    }
+    if (formen.has(n.tagName)) {
+      ziel = ziel.appendChild(document.createElement(n.tagName.toLowerCase()));
+    } else if (n.tagName === 'SPAN') {
+      const st = n.style;
+      if (st.fontWeight === 'bold' || Number(st.fontWeight) >= 600) ziel = ziel.appendChild(h('b'));
+      if (st.fontStyle === 'italic') ziel = ziel.appendChild(h('i'));
+      if ((st.textDecorationLine || st.textDecoration).indexOf('underline') >= 0) ziel = ziel.appendChild(h('u'));
+    }
+    Array.from(n.childNodes).forEach(function (c) { kopieren(c, ziel); });
+  };
+  Array.from(vorlage.content.childNodes).forEach(function (n) { kopieren(n, aus); });
+  return aus;
+}
+function kurzlageKanon(inhalt) {
+  const sauber = h('div', null, kurzlageInhalt(inhalt, new Map(), false));
+  return sauber.textContent.trim() ? sauber.innerHTML : '';
+}
+function kurzlageVerweis(id, titel, anzeigen) {
+  const text = '[' + id + ']';
+  if (!anzeigen) return h('span', { 'data-unterlage': id, contenteditable: 'false', class: 'kl-verweis' }, text);
+  if (!titel) return h('span', { class: 'dim', title: 'Unterlage in diesem Dossier nicht verfügbar' }, text);
+  return h('button', { type: 'button', class: 'link kl-verweis', 'aria-label': id + ' · ' + titel, title: titel, onclick: function () {
+    const z = $('rch-u-' + id);
+    if (!z) return;
+    z.focus({ preventScroll: true });
+    z.scrollIntoView({ block: 'nearest' });
+  } }, text);
+}
+function kurzlageUnterlagen(e) {
+  return new Map((typeof rchBelege === 'function' ? rchBelege(e) : []).filter(function (z) {
+    return z.fall && /^B-\d{1,12}$/.test(z.b.id);
+  }).map(function (z) { return [z.b.id, z.f.dateiname || kuerzen(String(z.b.zitat || '').replace(/\s+/g, ' '), 90) || z.q.id]; }));
+}
+function kurzlageFeld(e, d) {
+  const unterlagen = kurzlageUnterlagen(e);
+  const bereich = h('dd', { id: 'kl-bereich' }), bearbeiten = h('button', { type: 'button', id: 'kl-bearbeiten', 'aria-label': 'Kurzlage bearbeiten' }, 'Bearbeiten');
+  const anzeigen = function () {
+    bereich.replaceChildren(h('div', { class: 'kl-text', id: 'kl-text' }, d.kurzlage ? kurzlageInhalt(d.kurzlage, unterlagen, true) : h('span', { class: 'dim' }, 'Keine Kurzlage erfasst.')));
+    bearbeiten.hidden = false;
+  };
+  const bearbeitenStarten = function () {
+    bearbeiten.hidden = true;
+    const eingabe = h('div', { id: 'kl-eingabe', class: 'kl-text kl-eingabe', contenteditable: 'true', role: 'textbox', 'aria-label': 'Kurzlage', 'aria-multiline': 'true', spellcheck: 'true' }, kurzlageInhalt(d.kurzlage, unterlagen, false));
+    let position = null;
+    const setzen = function (r) {
+      eingabe.focus();
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); position = r.cloneRange();
+    };
+    const merken = function () {
+      const sel = window.getSelection(), r = sel.rangeCount ? sel.getRangeAt(0) : null;
+      if (r && eingabe.contains(r.commonAncestorContainer)) position = r.cloneRange();
+    };
+    const ende = function () { const r = document.createRange(); r.selectNodeContents(eingabe); r.collapse(false); return r; };
+    const wieder = function () { setzen(position && eingabe.contains(position.commonAncestorContainer) ? position : ende()); };
+    ['input', 'keyup', 'mouseup', 'blur'].forEach(function (art) { eingabe.addEventListener(art, merken); });
+    eingabe.addEventListener('paste', function (ev) {
+      ev.preventDefault(); document.execCommand('insertText', false, (ev.clipboardData || window.clipboardData).getData('text/plain')); merken();
+    });
+    eingabe.addEventListener('drop', function (ev) { ev.preventDefault(); });
+    const format = function (befehl, titel, text) {
+      return h('button', { type: 'button', 'data-format': befehl, 'aria-label': titel, title: titel,
+        onmousedown: function (ev) { merken(); ev.preventDefault(); },
+        onclick: function () { wieder(); document.execCommand('styleWithCSS', false, false); document.execCommand(befehl, false, null); merken(); }
+      }, text);
+    };
+    const einfuegen = h('button', { type: 'button', id: 'kl-einfuegen', disabled: true, onclick: function () {
+      const id = auswahl.value;
+      if (!unterlagen.has(id)) return;
+      wieder();
+      const r = window.getSelection().getRangeAt(0); r.collapse(false);
+      const fragment = document.createDocumentFragment(), vor = document.createTextNode('\u00a0'), nach = document.createTextNode('\u00a0');
+      fragment.append(vor, kurzlageVerweis(id, unterlagen.get(id), false), nach); r.insertNode(fragment);
+      r.setStartAfter(nach); r.collapse(true); setzen(r);
+      auswahl.value = ''; einfuegen.disabled = true;
+    } }, 'Verweis einfügen');
+    const auswahl = h('select', { id: 'kl-unterlage', 'aria-label': 'Unterlage auswählen', disabled: !unterlagen.size, onchange: function () { einfuegen.disabled = !auswahl.value; } },
+      h('option', { value: '' }, unterlagen.size ? 'Unterlage auswählen …' : 'Keine Unterlagen vorhanden'),
+      Array.from(unterlagen, function (eintrag) { return h('option', { value: eintrag[0] }, eintrag[0] + ' · ' + eintrag[1]); }));
+    const werkzeug = h('div', { class: 'kl-werkzeuge', role: 'group', 'aria-label': 'Kurzlage formatieren' },
+      format('bold', 'Fett', h('b', null, 'B')), format('italic', 'Kursiv', h('i', null, 'I')),
+      format('underline', 'Unterstrichen', h('u', null, 'U')), format('insertUnorderedList', 'Aufzählung', '• Liste'), auswahl, einfuegen);
+    const fertig = h('div', { class: 'kl-abschluss' },
+      h('button', { type: 'button', onclick: function () { anzeigen(); bearbeiten.focus(); } }, 'Abbrechen'),
+      h('button', { type: 'button', id: 'kl-speichern', onclick: function () {
+        const inhalt = eingabe.innerHTML;
+        if (inhalt.length > 24000) { meldung('Kurzlage ist zu lang. Bitte kürzen.'); return; }
+        dispatch({ type: 'DOSSIER_KURZLAGE', id: e.id, inhalt: inhalt });
+        if (bereich.isConnected) anzeigen();
+        const knopf = $('kl-bearbeiten'); if (knopf) knopf.focus({ preventScroll: true });
+      } }, 'Speichern'));
+    bereich.replaceChildren(werkzeug, eingabe, fertig);
+    setzen(ende());
+  };
+  bearbeiten.addEventListener('click', bearbeitenStarten);
+  anzeigen();
+  return h('div', { class: 'field full', id: 'dossier-kurzlage' },
+    h('dt', { class: 'kl-kopf' }, h('span', null, 'Kurzlage'), bearbeiten), bereich);
+}
+
 function dossierAnsicht(e) {
-  const st = STATE.dossiers.entitaeten[e.id], vs = verbindungenVon(e.id);
+  const st = STATE.dossiers.entitaeten[e.id];
   if (dossierGesperrt(e)) {
     const pruefen = function () {
       const pw = $('dg-pw').value; $('dg-pw').value = '';
@@ -6928,12 +7102,14 @@ function dossierAnsicht(e) {
       feld('Länderkennung', [land(e.land), ' ' + SCENARIO.laender[e.land] + (e.landHinweis ? ' (' + e.landHinweis + ')' : '')]),
       feld('Aliase', e.aliase.length ? e.aliase.join(', ') : 'keine bekannt'),
       feld('Status', st.status ? [dossierStatusLabel(st.status), ' seit ' + fmtZ(st.statusAm)] : 'ohne Status'),
-      feld('Registernummer', e.reg), feld('Zuletzt verändert durch', dossierVermerk(st), 'full'),
+      feld('Registernummer', dossierRegisternummer(e, st) || 'ohne'),
       e.typ === 'Ort' ? null : feld('Erkenntnislage', (function () { const el = erkenntnisLage(e); return el.anzahl ? [frischeLabel(el.juengste.fr), ' jüngste Spur: ' + el.juengste.art + ' ' + el.juengste.fr.text + (el.aktuell ? '' : '. Nichts Frisches: neue Sichtung, Beleg oder Einschätzung einholen.')] : 'Keine eigene Erkenntnis erfasst. Verbindungen und Angaben im Archiv altern ab Nutzungsbeginn.'; })(), 'full'),
       feld('Verteilerbeschränkung', e.verteiler, 'full'),
+      kurzlageFeld(e, st),
       feld('Beschreibung', schutz(e.rolle), 'full'),
       feld(e.typ === 'Person' ? 'Biografische Eckdaten' : 'Eckdaten', schutz(e.eckdaten.join(' · ')), 'full'),
-      (e.nachtraege || []).filter(function (n) { return freigeschaltet(n.mission); }).map(function (n) {
+      feld('Zuletzt verändert durch', dossierVermerk(st), 'full'),
+      (e.nachtraege || []).filter(function (n) { return missionsbetrieb() && freigeschaltet(n.mission); }).map(function (n) {
         return [feld('Nachtrag ' + n.mission + ' ' + missionDef(n.mission).name + ': Rolle', schutz(n.rolle), 'full'),
                 feld('Nachtrag ' + n.mission + ': Eckdaten', schutz(n.eckdaten.join(' · ')), 'full')];
       }))),
@@ -6954,13 +7130,6 @@ function dossierAnsicht(e) {
       PROFIL.aenderungen[e.id] ? h('span', { class: 'label s-warn' }, 'bearbeitet') : null),
     kartenKnopf(e),
     sichtungKnopf(e),
-    h('h3', null, 'Verbindungen (' + vs.length + ')'),
-    tabelle(['Gegenüber', 'Typ', 'Richtung', 'Bewertung', 'Quelle'], vs.map(function (v) {
-      const g = entitaet(v.von === e.id ? v.nach : v.von);
-      const richtung = v.richtung === 'beidseitig' ? 'beidseitig ↔' : (v.von === e.id ? 'ausgehend →' : 'eingehend ←');
-      return [h('button', { type: 'button', class: 'link', id: 'vl-' + v.id, onclick: function () { oeffneDossier(g.id, 'Verbindung ' + v.id); } }, anzeige(g)),
-              v.typ, td('nw', richtung), td('nw', bewertungAnzeige(v)), v.quelle];
-    })),
     galerieBlock(e),
     h('h3', null, 'Notizen (' + st.notizen.length + ')'),
     tabelle(['Zeit (UTC)', 'ID', 'Notiz'], st.notizen.slice().reverse().map(function (n) { return [td('nw', fmtZ(n.t)), td('nw', n.id), td('txt', n.text)]; }), 'Keine Notizen zu diesem Dossier.'),
@@ -7069,6 +7238,17 @@ function graphSvg(zentrum) {
   appendKid(svg, [gK, gL, gN]);
   return { svg: svg, kanten: sichtbar.length, knoten: Object.keys(pos).length, unbeschriftet: unbeschriftet };
 }
+function verbindungstabelle(e) {
+  const vs = verbindungenVon(e.id);
+  return [
+    h('h3', null, 'Verbindungen (' + vs.length + ')'),
+    tabelle(['Gegenüber', 'Typ', 'Richtung', 'Bewertung', 'Quelle'], vs.map(function (v) {
+      const g = entitaet(v.von === e.id ? v.nach : v.von);
+      const richtung = v.richtung === 'beidseitig' ? 'beidseitig ↔' : (v.von === e.id ? 'ausgehend →' : 'eingehend ←');
+      return [h('button', { type: 'button', class: 'link', id: 'vl-' + v.id, onclick: function () { oeffneDossier(g.id, 'Verbindung ' + v.id); } }, anzeige(g)),
+              v.typ, td('nw', richtung), td('nw', bewertungAnzeige(v)), v.quelle];
+    }), 'Keine Verbindungen zu diesem Dossier.')];
+}
 function beziehungsansicht(e) {
   const G = VIEW.graph, A = SCENARIO.admiralty, g = graphSvg(e), neu = function () { renderModule(); };
   return panel('Beziehungsansicht um ' + e.id, h('span', { class: 'badge' }, g.knoten + ' Knoten, ' + g.kanten + ' Verbindungen'),
@@ -7095,7 +7275,8 @@ function beziehungsansicht(e) {
       h('div', { class: 'cols' },
         tabelle(['Quelle', 'Zuverlässigkeit'], Object.keys(A.quelle).map(function (k) { return [td('nw', k), A.quelle[k]]; })),
         tabelle(['Information', 'Glaubhaftigkeit'], Object.keys(A.information).map(function (k) { return [td('nw', k), A.information[k]]; }))),
-      h('p', { class: 'note' }, 'F und 6 bezeichnen fehlende Beurteilbarkeit, keine Negativbewertung; die Filter "bis" schließen sie nur in der weitesten Einstellung ein.')));
+      h('p', { class: 'note' }, 'F und 6 bezeichnen fehlende Beurteilbarkeit, keine Negativbewertung; die Filter "bis" schließen sie nur in der weitesten Einstellung ein.')),
+    h('section', { id: 'dossier-verbindungen', 'aria-label': 'Verbindungen' }, verbindungstabelle(e)));
 }
 function galerieZeigen(e, f) {
   const inhalt = h('div', null,
