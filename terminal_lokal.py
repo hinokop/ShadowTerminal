@@ -103,7 +103,7 @@ def terminal_file_op(root, request):
     if not isinstance(request, dict):
         raise Refused
     op, parts = request.get("op"), request.get("parts")
-    if op not in ("cd", "ls", "cat", "head", "tail", "wget"):
+    if op not in ("cd", "ls", "cat", "head", "tail", "wget", "send"):
         raise Refused
     path, meta = resolve_inside(root, parts)
     if op in ("ls", "cd"):
@@ -128,12 +128,14 @@ def terminal_file_op(root, request):
         return {"entries": entries}
     if not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1:
         raise Refused
-    limit = MAX_DOWNLOAD if op == "wget" else MAX_TEXT
+    limit = MAX_DOWNLOAD if op in ("wget", "send") else MAX_TEXT
     if meta.st_size > limit:
         return {"error": "Datei zu groß"}
     data = read_inside(root, parts, path, limit)
     if len(data) > limit:
         return {"error": "Datei zu groß"}
+    if op == "send":
+        return {"name": path.name, "bytes": len(data)}
     if op == "wget":
         return {"name": path.name, "data": base64.b64encode(data).decode("ascii"), "endpoint": ARCHIVE_ENDPOINT}
     try:
