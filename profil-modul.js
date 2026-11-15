@@ -218,7 +218,7 @@ function terminalPfad(arg) {
   }
   return out;
 }
-async function terminalBruecke(op, parts, hidden) {
+async function terminalBruecke(op, parts, hidden, exportDaten) {
   if (!TERMINAL_BRUECKE) return { error: 'Lokale Datenbank nicht verbunden. Starte START_TERMINAL.bat.' };
   const controller = new AbortController();
   const t = setTimeout(function () { controller.abort(); }, op === 'disconnect' ? 1500 : 7500);
@@ -226,7 +226,9 @@ async function terminalBruecke(op, parts, hidden) {
     const r = await fetch('http://127.0.0.1:' + TERMINAL_BRUECKE[1] + '/db', {
       method: 'POST', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
       headers: { 'Content-Type': 'application/json', 'X-Shadow-Token': TERMINAL_BRUECKE[2] },
-      body: JSON.stringify({ op: op, parts: parts, hidden: hidden }), signal: controller.signal
+      body: JSON.stringify(op === 'export-txt' ? {
+        op: op, folder: exportDaten.ordner, kind: exportDaten.art, id: exportDaten.id, text: exportDaten.text
+      } : { op: op, parts: parts, hidden: hidden }), signal: controller.signal
     });
     if (!r.ok) return { error: r.status === 403 ? 'Permission denied' : 'Lokale Datenbank nicht erreichbar' };
     return await r.json();

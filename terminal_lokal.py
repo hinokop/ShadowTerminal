@@ -1,10 +1,11 @@
-"""Read-only local file bridge. No OS commands or generic HTTP file serving."""
+"""Local file bridge with narrow TXT export. No OS commands or generic file serving."""
 import argparse
 import base64
 import hmac
 import json
 import os
 from pathlib import Path
+from contextlib import ExitStack, contextmanager
 import re
 import secrets
 import stat
@@ -18,6 +19,8 @@ ARCHIVE_ENDPOINT = "relay-07.pgcl-eu3.inv"  # Display only. Never resolved or co
 TOKEN_HEADER = "X-Shadow-Token"
 MAX_DOWNLOAD = 20 * 1024 * 1024
 MAX_TEXT = 64 * 1024
+MAX_EXPORT_REQUEST = 2 * MAX_TEXT + 1024
+EXPORT_IDS = {"pin": re.compile(r"PIN-[0-9]{3,15}"), "zone": re.compile(r"ZO-[0-9]{3,15}")}
 PROJECT = Path(__file__).resolve().parent
 DEVICE = re.compile(r"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)", re.I)
 
@@ -58,7 +61,6 @@ def resolve_inside(root, parts):
 def read_inside(root, parts, path, limit):
     # On Unix, resolve relative to directory descriptors without following links.
     if hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd:
-        from contextlib import ExitStack
         with ExitStack() as stack:
             dflags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
             fd = os.open(root, dflags)
@@ -99,10 +101,91 @@ def read_inside(root, parts, path, limit):
         return stream.read(limit + 1)
 
 
+@contextmanager
+def export_directory_windows(path):
+    """Keep a normal directory open without sharing modification or deletion."""
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    opening = kernel.CreateFileW
+    opening.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                        wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    opening.restype = wintypes.HANDLE
+    info = kernel.GetFileInformationByHandleEx
+    info.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD]
+    info.restype = wintypes.BOOL
+    close = kernel.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    # FILE_READ_ATTRIBUTES, FILE_SHARE_READ, OPEN_EXISTING, BACKUP_SEMANTICS | OPEN_REPARSE_POINT
+    handle = opening(str(path), 0x80, 1, None, 3, 0x02200000, None)
+    if handle in (None, ctypes.c_void_p(-1).value):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        attrs = (wintypes.DWORD * 2)()  # FILE_ATTRIBUTE_TAG_INFO
+        if not info(handle, 9, ctypes.byref(attrs), ctypes.sizeof(attrs)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if not attrs[0] & stat.FILE_ATTRIBUTE_DIRECTORY or attrs[0] & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            raise Refused
+        yield
+    finally:
+        close(handle)
+
+
+def terminal_export_txt(root, request):
+    if set(request) != {"op", "folder", "kind", "id", "text"}:
+        raise Refused
+    folder, kind, ident, text = (request[k] for k in ("folder", "kind", "id", "text"))
+    if folder not in ("dokumente", "ops") or kind not in ("pin", "zone"):
+        raise Refused
+    if not isinstance(ident, str) or not EXPORT_IDS[kind].fullmatch(ident) or not isinstance(text, str):
+        raise Refused
+    if any((ord(c) < 32 and c not in "\r\n\t") or c == "\x7f" for c in text):
+        raise Refused
+    data = text.encode("utf-8")
+    if not data:
+        raise Refused
+    if len(data) > MAX_TEXT:
+        return {"error": "TXT-Export zu groß (maximal 64 KiB)"}
+    name = ("lageblatt-" if kind == "pin" else "zone-") + ident + ".txt"
+    try:
+        if os.name == "nt":
+            with export_directory_windows(root), export_directory_windows(root / folder):
+                path = root / folder / name
+                stream = path.open("xb")
+                try:
+                    with stream:
+                        stream.write(data)
+                except OSError:
+                    path.unlink(missing_ok=True)
+                    raise
+        elif hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd:
+            with ExitStack() as stack:
+                flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+                base = os.open(root, flags)
+                stack.callback(os.close, base)
+                dst = os.open(folder, flags, dir_fd=base)
+                stack.callback(os.close, dst)
+                fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dst)
+                try:
+                    with os.fdopen(fd, "wb") as stream:
+                        stream.write(data)
+                except OSError:
+                    os.unlink(name, dir_fd=dst)
+                    raise
+        else:
+            raise Refused
+    except FileExistsError:
+        return {"error": "Datei existiert bereits. Sie wurde nicht überschrieben."}
+    return {"name": name, "folder": folder, "bytes": len(data)}
+
+
 def terminal_file_op(root, request):
     if not isinstance(request, dict):
         raise Refused
     op, parts = request.get("op"), request.get("parts")
+    if op == "export-txt":
+        return terminal_export_txt(root, request)
     if op not in ("cd", "ls", "cat", "head", "tail", "wget", "send"):
         raise Refused
     path, meta = resolve_inside(root, parts)
@@ -198,12 +281,15 @@ def make_server(root, token, output=print):
             if not hmac.compare_digest(key.encode("utf-8"), token.encode("ascii")):
                 self.reply(403, {"error": "Permission denied"}, cors=True)
                 return
+            request = None
             try:
                 size = int(self.headers.get("Content-Length", "0"))
-                if not 0 < size <= 8192 or self.headers.get_content_type() != "application/json":
+                if not 0 < size <= MAX_EXPORT_REQUEST or self.headers.get_content_type() != "application/json":
                     raise Refused
                 self.connection.settimeout(5)
                 request = json.loads(self.rfile.read(size).decode("utf-8"))
+                if size > 8192 and (not isinstance(request, dict) or request.get("op") != "export-txt"):
+                    raise Refused
                 if request == {"op": "disconnect"}:
                     try:
                         self.reply(200, {"ok": True}, cors=True)
@@ -216,7 +302,7 @@ def make_server(root, token, output=print):
             except (FileNotFoundError, NotADirectoryError):
                 result = {"error": "Datei oder Ordner nicht gefunden"}
             except OSError:
-                result = {"error": "Datei nicht lesbar"}
+                result = {"error": "TXT-Datei konnte nicht geschrieben werden" if isinstance(request, dict) and request.get("op") == "export-txt" else "Datei nicht lesbar"}
             self.reply(200, result, cors=True)
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)

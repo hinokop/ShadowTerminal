@@ -666,16 +666,48 @@ function pinNaehe(x, maxM) {
 function pinText(x) {
   const z = [x.id + ' ' + x.name, 'Position: ' + x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5), 'Zweck: ' + (x.zwecke && x.zwecke.length ? x.zwecke.join(', ') : 'nicht festgelegt'), ''];
   PIN_UMGEBUNG.forEach(function (u) { z.push(u[1] + ': ' + ((x.umgebung && x.umgebung[u[0]]) || '–')); });
-  const n = pinNaehe(x, 1000);
-  z.push('', 'In der Nähe (bis 1 km): ' + (n.length ? '' : 'keine bekannten Punkte'));
-  n.forEach(function (q) { z.push('  ' + q.id + ' ' + q.name + ', ' + Math.round(q.d) + ' m'); });
   z.push('', 'Notiz: ' + (x.notiz || '–'), '', 'Angelegt: ' + dtg(new Date(x.t)));
   return z.join('\n');
 }
-function pinExport(liste) {
-  const txt = liste.map(pinText).join('\n\n----------------------------------------\n\n') + '\n';
-  const a = document.createElement('a'), u = URL.createObjectURL(new Blob([txt], { type: 'text/plain;charset=utf-8' }));
-  a.href = u; a.download = 'lageblatt-' + (liste.length === 1 ? liste[0].id : 'pins') + '.txt'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 2000);
+/* Nur Profilobjekte exportieren, ohne abgeleitete Missions- oder Umgebungsdaten. */
+function eigeneZoneText(x) {
+  return [x.id + ' ' + x.name, 'Position: ' + x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5),
+    'Radius: ' + x.r + ' m', 'Notiz: ' + (x.notiz || '–'), 'Stand: ' + fmtZ(x.stand || x.t),
+    'Bemerkung zur Prüfung: ' + (x.standBemerkung || '–')].join('\n');
+}
+function kartenTxtExport(art, id) {
+  const objekt = function () { return ((art === 'pin' ? PROFIL.pins : PROFIL.zonen) || []).find(function (x) { return x.id === id; }); };
+  const muster = art === 'pin' ? /^PIN-[0-9]{3,15}$/ : /^ZO-[0-9]{3,15}$/;
+  const pruefen = function () {
+    const x = objekt();
+    if (!x || !muster.test(x.id)) { meldung('TXT-Export nicht möglich. Kartenobjekt nicht vorhanden.'); return null; }
+    if (x.dossier && (PROFIL.gesperrt || []).includes(x.dossier)) {
+      meldung('TXT-Export blockiert. Das verknüpfte Dossier ist gesperrt.'); return null;
+    }
+    return x;
+  };
+  const x = pruefen();
+  if (!x) return;
+  const dateiname = (art === 'pin' ? 'lageblatt-' : 'zone-') + id + '.txt';
+  const textVon = function (y) { return (art === 'pin' ? pinText(y) : eigeneZoneText(y)) + '\n'; };
+  if (!TERMINAL_BRUECKE) {
+    const a = h('a', { download: dateiname }), u = URL.createObjectURL(new Blob([textVon(x)], { type: 'text/plain;charset=utf-8' }));
+    a.href = u; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 2000);
+    meldung('TXT-Download gestartet. Für send die Datei in dokumente oder ops im lokalen Archiv legen.');
+    return;
+  }
+  const ordner = h('select', { id: 'k-txt-ordner' },
+    h('option', { value: 'dokumente' }, 'dokumente'), h('option', { value: 'ops' }, 'ops'));
+  bestaetigen('Als TXT exportieren', [h('p', { class: 'note' }, dateiname),
+    h('div', { class: 'row' }, h('label', { for: 'k-txt-ordner' }, 'Archivordner'), ordner)],
+    'TXT speichern', async function () {
+      const aktuell = pruefen();
+      if (!aktuell) return;
+      const antwort = await terminalBruecke('export-txt', null, false, { art: art, id: id, ordner: ordner.value, text: textVon(aktuell) });
+      if (antwort.error) { meldung('TXT-Export nicht gespeichert. ' + antwort.error); return; }
+      meldung('TXT gespeichert · /' + TERMINAL_DB + '/' + antwort.folder + '/' + antwort.name);
+    });
 }
 function pinPopup(x, fertig) {
   const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: x.id }, patch)); karteNeuZeichnen(); };
@@ -695,7 +727,7 @@ function pinPopup(x, fertig) {
     h('p', { class: 'k-pop-meta' }, n.length ? 'In der Nähe: ' + n.map(function (q) { return q.id + ' ' + kuerzen(q.name, 24) + ' (' + Math.round(q.d) + ' m)'; }).join('; ') : 'Keine bekannten Punkte im Umkreis von 1 km.'),
     h('div', { class: 'k-pop-akt' },
       h('button', { type: 'button', class: 'link', id: 'pin-zentrum', onclick: function () { karteFlug(x.ll[0], x.ll[1], Math.max(K.zoom, 16.5), karteAuswahlAnzeige, x.id); } }, 'Zentrieren'),
-      h('button', { type: 'button', class: 'link', id: 'pin-export', title: 'Lageblatt als Textdatei speichern', onclick: function () { pinExport([x]); } }, 'Lageblatt als Text'),
+      h('button', { type: 'button', class: 'link', id: 'pin-export', title: 'Lageblatt als Textdatei speichern', onclick: function () { kartenTxtExport('pin', x.id); } }, 'Als TXT exportieren'),
       VIEW.draft['pin-weg'] === x.id ? h('button', { type: 'button', id: 'pin-weg-ja', onclick: function () { delete VIEW.draft['pin-weg']; K.auswahl = null; dispatch({ type: 'PIN_ENTFERNT', id: x.id }); } }, 'Wirklich entfernen')
         : h('button', { type: 'button', class: 'link', id: 'pin-weg', onclick: function () { VIEW.draft['pin-weg'] = x.id; karteAuswahlAnzeige(); } }, 'Entfernen'))]);
 }
@@ -1106,6 +1138,7 @@ function eigeneZonePopup(zn, fertig) {
       h('button', { type: 'button', id: 'oz-stand', onclick: function () { const t = VIEW.draft['oz-bem-' + zn.id] || ''; delete VIEW.draft['oz-bem-' + zn.id]; dispatch({ type: 'OZONE_STAND', id: zn.id, bemerkung: t }); } }, 'Stand aktualisieren'),
       h('button', { type: 'button', class: 'link', id: 'oz-protokoll', onclick: function () { K.kpObjekt = zn.id; K.kpFilter = ''; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen'),
       h('button', { type: 'button', class: 'link', id: 'oz-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 15), karteAuswahlAnzeige, zn.id); } }, 'Zentrieren'),
+      h('button', { type: 'button', class: 'link', id: 'oz-export', onclick: function () { kartenTxtExport('zone', zn.id); } }, 'Als TXT exportieren'),
       VIEW.draft['oz-weg'] === zn.id ? h('button', { type: 'button', id: 'oz-weg-ja', onclick: function () { delete VIEW.draft['oz-weg']; K.auswahl = null; dispatch({ type: 'OZONE_ENTFERNT', id: zn.id }); } }, 'Wirklich entfernen')
         : h('button', { type: 'button', class: 'link', id: 'oz-weg', onclick: function () { VIEW.draft['oz-weg'] = zn.id; karteAuswahlAnzeige(); } }, 'Entfernen'))].filter(Boolean));
 }
