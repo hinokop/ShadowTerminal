@@ -151,23 +151,13 @@ def terminal_file_op(root, request):
 
 def make_server(root, token, output=print):
     session_lock = threading.Lock()
-    session = {"connected": True}
+    disconnected = threading.Event()
 
-    def run_op(request):
+    def finish_session():
         with session_lock:
-            if request == {"op": "disconnect"}:
-                if session["connected"]:
-                    session["connected"] = False
-                    output(f"successfully disconnected from {ARCHIVE_ENDPOINT}:443", flush=True)
-                return {"ok": True}
-            if not session["connected"]:
-                if not isinstance(request, dict) or request.get("op") != "cd" or request.get("parts") != []:
-                    return {"error": "Lokale Sitzung getrennt"}
-                result = terminal_file_op(root, request)
-                if result.get("ok"):
-                    session["connected"] = True
-                return result
-        return terminal_file_op(root, request)
+            if not disconnected.is_set():
+                output(f"successfully disconnected from {ARCHIVE_ENDPOINT}:443", flush=True)
+                disconnected.set()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -211,7 +201,14 @@ def make_server(root, token, output=print):
                 if not 0 < size <= 8192 or self.headers.get_content_type() != "application/json":
                     raise Refused
                 self.connection.settimeout(5)
-                result = run_op(json.loads(self.rfile.read(size).decode("utf-8")))
+                request = json.loads(self.rfile.read(size).decode("utf-8"))
+                if request == {"op": "disconnect"}:
+                    try:
+                        self.reply(200, {"ok": True}, cors=True)
+                    finally:
+                        finish_session()
+                    return
+                result = {"error": "Lokale Sitzung getrennt"} if disconnected.is_set() else terminal_file_op(root, request)
             except (Refused, PermissionError, ValueError):
                 result = {"error": "Permission denied"}
             except (FileNotFoundError, NotADirectoryError):
@@ -220,7 +217,15 @@ def make_server(root, token, output=print):
                 result = {"error": "Datei nicht lesbar"}
             self.reply(200, result, cors=True)
 
-    return ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.disconnected = disconnected
+    return server
+
+
+def wait_for_disconnect(server, pause=time.sleep):
+    server.disconnected.wait()
+    # Give the console user time to read the last line before the launcher exits.
+    pause(1.5)
 
 
 def startup_sequence(pause=time.sleep, output=print):
@@ -291,32 +296,33 @@ def main():
     token = secrets.token_urlsafe(32)
     with make_server(root, token) as server:
         fragment = f"#db={server.server_port}.{token}"
-        if opt.serve_only:
-            print(fragment, flush=True)
-            server.serve_forever()
-            return
-        if os.name != "nt":
+        if not opt.serve_only and os.name != "nt":
             raise SystemExit("Nutze --serve-only außerhalb von Windows.")
-        env = {**os.environ, "SHADOW_TERMINAL_FRAGMENT": fragment}
-        for key in ("SHADOW_TERMINAL_WINDOW_POSITION", "SHADOW_TERMINAL_WINDOW_SIZE"):
-            env.pop(key, None)
-        try:
-            env.update(preferred_window(windows_monitors()))
-        except OSError:
-            pass  # Monitor discovery is optional. Keep the normal Edge start.
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            startup_sequence()
-            result = subprocess.run(["cmd.exe", "/d", "/c", "START_3D.bat"], cwd=PROJECT, env=env, check=False)
-            if result.returncode:
-                raise SystemExit(result.returncode)
-            print(f"connected to: {DATABASE}", flush=True)
-            input()
-        except (EOFError, KeyboardInterrupt):
+            if opt.serve_only:
+                print(fragment, flush=True)
+            else:
+                env = {**os.environ, "SHADOW_TERMINAL_FRAGMENT": fragment}
+                for key in ("SHADOW_TERMINAL_WINDOW_POSITION", "SHADOW_TERMINAL_WINDOW_SIZE"):
+                    env.pop(key, None)
+                try:
+                    env.update(preferred_window(windows_monitors()))
+                except OSError:
+                    pass  # Monitor discovery is optional. Keep the normal Edge start.
+                startup_sequence()
+                result = subprocess.run(["cmd.exe", "/d", "/c", "START_3D.bat"], cwd=PROJECT, env=env, check=False)
+                if result.returncode:
+                    raise SystemExit(result.returncode)
+                if not server.disconnected.is_set():
+                    print(f"connected to: {DATABASE}", flush=True)
+            wait_for_disconnect(server)
+        except KeyboardInterrupt:
             pass
         finally:
             server.shutdown()
+            thread.join()
 
 
 if __name__ == "__main__":

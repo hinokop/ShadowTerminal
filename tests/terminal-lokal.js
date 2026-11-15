@@ -22,6 +22,7 @@ const PF = require('./_pfad');
       if (process.platform !== 'win32' || !['EACCES','EPERM'].includes(e.code)) throw e;
     }
     helper = spawn(process.env.SHADOW_TEST_PYTHON || (process.platform === 'win32' ? 'python' : 'python3'), [join(sandbox, 'terminal_lokal.py'), '--serve-only']);
+    const helperExit = new Promise(resolve => helper.once('exit', (code, signal) => resolve({code, signal})));
     const start = await new Promise((resolve, reject) => {
       helper.once('error', reject); helper.once('exit', code => reject(new Error('Helper exit ' + code)));
       helper.stdout.once('data', d => resolve(d.toString().trim()));
@@ -126,9 +127,17 @@ const PF = require('./_pfad');
       helper.stdout.on('data', onData);
     });
     assert.equal((await (await call('ls', [])).json()).error, 'Lokale Sitzung getrennt');
-    assert.deepEqual(await (await call('cd', [])).json(), {ok:true});
+    let exitTimeout;
+    try {
+      const result = await Promise.race([
+        helperExit,
+        new Promise((_, reject) => { exitTimeout = setTimeout(() => reject(new Error('Dateibrücke beendet sich nicht')), 5500); })
+      ]);
+      assert.deepEqual(result, {code:0, signal:null});
+    } finally { clearTimeout(exitTimeout); }
+    await assert.rejects(() => call('ls', []));
     assert.deepEqual(errors, []);
-    console.log('OK: lokale Brücke in Chromium, Dateibefehle und Binärdownload, Token, Pfade und Links');
+    console.log('OK: lokale Brücke in Chromium, Dateibefehle und Binärdownload, Token, Pfade, Links und automatisches Beenden');
   } finally {
     if (b) await b.close();
     if (helper) helper.kill();
