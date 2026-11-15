@@ -8421,7 +8421,8 @@ const Zugang = (function () {
     end.hidden = false; liste.replaceChildren(); $('gate-end-fertig').hidden = true;
     const zeilen = [['Kanal wird geschlossen', 2], ['Schlüsselmaterial wird verworfen', 1], ['Sitzung wird gesichert', 0], ['Verbindung getrennt', null]];
     let i = 0;
-    const abschluss = function () {
+    const abschluss = async function () {
+      if (typeof terminalSitzungTrennen === 'function') await terminalSitzungTrennen();
       try { window.close(); } catch (e) { /* nicht erlaubt */ }
       setTimeout(function () { $('gate-end-fertig').hidden = false; $('gate-reconnect').focus(); }, rm ? 100 : 700);
     };
