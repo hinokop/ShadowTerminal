@@ -593,6 +593,7 @@ body:not(.locked) #gate{display:none}
 .profil-radar-formular input{width:75px}
 @media(max-width:600px){.profil-radar-inhalt{grid-template-columns:minmax(0,1fr)}}
 </style>
+<link rel="stylesheet" href="profil-modul.css">
 </head>
 <body class="locked">
 <a class="skip" href="#main">Zum Inhalt springen</a>
@@ -5367,12 +5368,18 @@ const ACTIONS = {
     let rchText = '';
     if (!PROFIL.identitaet && typeof q.identitaet === 'string' && legende(q.identitaet)) PROFIL.identitaet = q.identitaet;
     if (!ARBEITS_STATUS.includes(PROFIL.arbeitsstatus) && ARBEITS_STATUS.includes(q.arbeitsstatus)) PROFIL.arbeitsstatus = q.arbeitsstatus;
-    AGENT_RADAR.forEach(function (a) {
-      const n = q.agentRadar && q.agentRadar[a[0]], lokal = PROFIL.agentRadar && PROFIL.agentRadar[a[0]];
-      if (Number.isInteger(n) && n >= 0 && n <= 100 && !(Number.isInteger(lokal) && lokal >= 0 && lokal <= 100)) {
-        PROFIL.agentRadar = Object.assign({}, PROFIL.agentRadar, { [a[0]]: n });
-      }
+    [['agentRadar', AGENT_RADAR], ['agentPsycho', PSYCH_FAKTOREN]].forEach(function (eintrag) {
+      const feld = eintrag[0];
+      eintrag[1].forEach(function (achse) {
+        const id = achse[0], n = q[feld] && q[feld][id], lokal = PROFIL[feld] && PROFIL[feld][id];
+        if (assessmentWertGueltig(n) && !assessmentWertGueltig(lokal)) {
+          PROFIL[feld] = Object.assign({}, PROFIL[feld], { [id]: n });
+        }
+      });
     });
+    if (!assessmentRotationGueltig(PROFIL.assessmentRotation) && assessmentRotationGueltig(q.assessmentRotation)) {
+      PROFIL.assessmentRotation = { start: q.assessmentRotation.start, bZuerst: q.assessmentRotation.bZuerst };
+    }
     Object.keys(q.dokFristen || {}).forEach(function (k) { if (!(k in PROFIL.dokFristen)) PROFIL.dokFristen[k] = q.dokFristen[k]; });
     if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q);
     const zr = zonenImportieren(q, q.recherche && typeof rchProfilZusammenfuehren === 'function' ? rchProfilZusammenfuehren.abbildung : null);
@@ -5772,6 +5779,7 @@ function fensterZelle(zelle, now) {
 }
 /* Sekündlich aktualisierte Anzeigen innerhalb des Modulbereichs */
 function tickModule(now) {
+  profilAssessmentAktualisieren(now);
   const txt = meldeText(now);
   document.querySelectorAll('[data-melde]').forEach(function (e) { if (e.textContent !== txt) e.textContent = txt; });
   document.querySelectorAll('[data-vk]').forEach(function (c) { const v = VK().find(function (x) { return x.id === c.getAttribute('data-vk'); }); if (v && c.textContent !== vkStatus(v, now)) c.textContent = vkStatus(v, now); });

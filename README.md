@@ -21,7 +21,8 @@ Im Profil entfernt „Karte bereinigen“ nach Bestätigung Pins, eigene Zonen, 
 
 ## Arbeitsprofil
 
-- **Profil** behält Agentenkennung und Notizen und ergänzt ein spielerisches Radar mit fünf manuell einstellbaren Werten von 0 bis 100. Der Status in der Kopfzeile (Offline, Standby, Aktiv) steuert keine Mission und ändert nicht den Netzwerkzustand.
+- **Profil** zeigt ein Kompetenzradar und sechs psychologische Balken. Das eigene Assessment ist editierbar. Es wechselt alle drei Kalendermonate mit zwei vorbereiteten Profilen, deren Reihenfolge beim ersten Start ausgelost und lokal gespeichert wird. Der Verlauf zeigt bis zu drei Termine. Der Gesamtscore ist das gerundete Mittel aller elf Werte, A ab 80, B ab 65, C ab 50, darunter D. Alte Notizen bleiben eingeklappt erhalten. Der Status in der Kopfzeile (Offline, Standby, Aktiv) steuert weder eine Mission noch den Netzwerkzustand.
+- **Diagnoseterminal** kennt die Befehle `ls`, `cat`, `whoami`, `date`, `clear`, `help` und `ping relay`. Letzterer fragt nur auf ausdrücklichen Aufruf einmal die öffentliche Wikidata-API per HTTPS ab, ohne Anmeldedaten und Referrer. Angezeigt wird die Dauer bis zur gelesenen Antwort, kein ICMP-Ping. Alle übrigen Befehle sind rein lokal und lesen keine Dateien auf dem Rechner.
 - **Identitäten** zeigt drei fiktive Karten untereinander. Ein Klick auf die Anlagennummer öffnet die Dateiauswahl. Pro Nummer wird maximal eine Datei bis 20 MB lokal gespeichert. Anlagen werden nicht im Profil-JSON oder Fallpaket exportiert. Die bestehenden Identitäts- und Lichtbildschlüssel bleiben erhalten.
 - **Ausgangsorte** stehen in einem eigenen Reiter. An vorhandenen Positionen und Dossiers ändert die neue Ansicht nichts.
 

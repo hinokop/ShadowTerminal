@@ -57,15 +57,15 @@ function radarGrafik(werte) {
       ];
     }));
 }
-function agentRadarPanel() {
-  const werte = radarWerte();
+function agentRadarPanel(stand) {
+  const werte = stand.radar;
   return panel('Kompetenzprofil', h('span', { class: 'badge' }, 'SIMULATION · 0–100'),
     h('div', { class: 'profil-radar-inhalt' },
       radarGrafik(werte),
       h('dl', { class: 'profil-radar-werte' }, AGENT_RADAR.map(function (a, i) {
         return h('div', null, h('dt', null, a[1]), h('dd', { class: 'mono' }, String(werte[i])));
       }))),
-    h('details', { class: 'pad' }, h('summary', null, 'Werte bearbeiten'),
+    stand.quelle !== 'eigen' ? null : h('details', { class: 'pad' }, h('summary', null, 'Werte bearbeiten'),
       h('p', { class: 'note' }, 'Fiktive Startwerte. Du kannst sie frei setzen. Sie ändern keine Freigaben und lösen nichts aus.'),
       h('form', { class: 'profil-radar-formular', onsubmit: function (ev) {
         ev.preventDefault();
@@ -81,6 +81,175 @@ function agentRadarPanel() {
         return h('label', { for: id }, a[1], h('input', { id: id, name: a[0], type: 'number', min: 0, max: 100, step: 1, required: true, value: werte[i] }));
       }), h('button', { id: 'profil-radar-speichern', type: 'submit' }, 'Werte speichern'))));
 }
+const PSYCH_FAKTOREN = [
+  ['stress', 'Stressresistenz', 88], ['stabil', 'Emotionale Stabilität', 85],
+  ['druck', 'Entscheidungsfähigkeit unter Druck', 91], ['belastung', 'Körperliche Belastungstoleranz', 90],
+  ['impuls', 'Impulskontrolle', 86], ['erholung', 'Erholungsfähigkeit', 84]
+];
+const ASSESSMENT_VORLAGEN = {
+  B: { radar: [71, 65, 76, 70, 74], psycho: [69, 77, 72, 71, 78, 74] },
+  C: { radar: [55, 49, 61, 59, 53], psycho: [52, 61, 55, 59, 57, 52] }
+};
+function assessmentWertGueltig(n) { return Number.isInteger(n) && n >= 0 && n <= 100; }
+function psychoWerte() {
+  return PSYCH_FAKTOREN.map(function (a) {
+    const n = PROFIL.agentPsycho && PROFIL.agentPsycho[a[0]];
+    return assessmentWertGueltig(n) ? n : a[2];
+  });
+}
+function assessmentRotationGueltig(r) {
+  return !!r && typeof r.start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.start) &&
+    Number.isFinite(Date.parse(r.start)) && typeof r.bZuerst === 'boolean';
+}
+let assessmentRotationErsatz;
+function assessmentRotation(now) {
+  if (assessmentRotationGueltig(PROFIL.assessmentRotation)) return PROFIL.assessmentRotation;
+  if (assessmentRotationErsatz) return assessmentRotationErsatz;
+  const start = new Date(now).toISOString().slice(0, 10);
+  const neu = { start: start, bZuerst: Math.random() < .5 };
+  if (!arbeitsProfilSpeichern('assessmentRotation', neu)) assessmentRotationErsatz = neu;
+  return neu;
+}
+function assessmentTermin(start, periode) {
+  const d = new Date(start), tag = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + 3 * periode);
+  const letzter = new Date(d);
+  letzter.setUTCMonth(letzter.getUTCMonth() + 1, 0);
+  d.setUTCDate(Math.min(tag, letzter.getUTCDate()));
+  return d.getTime();
+}
+function assessmentStand(now) {
+  const rotation = assessmentRotation(now), start = new Date(rotation.start);
+  const n = new Date(now);
+  const monate = (n.getUTCFullYear() - start.getUTCFullYear()) * 12 + n.getUTCMonth() - start.getUTCMonth();
+  let periode = Math.max(0, Math.floor(monate / 3));
+  if (periode && now < assessmentTermin(start, periode)) periode--;
+  const reihe = rotation.bZuerst ? ['eigen', 'B', 'C'] : ['eigen', 'C', 'B'];
+  const daten = function (p) {
+    const quelle = reihe[p % reihe.length], vorlage = ASSESSMENT_VORLAGEN[quelle];
+    const radar = vorlage ? vorlage.radar : radarWerte(), psycho = vorlage ? vorlage.psycho : psychoWerte();
+    const alle = radar.concat(psycho);
+    const score = Math.round(alle.reduce(function (a, b) { return a + b; }, 0) / alle.length);
+    const note = score >= 80 ? ['A', 'sehr gut'] : score >= 65 ? ['B', 'solide'] : score >= 50 ? ['C', 'knapp bestanden'] : ['D', 'nicht bestanden'];
+    return { quelle: quelle, am: assessmentTermin(start, p), radar: radar, psycho: psycho, score: score, note: note };
+  };
+  const liste = [];
+  for (let p = periode; p >= 0 && p > periode - 3; p--) liste.push(daten(p));
+  return { aktuell: liste[0], liste: liste, naechster: assessmentTermin(start, periode + 1) };
+}
+function psychoPanel(stand) {
+  const werte = stand.psycho;
+  return panel('Psychologisches Profil', h('span', { class: 'badge' }, '0–100'),
+    h('dl', { class: 'profil-psycho pad' }, PSYCH_FAKTOREN.map(function (a, i) {
+      return h('div', null, h('dt', null, a[1]), h('dd', null,
+        h('meter', { min: 0, max: 100, value: werte[i], 'aria-label': a[1] }),
+        h('span', { class: 'mono' }, String(werte[i]))));
+    })),
+    stand.quelle !== 'eigen' ? null : h('details', { class: 'pad' }, h('summary', null, 'Psychologische Werte bearbeiten'),
+      h('form', { class: 'profil-radar-formular', onsubmit: function (ev) {
+        ev.preventDefault();
+        const neu = {};
+        PSYCH_FAKTOREN.forEach(function (a) { neu[a[0]] = ev.target.elements[a[0]].valueAsNumber; });
+        if (Object.values(neu).every(assessmentWertGueltig) && arbeitsProfilSpeichern('agentPsycho', neu)) {
+          renderModule();
+          $('profil-psycho-speichern').closest('details').querySelector('summary').focus();
+        }
+      } }, PSYCH_FAKTOREN.map(function (a, i) {
+        return h('label', null, a[1], h('input', { name: a[0], type: 'number', min: 0, max: 100, step: 1, required: true, value: werte[i] }));
+      }), h('button', { id: 'profil-psycho-speichern', type: 'submit' }, 'Werte speichern'))));
+}
+function assessmentVerlaufPanel(stand) {
+  return panel('Assessment-Verlauf', h('span', { class: 'badge' }, 'Nächster Wechsel · ' + fmtDatum(stand.naechster)),
+    tabelle(['Datum', 'Gesamtscore', 'Note'], stand.liste.map(function (x) {
+      return [td('nw', fmtDatum(x.am)), td('nw', x.score + ' / 100'),
+        h('span', { class: 'label ' + (x.note[0] === 'A' ? 's-accent' : x.note[0] === 'C' ? 's-warn' : x.note[0] === 'D' ? 's-crit' : 's-dim') }, x.note.join(' · '))];
+    }), ''));
+}
+function assessmentAnsicht(kennung, now) {
+  const plan = assessmentStand(now);
+  return h('div', { id: 'profil-assessment', 'data-wechsel': plan.naechster },
+    h('div', { class: 'cols' }, kennung, agentRadarPanel(plan.aktuell)),
+    h('div', { class: 'cols' }, psychoPanel(plan.aktuell), assessmentVerlaufPanel(plan)));
+}
+function profilAssessmentAktualisieren(now) {
+  const box = $('profil-assessment');
+  if (!box || now < Number(box.dataset.wechsel)) return;
+  box.replaceWith(assessmentAnsicht($('profil-kennung'), now));
+}
+
+const TERMINAL_RELAY = 'https://www.wikidata.org/w/api.php?action=query&meta=siteinfo&siprop=general&format=json&origin=*';
+const TERMINAL_BAUM = [
+  '/home/agent/', '├── dossiers/', '│   ├── active/', '│   ├── archived/', '│   └── templates/',
+  '├── identity/', '│   └── docs/', '├── system/', '│   ├── config/', '│   └── status/', '└── tmp/'
+].join('\n');
+const TERMINAL_DATEIEN = new Map([
+  ['system/status/relay.txt', 'RELAY · HTTPS\nPrüfbefehl: ping relay'],
+  ['system/config/terminal.conf', 'workspace=/home/agent\nshell=diag\nrelay=relay']
+]);
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, version: 0 };
+function terminalAusgabe(zeile) {
+  const t = TERMINAL_ZUSTAND;
+  t.ausgabe = t.ausgabe.concat(zeile).slice(-45);
+  const el = $('profil-terminal-ausgabe');
+  if (!el) return;
+  el.textContent = t.ausgabe.join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+async function terminalPing() {
+  const t = TERMINAL_ZUSTAND;
+  if (t.prueft) { terminalAusgabe('relay · Anfrage läuft bereits'); return; }
+  t.prueft = true;
+  const version = t.version, start = performance.now(), abbruch = new AbortController();
+  const timeout = setTimeout(function () { abbruch.abort(); }, 8000);
+  const ergebnis = function (text) { if (t.version === version) terminalAusgabe(text); };
+  try {
+    const antwort = await fetch(TERMINAL_RELAY, { credentials: 'omit', referrerPolicy: 'no-referrer',
+      redirect: 'error', cache: 'no-store', signal: abbruch.signal });
+    if (!antwort.ok) { ergebnis('relay · HTTPS · HTTP ' + antwort.status); return; }
+    const daten = await antwort.json();
+    if (!daten.query || !daten.query.general) { ergebnis('relay · HTTPS · unerwartete Antwort'); return; }
+    ergebnis('relay · HTTPS · ' + Math.max(1, Math.round(performance.now() - start)) + ' ms');
+  } catch (e) {
+    ergebnis('relay · HTTPS · ' + (abbruch.signal.aborted ? 'Zeitlimit überschritten' : 'nicht erreichbar'));
+  } finally {
+    clearTimeout(timeout);
+    t.prueft = false;
+  }
+}
+function terminalBefehl(zeile) {
+  const [befehl, ...args] = zeile.split(/\s+/), arg = args.join(' ');
+  const t = TERMINAL_ZUSTAND;
+  if (befehl === 'clear' && !arg) { t.version++; t.ausgabe = []; terminalAusgabe([]); return; }
+  terminalAusgabe('raizo@terminal:~$ ' + zeile);
+  if (befehl === 'help' && !arg) terminalAusgabe('ls · cat <datei> · whoami · date · ping relay · clear');
+  else if (befehl === 'ls' && !arg) terminalAusgabe(TERMINAL_BAUM + '\n\n' + Array.from(TERMINAL_DATEIEN.keys()).join('\n'));
+  else if (befehl === 'cat') terminalAusgabe(TERMINAL_DATEIEN.get(arg) || 'cat: Datei nicht gefunden');
+  else if (befehl === 'whoami' && !arg) terminalAusgabe('raizo / ' + SCENARIO.agent.id);
+  else if (befehl === 'date' && !arg) terminalAusgabe(fmtZ(new Date()));
+  else if (befehl === 'ping') {
+    if (arg === 'relay') terminalPing();
+    else terminalAusgabe('ping: verfügbares Ziel ist relay');
+  } else terminalAusgabe('command not found');
+}
+function profilTerminalPanel() {
+  const t = TERMINAL_ZUSTAND;
+  const input = h('input', { id: 'profil-terminal-eingabe', type: 'text', 'aria-label': 'Terminalbefehl',
+    placeholder: 'help', maxlength: 160, autocomplete: 'off', spellcheck: 'false' });
+  return h('details', { id: 'profil-terminal', class: 'panel profil-terminal', open: t.offen,
+    ontoggle: function (ev) { t.offen = ev.currentTarget.open; } },
+    h('summary', null, 'Diagnoseterminal'),
+    h('div', { class: 'profil-terminal-kern' },
+      h('pre', { id: 'profil-terminal-ausgabe', class: 'mono', role: 'log', 'aria-label': 'Terminalausgabe' }, t.ausgabe.join('\n')),
+      h('form', { onsubmit: function (ev) {
+        ev.preventDefault();
+        const zeile = input.value.trim();
+        input.value = '';
+        if (zeile) terminalBefehl(zeile);
+      } }, h('label', { for: input.id, class: 'mono' }, 'raizo@terminal:~$'), input,
+        h('button', { type: 'submit' }, 'Ausführen'))));
+}
+
 function identitaetDateiSchluessel(id, nr) { return 'identitaet:' + id + ':' + nr; }
 function identitaetDateiZeile(id, d) {
   const nr = d[0], key = identitaetDateiSchluessel(id, nr);
@@ -149,18 +318,20 @@ function renderArbeitsprofil(m) {
     h('p', { class: 'note pad' }, 'Fiktive Identitäten. Auf eine Anlagennummer klicken, um eine eigene Datei hinzuzufügen oder zu ersetzen. Die Dateien bleiben in diesem Browser.'),
     h('div', { class: 'profil-identitaeten' }, Object.keys(ARBEITS_IDENTITAETEN).map(arbeitsIdentitaetKarte)));
   const A = SCENARIO.agent, id = ARBEITS_IDENTITAETEN[aktiveLegendeId()], status = arbeitsProfilStatus();
-  return kopf.concat(
-    h('div', { class: 'cols' },
-      panel('Agentenkennung', null, h('dl', { class: 'fields' }, feld('Codename', A.codename), feld('Interne ID', A.id),
-        feld('Aktive Identität', id ? id.name + ' · ' + id.bezeichnung : '–', 'full'), feld('Status', statusLabel(status), 'full')),
-        h('div', { class: 'row top' }, h('label', { for: 'sel-status' }, 'Status setzen'),
-          h('select', { id: 'sel-status', value: status, onchange: function (ev) {
-            arbeitsProfilSpeichern('arbeitsstatus', ev.target.value);
-            renderHeader(); renderModule();
-          } }, ARBEITS_STATUS.map(function (x) { return h('option', { value: x }, x); })))),
-      agentRadarPanel()),
-    h('div', { class: 'cols' },
-      panel('Notizen', null, h('div', { class: 'pad' }, autosaveFeld('ta-notizen', 'notizen', 'Notizen'))),
-      panel('Operative Einschränkungen', null, h('div', { class: 'pad' }, autosaveFeld('ta-einschr', 'einschraenkungen', 'Operative Einschränkungen')))),
+  const kennung = panel('Agentenkennung', null, h('dl', { class: 'fields' }, feld('Codename', A.codename), feld('Interne ID', A.id),
+    feld('Aktive Identität', id ? id.name + ' · ' + id.bezeichnung : '–', 'full'), feld('Status', statusLabel(status), 'full')),
+    h('div', { class: 'row top' }, h('label', { for: 'sel-status' }, 'Status setzen'),
+      h('select', { id: 'sel-status', value: status, onchange: function (ev) {
+        arbeitsProfilSpeichern('arbeitsstatus', ev.target.value);
+        renderHeader(); renderModule();
+      } }, ARBEITS_STATUS.map(function (x) { return h('option', { value: x }, x); }))));
+  kennung.id = 'profil-kennung';
+  return kopf.concat(assessmentAnsicht(kennung, Date.now()),
+    profilTerminalPanel(),
+    [STATE.agent.notizen, STATE.agent.einschraenkungen, VIEW.draft['ta-notizen'], VIEW.draft['ta-einschr']].some(Boolean) ?
+      h('details', { class: 'panel profil-alt-notizen' }, h('summary', null, 'Bisherige Notizen'),
+        h('div', { class: 'cols pad' },
+          panel('Notizen', null, h('div', { class: 'pad' }, autosaveFeld('ta-notizen', 'notizen', 'Notizen'))),
+          panel('Operative Einschränkungen', null, h('div', { class: 'pad' }, autosaveFeld('ta-einschr', 'einschraenkungen', 'Operative Einschränkungen'))))) : null,
     karteBereinigenPanel());
 }
