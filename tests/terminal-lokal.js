@@ -27,6 +27,8 @@ const PF = require('./_pfad');
       helper.stdout.once('data', d => resolve(d.toString().trim()));
     });
     const [, port, token] = /^#db=(\d+)\.([\w-]+)$/.exec(start);
+    let cmdOutput = '';
+    helper.stdout.on('data', d => { cmdOutput += d.toString(); });
     const address = 'http://127.0.0.1:' + port + '/db';
     const call = (op, parts, key=token, origin='null') => fetch(address, {
       method:'POST', headers:{'Origin':origin, 'Content-Type':'application/json', 'X-Shadow-Token':key}, body: JSON.stringify({op,parts})
@@ -90,7 +92,7 @@ const PF = require('./_pfad');
     assert.doesNotMatch(fehlend, /100%|200 OK/);
     const netzVorher = netz.length;
     const [download, protokoll] = await Promise.all([p.waitForEvent('download'), cmd('wget probe.bin')]);
-    assert.match(protokoll, /https:\/\/relay-07\.pgcl-eu3\.invalid\/pgcl-eu3\.arch07\/dossiers\/probe\.bin/);
+    assert.match(protokoll, /https:\/\/relay-07\.pgcl-eu3\.inv\/pgcl-eu3\.arch07\/dossiers\/probe\.bin/);
     assert.match(protokoll, /200 OK/);
     assert.match(protokoll, /Länge: 3 \(3 B\)/);
     assert.match(protokoll, /100%/);
@@ -103,6 +105,28 @@ const PF = require('./_pfad');
     assert.equal(await p.locator('#profil-terminal-prompt').textContent(), 'root@terminal:/pgcl-eu3.arch07#');
     await cmd('clear');
     assert.equal(await out.textContent(), '');
+    assert.equal(await eingabe.getAttribute('placeholder'), null);
+    const getrennt = 'successfully disconnected from relay-07.pgcl-eu3.inv:443';
+    await p.emulateMedia({reducedMotion:'reduce'});
+    await p.locator('#btn-end').focus();
+    await p.keyboard.press('x');
+    await p.waitForFunction(() => Zugang.beendet());
+    await new Promise((resolve, reject) => {
+      if (cmdOutput.includes(getrennt)) { resolve(); return; }
+      const onData = () => {
+        if (!cmdOutput.includes(getrennt)) return;
+        clearTimeout(timeout);
+        helper.stdout.off('data', onData);
+        resolve();
+      };
+      const timeout = setTimeout(() => {
+        helper.stdout.off('data', onData);
+        reject(new Error('Abmeldung nicht in CMD angekommen'));
+      }, 5500);
+      helper.stdout.on('data', onData);
+    });
+    assert.equal((await (await call('ls', [])).json()).error, 'Lokale Sitzung getrennt');
+    assert.deepEqual(await (await call('cd', [])).json(), {ok:true});
     assert.deepEqual(errors, []);
     console.log('OK: lokale Brücke in Chromium, Dateibefehle und Binärdownload, Token, Pfade und Links');
   } finally {

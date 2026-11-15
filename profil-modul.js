@@ -221,7 +221,7 @@ function terminalPfad(arg) {
 async function terminalBruecke(op, parts, hidden) {
   if (!TERMINAL_BRUECKE) return { error: 'Lokale Datenbank nicht verbunden. Starte START_TERMINAL.bat.' };
   const controller = new AbortController();
-  const t = setTimeout(function () { controller.abort(); }, 7500);
+  const t = setTimeout(function () { controller.abort(); }, op === 'disconnect' ? 1500 : 7500);
   try {
     const r = await fetch('http://127.0.0.1:' + TERMINAL_BRUECKE[1] + '/db', {
       method: 'POST', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
@@ -233,6 +233,12 @@ async function terminalBruecke(op, parts, hidden) {
   } catch (ex) {
     return { error: 'Lokale Datenbank nicht erreichbar' };
   } finally { clearTimeout(t); }
+}
+function terminalSitzungTrennen() {
+  if (!TERMINAL_BRUECKE) return;
+  TERMINAL_ZUSTAND.version++;
+  TERMINAL_ZUSTAND.ort = null;
+  return terminalBruecke('disconnect');
 }
 function terminalPrompt() {
   const ort = TERMINAL_ZUSTAND.ort;
@@ -416,7 +422,7 @@ function terminalTabTaste(ev) {
 function profilTerminalPanel() {
   const t = TERMINAL_ZUSTAND;
   const input = h('input', { id: 'profil-terminal-eingabe', type: 'text', 'aria-label': 'Terminalbefehl',
-    placeholder: 'help · Tab ergänzt', maxlength: 160, autocomplete: 'off', spellcheck: 'false', onkeydown: terminalTabTaste });
+    maxlength: 160, autocomplete: 'off', spellcheck: 'false', onkeydown: terminalTabTaste });
   return h('details', { id: 'profil-terminal', class: 'panel profil-terminal', open: t.offen,
     ontoggle: function (ev) { t.offen = ev.currentTarget.open; } },
     h('summary', null, 'Diagnoseterminal'),

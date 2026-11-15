@@ -14,7 +14,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DATABASE = "pgcl-eu3.arch07"
-ARCHIVE_ENDPOINT = "relay-07.pgcl-eu3.invalid"  # Display only. Never resolved or contacted.
+ARCHIVE_ENDPOINT = "relay-07.pgcl-eu3.inv"  # Display only. Never resolved or contacted.
 TOKEN_HEADER = "X-Shadow-Token"
 MAX_DOWNLOAD = 20 * 1024 * 1024
 MAX_TEXT = 64 * 1024
@@ -149,7 +149,26 @@ def terminal_file_op(root, request):
     return {"text": text}
 
 
-def make_server(root, token):
+def make_server(root, token, output=print):
+    session_lock = threading.Lock()
+    session = {"connected": True}
+
+    def run_op(request):
+        with session_lock:
+            if request == {"op": "disconnect"}:
+                if session["connected"]:
+                    session["connected"] = False
+                    output(f"successfully disconnected from {ARCHIVE_ENDPOINT}:443", flush=True)
+                return {"ok": True}
+            if not session["connected"]:
+                if not isinstance(request, dict) or request.get("op") != "cd" or request.get("parts") != []:
+                    return {"error": "Lokale Sitzung getrennt"}
+                result = terminal_file_op(root, request)
+                if result.get("ok"):
+                    session["connected"] = True
+                return result
+        return terminal_file_op(root, request)
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
             pass
@@ -192,7 +211,7 @@ def make_server(root, token):
                 if not 0 < size <= 8192 or self.headers.get_content_type() != "application/json":
                     raise Refused
                 self.connection.settimeout(5)
-                result = terminal_file_op(root, json.loads(self.rfile.read(size).decode("utf-8")))
+                result = run_op(json.loads(self.rfile.read(size).decode("utf-8")))
             except (Refused, PermissionError, ValueError):
                 result = {"error": "Permission denied"}
             except (FileNotFoundError, NotADirectoryError):
@@ -209,7 +228,55 @@ def startup_sequence(pause=time.sleep, output=print):
         if delay:
             pause(delay)
         balken = ("=" * (percent // 5)).ljust(20, ".")
-        output(f"\r[{balken}] {percent:>3}%", end="\n" if percent == 100 else "", flush=True)
+        output(f"\rtrying to connect to: {ARCHIVE_ENDPOINT}:443  [{balken}] {percent:>3}%", end="\n" if percent == 100 else "", flush=True)
+
+
+def preferred_window(monitors):
+    """Return logical desktop coordinates for a window on a non-primary monitor."""
+    secondary = [m for m in monitors if not m[1] and m[2][2] > m[2][0] and m[2][3] > m[2][1]]
+    if len(monitors) < 2 or not secondary:
+        return {}
+    name, _, (left, top, right, bottom) = min(
+        secondary, key=lambda m: (m[0].upper() != r"\\.\DISPLAY2", m[0])
+    )
+    width, height = min(1440, right - left), min(900, bottom - top)
+    return {
+        "SHADOW_TERMINAL_WINDOW_POSITION": f"{left + (right - left - width) // 2},{top + (bottom - top - height) // 2}",
+        "SHADOW_TERMINAL_WINDOW_SIZE": f"{width},{height}",
+    }
+
+
+def windows_monitors():
+    import ctypes
+    from ctypes import wintypes
+    # Leave this launcher DPI-unaware so coordinates from Win32 are virtualized.
+    user = ctypes.WinDLL("user32", use_last_error=True)
+
+    class MonitorInfo(ctypes.Structure):
+        _fields_ = [
+            ("size", wintypes.DWORD), ("monitor", wintypes.RECT), ("work", wintypes.RECT),
+            ("flags", wintypes.DWORD), ("name", wintypes.WCHAR * 32),
+        ]
+
+    callback_type = ctypes.WINFUNCTYPE(
+        wintypes.BOOL, wintypes.HANDLE, wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.LPARAM
+    )
+    user.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MonitorInfo)]
+    user.GetMonitorInfoW.restype = wintypes.BOOL
+    user.EnumDisplayMonitors.argtypes = [wintypes.HDC, ctypes.POINTER(wintypes.RECT), callback_type, wintypes.LPARAM]
+    user.EnumDisplayMonitors.restype = wintypes.BOOL
+    found = []
+
+    @callback_type
+    def collect(monitor, _hdc, _rect, _param):
+        info = MonitorInfo()
+        info.size = ctypes.sizeof(info)
+        if user.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            w = info.work
+            found.append((info.name, bool(info.flags & 1), (w.left, w.top, w.right, w.bottom)))
+        return True
+
+    return found if user.EnumDisplayMonitors(None, None, collect, 0) else []
 
 
 def main():
@@ -231,6 +298,12 @@ def main():
         if os.name != "nt":
             raise SystemExit("Nutze --serve-only außerhalb von Windows.")
         env = {**os.environ, "SHADOW_TERMINAL_FRAGMENT": fragment}
+        for key in ("SHADOW_TERMINAL_WINDOW_POSITION", "SHADOW_TERMINAL_WINDOW_SIZE"):
+            env.pop(key, None)
+        try:
+            env.update(preferred_window(windows_monitors()))
+        except OSError:
+            pass  # Monitor discovery is optional. Keep the normal Edge start.
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:

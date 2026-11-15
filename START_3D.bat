@@ -27,7 +27,10 @@ set "BASIS=%~dp0"
 set "URL=!BASIS:\=/!"
 set "URL=!URL: =%%20!"
 
-start "" "!EDGE!" --app="file:///!URL!index.html!SHADOW_TERMINAL_FRAGMENT!" --user-data-dir="%~dp0profil" --start-fullscreen --no-first-run --no-default-browser-check --window-size=1440,900
+set "SHADOW_PLACEMENT="
+if defined SHADOW_TERMINAL_WINDOW_POSITION if defined SHADOW_TERMINAL_WINDOW_SIZE set "SHADOW_PLACEMENT=--window-position=!SHADOW_TERMINAL_WINDOW_POSITION! --window-size=!SHADOW_TERMINAL_WINDOW_SIZE!"
+if not defined SHADOW_PLACEMENT set "SHADOW_PLACEMENT=--window-size=1440,900"
+start "" "!EDGE!" --app="file:///!URL!index.html!SHADOW_TERMINAL_FRAGMENT!" --user-data-dir="%~dp0profil" --start-fullscreen --no-first-run --no-default-browser-check !SHADOW_PLACEMENT!
 exit /b 0
 
 :fehlt
