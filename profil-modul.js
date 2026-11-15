@@ -489,7 +489,7 @@ async function terminalKanalDatei(arg, kanal) {
     const fertig = await terminalTransfer(name, bytes, aktiv);
     if (!aktiv()) return;
     terminalTransferStop();
-    terminalAusgabe([fertig, 'Kanalpuffer vollständig [' + bytes + '/' + bytes + '] · lokale Übermittlung bestätigt']);
+    terminalAusgabe([fertig, 'Kanalpuffer vollständig [' + bytes + '/' + bytes + '] · Übermittlung bestätigt']);
   }
   kanal.phase = 'eingabe';
   terminalKanalPromptSync();
