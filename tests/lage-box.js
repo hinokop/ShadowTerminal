@@ -1,5 +1,5 @@
 /* Lage-Box: Objektkontext bei gezieltem Sprung (ohne Auftrag), Rückfall auf die Kartenmitte nur beim eigenen Ziehen, Wetter am Bezugspunkt
-   (verspätete Antwort für A überschreibt B nicht), Offline ohne Abfrage; Gegenprobe: mit Auftrag bleiben die Auftragszeilen.
+   (verspätete Antwort für A überschreibt B nicht), Offline ohne Abfrage; Gegenprobe: auch im internen Missionsablauf bleibt die Lage-Box auf Objekt, Position, Licht und Wetter beschränkt.
    Exit-Code 1 bei Fehlschlag. */
 const PF = require('./_pfad.js'); const { chromium } = require('playwright');
 (async () => {
@@ -11,7 +11,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
     const u = new URL(r.request().url()), lat = Number(u.searchParams.get('latitude')); anfragen.push(lat);
     const temp = Math.abs(lat - 48.1) < 1 ? 22 : 11;
     if (temp === 11 && global.__verzoegern) await new Promise(f => setTimeout(f, 2500));
-    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ current: { temperature_2m: temp, precipitation: 0, weather_code: 0, wind_speed_10m: 5, wind_direction_10m: 90, wind_gusts_10m: 6, visibility: 20000, time: '2026-11-14T10:00' } }) });
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ current: { temperature_2m: temp, precipitation: 0, weather_code: 0, wind_speed_10m: 5, wind_direction_10m: 90, wind_gusts_10m: 6, visibility: 20000, time: '2026-11-14T10:00' } }) });
   });
   await p.goto(PF.APP); await p.waitForTimeout(5200); await p.fill('#gate-pw', 'pw-test-123'); const z = await p.$('#gate-pw2'); if (z && await z.isVisible()) await z.fill('pw-test-123'); await p.click('#gate-go');
   await p.waitForFunction(() => !document.body.classList.contains('locked'), null, { timeout: 20000 });
@@ -19,7 +19,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   ok.ohneAuftrag = await p.evaluate(() => !!STATE.vorlauf && !zDef());
   const text = id => p.evaluate(i => { const e = document.getElementById(i); return e ? e.innerText : null; }, id);
   /* A: gezielter Sprung aus dem Dossier */
-  await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; VIEW.karte.statusOffen = false; VIEW.karte.lat = 50; VIEW.karte.lon = 10; VIEW.karte.zoom = 6; renderModule(); });
+  await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; VIEW.karte.statusOffen = false; VIEW.karte.ebenen.kacheln = true; VIEW.karte.lat = 50; VIEW.karte.lon = 10; VIEW.karte.zoom = 6; renderModule(); });
   const d = await p.evaluate(() => { const e = poolAlle().find(x => karteKoord(x.id)); return e ? { id: e.id, name: e.name, ll: karteKoord(e.id) } : null; });
   ok.dossierMitOrt = !!d;
   await p.evaluate(id => { const e = poolAlle().find(x => x.id === id); kartenSprung(e, karteKoord(id)); }, d.id);
@@ -82,7 +82,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   /* F: Gegenprobe mit Auftrag */
   await p.evaluate(() => { dispatch({ type: 'KENNWORT_SCHALTER', an: false }); dispatch({ type: 'STATUS_GESETZT', status: 'Standby' }); dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); dispatch({ type: 'MISSION_BEGINN_JETZT' }); VIEW.karte.bezug = null; VIEW.karte.statusOffen = true; dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; renderModule(); });
   await p.waitForTimeout(800);
-  ok.mitAuftragZeilen = await p.evaluate(() => !!zDef() && ['k-st-stufe', 'k-st-ci', 'k-st-ziele', 'k-st-fenster', 'k-st-licht'].every(i => !!document.getElementById(i)));
+  ok.auchMitAuftragNurLage = await p.evaluate(() => !!zDef() && !!$('k-st-licht') && !!$('k-st-pos') && ['k-st-stufe', 'k-st-ci', 'k-st-ziele', 'k-st-fenster'].every(i => !$(i)));
   /* Rücksprung bei aktiver 3D-Ansicht behält den Objektbezug der Lage-Box (Kamerafahrt darf ihn nicht löschen) */
   await p.evaluate(() => { dispatch({ type: 'OZONE_ANGELEGT', ll: [52.51, 13.41] }); const id = PROFIL.zonen[PROFIL.zonen.length - 1].id; window.__zid = id; VIEW.karte.bezug = null; VIEW.karte.ansicht3d = true; kartenObjektZeigen(id); });
   ok.bezugNach3DRuecksprung = await p.evaluate(() => VIEW.karte.bezug === window.__zid);

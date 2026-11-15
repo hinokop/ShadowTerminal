@@ -49,7 +49,7 @@ input[type="checkbox"]{accent-color:var(--accent);width:14px;height:14px;margin:
 input:disabled{cursor:not-allowed}
 label{color:var(--text-dim)}
 
-/* Klassifizierungsbanner */
+/* Bereichsbanner */
 .banner{background:var(--panel-raised);border-bottom:1px solid var(--border-strong);text-align:center;
   font-family:var(--mono);font-size:11px;padding:1px 8px;color:var(--text-dim)}
 .banner.bottom{display:none}
@@ -631,7 +631,7 @@ body:not(.locked) #gate{display:none}
     <dl id="tb-dl"></dl>
   </div>
 </div>
-<div class="banner" id="banner-top" role="note" aria-label="Einstufung"></div>
+<div class="banner" id="banner-top" role="note" aria-label="Bereich"></div>
 
 <header class="hdr" aria-label="Lagekopf">
   <div class="hf"><span class="k">CN</span><span class="v" id="h-agent"></span></div>
@@ -640,7 +640,6 @@ body:not(.locked) #gate{display:none}
   <div class="hf"><span class="k">Ortszeit Region</span><span class="v" id="h-orts"></span></div>
   <div class="hf"><span class="k">Sitzungsdauer</span><span class="v" id="h-session"></span></div>
   <div class="hf"><span class="k">Verbindung</span><span class="v" id="h-kanal"></span></div>
-  <div class="hf"><span class="k">Standortfreigabe</span><span class="v" id="h-standort"></span></div>
   <div class="hf act">
     <span id="h-persist"></span>
     <button type="button" id="btn-log" aria-expanded="false" aria-controls="log" aria-keyshortcuts="P">Protokoll <span class="key" aria-hidden="true">P</span></button>
@@ -678,7 +677,7 @@ body:not(.locked) #gate{display:none}
   <button type="button" id="btn-reset">Zurücksetzen</button>
   <span class="msg" id="sys-msg" role="status" aria-live="polite"></span>
 </footer>
-<div class="banner bottom" id="banner-bottom" role="note" aria-label="Einstufung"></div>
+<div class="banner bottom" id="banner-bottom" role="note" aria-label="Bereich"></div>
 
 <dialog id="dlg" aria-labelledby="dlg-title">
   <h2 id="dlg-title"></h2>
@@ -4312,7 +4311,7 @@ const ACTIONS = {
     return { modul: 'System', aktion: 'Alterung gesetzt (Regie)', detail: (alt === 1 ? 'Echtzeit' : '×' + alt) + ' → ' + (f === 1 ? 'Echtzeit' : f === 0 ? 'aus' : '×' + f) };
   },
   ZONE_BESTAETIGT: function (a) {
-    const def = zDef(), zn = def ? karteZoneFinden(a.id) : null;
+    const def = zDef(), zn = def && !PROFIL.karteBlanko ? karteZoneFinden(a.id, def) : null;
     if (!zn) return null;
     if (zn.auto) { const u = zonenUrteil(def)[zn.id]; if (!u || u.stufe == null || u.status !== 'frei') return null; u.t = nowIso(); }
     else { const z = zonenEigene(def).find(function (x) { return x.id === zn.id; }); if (!z) return null; z.stand = nowIso(); }
@@ -5645,7 +5644,7 @@ const ACTIONS = {
     return { modul: 'Dossier', aktion: 'Rückfrage beantwortet', detail: e.name + ': ' + kuerzen(t, 100) };
   },
   ZONE_URTEIL: function (a) {
-    const def = zDef(), zn = def ? karteZonen().find(function (x) { return x.id === a.id && x.auto; }) : null, Zt = SCENARIO.zonen, U = zonenUrteil(def);
+    const def = zDef(), zn = def && !PROFIL.karteBlanko ? karteZonen(def).find(function (x) { return x.id === a.id && x.auto; }) : null, Zt = SCENARIO.zonen, U = zonenUrteil(def);
     if (!zn) return null;
     const u = U[zn.id] || (U[zn.id] = {});
     if (a.r !== undefined) {
@@ -5832,6 +5831,9 @@ function dispatch(action) {
   const ergebnis = handler(action);                      /* (1) */
   if (!ergebnis) return;
   if (MISSIONS_AKTIONEN[action.type]) STATE.missionsbetrieb = true;
+  /* Nur eine ausdrückliche Annahme in dieser Sitzung öffnet die historische Kartenansicht.
+     Ein gespeicherter Missionsbetrieb allein reicht dafür nicht. */
+  if (action.type === 'MISSION_ANGENOMMEN') VIEW.missionsansicht = STATE;
   const t = nowIso(), liste = Array.isArray(ergebnis) ? ergebnis : [ergebnis];
   let kpNeu = false;
   liste.forEach(function (e) {                           /* (2) */
@@ -5858,7 +5860,7 @@ function dispatch(action) {
    werden dabei über Element-IDs wiederhergestellt.
    ===================================================================== */
 function renderBanner() {
-  const txt = SCENARIO.dienst + ' · interner Bereich' + (STATE.vorlauf ? '' : ' · ' + KM().einstufung);
+  const txt = SCENARIO.dienst + ' · interner Bereich';
   $('banner-top').textContent = txt;
   $('banner-bottom').textContent = txt;
 }
@@ -5886,10 +5888,6 @@ function renderHeader() {
   $('h-agent').textContent = SCENARIO.agent.codename + ' / ' + SCENARIO.agent.id;
   $('h-status').replaceChildren(statusLabel(arbeitsProfilStatus()));
   $('h-kanal').textContent = kanalAnzeige();
-  const sf = !!STATE.extraktion.standortfreigabe;                /* Schalter in der Kopfzeile: jederzeit erreichbar, nicht nur im Notfallmodul */
-  $('h-standort').replaceChildren(h('button', { type: 'button', class: 'link', id: 'h-standort-btn', 'aria-pressed': sf ? 'true' : 'false',
-    title: sf ? 'Standortfreigabe ausschalten' : 'Standortfreigabe einschalten', onclick: function () { dispatch({ type: 'STANDORTFREIGABE_GESETZT', ein: !sf }); } },
-    sf ? 'ein' : 'aus'));
   const p = $('h-persist');
   if (Store.isPersistent()) p.replaceChildren();
   else p.replaceChildren(h('span', { class: 'label s-warn' }, 'Sitzung nicht persistent'));
@@ -5999,7 +5997,7 @@ function renderNav() {
 function modKopf(m, zusatz) {
   return h('div', { class: 'mod-head' },
     h('h1', { id: 'mod-title', tabindex: '-1' }, m.titel),
-    h('span', { class: 'mono dim' }, 'Modul ' + m.key + (STATE.vorlauf ? '' : ' · Vorgang ' + KM().nummer)), zusatz);
+    h('span', { class: 'mono dim' }, 'Modul ' + m.key + (STATE.vorlauf || ARBEITSMODULE.some(function (a) { return a.id === m.id; }) ? '' : ' · Vorgang ' + KM().nummer)), zusatz);
 }
 /* Freitextfeld mit Entwurfspuffer (übersteht Neuaufbau der Ansicht) */
 function entwurf(tag, id, key, attrs) {
@@ -6816,7 +6814,7 @@ function dossierListe() {
 }
 
 function zielpersonKnopf(e) {
-  if (e.typ === 'Ort' || wissen(e) === 'unbekannt' || !zDef()) return null;
+  if (e.typ === 'Ort' || wissen(e) === 'unbekannt' || !karteAuftragsansicht()) return null;
   const an = istZielperson(e);
   return h('div', { class: 'row' },
     h('button', { type: 'button', id: 'btn-zielperson', 'aria-pressed': an ? 'true' : 'false', onclick: function () { dispatch({ type: 'ZIELPERSON_GESETZT', id: e.id, an: !an }); } }, an ? 'Nicht mehr als Zielperson führen' : 'Als Zielperson führen'),

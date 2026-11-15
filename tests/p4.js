@@ -3,8 +3,8 @@ const {chromium}=require('playwright');const ok=(c,m)=>console.log((c?'OK   ':'F
 await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 const v0=await p.evaluate(()=>STATE.extraktion.standortfreigabe);
-await p.click('#h-standort-btn');
-ok((await p.evaluate(()=>STATE.extraktion.standortfreigabe))===!v0,'Kopfzeilenschalter kehrt Standortfreigabe um');
-ok(/(ein|aus)/.test(await p.textContent('#h-standort')),'Anzeige aktuell');
-await p.click('#h-standort-btn');ok((await p.evaluate(()=>STATE.extraktion.standortfreigabe))===v0,'zurückschaltbar');
+await p.evaluate(()=>dispatch({type:'STANDORTFREIGABE_GESETZT',ein:!STATE.extraktion.standortfreigabe}));
+ok((await p.evaluate(()=>STATE.extraktion.standortfreigabe))===!v0,'Historische Aktion kehrt Standortfreigabe weiterhin um');
+ok((await p.locator('#h-standort, #h-standort-btn').count())===0,'Keine Standortfreigabe in der Kopfzeile');
+await p.evaluate(()=>dispatch({type:'STANDORTFREIGABE_GESETZT',ein:!STATE.extraktion.standortfreigabe}));ok((await p.evaluate(()=>STATE.extraktion.standortfreigabe))===v0,'zurückschaltbar');
 console.log(e.join('|')||'keine Seitenfehler');await b.close()})();
