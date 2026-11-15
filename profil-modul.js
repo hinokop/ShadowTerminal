@@ -11,9 +11,10 @@ const ARBEITS_IDENTITAETEN = {
     anlagen: [['G-01', 'Schichtnotiz'], ['G-02', 'Eigene Anlage']] }
 };
 const ARBEITS_STATUS = ['Offline', 'Standby', 'Aktiv'];
+/* Die internen Speicherschlüssel bleiben beim Umbenennen der Achsen unverändert. */
 const AGENT_RADAR = [
-  ['sprache', 'Sprachkompetenz', 72], ['tradecraft', 'Tradecraft', 81], ['cyber', 'Cyber', 68],
-  ['physis', 'Physis', 87], ['stress', 'Stressresilienz', 90]
+  ['sprache', 'Sprachkompetenz', 72], ['tradecraft', 'Kampferfahrung', 81], ['cyber', 'Cyber', 68],
+  ['physis', 'Physis', 87], ['stress', 'Sozialkompetenz', 90]
 ];
 function arbeitsProfilStatus() {
   return ARBEITS_STATUS.includes(PROFIL.arbeitsstatus) ? PROFIL.arbeitsstatus : 'Offline';
@@ -39,7 +40,7 @@ function radarGrafik(werte) {
     return [180 + Math.sin(a) * wert, 135 - Math.cos(a) * wert];
   };
   const punkte = function (w) { return w.map(function (v, i) { return punkt(i, v).join(','); }).join(' '); };
-  return s('svg', { class: 'profil-radar', viewBox: '-23 0 394 250', 'aria-hidden': 'true' },
+  return s('svg', { class: 'profil-radar', viewBox: '-30 0 420 250', 'aria-hidden': 'true' },
     [20, 40, 60, 80, 100].map(function (n) {
       return s('polygon', { points: punkte(AGENT_RADAR.map(function () { return n; })), class: 'profil-radar-ring' });
     }),
