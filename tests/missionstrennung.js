@@ -71,7 +71,7 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   ok.karteGezeichnet = await p.evaluate(() => !!document.getElementById('k-svg'));
   /* Diagnoseterminal */
   await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule(); }); await p.waitForTimeout(400);
-  await p.getByText('Diagnoseterminal', { exact: true }).click();
+  await p.locator('#profil-terminal > summary').click();
   const cmd = async z => { await p.locator('#profil-terminal-eingabe').fill(z); await p.locator('#profil-terminal-eingabe').press('Enter'); };
   await cmd('whoami'); await cmd('pwd'); await p.waitForTimeout(300);
   const aus = await p.locator('#profil-terminal-ausgabe').textContent();
