@@ -1661,6 +1661,7 @@ function planeZustellung(kanalId, msg) {
 }
 function planeAlle() {
   zustellTimer.forEach(clearTimeout); zustellTimer = [];
+  if (!missionsbetrieb()) return;                         /* Altnachrichten eines früheren Auftrags erhalten im Recherchebetrieb keine Statuswechsel */
   Object.keys(STATE.komm.kanaele).forEach(function (kid) {
     STATE.komm.kanaele[kid].nachrichten.forEach(function (m) { if (m.von === 'agent' && m.status !== 'gelesen' && !m.blockiert) planeZustellung(kid, m); });
   });
@@ -4074,13 +4075,13 @@ const ACTIONS = {
   SITZUNG_START: function (a) {
     const out = [{ modul: 'System', aktion: 'Sitzung geöffnet', detail: a.neu ? 'Ausgangszustand aus Szenario erzeugt' : 'Gespeicherter Zustand geladen' }];
     const jetzt = Date.now();
-    if (!a.neu && meldeAktiv()) {
+    if (!a.neu && missionsbetrieb() && meldeAktiv()) {
       let f = fensterNach(Date.parse(STATE.melde.geprueftBis)), n = 0, erstes = null, letztes = null;
       while (f && f.D <= jetzt && n < 4000) { n += 1; erstes = erstes || f; letztes = f; f = fensterNach(f.D); }
       if (n) out.push({ modul: 'Profil', aktion: 'Fenster während Abwesenheit nicht bewertet',
         detail: n + (n === 1 ? ' Meldefenster' : ' Meldefenster') + ' zwischen ' + erstes.label + ' (' + fmtDatum(erstes.S) + ') und ' + letztes.label + ' (' + fmtDatum(letztes.S) + '); keine Wertung als Versäumnis' });
     }
-    if (!a.neu) {                                           /* Nachholverhalten: veraltete Nachfragen verfallen, der Rest wird gestaffelt zugestellt */
+    if (!a.neu && missionsbetrieb()) {                      /* Nachholverhalten: veraltete Nachfragen verfallen, der Rest wird gestaffelt zugestellt */
       const letzte = STATE.log.length ? Date.parse(STATE.log[STATE.log.length - 1].t) : jetzt, weg = Math.round((jetzt - letzte) / 60000);
       if (weg >= 20) {
         const vorher = STATE.plan.length;
@@ -5707,11 +5708,17 @@ const ACTIONS = {
   }
 };
 
+/* Missionsbetrieb: Die Missionsautomatik (Sekundentakt, Planeinträge, Ereignisregeln, Zustands- und Spurenmodell, Rückstau beim Start) läuft nur,
+   wenn in diesem Zustand eine Missionsaktion ausgeführt wurde. Recherche (Dossiers, Unterlagen, Fallpakete, Kartenobjekte, Diagnoseterminal)
+   und geladene Altprofile lösen sie nicht aus. Die gespeicherten Missionsfelder bleiben unverändert erhalten. */
+const MISSIONS_AKTIONEN = { STATUS_GESETZT: 1, MISSION_ZUGEWIESEN: 1, MISSION_ANGENOMMEN: 1, MISSION_BEGINN_JETZT: 1, MISSIONSSTATUS_GESETZT: 1, AUTOMATIK_GESETZT: 1 };
+function missionsbetrieb() { return !!STATE && STATE.missionsbetrieb === true; }
 function dispatch(action) {
   const handler = ACTIONS[action.type];
   if (!handler) return;
   const ergebnis = handler(action);                      /* (1) */
   if (!ergebnis) return;
+  if (MISSIONS_AKTIONEN[action.type]) STATE.missionsbetrieb = true;
   const t = nowIso(), liste = Array.isArray(ergebnis) ? ergebnis : [ergebnis];
   let kpNeu = false;
   liste.forEach(function (e) {                           /* (2) */
@@ -5721,8 +5728,10 @@ function dispatch(action) {
     STATE.log.push(eintrag);
     try { if (typeof kartenProtokollErfassen === 'function' && kartenProtokollErfassen(eintrag, e, action.type)) kpNeu = true; } catch (ex) { /* das Kartenprotokoll darf den Ablauf nicht stoppen */ }
   });
-  try { zustandAus(action, liste); } catch (ex) { /* Zustandsmodell darf den Ablauf nicht stoppen */ }
-  try { abdPruefen(); } catch (ex) { /* Spurenmodell darf den Ablauf nicht stoppen */ }
+  if (missionsbetrieb()) {
+    try { zustandAus(action, liste); } catch (ex) { /* Zustandsmodell darf den Ablauf nicht stoppen */ }
+    try { abdPruefen(); } catch (ex) { /* Spurenmodell darf den Ablauf nicht stoppen */ }
+  }
   if (STATE.log.length > LOG_LIMIT) STATE.log.splice(0, STATE.log.length - LOG_LIMIT);
   Store.save(STATE);                                     /* (3) */
   if ((PROFIL_AKTIONEN[action.type] || kpNeu) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
@@ -5800,7 +5809,7 @@ function renderClock() {
 }
 const RUECKSTAU_SCHWELLE_MS = 90000, RUECKSTAU_ABSTAND_MS = 12000;
 let RUECKSTAU_LETZTER = 0;
-/* Sekundentakt: Uhr, Countdown, fällige Zuweisung des Folgeauftrags und Prüfung abgelaufener Meldefristen */
+/* Sekundentakt: Uhr immer; Countdown, fällige Zuweisung des Folgeauftrags, Planeinträge und Meldefristen nur im Missionsbetrieb */
 function tick() {
   if (Zugang.beendet()) return;
   Zugang.leerlauf();
@@ -5808,13 +5817,14 @@ function tick() {
   const jetzt = Date.now(), fo = STATE.serie.folge;
   const ruhend = STATE.agent.status === 'Ruhend';                  /* Ruhend: Ansprechpartner und Gegenstellen schweigen, nur Antworten laufen */
   const bel = belS();
-  if (STATE.automatik && !ruhend) {
+  const mb = missionsbetrieb();
+  if (mb && STATE.automatik && !ruhend) {
     if (lzNoetig()) dispatch({ type: 'LZ_ANSETZEN' });
     if ((bel.w >= 70 && (!bel.hinweis || (!bel.hinweisRuhe && !LM()))) || (bel.w >= 85 && !bel.sperre)) dispatch({ type: 'BELASTUNG_PRUEFUNG' });
   }
-  if (fo && !ruhend && !STATE.serie.ende && Date.parse(fo.faelligAm) <= jetzt && !kwSperrt() && !STATE.funkstille.aktiv && belS().w < 85) dispatch({ type: 'MISSION_ZUGEWIESEN', id: fo.mission });
-  /* Fällige Planeinträge; Antworten laufen auch bei ausgeschalteter Automatik */
-  let faellig = STATE.plan.filter(function (p) { return Date.parse(p.faelligAm) <= jetzt && (p.typ === 'antwort' || (STATE.automatik && !ruhend)); })
+  if (mb && fo && !ruhend && !STATE.serie.ende && Date.parse(fo.faelligAm) <= jetzt && !kwSperrt() && !STATE.funkstille.aktiv && belS().w < 85) dispatch({ type: 'MISSION_ZUGEWIESEN', id: fo.mission });
+  /* Fällige Planeinträge (nur im Missionsbetrieb); Antworten laufen dort auch bei ausgeschalteter Automatik */
+  let faellig = STATE.plan.filter(function (p) { return Date.parse(p.faelligAm) <= jetzt && mb && (p.typ === 'antwort' || (STATE.automatik && !ruhend)); })
     .sort(function (a, b) { return Date.parse(a.faelligAm) - Date.parse(b.faelligAm); });
   /* Rückstau (z. B. nach Stunden ohne offenes Terminal): ältere Einträge nacheinander zustellen statt alle in derselben Sekunde */
   if (faellig.length > 1 && jetzt - Date.parse(faellig[0].faelligAm) > RUECKSTAU_SCHWELLE_MS) {
@@ -5822,8 +5832,8 @@ function tick() {
     else { faellig = faellig.slice(0, 1); RUECKSTAU_LETZTER = jetzt; }
   }
   faellig.forEach(function (p) { dispatch({ type: 'FAELLIG', id: p.id }); });
-  if (STATE.automatik && !ruhend && !STATE.funkstille.aktiv && LM() && einsatzLaeuft()) { const zid = zonenFaellig(jetzt); if (zid) dispatch({ type: 'ZONEN_EREIGNIS', id: zid }); }
-  if (meldeAktiv()) {
+  if (mb && STATE.automatik && !ruhend && !STATE.funkstille.aktiv && LM() && einsatzLaeuft()) { const zid = zonenFaellig(jetzt); if (zid) dispatch({ type: 'ZONEN_EREIGNIS', id: zid }); }
+  if (mb && meldeAktiv()) {
     const f = fensterNach(Date.parse(STATE.melde.geprueftBis));
     if (f && f.D <= jetzt) dispatch({ type: 'MELDEFENSTER_PRUEFUNG' });
   }

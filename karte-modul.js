@@ -104,8 +104,10 @@ function karteAssetId(e) {
   const n = erkFold(kanalDef('asset').gegenstelle || '');
   return !!n && e.typ === 'Person' && (e.aliase || []).some(function (al) { return erkFold(al) === n; });
 }
+/* Missionsobjekte der Karte (Standorte, Zonen des Auftrags, Verbindungen, Zeitfenster) gibt es nur im Missionsbetrieb mit laufendem Auftrag */
+function karteOhneMission() { return STATE.vorlauf || !missionsbetrieb(); }
 function karteMarker() {
-  const Z = VIEW.karte.ebenen, def = STATE.vorlauf || PROFIL.karteBlanko ? null : KM(), out = [];
+  const Z = VIEW.karte.ebenen, def = karteOhneMission() || PROFIL.karteBlanko ? null : KM(), out = [];
   if (Z.ausgang) PROFIL.ausgang.forEach(function (x) { if (x.ll) out.push({ id: x.id, kat: 'ausgang', name: x.name, ll: x.ll, art: x.art }); });
   if (def && Z.standorte && STATE.agent.checkin.standortId === 'AW' && STATE.agent.checkin.koord) out.push({ id: 'AW', kat: 'standort', name: 'Ausweichort ' + STATE.agent.checkin.name, ll: STATE.agent.checkin.koord, land: '' });
   if (def && Z.standorte) def.standorte.forEach(function (st) {
@@ -134,7 +136,7 @@ function karteMarker() {
   return out;
 }
 function karteFenster() {
-  const def = STATE.vorlauf || PROFIL.karteBlanko ? null : KM();
+  const def = karteOhneMission() || PROFIL.karteBlanko ? null : KM();
   if (!def) return [];
   const ms = MS(def.id), T = Date.now() + VIEW.karte.dt * 3600000, zuord = (SCENARIO.karte && SCENARIO.karte.fensterOrt) || {};
   return def.zeitfenster.map(function (w) {
@@ -145,11 +147,11 @@ function karteFenster() {
   }).filter(Boolean);
 }
 function karteStrecke() {
-  const def = STATE.vorlauf || PROFIL.karteBlanko ? null : KM();
+  const def = karteOhneMission() || PROFIL.karteBlanko ? null : KM();
   return def && def.route && Array.isArray(def.route.abschnitte) ? def.route : null;
 }
 function karteHerkunft() {
-  const def = STATE.vorlauf || PROFIL.karteBlanko ? null : KM(), an = STATE.anreise;
+  const def = karteOhneMission() || PROFIL.karteBlanko ? null : KM(), an = STATE.anreise;
   if (!def || !an || an.mission !== def.id || an.ohnePlan || !an.ortId) return null;
   const ag = an.ausgangId ? PROFIL.ausgang.find(function (x) { return x.id === an.ausgangId; }) : null;
   const hk = ag && ag.ll ? { koord: ag.ll, name: ag.name } : (SCENARIO.karte && SCENARIO.karte.herkunft && SCENARIO.karte.herkunft[def.id]), ziel = karteKoord(an.ortId);
@@ -166,7 +168,7 @@ function karteEinpassen(punkte) {
   K.zoom = Math.max(2, Math.min(15, Math.log(Wd / 256) / Math.LN2));
 }
 function karteGrundansicht() {
-  const K = VIEW.karte, def = STATE.vorlauf ? null : KM();
+  const K = VIEW.karte, def = karteOhneMission() ? null : KM();
   const pts = def ? def.standorte.map(function (s) { return karteKoord(s.id); }).filter(Boolean) : [];
   const hk = karteHerkunft();
   if (hk) pts.push(hk.von, hk.nach);
@@ -626,7 +628,7 @@ function zeichneKarte(svg) {
 }
 
 /* ---------- Lagezonen ---------- */
-function zDef() { return STATE.vorlauf ? null : KM(); }
+function zDef() { return karteOhneMission() ? null : KM(); }
 /* Abstand bis zur nächsten Ereignismeldung einer eigenen Zone (Minuten, je nach Bewertung; unruhige Zonen melden häufiger) */
 const ZONEN_INTERVALL = { ruhig: [90, 180], leicht: [35, 70], bedroht: [20, 40], akut: [10, 20] };
 function zoneNaechste(zn) {
@@ -872,7 +874,7 @@ function karteBezugSetzen(id) {
 function karteStatusAkt() {
   const box = $('k-status');
   if (!box) return;
-  const K = VIEW.karte, def = STATE.vorlauf ? null : KM();
+  const K = VIEW.karte, def = karteOhneMission() ? null : KM();
   const bz = K.bezug ? karteBezugVon(K.bezug) : null;
   if (K.bezug && !bz) K.bezug = null;
   const ref = bz ? bz.ll : [K.lat, K.lon];
@@ -912,7 +914,7 @@ function karteFensterListe() {
     return [td('nw', w.id), td('txt', [w.titel + ' (' + fmtZ(w.von).slice(0, 16) + 'Z bis ' + fmtZ(w.bis).slice(0, 16) + 'Z)', h('span', { class: 'dim' }, ' · Licht: ' + (p1 === p2 ? p1 : p1 + ' → ' + p2))]),
       w.ort && karteKoord(w.ort) ? h('button', { type: 'button', class: 'link', onclick: function () { karteWaehlen(w.ort, true); } }, w.ort) : td('dim', 'ohne Ort'),
       td('nw', [h('span', { class: 'label ' + lbl }, w.zustand), ' ' + rest])];
-  }), STATE.vorlauf ? 'Kein laufender Auftrag, daher keine Zeitfenster.' : 'Keine Zeitfenster.'));
+  }), karteOhneMission() ? 'Kein laufender Auftrag, daher keine Zeitfenster.' : 'Keine Zeitfenster.'));
   const z = $('k-zeit');
   if (z) z.textContent = (K.dt === 0 ? 'jetzt' : (K.dt > 0 ? '+' : '−') + Math.abs(K.dt) + ' h') + ' · ' + fmtZ(T).slice(0, 16) + 'Z';
 }
@@ -1556,7 +1558,7 @@ function kartenProtokollAnsicht() {
     }), filter || objFilter ? 'Keine Einträge dieser Auswahl.' : 'Noch keine Einträge.'));
 }
 function renderKarte(m) {
-  const K = VIEW.karte, def = STATE.vorlauf || PROFIL.karteBlanko ? null : KM();
+  const K = VIEW.karte, def = karteOhneMission() || PROFIL.karteBlanko ? null : KM();
   if (K.reiter === 'protokoll') return [modKopf(m), kartenReiter('protokoll'), kartenProtokollAnsicht()];
   if (!K.init) { karteGrundansicht(); K.init = true; }
   const svg = s('svg', { id: 'k-svg', class: 'karte-svg' + (K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen ? ' pick' : '') + (K.messen ? ' messen' : ''), viewBox: '0 0 ' + KW + ' ' + KH, role: 'application', tabindex: '-1', 'aria-label': 'Karte, mit Maus ziehen und Mausrad zoomen' });
