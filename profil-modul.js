@@ -372,10 +372,11 @@ function terminalKanalAbbruch() {
   terminalKanalPromptSync();
   terminalAusgabe([]);
 }
-async function terminalKanalFolge(kanal, zeilen) {
+const TERMINAL_KANAL_TEMPO = { aufbau: 620, abbau: 650 };
+async function terminalKanalFolge(kanal, zeilen, pause) {
   const reduziert = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   for (const zeile of zeilen) {
-    await new Promise(function (ok) { setTimeout(ok, reduziert ? 0 : 240); });
+    await new Promise(function (ok) { setTimeout(ok, reduziert ? 0 : pause); });
     if (TERMINAL_ZUSTAND.kanal !== kanal) return false;
     terminalAusgabe(zeile);
   }
@@ -392,7 +393,7 @@ async function terminalKanalStart() {
   const sitzung = [4, 4, 4].map(function (n) { return terminalKanalZeichen(hex, n); }).join('-');
   const kontakt = terminalKanalZeichen(abc, 14);
   terminalAusgabe('[*] Local channel simulation');
-  if (!await terminalKanalFolge(kanal, TERMINAL_KANAL_START)) return;
+  if (!await terminalKanalFolge(kanal, TERMINAL_KANAL_START, TERMINAL_KANAL_TEMPO.aufbau)) return;
   terminalAusgabe([
     'Connected to:  ' + knoten + '  (session: ' + sitzung + ')',
     'Contact:       "' + kontakt + '"',
@@ -418,7 +419,7 @@ async function terminalKanalMeldung(zeile, kanal) {
     '[*] Wiping memory buffers... (' + (16 + terminalKanalZufall(81)) + ' kb)',
     '[*] Connection terminated.'
   ];
-  if (!await terminalKanalFolge(kanal, protokoll)) return;
+  if (!await terminalKanalFolge(kanal, protokoll, TERMINAL_KANAL_TEMPO.abbau)) return;
   terminalKanalAbbruch();
   terminalAusgabe(['> Verstanden.', TERMINAL_KANAL_LINIE].concat(protokoll));
 }
