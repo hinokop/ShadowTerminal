@@ -365,19 +365,31 @@ function terminalKanalPromptSync() {
 function terminalKanalAbbruch() {
   const t = TERMINAL_ZUSTAND;
   if (!t.kanal) return;
-  t.ausgabe = t.kanal.vorher;
+  const kanal = t.kanal;
+  t.ausgabe = kanal.vorher;
   t.kanal = null;
+  if (kanal.pauseBeenden) kanal.pauseBeenden();
   const eingabe = $('profil-terminal-eingabe');
   if (eingabe) eingabe.value = '';
   terminalKanalPromptSync();
   terminalAusgabe([]);
 }
-const TERMINAL_KANAL_TEMPO = { aufbau: 620, abbau: 650 };
+const TERMINAL_KANAL_TEMPO = { aufbau: 950, antwort: 15000, vorAbbau: 2000, abbau: 650 };
+function terminalKanalPause(kanal, ms) {
+  return new Promise(function (ok) {
+    const fertig = function () {
+      clearTimeout(timer);
+      kanal.pauseBeenden = null;
+      ok(TERMINAL_ZUSTAND.kanal === kanal);
+    };
+    const timer = setTimeout(fertig, ms);
+    kanal.pauseBeenden = fertig;
+  });
+}
 async function terminalKanalFolge(kanal, zeilen, pause) {
   const reduziert = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   for (const zeile of zeilen) {
-    await new Promise(function (ok) { setTimeout(ok, reduziert ? 0 : pause); });
-    if (TERMINAL_ZUSTAND.kanal !== kanal) return false;
+    if (!await terminalKanalPause(kanal, reduziert ? 0 : pause)) return false;
     terminalAusgabe(zeile);
   }
   return true;
@@ -392,7 +404,6 @@ async function terminalKanalStart() {
   const knoten = 'NODE-' + String(terminalKanalZufall(10000)).padStart(4, '0') + '-' + terminalKanalZeichen(abc.toUpperCase(), 1);
   const sitzung = [4, 4, 4].map(function (n) { return terminalKanalZeichen(hex, n); }).join('-');
   const kontakt = terminalKanalZeichen(abc, 14);
-  terminalAusgabe('[*] Local channel simulation');
   if (!await terminalKanalFolge(kanal, TERMINAL_KANAL_START, TERMINAL_KANAL_TEMPO.aufbau)) return;
   terminalAusgabe([
     'Connected to:  ' + knoten + '  (session: ' + sitzung + ')',
@@ -412,14 +423,18 @@ async function terminalKanalMeldung(zeile, kanal) {
   }
   kanal.phase = 'ende';
   terminalKanalPromptSync();
-  terminalAusgabe(['you > ' + zeile, '> Verstanden.', TERMINAL_KANAL_LINIE]);
+  terminalAusgabe('you > ' + zeile);
+  if (!await terminalKanalPause(kanal, TERMINAL_KANAL_TEMPO.antwort)) return;
+  terminalAusgabe(['> Verstanden.', TERMINAL_KANAL_LINIE]);
+  if (!await terminalKanalPause(kanal, TERMINAL_KANAL_TEMPO.vorAbbau)) return;
   const protokoll = [
     '[*] Closing channel...',
     '[*] Burning session keys...',
     '[*] Wiping memory buffers... (' + (16 + terminalKanalZufall(81)) + ' kb)',
     '[*] Connection terminated.'
   ];
-  if (!await terminalKanalFolge(kanal, protokoll, TERMINAL_KANAL_TEMPO.abbau)) return;
+  terminalAusgabe(protokoll[0]);
+  if (!await terminalKanalFolge(kanal, protokoll.slice(1), TERMINAL_KANAL_TEMPO.abbau)) return;
   terminalKanalAbbruch();
   terminalAusgabe(['> Verstanden.', TERMINAL_KANAL_LINIE].concat(protokoll));
 }
@@ -427,10 +442,21 @@ async function terminalKanalMeldung(zeile, kanal) {
 function terminalBefehl(zeile) {
   const m = /^(\S+)(?:\s+(.*))?$/.exec(zeile);
   const befehl = m[1], arg = m[2] || '', t = TERMINAL_ZUSTAND;
+  if (befehl === 'exit' && !arg) {
+    terminalKanalAbbruch();
+    t.version++;
+    t.offen = false;
+    const panel = $('profil-terminal');
+    if (panel) {
+      panel.open = false;
+      panel.querySelector('summary').focus();
+    }
+    return;
+  }
   if (t.kanal) { void terminalKanalMeldung(zeile, t.kanal); return; }
   if (befehl === 'clear' && !arg) { t.version++; t.ausgabe = []; terminalAusgabe([]); return; }
   terminalAusgabe(terminalPrompt() + ' ' + zeile);
-  if (befehl === 'help' && !arg) terminalAusgabe('ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · whoami · uname -a · date · ping relay · clear · ' + TERMINAL_KANAL_BEFEHL);
+  if (befehl === 'help' && !arg) terminalAusgabe('ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · whoami · uname -a · date · ping relay · clear · exit · ' + TERMINAL_KANAL_BEFEHL);
   else if (befehl === 'pwd' && !arg) terminalAusgabe(t.ort ? '/' + [TERMINAL_DB].concat(t.ort).join('/') : '/');
   else if (befehl === 'whoami' && !arg) terminalAusgabe('root');
   else if (befehl === 'uname' && arg === '-a') terminalAusgabe(TERMINAL_UBUNTU);
@@ -451,7 +477,7 @@ function terminalBefehl(zeile) {
   } else terminalAusgabe('command not found');
 }
 const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
-const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'secure-channel']);
+const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit', 'secure-channel']);
 function terminalTabKandidaten(input, bisher, version, kopf, prefix, kandidaten, format) {
   if (!input.isConnected || input.value !== bisher || TERMINAL_ZUSTAND.version !== version ||
       document.activeElement !== input || input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
@@ -526,7 +552,7 @@ function profilTerminalPanel() {
       t.offen = ev.currentTarget.open;
       if (!t.offen) terminalKanalAbbruch();
     } },
-    h('summary', null, 'Diagnoseterminal'),
+    h('summary', null, 'Terminal'),
     h('div', { class: 'profil-terminal-kern' },
       h('pre', { id: 'profil-terminal-ausgabe', class: 'mono', role: 'log', 'aria-label': 'Terminalausgabe' }, t.ausgabe.join('\n')),
       h('form', { onsubmit: function (ev) {

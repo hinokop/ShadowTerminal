@@ -52,7 +52,7 @@ const PF = require('./_pfad');
     await p.locator('#gate-pw').fill('pw-test-123');
     if (await p.locator('#gate-pw2').isVisible()) await p.locator('#gate-pw2').fill('pw-test-123');
     await p.click('#gate-go');
-    await p.getByText('Diagnoseterminal',{exact:true}).click();
+    await p.locator('#profil-terminal > summary').click();
     const out = p.locator('#profil-terminal-ausgabe');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.dateiLaeuft);
     async function cmd(zeile) {
