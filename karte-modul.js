@@ -106,8 +106,10 @@ function karteAssetId(e) {
 }
 /* Missionsobjekte der Karte (Standorte, Zonen des Auftrags, Verbindungen, Zeitfenster) gibt es nur im Missionsbetrieb mit laufendem Auftrag */
 function karteOhneMission() { return STATE.vorlauf || !missionsbetrieb(); }
+/* Darstellung getrennt von zDef() für den historischen Ablauf. Kein Wiederaufleben des Karten-UI aus Altdaten. */
+function karteAuftragsansicht() { return VIEW.missionsansicht === STATE && !PROFIL.karteBlanko ? zDef() : null; }
 function karteMarker() {
-  const Z = VIEW.karte.ebenen, def = karteOhneMission() || PROFIL.karteBlanko ? null : KM(), out = [];
+  const Z = VIEW.karte.ebenen, def = karteAuftragsansicht(), out = [];
   if (Z.ausgang) PROFIL.ausgang.forEach(function (x) { if (x.ll) out.push({ id: x.id, kat: 'ausgang', name: x.name, ll: x.ll, art: x.art }); });
   if (def && Z.standorte && STATE.agent.checkin.standortId === 'AW' && STATE.agent.checkin.koord) out.push({ id: 'AW', kat: 'standort', name: 'Ausweichort ' + STATE.agent.checkin.name, ll: STATE.agent.checkin.koord, land: '' });
   if (def && Z.standorte) def.standorte.forEach(function (st) {
@@ -130,13 +132,13 @@ function karteMarker() {
     const ll = karteKoord(e.id);
     if (!ll) return;
     if (infoGesperrt(e) || dossierGesperrt(e)) return;
-    if (e.typ === 'Ort') { if (Z.orte) out.push({ id: e.id, kat: 'ort', typ: 'Ort', name: e.name, ll: ll, land: e.land, entitaet: true, stufe: bedrohung(e).stufe }); }
-    else if (e.typ === 'Person' ? Z.personen : Z.organisationen) out.push({ id: e.id, kat: 'figur', typ: e.typ, name: e.name, ll: ll, land: e.land, entitaet: true, stufe: bedrohung(e).stufe, zusatz: zusatzIds[e.id] || false, asset: karteAssetId(e) });
+    const stufe = def ? bedrohung(e).stufe : 0;
+    if (e.typ === 'Ort') { if (Z.orte) out.push({ id: e.id, kat: 'ort', typ: 'Ort', name: e.name, ll: ll, land: e.land, entitaet: true, stufe: stufe }); }
+    else if (e.typ === 'Person' ? Z.personen : Z.organisationen) out.push({ id: e.id, kat: 'figur', typ: e.typ, name: e.name, ll: ll, land: e.land, entitaet: true, stufe: stufe, zusatz: zusatzIds[e.id] || false, asset: !!def && karteAssetId(e) });
   });
   return out;
 }
-function karteFenster() {
-  const def = karteOhneMission() || PROFIL.karteBlanko ? null : KM();
+function karteFenster(def = karteAuftragsansicht()) {
   if (!def) return [];
   const ms = MS(def.id), T = Date.now() + VIEW.karte.dt * 3600000, zuord = (SCENARIO.karte && SCENARIO.karte.fensterOrt) || {};
   return def.zeitfenster.map(function (w) {
@@ -147,11 +149,11 @@ function karteFenster() {
   }).filter(Boolean);
 }
 function karteStrecke() {
-  const def = karteOhneMission() || PROFIL.karteBlanko ? null : KM();
+  const def = karteAuftragsansicht();
   return def && def.route && Array.isArray(def.route.abschnitte) ? def.route : null;
 }
 function karteHerkunft() {
-  const def = karteOhneMission() || PROFIL.karteBlanko ? null : KM(), an = STATE.anreise;
+  const def = karteAuftragsansicht(), an = STATE.anreise;
   if (!def || !an || an.mission !== def.id || an.ohnePlan || !an.ortId) return null;
   const ag = an.ausgangId ? PROFIL.ausgang.find(function (x) { return x.id === an.ausgangId; }) : null;
   const hk = ag && ag.ll ? { koord: ag.ll, name: ag.name } : (SCENARIO.karte && SCENARIO.karte.herkunft && SCENARIO.karte.herkunft[def.id]), ziel = karteKoord(an.ortId);
@@ -168,7 +170,7 @@ function karteEinpassen(punkte) {
   K.zoom = Math.max(2, Math.min(15, Math.log(Wd / 256) / Math.LN2));
 }
 function karteGrundansicht() {
-  const K = VIEW.karte, def = karteOhneMission() ? null : KM();
+  const K = VIEW.karte, def = karteAuftragsansicht();
   const pts = def ? def.standorte.map(function (s) { return karteKoord(s.id); }).filter(Boolean) : [];
   const hk = karteHerkunft();
   if (hk) pts.push(hk.von, hk.nach);
@@ -506,7 +508,8 @@ function zeichneKarte(svg) {
     kids.push(s('circle', { cx: cx, cy: cy, r: r, class: 'k-fenster-fl ' + w.zustand }), s('circle', { cx: cx, cy: cy, r: r, class: 'k-fenster ' + w.zustand }, s('title', null, w.id + ' ' + w.titel + ' (' + w.zustand + ')')));
   });
   /* Markierungen und Verbindungen */
-  const marker = karteMarker(), ci = STATE.agent.checkin && STATE.agent.checkin.standortId, pos = {};
+  const marker = karteMarker(), def = karteAuftragsansicht(), pos = {};
+  const ci = def && STATE.agent.checkin && STATE.agent.checkin.standortId, zielpersonen = def ? zielpersonenListe() : [];
   /* Markierungen, die sich überdecken, werden auf einem kleinen Kreis aufgefächert; ein Leitstrich führt zur wahren Lage */
   { const gruppen = [];
     marker.forEach(function (m) {
@@ -590,7 +593,7 @@ function zeichneKarte(svg) {
     if (m.id === ci && Z.ausgang !== false) { g.appendChild(s('circle', { cx: x, cy: y, r: 10, class: 'k-checkin' })); g.appendChild(s('circle', { cx: x, cy: y, r: 16, class: 'k-checkin aussen' })); }
     if (m.kat === 'zugriff' && m.r) g.appendChild(s('circle', { cx: x, cy: y, r: Math.max(9, m.r / (40075016.69 * Math.cos(m.ll[0] * DEG) / P.Wd)).toFixed(1), class: 'k-zp-ring' }));
     if (m.zusatz) g.appendChild(s('circle', { cx: x, cy: y, r: 9, class: 'k-zusatz' }));
-    if (m.entitaet && zielpersonenListe().indexOf(m.id) >= 0) g.appendChild(s('circle', { cx: x, cy: y, r: 9.5, class: 'k-ziel' }));
+    if (m.entitaet && zielpersonen.indexOf(m.id) >= 0) g.appendChild(s('circle', { cx: x, cy: y, r: 9.5, class: 'k-ziel' }));
     if (sel) g.appendChild(s('circle', { cx: x, cy: y, r: 13, class: 'k-sel' }));
     karteSymbol(m, x, y).forEach(function (e) { g.appendChild(e); });
     g.appendChild(s('circle', { cx: x, cy: y, r: 12, class: 'k-treffer' }));
@@ -743,8 +746,8 @@ function zielpersonenListe() {
   return ms.zielpersonen;
 }
 function istZielperson(e) { return zielpersonenListe().indexOf(e.id) >= 0; }
-function karteZonen() {
-  const def = PROFIL.karteBlanko ? null : zDef(), out = [];
+function karteZonen(def = karteAuftragsansicht()) {
+  const out = [];
   if (def) {
     const Z = SCENARIO.zonen, sz = (SCENARIO.karte && SCENARIO.karte.zonen) || {};
     def.standorte.forEach(function (st) {
@@ -758,7 +761,7 @@ function karteZonen() {
   (PROFIL.zonen || []).forEach(function (zn) { out.push(Object.assign({}, zn, { auto: false, profil: true, art: 'ort' })); });
   return out;
 }
-function karteZoneFinden(id) { return id ? (karteZonen().find(function (x) { return x.id === id; }) || null) : null; }
+function karteZoneFinden(id, def) { return id ? (karteZonen(def).find(function (x) { return x.id === id; }) || null) : null; }
 function zonePositionen(e) {
   const out = [], ll = karteKoord(e.id);
   if (ll) out.push(ll);
@@ -784,9 +787,9 @@ function zoneLage(zn) {
   let top = null;
   ents.forEach(function (e) { const b = bedrohung(e); if (!top || b.stufe > top.stufe) top = { stufe: b.stufe, e: e }; });
   const orte = ents.filter(function (e) { return e.typ === 'Ort'; }).map(function (e) { return e.id; }).concat(zn.auto ? [zn.standort] : []);
-  const fenster = karteFenster().filter(function (w) { return w.ort && orte.indexOf(w.ort) >= 0 && w.zustand !== 'abgelaufen'; });
+  const def = zDef(), fenster = karteFenster(PROFIL.karteBlanko ? null : def).filter(function (w) { return w.ort && orte.indexOf(w.ort) >= 0 && w.zustand !== 'abgelaufen'; });
   const si = karteMarker().filter(function (m) { return m.kat === 'sichtung' && karteDistanz(m.ll, zn.ll) * 1000 <= zn.r + 100; });
-  const zp = zielpersonenListe(), def = zDef();
+  const zp = zielpersonenListe();
   const sts = def ? def.standorte.filter(function (st) { const ll = karteKoord(st.id); return ll && karteDistanz(ll, zn.ll) * 1000 <= zn.r + 100; }).map(function (st) { return st.id; }) : [];
   return { standorte: sts, ents: ents, personen: ents.filter(function (e) { return e.typ !== 'Ort'; }), stufe: top ? top.stufe : null, quelle: top ? top.e : null, fenster: fenster, sichtungen: si.length,
            ziel: ents.filter(function (e) { return zp.indexOf(e.id) >= 0; }), asset: ents.some(function (e) { return karteAssetId(e); }) };
@@ -893,8 +896,8 @@ function karteBezugVon(id) {
   if (ao && ao.ll) return { id: id, typ: 'Ausgangsort', name: ao.name, ll: ao.ll, stand: null, filter: false };
   const m = karteMarker().find(function (x) { return x.id === id; });
   if (m && m.ll) return { id: id, typ: m.kat === 'sichtung' ? 'Sichtung' : 'Standort', name: m.name || id, ll: m.ll, stand: null, filter: false };
-  const e = entitaet(id), ll = e ? karteKoord(id) : null;
-  if (e && ll) return { id: id, typ: 'Dossier ' + e.typ, name: e.name, ll: ll, stand: null, filter: false };
+  const e = entitaet(id), ll = e && !infoGesperrt(e) && !dossierGesperrt(e) ? karteKoord(id) : null;
+  if (ll) return { id: id, typ: 'Dossier ' + e.typ, name: e.name, ll: ll, stand: null, filter: false };
   return null;
 }
 function karteBezugSetzen(id) {
@@ -906,39 +909,29 @@ function karteBezugSetzen(id) {
 function karteStatusAkt() {
   const box = $('k-status');
   if (!box) return;
-  const K = VIEW.karte, def = karteOhneMission() ? null : KM();
+  const K = VIEW.karte;
   const bz = K.bezug ? karteBezugVon(K.bezug) : null;
   if (K.bezug && !bz) K.bezug = null;
   const ref = bz ? bz.ll : [K.lat, K.lon];
   const zeile = function (k, v, id) { return h('div', { class: 'k-st-z' }, h('span', { class: 'k-st-k' }, k), h('span', { class: 'k-st-v', id: id }, v)); };
-  let kurz = bz ? bz.typ + ' · ' + bz.name : 'Kartenmitte';
+  const kurz = bz ? bz.typ + ' · ' + bz.name : 'Kartenmitte';
   const zeilen = [];
   if (bz) {
     zeilen.push(zeile('Objekt', bz.typ + ' · ' + bz.name, 'k-st-objekt'), zeile('Position', bz.ll[0].toFixed(5) + ', ' + bz.ll[1].toFixed(5), 'k-st-pos'));
     if (bz.stand) zeilen.push(zeile('Stand', fmtZ(bz.stand), 'k-st-stand'));
     if (bz.filter) zeilen.push(h('div', { class: 'k-st-z' }, h('button', { type: 'button', class: 'link', id: 'k-st-protokoll', onclick: function () { K.kpObjekt = bz.id; K.kpFilter = ''; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen')));
   } else zeilen.push(zeile('Position', 'Kartenmitte ' + K.lat.toFixed(3) + ', ' + K.lon.toFixed(3), 'k-st-pos'));
-  if (def) {                                         /* Auftragszeilen nur während eines Auftrags */
-    const FL = karteFensterLage(), ci = STATE.agent && STATE.agent.checkin;
-    const stufen = pool().filter(function (e) { return e.typ !== 'Ort' && !infoGesperrt(e); }).map(function (e) { return bedrohung(e).stufe; });
-    const hoechst = stufen.length ? Math.max.apply(null, stufen) : null;
-    let fenster = FL.aktiv.length ? 'aktiv: ' + FL.aktiv.map(function (w) { return w.id; }).join(', ') : FL.kommend.length ? 'nächstes in ' + dauerText((FL.kommend[0].von - FL.kommend[0].T) / 60000) : FL.liste.length ? 'keine offen' : 'keine';
-    const ciT = ci && ci.t && ci.standortId ? fmtZ(ci.t).slice(11, 16) + 'Z · vor ' + dauerText(Math.max(0, (Date.now() - Date.parse(ci.t)) / 60000)) : '–';
-    kurz = (bz ? bz.typ + ' · ' + bz.name + ' · ' : '') + (hoechst == null ? 'ohne Bewertung' : 'Stufe ' + hoechst) + ' · ' + offeneZiele() + ' von ' + def.ziele.length + ' Zielen offen';
-    zeilen.push(zeile('Höchste Stufe im Bestand', hoechst == null ? '–' : hoechst + ' · ' + SCENARIO.bedrohungsstufen[hoechst], 'k-st-stufe'),
-      zeile('Letzter Check-in', ciT, 'k-st-ci'), zeile('Offene Ziele', offeneZiele() + ' von ' + def.ziele.length, 'k-st-ziele'), zeile('Zeitfenster', fenster, 'k-st-fenster'));
-  }
-  zeilen.push(zeile('Licht', lichtText(ref[0], ref[1], Date.now() + K.dt * 3600000), 'k-st-licht'));
-  if (K.wetter) zeilen.push(zeile('Wetter', wetterText(wetterStand(ref[0], ref[1])) + (K.dt ? ' (Stand jetzt)' : ''), 'k-st-wetter'));
+  zeilen.push(zeile('Licht', lichtText(ref[0], ref[1], Date.now()), 'k-st-licht'));
+  if (K.wetter) zeilen.push(zeile('Wetter', wetterText(wetterStand(ref[0], ref[1])), 'k-st-wetter'));
   box.classList.toggle('offen', !!K.statusOffen);
-  box.replaceChildren.apply(box, [h('button', { type: 'button', class: 'k-st-kopf', id: 'k-st-t', 'aria-expanded': K.statusOffen ? 'true' : 'false', title: 'Lage ein- oder ausklappen. Die Lage je Standort zeigen die Zonen auf der Karte.', onclick: function () { K.statusOffen = !K.statusOffen; karteStatusAkt(); } },
+  box.replaceChildren.apply(box, [h('button', { type: 'button', class: 'k-st-kopf', id: 'k-st-t', 'aria-expanded': K.statusOffen ? 'true' : 'false', title: 'Lage am ausgewählten Objekt oder an der Kartenmitte ein- oder ausklappen', onclick: function () { K.statusOffen = !K.statusOffen; karteStatusAkt(); } },
       h('span', null, 'LAGE'), h('span', { class: 'k-st-kurz' }, kurz), h('span', { class: 'k-eb-pfeil' }, K.statusOffen ? '▴' : '▾')),
     K.statusOffen ? h('div', { class: 'k-st-body' }, zeilen) : null].filter(Boolean));
 }
 function karteFensterListe() {
-  const liste = karteFenster(), K = VIEW.karte, T = Date.now() + K.dt * 3600000;
   const wrap = $('k-fenster');
   if (!wrap) return;
+  const liste = karteFenster(), K = VIEW.karte, T = Date.now() + K.dt * 3600000;
   wrap.replaceChildren(tabelle(['ID', 'Fenster', 'Ort', 'Zustand'], liste.map(function (w) {
     const lbl = w.zustand === 'aktiv' ? 's-accent' : w.zustand === 'ausstehend' ? 's-warn' : 's-dim';
     const rest = w.zustand === 'aktiv' ? 'noch ' + dauerText((w.bis - T) / 60000) : w.zustand === 'ausstehend' ? 'in ' + dauerText((w.von - T) / 60000) : 'seit ' + dauerText((T - w.bis) / 60000);
@@ -946,7 +939,7 @@ function karteFensterListe() {
     return [td('nw', w.id), td('txt', [w.titel + ' (' + fmtZ(w.von).slice(0, 16) + 'Z bis ' + fmtZ(w.bis).slice(0, 16) + 'Z)', h('span', { class: 'dim' }, ' · Licht: ' + (p1 === p2 ? p1 : p1 + ' → ' + p2))]),
       w.ort && karteKoord(w.ort) ? h('button', { type: 'button', class: 'link', onclick: function () { karteWaehlen(w.ort, true); } }, w.ort) : td('dim', 'ohne Ort'),
       td('nw', [h('span', { class: 'label ' + lbl }, w.zustand), ' ' + rest])];
-  }), karteOhneMission() ? 'Kein laufender Auftrag, daher keine Zeitfenster.' : 'Keine Zeitfenster.'));
+  }), 'Keine Zeitfenster.'));
   const z = $('k-zeit');
   if (z) z.textContent = (K.dt === 0 ? 'jetzt' : (K.dt > 0 ? '+' : '−') + Math.abs(K.dt) + ' h') + ' · ' + fmtZ(T).slice(0, 16) + 'Z';
 }
@@ -1055,7 +1048,7 @@ function zugriffPopup(zn, fertig) {
 }
 /* Mehrfachauswahl: Umschalt- oder Strg-Klick auf Zonen, oder Schalter "Mehrfach" in der Kartenleiste */
 function zonenMehrPanel(fertig) {
-  const K = VIEW.karte, Zt = SCENARIO.zonen, alle = (K.mehr || []).map(karteZoneFinden).filter(Boolean), Z = alle.filter(function (z) { return !z.auto; });
+  const K = VIEW.karte, Zt = SCENARIO.zonen, alle = (K.mehr || []).map(function (id) { return karteZoneFinden(id); }).filter(Boolean), Z = alle.filter(function (z) { return !z.auto; });
   const nZ = Z.filter(function (z) { return z.art === 'zugriff'; }).length, nL = Z.length - nZ, nA = alle.length - Z.length;
   const radien = Zt.radien.concat(ZUGRIFF_RADIEN).filter(function (r, i, a) { return a.indexOf(r) === i; }).sort(function (x, y) { return x - y; });
   const ids = Z.map(function (z) { return z.id; });
@@ -1591,9 +1584,17 @@ function kartenProtokollAnsicht() {
     }), filter || objFilter ? 'Keine Einträge dieser Auswahl.' : 'Noch keine Einträge.'));
 }
 function renderKarte(m) {
-  const K = VIEW.karte, def = karteOhneMission() || PROFIL.karteBlanko ? null : KM();
+  const K = VIEW.karte, def = karteAuftragsansicht();
   if (K.reiter === 'protokoll') return [modKopf(m), kartenReiter('protokoll'), kartenProtokollAnsicht()];
   if (!K.init) { karteGrundansicht(); K.init = true; }
+  if (K.spiel) { clearInterval(K.spiel); K.spiel = null; }
+  if (!def) {
+    if (K.zoneSetzen === true) K.zoneSetzen = false;
+    if (K.pick && (K.pick === 'CI-AUS' || K.pick.indexOf('ZP-') === 0)) K.pick = null;
+    K.zugriffSetzen = false;
+    K.mehr = [];
+    K.mehrModus = false;
+  }
   const svg = s('svg', { id: 'k-svg', class: 'karte-svg' + (K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen ? ' pick' : '') + (K.messen ? ' messen' : ''), viewBox: '0 0 ' + KW + ' ' + KH, role: 'application', tabindex: '-1', 'aria-label': 'Karte, mit Maus ziehen und Mausrad zoomen' });
   const st = karteSteuerung(svg); KARTE_ST = st;
   const knopf = function (id, text, fn) { return h('button', { type: 'button', id: id, onclick: fn }, text); };
@@ -1605,7 +1606,7 @@ function renderKarte(m) {
     organisationen: ik(s('rect', { x: 2, y: 2, width: 10, height: 10, rx: 1.5, class: 'k-m org' }), s('line', { x1: 5, y1: 5, x2: 5, y2: 9, class: 'k-glyph org' }), s('line', { x1: 9, y1: 5, x2: 9, y2: 9, class: 'k-glyph org' })),
     verbindungen: ik(s('line', { x1: 1.5, y1: 11.5, x2: 12.5, y2: 2.5, class: 'k-verb stark' })),
     fenster: ik(s('circle', { cx: 7, cy: 7, r: 5.5, class: 'k-fenster-fl aktiv' }), s('circle', { cx: 7, cy: 7, r: 5.5, class: 'k-fenster aktiv' })),
-    ausgang: ik(s('circle', { cx: 7, cy: 7, r: 3, class: 'k-checkin' }), s('circle', { cx: 7, cy: 7, r: 6, class: 'k-checkin aussen' })),
+    ausgang: ik(s('polygon', { points: '7,2 12,11 2,11', class: 'k-m ausgang' })),
     zonen: ik(s('circle', { cx: 7, cy: 7, r: 5.5, style: 'fill:rgba(201,160,74,.2);stroke:#C9A04A;stroke-width:1.2;stroke-dasharray:3 2' })),
     sichtungen: ik(s('polygon', { points: '7,2 12,11 2,11', class: 'k-m sichtung' })),
     strecke: ik(s('path', { d: 'M 1 11 L 5 5 L 9 8 L 13 2', class: 'k-strecke' }))
@@ -1617,15 +1618,14 @@ function renderKarte(m) {
       ikon || h('span', { class: 'k-ik leer' }), h('span', null, text));
   };
   const pickE = K.pick ? (K.pick === 'CI-AUS' ? { id: 'Check-in', name: 'Ausweichort' } : K.pick.indexOf('AO-') === 0 ? (PROFIL.ausgang.find(function (x) { return x.id === K.pick; }) || null) : K.pick.indexOf('ZP-') === 0 ? { id: K.pick, name: 'Zugriffspunkt' } : entitaet(K.pick)) : null;
-  if (K.spiel) { clearInterval(K.spiel); K.spiel = null; }
   const kopf = [knopf('k-raum', 'Region', function () { const a = { lat: K.lat, lon: K.lon, zoom: K.zoom }; karteGrundansicht(); const z = { lat: K.lat, lon: K.lon, zoom: K.zoom }; K.lat = a.lat; K.lon = a.lon; K.zoom = a.zoom; karteFlug(z.lat, z.lon, z.zoom); }),
     knopf('k-eu', 'Europa', function () { karteFlug(50, 10, 4.4); }),
     knopf('k-welt', 'Welt', function () { karteFlug(25, 20, 1.9); }),
     h('button', { type: 'button', id: 'k-pin-neu', class: K.pinSetzen ? 'aktiv' : '', 'aria-pressed': K.pinSetzen ? 'true' : 'false', title: 'Auf die Karte klicken: setzt einen eigenen Pin mit Lageblatt (Zweck, Umgebung, Notiz, Textexport)', onclick: function () { K.pinSetzen = !K.pinSetzen; K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.pinSetzen ? 'Pin: auf Karte klicken' : 'Pin setzen'),
-    h('button', { type: 'button', id: 'k-ozone-neu', class: K.zoneSetzen === 'eigen' ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen === 'eigen' ? 'true' : 'false', title: 'Auf die Karte klicken: setzt eine eigene Zone mit Radius, Notiz und Stand; unabhängig von einem Auftrag', onclick: function () { K.zoneSetzen = K.zoneSetzen === 'eigen' ? false : 'eigen'; K.pinSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen === 'eigen' ? 'Zone: auf Karte klicken' : 'Zone markieren'),
-    h('button', { type: 'button', id: 'k-zone-neu', class: K.zoneSetzen === true ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen === true ? 'true' : 'false', disabled: !def, title: def ? 'Auf die Karte klicken: setzt eine eigene Zone mit Radius und Sicherheitsbewertung' : 'Nur mit laufendem Auftrag', onclick: function () { K.zoneSetzen = K.zoneSetzen === true ? false : true; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen === true ? 'Lagezone: auf Karte klicken' : 'Lagezone (Auftrag)'),
-    h('button', { type: 'button', id: 'k-zugriff-neu', class: K.zugriffSetzen ? 'aktiv' : '', 'aria-pressed': K.zugriffSetzen ? 'true' : 'false', disabled: !def, title: def ? 'Wiederholt auf die Karte klicken: markiert mögliche Zugriffspunkte (Zufahrt, Tor, Seiteneingang …). Ende mit Esc oder erneutem Klick' : 'Nur mit laufendem Auftrag', onclick: function () { K.zugriffSetzen = !K.zugriffSetzen; K.zoneSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zugriffSetzen ? 'Zugriffspunkte: klicken, Ende mit Esc' : 'Zugriffspunkte markieren'),
-    h('button', { type: 'button', id: 'k-mehr', class: K.mehrModus ? 'aktiv' : '', 'aria-pressed': K.mehrModus ? 'true' : 'false', title: 'Zonen nacheinander anklicken, um mehrere gemeinsam zu bearbeiten (auch mit Umschalt- oder Strg-Klick)', onclick: function () { K.mehrModus = !K.mehrModus; if (!K.mehrModus) { K.mehr = []; } K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; renderModule(); } }, K.mehrModus ? 'Mehrfach: Zonen anklicken' : 'Mehrfach'),
+    h('button', { type: 'button', id: 'k-ozone-neu', class: K.zoneSetzen === 'eigen' ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen === 'eigen' ? 'true' : 'false', title: 'Auf die Karte klicken: setzt eine eigene Zone mit Radius, Notiz und Stand', onclick: function () { K.zoneSetzen = K.zoneSetzen === 'eigen' ? false : 'eigen'; K.pinSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen === 'eigen' ? 'Zone: auf Karte klicken' : 'Zone markieren'),
+    def ? h('button', { type: 'button', id: 'k-zone-neu', class: K.zoneSetzen === true ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen === true ? 'true' : 'false', title: 'Auf die Karte klicken: setzt eine Lagezone mit Radius und Sicherheitsbewertung', onclick: function () { K.zoneSetzen = K.zoneSetzen === true ? false : true; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen === true ? 'Lagezone: auf Karte klicken' : 'Lagezone (Auftrag)') : null,
+    def ? h('button', { type: 'button', id: 'k-zugriff-neu', class: K.zugriffSetzen ? 'aktiv' : '', 'aria-pressed': K.zugriffSetzen ? 'true' : 'false', title: 'Wiederholt auf die Karte klicken: markiert mögliche Zugriffspunkte. Ende mit Esc oder erneutem Klick', onclick: function () { K.zugriffSetzen = !K.zugriffSetzen; K.zoneSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zugriffSetzen ? 'Zugriffspunkte: klicken, Ende mit Esc' : 'Zugriffspunkte markieren') : null,
+    def ? h('button', { type: 'button', id: 'k-mehr', class: K.mehrModus ? 'aktiv' : '', 'aria-pressed': K.mehrModus ? 'true' : 'false', title: 'Zonen nacheinander anklicken, um mehrere gemeinsam zu bearbeiten (auch mit Umschalt- oder Strg-Klick)', onclick: function () { K.mehrModus = !K.mehrModus; if (!K.mehrModus) { K.mehr = []; } K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; renderModule(); } }, K.mehrModus ? 'Mehrfach: Zonen anklicken' : 'Mehrfach') : null,
     h('button', { type: 'button', id: 'k-messen', class: K.messen ? 'aktiv' : '', 'aria-pressed': K.messen ? 'true' : 'false', title: 'Zwei Punkte oder Markierungen anklicken: Entfernung und Fahrzeit', onclick: function () { if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; } else { K.messen = true; K.auswahl = null; } renderModule(); } }, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen'),
     h('button', { type: 'button', id: 'k-3d', class: K.ansicht3d ? 'aktiv' : '', 'aria-pressed': K.ansicht3d ? 'true' : 'false', title: 'Wechselt zwischen der flachen Karte und der geneigten Ansicht mit Gebäuden (benötigt Internetverbindung)', onclick: karte3dUmschalten }, K.ansicht3d ? '2D' : '3D')];
   const preset = function (name, sets) {
@@ -1640,8 +1640,8 @@ function renderKarte(m) {
         ul.replaceChildren.apply(ul, tr.map(function (m) { return h('li', null, h('button', { type: 'button', class: 'link', onclick: function () { K.suche = ''; $('k-suche').value = ''; ul.replaceChildren(); karteWaehlen(m.id, true); } }, m.name)); }));
       } }),
     h('ul', { id: 'k-suche-erg', class: 'k-suche-erg' }));
-  const zeit = h('input', { type: 'range', id: 'k-dt', min: '-12', max: '96', step: '1', value: String(K.dt), 'aria-label': 'Zeitpunkt relativ zu jetzt in Stunden',
-    oninput: function (ev) { K.dt = Number(ev.target.value); st.neu(); karteFensterListe(); karteAuswahlAnzeige(); } });
+  const zeit = def ? h('input', { type: 'range', id: 'k-dt', min: '-12', max: '96', step: '1', value: String(K.dt), 'aria-label': 'Zeitpunkt relativ zu jetzt in Stunden',
+    oninput: function (ev) { K.dt = Number(ev.target.value); st.neu(); karteFensterListe(); karteAuswahlAnzeige(); } }) : null;
   const Z0 = K.ebenen;
   const leiste = h('div', { class: 'k-ebenen', id: 'k-ebenen' },
     h('button', { type: 'button', class: 'k-eb-kopf', id: 'k-eb-t', 'aria-expanded': K.ebenenOffen ? 'true' : 'false', onclick: function () { K.ebenenOffen = !K.ebenenOffen; renderModule(); } }, h('span', null, 'EBENEN'), h('span', { class: 'k-eb-pfeil' }, K.ebenenOffen ? '–' : '+')),
@@ -1660,20 +1660,20 @@ function renderKarte(m) {
       K.keyHinweis ? h('p', { class: 'k-eb-note k-key-hinweis' }, 'CARTO verlangt einen kostenlosen Schlüssel (carto.com/basemaps/apikey). Unter Darstellung eintragen.') : null,
       h('div', { class: 'k-eb-gruppe' }, 'Ansicht'),
       h('div', { class: 'k-seg', role: 'group', 'aria-label': 'Ansicht' },
-        preset('Gesamt', { standorte: true, orte: true, personen: true, organisationen: true, verbindungen: true, fenster: true, ausgang: true, route: true, sichtungen: true, strecke: true }),
-        preset('Netzwerk', { standorte: true, orte: true, personen: true, organisationen: true, verbindungen: true, fenster: false, ausgang: false, route: false, sichtungen: false, strecke: false }),
-        preset('Zeit', { standorte: true, orte: true, personen: false, organisationen: false, verbindungen: false, fenster: true, ausgang: true, route: true, sichtungen: true, strecke: true })),
+        preset('Gesamt', Object.assign({ orte: true, personen: true, organisationen: true, verbindungen: true, ausgang: true, sichtungen: true }, def ? { standorte: true, fenster: true, route: true, strecke: true } : {})),
+        preset('Netzwerk', Object.assign({ orte: true, personen: true, organisationen: true, verbindungen: true, ausgang: false, sichtungen: false }, def ? { standorte: true, fenster: false, route: false, strecke: false } : {})),
+        def ? preset('Zeit', { standorte: true, orte: true, personen: false, organisationen: false, verbindungen: false, fenster: true, ausgang: true, route: true, sichtungen: true, strecke: true }) : null),
       h('div', { class: 'k-eb-gruppe' }, 'Karte'),
-      ebene(['standorte', 'orte'], 'Standorte und Orte', IKON.standorte),
+      ebene(def ? ['standorte', 'orte'] : 'orte', def ? 'Standorte und Orte' : 'Orte', IKON.standorte),
       ebene('personen', 'Personen', IKON.personen),
       ebene('organisationen', 'Organisationen', IKON.organisationen),
-      ebene('verbindungen', 'Verbindungen', IKON.verbindungen, 'Linien zwischen verknüpften, freigeschalteten Dossiers'),
-      ebene('fenster', 'Zeitfenster', IKON.fenster, 'Meldefenster und Termine; außerhalb aller aktiven Fenster wird die Karte abgedunkelt'),
-      ebene(['ausgang', 'route'], 'Eigener Standort', IKON.ausgang, 'Ausgangsorte, letzter Check-in und Anreiseroute'),
-      h('div', { class: 'k-eb-gruppe' }, 'Auftrag'),
-      ebene('zonen', 'Lagezonen', IKON.zonen, 'Eine Zone je Standort mit eigener Lagebewertung, dazu die eigenen Zonen'),
+      ebene('verbindungen', 'Verbindungen', IKON.verbindungen, 'Linien zwischen sichtbaren, verknüpften Dossiers'),
+      def ? ebene('fenster', 'Zeitfenster', IKON.fenster, 'Meldefenster und Termine; außerhalb aller aktiven Fenster wird die Karte abgedunkelt') : null,
+      ebene(def ? ['ausgang', 'route'] : 'ausgang', def ? 'Eigener Standort' : 'Ausgangsorte', IKON.ausgang, def ? 'Ausgangsorte, letzter Check-in und Anreiseroute' : 'Ausgangsorte aus dem Profil'),
+      def ? h('div', { class: 'k-eb-gruppe' }, 'Auftrag') : null,
+      ebene('zonen', def ? 'Lagezonen' : 'Eigene Zonen', IKON.zonen, def ? 'Eine Zone je Standort mit eigener Lagebewertung, dazu die eigenen Zonen' : 'Zonen aus dem Profil'),
       ebene('sichtungen', 'Sichtungen', IKON.sichtungen),
-      ebene('strecke', 'Vermutete Transportroute', IKON.strecke),
+      def ? ebene('strecke', 'Vermutete Transportroute', IKON.strecke) : null,
       h('details', { class: 'k-eb-det', open: !!K.keyHinweis }, h('summary', null, 'Darstellung'),
         ebene('gelaende', 'Gewässer und Siedlungen'), ebene('strassen', 'Fernstraßen'), ebene('namen', 'Ortsnamen'), ebene('kacheln', 'Online-Kacheln'),
         h('select', { id: 'k-anbieter', 'aria-label': 'Anbieter der Kacheln', onchange: function (ev) { K.anbieter = ev.target.value; karteWahlSichern(); st.neu(); renderModule(); } },
@@ -1685,7 +1685,7 @@ function renderKarte(m) {
         K.anbieter === 'eigen' ? h('input', { type: 'text', id: 'k-url', class: 'k-url', value: K.url, placeholder: 'https://…/{z}/{x}/{y}.png', 'aria-label': 'Kachel-URL', autocomplete: 'off', spellcheck: 'false',
           onchange: function (ev) { K.url = ev.target.value; karteWahlSichern(); st.neu(); } }) : null,
         h('p', { class: 'k-eb-note' }, 'Online-Kacheln sind standardmäßig aus. Eingeschaltet lädt der Browser Kacheln vom Anbieter; dieser sieht Ausschnitt, IP-Adresse und bei CARTO den Schlüssel. URL und Schlüssel bleiben nur in diesem Browser und werden nie exportiert.')),
-      h('p', { class: 'k-eb-note' }, 'Roter Ring: Stufe 4 oder 5. Gestrichelter Ring um eine Sichtung: Unschärfe; er wächst mit dem Alter der Sichtung.')) : null);
+      h('p', { class: 'k-eb-note' }, (def ? 'Roter Ring: Stufe 4 oder 5. ' : '') + 'Der gestrichelte Ring um eine Sichtung zeigt ihre räumliche Unschärfe und wächst mit ihrem Alter.')) : null);
   const res = [
     modKopf(m),
     kartenReiter('karte'),
@@ -1698,7 +1698,7 @@ function renderKarte(m) {
         h('div', { class: 'k-popup', id: 'k-auswahl', hidden: true, 'aria-live': 'polite' }),
         h('div', { class: 'k-tip', id: 'k-tip', hidden: true }),
         h('div', { class: 'k-zoom' }, knopf('k-plus', '+', function () { st.zoom(0.8); }), knopf('k-minus', '−', function () { st.zoom(-0.8); })))),
-    panel('Zeitfenster-Overlay', null,
+    def ? panel('Zeitfenster-Overlay', null,
       h('div', { class: 'row' }, h('label', { for: 'k-dt' }, 'Zeitpunkt'), zeit, h('span', { class: 'mono', id: 'k-zeit' }),
         h('button', { type: 'button', id: 'k-spiel', 'aria-pressed': 'false', onclick: function (ev) {
           const b = ev.currentTarget;
@@ -1713,7 +1713,7 @@ function renderKarte(m) {
           }, 350);
         } }, 'Wiedergabe')),
       h('div', { id: 'k-fenster' }),
-      h('p', { class: 'note pad' }, def ? 'Der Schieber verschiebt den betrachteten Zeitpunkt von 12 Stunden zurück bis 96 Stunden voraus. Ringe auf der Karte: durchgezogen = aktiv, gestrichelt = ausstehend, schwach = abgelaufen. Ist kein Fenster aktiv, wird die Karte leicht abgedunkelt.' : 'Mit einem laufenden Auftrag erscheinen hier die Zeitfenster samt Ort.'))
+      h('p', { class: 'note pad' }, 'Der Schieber verschiebt den betrachteten Zeitpunkt von 12 Stunden zurück bis 96 Stunden voraus. Ringe auf der Karte: durchgezogen = aktiv, gestrichelt = ausstehend, schwach = abgelaufen. Ist kein Fenster aktiv, wird die Karte leicht abgedunkelt.')) : null
   ];
   const rt = karteStrecke();
   if (rt) res.push(panel(rt.titel, null,
@@ -1725,6 +1725,6 @@ function renderKarte(m) {
       }))),
     h('div', { class: 'pad' }, rt.abschnitte.map(function (x) { return h('p', { class: 'note' }, x.id + ': ' + x.text); }))));
   setTimeout(function () { zeichneKarte(svg); karteAuswahlAnzeige(); karteFensterListe(); }, 0);
-  return res;
+  return res.filter(Boolean);
 }
 

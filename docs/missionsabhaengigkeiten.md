@@ -14,8 +14,8 @@ Stand: `main` 00c47ad plus Branch `refactor/missionsautomatik-trennen`. Quelle: 
 | `SITZUNG_START` | `profilEinspielen(STATE)`: überträgt das Profil in den Zustand. Das ist Recherchebetrieb. | unverändert |
 | `init()` → `planeAlle()` | Zustellzeitgeber für eigene Nachrichten im Kommunikationsmodul (Status zugestellt, gelesen). Betrifft nur Nachrichten, die es im Recherchebetrieb nicht gibt. | unverändert |
 | `init()` → `setInterval(tick, 1000)` | Sekundentakt, siehe 2. | siehe 2. |
-| Kopfzeile, Banner | `renderBanner()` und die Kopfzeile lesen `KM()` und zeigen „kein Auftrag“ oder Auftragsnummer und -status. | unverändert (Oberfläche) |
-| Kartenebenen | Missionsmarker, -zonen und -verbindungen kommen aus `KM()`; `PROFIL.karteBlanko` blendet sie aus. | unverändert |
+| Kopfzeile und Arbeitsmodule | Alte Einstufung, Standortfreigabe und Vorgangsnummer sind aus dem Arbeitsgerüst entfernt. | **R2** |
+| Kartenebenen | Im Recherchebetrieb zeigt die Karte eigene Objekte und Dossiers ohne Auftragsmarker oder -werkzeuge. | **R2**, siehe 4b |
 
 ## 2. Im Hintergrund (Sekundentakt `tick()`)
 
@@ -54,6 +54,13 @@ Zur Rückkehr in den Missionsbetrieb genügt eine Missionsaktion; die Tests des 
 
 Ein Altprofil mit laufender Mission friert ab: fällige Planeinträge, Folgeaufträge, Meldefristen und Zonenmeldungen werden nicht mehr abgearbeitet. Es gibt in
 der Oberfläche keinen Weg mehr, darauf zu antworten (Missionsreiter und Kürzel sind seit PR #17 entfernt).
+
+## 4b. R2 – Arbeitsoberfläche
+
+- Die Lage-Box zeigt Objektbezug oder Kartenmitte, Position, ggf. den Zonenstand und den Protokollsprung sowie Licht und Wetter. Sie liest keine Auftragszeilen, auch im internen Missionsablauf.
+- Die 2D-Karte und ihre 3D-Daten zeigen im Recherchebetrieb weder Missionsstandorte und -zonen noch Check-in-, Ziel- oder Stufenmarkierungen. Arbeitsdossiers mit Geokoordinaten bleiben Kartenobjekte. Pins, eigene Zonen, Ausgangsorte, Sichtungen und der TXT-Export bleiben verfügbar.
+- Ein bereits gespeichertes `STATE.missionsbetrieb` öffnet nach Laden oder Import keine historische Kartenansicht. Für die internen Abläufe und ihre Tests wird diese Ansicht lediglich nach einer erfolgreichen ausdrücklichen Missionsannahme in derselben Sitzung geöffnet. Der Speicherschalter, der den alten Hintergrundablauf steuert, ist unverändert.
+- Keine Änderung am Datenformat, an der Dossier-Freigabemechanik, an der Kennwortmaske, am Profil oder am Windows-Start.
 
 ## 5. Bewusst noch nicht angefasst
 
