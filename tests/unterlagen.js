@@ -19,7 +19,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.locator('#rch-dossier-unterlagen > summary').click();
   /* Formular öffnen, schließen, wieder öffnen */
   await p.click('#rch-neu'); const offen = await p.evaluate(() => !!document.getElementById('rch-ok')); await p.click('#rch-abbruch'); const zu2 = await p.evaluate(() => !document.getElementById('rch-ok')); await p.click('#rch-neu');
-  const labels = await p.evaluate(() => ({ quelle: !!document.querySelector('#rch-herkunft[placeholder^="Quelle oder URL"]'), alt: document.body.innerText.includes('Herkunft oder Adresse') }));
+  const labels = await p.evaluate(() => ({ quelle: document.querySelector('label[for="rch-herkunft"]')?.textContent === 'Quelle oder URL' && !document.getElementById('rch-herkunft').hasAttribute('placeholder'), alt: document.body.innerText.includes('Herkunft oder Adresse') }));
   /* ohne Fall: Frage nach der Zuordnung, nichts angelegt */
   await p.fill('#rch-text', 'Erster Auszug ohne Fundstelle'); await p.click('#rch-ok'); await p.waitForTimeout(200);
   const ohneFall = await p.evaluate(() => PROFIL.recherche.beobachtungen.length); const msgFall = await sys();

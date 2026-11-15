@@ -15,7 +15,6 @@ const RCH_MAX = 20 * 1024 * 1024;
 const RCH_FUNDSTELLEN = ['Seite', 'Absatz', 'Abschnitt', 'Zeitmarke', 'Zeichenbereich', 'ganze Datei'];
 /* Fundstellenarten, die zum Material passen; alles Weitere steht unter "Weitere Optionen" */
 const RCH_FT_MATERIAL = { pdf: ['Seite'], zeit: ['Zeitmarke'], text: ['Absatz', 'Abschnitt'], bild: [], datei: [] };
-const RCH_FT_HINWEIS = { 'Seite': 'Seitenzahl, z. B. 4', 'Zeitmarke': 'z. B. 00:12:30', 'Absatz': 'Nummer, z. B. 3', 'Abschnitt': 'z. B. 2.1 oder Überschrift', 'Zeichenbereich': 'z. B. 120–260' };
 function rchMaterial(datei) {
   if (!datei) return 'text';
   const t = String(datei.type || '').toLowerCase(), n = String(datei.name || '').toLowerCase();
@@ -269,7 +268,8 @@ function rchUnterlageZeile(e, z) {
     h('div', { class: 'row' },
       z.f.anhang ? h('button', { type: 'button', id: 'rch-o-' + b.id, onclick: function () { rchOeffnen({ b: b, f: z.f, q: z.q }); } }, 'Öffnen') : null,
       h('button', { type: 'button', id: 'rch-m-' + b.id, onclick: function () { speichern({ geprueft: !ok, notiz: notizText() }); } }, ok ? 'Markierung zurücknehmen' : 'Als geprüft und nützlich markieren'),
-      entwurf('input', nk, nk, { autocomplete: 'off', type: 'text', 'aria-label': 'Notiz zu ' + b.id, placeholder: 'Notiz: warum geprüft und nützlich (optional)', maxlength: '500', value: notizText(), style: 'flex:1 1 220px;min-width:0' }),
+      h('label', { for: nk }, 'Notiz'),
+      entwurf('input', nk, nk, { autocomplete: 'off', type: 'text', 'aria-label': 'Notiz zu ' + b.id, maxlength: '500', value: notizText(), style: 'flex:1 1 220px;min-width:0' }),
       h('button', { type: 'button', id: 'rch-ns-' + b.id, onclick: function () { speichern({ notiz: notizText() }); } }, 'Notiz speichern'),
       fremd ? null : h('button', { type: 'button', id: 'rch-x-' + b.id, onclick: function () {
         const geteilt = rchUnterlageTeiltBezug(b, e.id), aktion = geteilt ? 'Vom Dossier lösen' : 'Unterlage löschen';
@@ -299,19 +299,19 @@ function rechercheBelege(e) {
       h('div', { class: 'row' }, h('label', { for: 'rch-fall' }, 'Fall'),
         sel('rch-fall', 'Fall wählen', fallOpt, fallWahl, function (ev) { VIEW.draft['rch-fall'] = ev.target.value; renderModule(); })),
       fallWahl === '__neu' ? h('div', { class: 'row' },
-        entwurf('input', 'rch-fall-titel', 'rch-fall-titel', { autocomplete: 'off', type: 'text', 'aria-label': 'Titel des neuen Falls', placeholder: 'Titel des Falls', maxlength: '120', style: 'flex:1 1 220px;min-width:0' }),
-        entwurf('input', 'rch-fall-frage', 'rch-fall-frage', { autocomplete: 'off', type: 'text', 'aria-label': 'Recherchefrage', placeholder: 'Recherchefrage (optional)', maxlength: '300', style: 'flex:2 1 300px;min-width:0' })) : null,
+        h('label', { for: 'rch-fall-titel' }, 'Titel des Falls'), entwurf('input', 'rch-fall-titel', 'rch-fall-titel', { autocomplete: 'off', type: 'text', 'aria-label': 'Titel des neuen Falls', maxlength: '120', style: 'flex:1 1 220px;min-width:0' }),
+        h('label', { for: 'rch-fall-frage' }, 'Recherchefrage'), entwurf('input', 'rch-fall-frage', 'rch-fall-frage', { autocomplete: 'off', type: 'text', 'aria-label': 'Recherchefrage', maxlength: '300', style: 'flex:2 1 300px;min-width:0' })) : null,
       h('div', { class: 'row' }, h('label', { for: 'rch-datei' }, 'Datei'), inp,
-        entwurf('input', 'rch-herkunft', 'rch-herkunft', { autocomplete: 'off', type: 'text', 'aria-label': 'Quelle oder URL', placeholder: 'Quelle oder URL (optional; wird nicht abgerufen)', maxlength: '300', style: 'flex:1 1 260px;min-width:0' })),
-      h('div', { class: 'row' }, entwurf('textarea', 'rch-text', 'rch-text', { 'aria-label': 'Textauszug', placeholder: 'Textauszug (wörtlich; ohne Datei Pflicht)', rows: '3', maxlength: '2000', style: 'flex:1 1 100%;min-width:0' })),
+        h('label', { for: 'rch-herkunft' }, 'Quelle oder URL'), entwurf('input', 'rch-herkunft', 'rch-herkunft', { autocomplete: 'off', type: 'text', 'aria-label': 'Quelle oder URL', maxlength: '300', style: 'flex:1 1 260px;min-width:0' })),
+      h('div', { class: 'row' }, h('label', { for: 'rch-text' }, 'Textauszug'), entwurf('textarea', 'rch-text', 'rch-text', { 'aria-label': 'Textauszug', rows: '3', maxlength: '2000', style: 'flex:1 1 100%;min-width:0' })),
       h('div', { class: 'row' }, h('label', { for: 'rch-ft-typ' }, 'Fundstelle'),
         sel('rch-ft-typ', 'Art der Fundstelle', erlaubt.map(function (x) { return [x, x]; }).concat(erlaubt.length ? [] : [['', 'keine Angabe']]), typ1, function (ev) { VIEW.draft['rch-ft-typ'] = ev.target.value; renderModule(); }),
-        typ && typ !== 'ganze Datei' ? entwurf('input', 'rch-ft-wert', 'rch-ft-wert', { autocomplete: 'off', type: 'text', 'aria-label': 'Wert der Fundstelle', placeholder: (RCH_FT_HINWEIS[typ] || 'Angabe') + ' (optional)', maxlength: '120', style: 'flex:1 1 220px;min-width:0' })
+        typ && typ !== 'ganze Datei' ? [h('label', { for: 'rch-ft-wert' }, 'Wert'), entwurf('input', 'rch-ft-wert', 'rch-ft-wert', { autocomplete: 'off', type: 'text', 'aria-label': 'Wert der Fundstelle', maxlength: '120', style: 'flex:1 1 220px;min-width:0' })]
           : (typ === 'ganze Datei' ? h('span', { class: 'note' }, 'Der Verweis gilt der ganzen Datei.') : h('span', { class: 'note' }, 'Ohne Fundstelle gespeichert.'))),
       h('details', { id: 'rch-weitere', open: K.weitere, ontoggle: function (ev) { K.weitere = ev.target.open; } }, h('summary', null, 'Weitere Optionen'),
         h('div', { class: 'row' }, h('label', { for: 'rch-ft-typ2' }, 'Andere Fundstellenart'),
           sel('rch-ft-typ2', 'Andere Art der Fundstelle', [['', 'wie oben']].concat(RCH_FUNDSTELLEN.map(function (x) { return [x, x]; })), typ2, function (ev) { VIEW.draft['rch-ft-typ2'] = ev.target.value; renderModule(); })),
-        h('div', { class: 'row' }, entwurf('input', 'rch-notiz', 'rch-notiz', { autocomplete: 'off', type: 'text', 'aria-label': 'Anmerkung zur Unterlage', placeholder: 'Anmerkung (optional)', maxlength: '300', style: 'flex:1 1 300px;min-width:0' }))),
+        h('div', { class: 'row' }, h('label', { for: 'rch-notiz' }, 'Anmerkung'), entwurf('input', 'rch-notiz', 'rch-notiz', { autocomplete: 'off', type: 'text', 'aria-label': 'Anmerkung zur Unterlage', maxlength: '300', style: 'flex:1 1 300px;min-width:0' }))),
       h('div', { class: 'row' },
         h('button', { type: 'button', id: 'rch-ok', onclick: function () { rchErfassen(e); } }, 'Unterlage speichern'),
         h('button', { type: 'button', id: 'rch-abbruch', onclick: function () { K.offen = false; renderModule(); } }, 'Abbrechen')));
