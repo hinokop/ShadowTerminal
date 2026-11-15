@@ -207,7 +207,18 @@ function profilAssessmentAktualisieren(now) {
 const TERMINAL_RELAY = 'https://www.wikidata.org/w/api.php?action=query&meta=siteinfo&siprop=general&format=json&origin=*';
 const TERMINAL_DB = 'pgcl-eu3.arch07';
 const TERMINAL_UBUNTU = 'Linux ubuntu-server 6.8.0-45-generic #45-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug 30 12:02:04 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux';
-const TERMINAL_BRUECKE = /^#db=(\d{1,5})\.([\w-]{43})$/.exec(window.location.hash);
+function terminalBrueckenAdresse() { return /^#db=(\d{1,5})\.([\w-]{43})$/.exec(window.location.hash); }
+const TERMINAL_BRUECKE_START = 'Starte START_TERMINAL.bat erneut und lass das Konsolenfenster offen.';
+const TERMINAL_BRUECKE_FEHLER = 'Lokale Datenbank nicht erreichbar. ' + TERMINAL_BRUECKE_START;
+const TERMINAL_BRUECKE_FEHLT = 'Lokale Datenbank nicht verbunden. Starte START_TERMINAL.bat.';
+let terminalTabFehlerZuletzt = '';
+function terminalTabFehler(input, wert, version, antwort) {
+  if (input.isConnected && document.activeElement === input && input.value === wert && TERMINAL_ZUSTAND.version === version &&
+      antwort.error && terminalTabFehlerZuletzt !== antwort.error) {
+    terminalTabFehlerZuletzt = antwort.error;
+    terminalAusgabe('Tab: ' + antwort.error);
+  }
+}
 function terminalPfad(arg) {
   const out = TERMINAL_ZUSTAND.ort.slice();
   if (/^[\\/]|[:\\]|[\u0000-\u001f\u007f]/.test(arg)) return null;
@@ -219,26 +230,29 @@ function terminalPfad(arg) {
   return out;
 }
 async function terminalBruecke(op, parts, hidden, exportDaten) {
-  if (!TERMINAL_BRUECKE) return { error: 'Lokale Datenbank nicht verbunden. Starte START_TERMINAL.bat.' };
+  const bruecke = terminalBrueckenAdresse();
+  if (!bruecke) return { error: TERMINAL_BRUECKE_FEHLT };
   const controller = new AbortController();
   const t = setTimeout(function () { controller.abort(); }, op === 'disconnect' ? 1500 : 7500);
   try {
-    const r = await fetch('http://127.0.0.1:' + TERMINAL_BRUECKE[1] + '/db', {
+    const r = await fetch('http://127.0.0.1:' + bruecke[1] + '/db', {
       method: 'POST', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
-      headers: { 'Content-Type': 'application/json', 'X-Shadow-Token': TERMINAL_BRUECKE[2] },
+      headers: { 'Content-Type': 'application/json', 'X-Shadow-Token': bruecke[2] },
       body: JSON.stringify(op === 'export-txt' ? {
         op: op, folder: exportDaten.ordner, kind: exportDaten.art, id: exportDaten.id, text: exportDaten.text
       } : { op: op, parts: parts, hidden: hidden }), signal: controller.signal
     });
-    if (!r.ok) return { error: r.status === 403 ? 'Permission denied' : 'Lokale Datenbank nicht erreichbar' };
-    return await r.json();
+    if (!r.ok) return { error: r.status === 403 ? 'Zugriff auf die lokale Datenbank verweigert. ' + TERMINAL_BRUECKE_START : TERMINAL_BRUECKE_FEHLER };
+    const antwort = await r.json();
+    if (antwort.error === 'Lokale Sitzung getrennt') antwort.error += '. ' + TERMINAL_BRUECKE_START;
+    return antwort;
   } catch (ex) {
-    return { error: 'Lokale Datenbank nicht erreichbar' };
+    return { error: TERMINAL_BRUECKE_FEHLER };
   } finally { clearTimeout(t); }
 }
 function terminalSitzungTrennen() {
   terminalKanalAbbruch();
-  if (!TERMINAL_BRUECKE) return;
+  if (!terminalBrueckenAdresse()) return;
   TERMINAL_ZUSTAND.version++;
   terminalTransferStop();
   TERMINAL_ZUSTAND.ort = null;
@@ -615,9 +629,11 @@ async function terminalTab(input, bisher, m) {
   const ort = t.ort, slash = pfad.lastIndexOf('/') + 1;
   const basis = pfad.slice(0, slash), prefix = pfad.slice(slash);
   const teile = terminalPfad(basis);
-  if (!teile || !TERMINAL_BRUECKE) return;
+  if (!teile) return;
   const antwort = await terminalBruecke('ls', teile, prefix.startsWith('.'));
-  if (t.ort !== ort || !antwort.entries) return;
+  if (t.ort !== ort) return;
+  if (!antwort.entries) { terminalTabFehler(input, bisher, version, antwort); return; }
+  terminalTabFehlerZuletzt = '';
   const namen = antwort.entries.filter(function (x) { return x.dir || befehl !== 'cd'; })
     .map(function (x) { return basis + x.name + (x.dir ? '/' : ''); });
   fertig(befehl + ' ' + anfang, pfad, namen, function (x) {
@@ -638,17 +654,18 @@ async function terminalKanalTab(input, bisher, kanal) {
     return (quote && !anfang ? quote : '') + x + quote;
   };
   const prefix = '/' + TERMINAL_DB + '/';
-  if (!pfad || (pfad.startsWith('/') && !pfad.startsWith(prefix))) {
-    terminalTabKandidaten(input, bisher, version, kopf, pfad, [prefix], format);
+  if (!pfad || (pfad.startsWith('/') && !pfad.startsWith(prefix)) || (!TERMINAL_ZUSTAND.ort && !pfad.includes('/'))) {
+    terminalTabKandidaten(input, bisher, version, kopf, pfad, [pfad.startsWith('/') || !pfad ? prefix : prefix.slice(1)], function () { return format(prefix); });
     return;
   }
-  if (!TERMINAL_BRUECKE) return;
   const basis = pfad.slice(0, pfad.lastIndexOf('/') + 1);
   const parent = basis.replace(/\/$/, '');
   const teile = basis === prefix ? [] : basis ? terminalArchivDateipfad('"' + parent + '"') : TERMINAL_ZUSTAND.ort;
   if (!teile) return;
   const antwort = await terminalBruecke('ls', teile, pfad.slice(basis.length).startsWith('.'));
-  if (TERMINAL_ZUSTAND.kanal !== kanal || kanal.phase !== 'eingabe' || !antwort.entries) return;
+  if (TERMINAL_ZUSTAND.kanal !== kanal || kanal.phase !== 'eingabe') return;
+  if (!antwort.entries) { terminalTabFehler(input, bisher, version, antwort); return; }
+  terminalTabFehlerZuletzt = '';
   terminalTabKandidaten(input, bisher, version, kopf, pfad, antwort.entries.map(function (x) {
     return basis + x.name + (x.dir ? '/' : '');
   }), format);

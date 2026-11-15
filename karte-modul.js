@@ -690,7 +690,7 @@ function kartenTxtExport(art, id) {
   if (!x) return;
   const dateiname = (art === 'pin' ? 'lageblatt-' : 'zone-') + id + '.txt';
   const textVon = function (y) { return (art === 'pin' ? pinText(y) : eigeneZoneText(y)) + '\n'; };
-  if (!TERMINAL_BRUECKE) {
+  if (!terminalBrueckenAdresse()) {
     const a = h('a', { download: dateiname }), u = URL.createObjectURL(new Blob([textVon(x)], { type: 'text/plain;charset=utf-8' }));
     a.href = u; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(u); }, 2000);
