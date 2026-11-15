@@ -39,6 +39,16 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   ok.keineFolgezuweisung = nach.folge === vor.folge;
   ok.faelligeAntwortBleibtImPlan = vor.antwort && nach.antwort && !nach.antwortNachricht;
   ok.keineAltzustellung = vor.n900 === 'gesendet' && nach.n900 === 'gesendet' && nach.statusLog === vor.statusLog;
+  /* --- Kartenpfade der Mission: im Recherchebetrieb weder sichtbar noch auslösbar ("Lage erfragen", Lage melden, Zonen des Auftrags) --- */
+  const kp = await p.evaluate(() => {
+    const kommN = () => Object.values(STATE.komm.kanaele).reduce((n, k) => n + k.nachrichten.length, 0), v = { komm: kommN(), plan: STATE.plan.length, log: STATE.log.length };
+    dispatch({ type: 'ZONE_ANGELEGT', ll: [52.5, 13.4] });
+    const zid = (zonenEigene(KM()).slice(-1)[0] || {}).id; dispatch({ type: 'ZONE_ERFRAGT', id: zid }); dispatch({ type: 'ZONE_GEMELDET', id: zid });
+    return { sichtbar: karteZonen().some(z => !z.profil) || karteMarker().some(m => m.kat === 'standort'), komm: kommN() - v.komm, plan: STATE.plan.length - v.plan, log: STATE.log.length - v.log };
+  });
+  ok.keineMissionszonenAufDerKarte = !kp.sichtbar;
+  ok.lageErfragenLoestNichtsAus = kp.komm === 0 && kp.plan === 0 && kp.log === 0;
+  vor.komm = vor.komm + kp.komm; vor.plan = vor.plan + kp.plan;
   /* --- Recherche arbeitet auf dem Altprofil --- */
   const r = await p.evaluate(async () => {
     const e = STATE.dossiers.eigene.find(x => x.name === 'Altprofil Person'), R = PROFIL.recherche;
