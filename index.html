@@ -703,6 +703,7 @@ body:not(.locked) #gate{display:none}
     <div id="gate-end-list"></div>
     <div id="gate-end-fertig" hidden>
       <p class="fin">Sitzung beendet. Dieses Fenster kann geschlossen werden.</p>
+      <p class="fin" id="gate-archiv-neustart" hidden>Für eine neue Dateisitzung dieses Fenster schließen und START_TERMINAL.bat erneut ausführen.</p>
       <button type="button" id="gate-reconnect">Neu verbinden</button>
     </div>
   </div>
@@ -8657,7 +8658,13 @@ const Zugang = (function () {
     const abschluss = async function () {
       if (typeof terminalSitzungTrennen === 'function') await terminalSitzungTrennen();
       try { window.close(); } catch (e) { /* nicht erlaubt */ }
-      setTimeout(function () { $('gate-end-fertig').hidden = false; $('gate-reconnect').focus(); }, rm ? 100 : 700);
+      setTimeout(function () {
+        const mitBruecke = typeof terminalBrueckenAdresse === 'function' && !!terminalBrueckenAdresse();
+        $('gate-reconnect').hidden = mitBruecke;
+        $('gate-archiv-neustart').hidden = !mitBruecke;
+        $('gate-end-fertig').hidden = false;
+        if (!mitBruecke) $('gate-reconnect').focus();
+      }, rm ? 100 : 700);
     };
     const schritt = function () {
       if (i >= zeilen.length) { abschluss(); return; }
