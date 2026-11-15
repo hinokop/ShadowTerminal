@@ -1,0 +1,924 @@
+{
+ "_hinweis": "Altprofil aus dem Stand c276654 (vor den Umbauten): laufende Mission M1, Status Aktiv, 15 Planeinträge, ein eigenes Dossier mit Sichtung und Unterlage, ein Pin, eine eigene Zone. Wird vom Test missionstrennung.js geladen.",
+ "state": {
+  "version": 4,
+  "t0": "2026-11-15T04:11:38.450Z",
+  "seq": {
+   "nachricht": 2,
+   "log": 15,
+   "notiz": 0,
+   "bericht": 0,
+   "plan": 15,
+   "eigen": 1,
+   "kante": 0,
+   "sichtung": 1
+  },
+  "verstaerkung": [],
+  "plan": [
+   {
+    "typ": "verlauf",
+    "kanal": "handler",
+    "auto": true,
+    "text": "Verbindung hergestellt. Kanal Ansprechpartner aktiv, Sitzungsschlüssel ausgetauscht.",
+    "faelligAm": "2026-11-15T04:11:42.483Z",
+    "id": "F-001"
+   },
+   {
+    "typ": "verlauf",
+    "kanal": "support",
+    "auto": true,
+    "text": "Kanal Support Element aktiv. Schlüsselalter 0 h. Integrität geprüft.",
+    "faelligAm": "2026-11-15T04:11:47.483Z",
+    "id": "F-002"
+   },
+   {
+    "typ": "verlauf",
+    "kanal": "handler",
+    "auto": false,
+    "text": "Hier ARGUS. Du bist aufgeschaltet. Bitte kurz den Empfang bestätigen. Der erste Auftrag ist in Vorbereitung und kommt im Bereich Auftrag.",
+    "faelligAm": "2026-11-15T04:12:18.483Z",
+    "id": "F-003"
+   },
+   {
+    "typ": "skript",
+    "mission": "M1",
+    "index": 0,
+    "faelligAm": "2026-11-16T04:13:08.490Z",
+    "id": "F-004"
+   },
+   {
+    "typ": "skript",
+    "mission": "M1",
+    "index": 1,
+    "faelligAm": "2026-11-16T04:14:38.490Z",
+    "id": "F-005"
+   },
+   {
+    "typ": "skript",
+    "mission": "M1",
+    "index": 2,
+    "faelligAm": "2026-11-16T04:15:38.490Z",
+    "id": "F-006"
+   },
+   {
+    "typ": "skript",
+    "mission": "M1",
+    "index": 3,
+    "faelligAm": "2026-11-16T04:18:38.490Z",
+    "id": "F-007"
+   },
+   {
+    "typ": "skript",
+    "mission": "M1",
+    "index": 5,
+    "faelligAm": "2026-11-16T04:21:38.490Z",
+    "id": "F-008"
+   },
+   {
+    "typ": "anreise_pruefung",
+    "mission": "M1",
+    "faelligAm": "2026-11-16T04:11:38.490Z",
+    "id": "F-009"
+   },
+   {
+    "typ": "verlauf",
+    "kanal": "handler",
+    "auto": false,
+    "termin": "M1",
+    "text": "Noch 24 Stunden bis zum Transporttermin. Primäre Ziele jetzt priorisieren. Danach gibt es nichts mehr nachzuholen.",
+    "faelligAm": "2026-11-22T04:11:38.490Z",
+    "id": "F-010"
+   },
+   {
+    "typ": "verlauf",
+    "kanal": "handler",
+    "auto": false,
+    "termin": "M1",
+    "text": "Der Termin ist verstrichen. Die Ladung ist unterwegs, mit oder ohne unsere Erkenntnisse. Offene Ziele bleiben offen; wer jetzt noch liefert, liefert zu spät. Bewertung folgt im Abschlussbericht.",
+    "faelligAm": "2026-11-23T04:11:38.490Z",
+    "id": "F-011"
+   },
+   {
+    "typ": "verlauf",
+    "kanal": "handler",
+    "auto": false,
+    "art": null,
+    "text": "Wichtiger als die Ladung ist, wer sie bewegt. Fotos, Papiere und deine Einschätzung zur Strecke reichen erstmal.",
+    "faelligAm": "2026-11-15T04:12:37.490Z",
+    "id": "F-012"
+   },
+   {
+    "typ": "verlauf",
+    "kanal": "support",
+    "auto": false,
+    "art": "Automatische Meldung",
+    "text": "Standard-Dossier ist um die Transportkette ergänzt. Mehrere Personen ohne Lichtbild. Fotos bitte im Dossier hinterlegen.",
+    "faelligAm": "2026-11-15T04:13:27.490Z",
+    "id": "F-013"
+   },
+   {
+    "typ": "verlauf",
+    "kanal": "support",
+    "auto": false,
+    "art": "Automatische Meldung",
+    "text": "Ausweichunterkunft Potsdam bereit. Fahrzeug steht ab 0500Z am Übergabepunkt. Dokumente der Ausweichidentität vollständig hinterlegt.",
+    "faelligAm": "2026-11-15T04:14:19.490Z",
+    "id": "F-014"
+   },
+   {
+    "typ": "verlauf",
+    "kanal": "asset",
+    "auto": false,
+    "art": null,
+    "text": "Abends ist die Werkstatt voll. Es kommen Leute, die ich nicht kenne. Ich halte mich raus.",
+    "faelligAm": "2026-11-15T04:14:37.490Z",
+    "id": "F-015"
+   }
+  ],
+  "automatik": true,
+  "ui": {
+   "modul": "dossier"
+  },
+  "kw": {
+   "an": false,
+   "aufgabe": null,
+   "gesperrt": false,
+   "freiPlan": false,
+   "erst": {},
+   "genutzt": [],
+   "zwang": null
+  },
+  "vorlauf": false,
+  "nachbereitung": null,
+  "agent": {
+   "status": "Aktiv",
+   "legende": "haupt",
+   "checkin": {
+    "t": "2026-11-15T04:11:38.490Z",
+    "standortId": null
+   },
+   "ablehnungen": 0,
+   "notizen": "",
+   "notizenGeaendert": "2026-11-15T04:11:38.450Z",
+   "einschraenkungen": "",
+   "einschraenkungenGeaendert": "2026-11-15T04:11:38.450Z",
+   "dokumente": {
+    "H-01": {
+     "gueltigBis": "2031-10-20T04:11:38.450Z"
+    },
+    "H-02": {
+     "gueltigBis": "2035-08-20T04:11:38.450Z"
+    },
+    "H-03": {
+     "gueltigBis": "2028-03-29T04:11:38.450Z"
+    },
+    "H-04": {
+     "gueltigBis": null
+    },
+    "H-05": {
+     "gueltigBis": "2028-08-16T04:11:38.450Z"
+    },
+    "A-01": {
+     "gueltigBis": "2030-06-07T04:11:38.450Z"
+    },
+    "A-02": {
+     "gueltigBis": "2033-12-28T04:11:38.450Z"
+    },
+    "A-03": {
+     "gueltigBis": "2029-05-03T04:11:38.450Z"
+    },
+    "A-04": {
+     "gueltigBis": "2028-01-09T04:11:38.450Z"
+    },
+    "G-01": {
+     "gueltigBis": "2030-12-24T04:11:38.450Z"
+    },
+    "G-02": {
+     "gueltigBis": "2032-08-15T04:11:38.450Z"
+    },
+    "G-03": {
+     "gueltigBis": "2027-07-13T04:11:38.450Z"
+    },
+    "G-04": {
+     "gueltigBis": "2028-10-15T04:11:38.450Z"
+    }
+   },
+   "bel": {
+    "w": 15,
+    "t": "2026-11-15T04:11:38.458Z",
+    "hinweis": false,
+    "sperre": false,
+    "verlauf": [],
+    "hinweisRuhe": false
+   },
+   "ar": {}
+  },
+  "melde": {
+   "geprueftBis": "2026-11-16T04:11:38.490Z",
+   "versaeumt": 0
+  },
+  "funkstille": {
+   "aktiv": false,
+   "seit": null,
+   "mission": null
+  },
+  "kontext": "M1",
+  "serie": {
+   "folge": null,
+   "ende": null
+  },
+  "einweisung": true,
+  "pause": null,
+  "missionen": {
+   "M1": {
+    "status": "laufend",
+    "arbeitsstand": "Laufend",
+    "zugewiesenAm": "2026-11-15T04:11:38.486Z",
+    "angenommenAm": "2026-11-15T04:11:38.490Z",
+    "beendetAm": null,
+    "ablehnungen": [],
+    "ziele": {
+     "Z-P1": {
+      "erledigt": false,
+      "t": null
+     },
+     "Z-P2": {
+      "erledigt": false,
+      "t": null
+     },
+     "Z-P3": {
+      "erledigt": false,
+      "t": null
+     },
+     "Z-S1": {
+      "erledigt": false,
+      "t": null
+     },
+     "Z-S2": {
+      "erledigt": false,
+      "t": null
+     },
+     "Z-S3": {
+      "erledigt": false,
+      "t": null
+     }
+    },
+    "zeitfenster": {
+     "W-01": {
+      "von": "2026-11-23T01:11:38.490Z",
+      "bis": "2026-11-23T04:11:38.490Z"
+     },
+     "W-02": {
+      "von": "2026-11-16T14:11:38.490Z",
+      "bis": "2026-11-16T15:11:38.490Z"
+     },
+     "W-03": {
+      "von": "2026-11-23T04:11:38.490Z",
+      "bis": "2026-11-23T11:11:38.490Z"
+     },
+     "W-04": {
+      "von": "2026-11-23T11:11:38.490Z",
+      "bis": "2026-11-23T21:11:38.490Z"
+     }
+    },
+    "von": "2026-11-15T04:11:38.490Z",
+    "bis": "2026-11-24T04:11:38.490Z",
+    "partnerStand": "2026-11-14T04:51:38.490Z",
+    "skript": [
+     "geplant",
+     "geplant",
+     "geplant",
+     "geplant",
+     "offen",
+     "geplant",
+     "offen",
+     "offen"
+    ],
+    "zusatz": [],
+    "eigene": [],
+    "zugriff": [],
+    "zugriffUrteil": null,
+    "wissen": {},
+    "treffen": 0,
+    "dokumente": [],
+    "abschlussbericht": null,
+    "abbruchgrund": null,
+    "beginn": "2026-11-16T04:11:38.490Z",
+    "zielpersonen": [
+     "P-0002",
+     "P-0003"
+    ]
+   }
+  },
+  "berichte": [],
+  "dossiers": {
+   "entitaeten": {
+    "P-0001": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.490Z"
+    },
+    "P-0002": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.490Z"
+    },
+    "P-0003": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.490Z"
+    },
+    "P-9051": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9052": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9053": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9054": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9055": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9056": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9057": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9058": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9059": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9060": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9061": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9062": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9063": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9064": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "O-9051": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "O-9052": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "O-9053": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "O-9054": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "O-9055": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "L-9051": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "L-9052": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "L-9053": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "L-9054": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "L-9055": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "L-9056": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "L-9057": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "L-9058": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "L-9059": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.450Z"
+    },
+    "P-9101": {
+     "status": null,
+     "statusAm": null,
+     "notizen": [],
+     "aktualisiert": "2026-11-15T04:11:38.503Z",
+     "sichtungen": [
+      {
+       "id": "SI-001",
+       "t": "2026-11-15T04:11:38.503Z",
+       "ort": "Altort",
+       "text": "frühe Sichtung",
+       "guete": "unbewertet",
+       "quelle": "Eintrag"
+      }
+     ]
+    }
+   },
+   "auswahl": "P-9101",
+   "eigene": [
+    {
+     "id": "P-9101",
+     "typ": "Person",
+     "land": "DE",
+     "mission": "STD",
+     "name": "Altprofil Person",
+     "bild": null,
+     "aliase": [],
+     "reg": "ohne",
+     "verteiler": "Eigener Eintrag",
+     "rolle": "Keine Beschreibung.",
+     "eckdaten": [],
+     "bedrohung": {
+      "stufe": 2,
+      "begruendung": "Eigene Einschätzung."
+     },
+     "nachtraege": [],
+     "eigen": true
+    }
+   ],
+   "eigeneKanten": []
+  },
+  "anreise": null,
+  "akten": {
+   "anfragen": {},
+   "freigaben": {},
+   "offen": null
+  },
+  "komm": {
+   "kanaele": {
+    "handler": {
+     "ungelesen": 2,
+     "nachrichten": [
+      {
+       "id": "N-001",
+       "von": "gegenstelle",
+       "absender": "ARGUS",
+       "t": "2026-11-15T04:11:38.487Z",
+       "text": "Auftrag V-26/0201 Transportlinie Ost zugewiesen. Zugang Stufe 2. Es geht um eine Ladung, Details brauchst du nicht. Du lieferst Gesichter, Belege und die Strecke. Meldefenster täglich 0600Z und 1800Z, Frist 30 Minuten. Der Termin steht fest.",
+       "status": "zugestellt",
+       "dringlichkeit": "Priorität",
+       "lagerelevant": false,
+       "art": "Auftrag"
+      },
+      {
+       "id": "N-002",
+       "von": "system",
+       "absender": "System",
+       "t": "2026-11-15T04:11:38.491Z",
+       "text": "Systemmeldung: Auftrag V-26/0201 Transportlinie Ost angenommen. Identität, Standorte und Meldewesen gemäß Auftrag gesetzt.",
+       "status": "zugestellt",
+       "dringlichkeit": "Priorität",
+       "lagerelevant": false,
+       "art": "Systemnachricht"
+      }
+     ]
+    },
+    "support": {
+     "ungelesen": 0,
+     "nachrichten": []
+    },
+    "asset": {
+     "ungelesen": 0,
+     "nachrichten": []
+    }
+   },
+   "aktiv": "handler"
+  },
+  "extraktion": {
+   "stufe": 2,
+   "begruendung": [
+    {
+     "t": "2026-11-15T04:11:38.490Z",
+     "text": "Ausgangsbewertung des Ansprechpartners: Begleitschutz durch P-9060 vermutet, kein Hinweis auf Erfassung der Hauptidentität.",
+     "quelle": "Ansprechpartner ARGUS, Transportlinie Ost"
+    }
+   ],
+   "bewertet": "2026-11-15T04:11:38.490Z",
+   "anforderung": {
+    "status": "keine",
+    "option": null,
+    "begruendung": "",
+    "t": null,
+    "durch": null,
+    "statusZuvor": null,
+    "freigabe": null,
+    "freigabeT": null
+   },
+   "standortfreigabe": false
+  },
+  "log": [
+   {
+    "id": 1,
+    "t": "2026-11-15T04:11:38.452Z",
+    "modul": "System",
+    "aktion": "Sitzung geöffnet",
+    "detail": "Ausgangszustand aus Szenario erzeugt"
+   },
+   {
+    "id": 2,
+    "t": "2026-11-15T04:11:29.837Z",
+    "modul": "System",
+    "aktion": "Zugangskennung festgelegt",
+    "detail": "Als gesalzener Hash lokal gespeichert"
+   },
+   {
+    "id": 3,
+    "t": "2026-11-15T04:11:29.837Z",
+    "modul": "System",
+    "aktion": "Zugang freigegeben",
+    "detail": "Authentifizierung erfolgreich"
+   },
+   {
+    "id": 4,
+    "t": "2026-11-15T04:11:38.479Z",
+    "modul": "Profil",
+    "aktion": "Kennwortprüfung ausgeschaltet",
+    "detail": "keine Prüfsätze, Kanal Ansprechpartner offen"
+   },
+   {
+    "id": 5,
+    "t": "2026-11-15T04:11:38.483Z",
+    "modul": "Profil",
+    "aktion": "Status geändert",
+    "detail": "Ruhend → Standby (manuell)"
+   },
+   {
+    "id": 6,
+    "t": "2026-11-15T04:11:38.483Z",
+    "modul": "Kommunikation",
+    "aktion": "Verbindung zum Ansprechpartner aufgenommen",
+    "detail": "Erste Aktivierung: Einweisung und erster Auftrag folgen"
+   },
+   {
+    "id": 7,
+    "t": "2026-11-15T04:11:38.487Z",
+    "modul": "Mission",
+    "aktion": "Neuer Auftrag zugewiesen",
+    "detail": "V-26/0201 Transportlinie Ost, Art Observation (Aufklärung, Phase 1 von 3), Einstufung Zugang Stufe 2; Nachricht N-001 (Kanal Ansprechpartner)"
+   },
+   {
+    "id": 8,
+    "t": "2026-11-15T04:11:38.491Z",
+    "modul": "Mission",
+    "aktion": "Auftrag angenommen",
+    "detail": "V-26/0201 Transportlinie Ost, Art Observation (Aufklärung, Phase 1 von 3), Einstufung Zugang Stufe 2; Kontext Transportlinie Ost → Transportlinie Ost; Identität Hauptidentität (Daniel Rohde); Standort S-01 Unterkunft Neukölln, Umfeld Reuterkiez; 3 Dossiers freigeschaltet; Bedrohungsstufe 2; Meldefenster 0600Z und 1800Z"
+   },
+   {
+    "id": 9,
+    "t": "2026-11-15T04:11:38.491Z",
+    "modul": "Profil",
+    "aktion": "Status geändert",
+    "detail": "Standby → Aktiv (Annahme V-26/0201 Transportlinie Ost)"
+   },
+   {
+    "id": 10,
+    "t": "2026-11-15T04:11:38.501Z",
+    "modul": "Dossier",
+    "aktion": "Eigenes Dossier angelegt",
+    "detail": "P-9101 Altprofil Person (Person, DE, Stufe 2)"
+   },
+   {
+    "id": 11,
+    "t": "2026-11-15T04:11:38.503Z",
+    "modul": "Dossier",
+    "aktion": "Sichtung eingetragen",
+    "detail": "P-9101 Altprofil Person, SI-001 bei Altort: frühe Sichtung"
+   },
+   {
+    "id": 12,
+    "t": "2026-11-15T04:11:38.513Z",
+    "modul": "Karte",
+    "aktion": "Pin gesetzt",
+    "detail": "Alt-Pin bei 52.5000, 13.4000"
+   },
+   {
+    "id": 13,
+    "t": "2026-11-15T04:11:38.520Z",
+    "modul": "Karte",
+    "aktion": "Zone angelegt",
+    "detail": "Zone 1 bei 52.5000, 13.4100, Radius 200 m"
+   },
+   {
+    "id": 14,
+    "t": "2026-11-15T04:11:38.525Z",
+    "modul": "Dossier",
+    "aktion": "Modul geöffnet",
+    "detail": "Dossiers"
+   },
+   {
+    "id": 15,
+    "t": "2026-11-15T04:11:39.268Z",
+    "modul": "Dossier",
+    "aktion": "Unterlage erfasst",
+    "detail": "P-9101 Altprofil Person: Q-001 (Text) im Fall F-001 (neu angelegt), ohne Fundstelle"
+   }
+  ],
+  "ereignisse": {},
+  "abdruck": {
+   "spuren": [],
+   "orte": [],
+   "warn": {
+    "legende": 0,
+    "asset": 0
+   },
+   "sperreBis": null,
+   "letzteRuege": null
+  },
+  "infozugang": {},
+  "alterung": {
+   "faktor": 1
+  }
+ },
+ "profil": {
+  "v": 1,
+  "eigene": [
+   {
+    "id": "P-9101",
+    "typ": "Person",
+    "land": "DE",
+    "mission": "STD",
+    "name": "Altprofil Person",
+    "bild": null,
+    "aliase": [],
+    "reg": "ohne",
+    "verteiler": "Eigener Eintrag",
+    "rolle": "Keine Beschreibung.",
+    "eckdaten": [],
+    "bedrohung": {
+     "stufe": 2,
+     "begruendung": "Eigene Einschätzung."
+    },
+    "nachtraege": [],
+    "eigen": true
+   }
+  ],
+  "eigeneKanten": [],
+  "daten": {
+   "P-9101": {
+    "status": null,
+    "statusAm": null,
+    "notizen": [],
+    "aktualisiert": "2026-11-15T04:11:38.503Z",
+    "sichtungen": [
+     {
+      "id": "SI-001",
+      "t": "2026-11-15T04:11:38.503Z",
+      "ort": "Altort",
+      "text": "frühe Sichtung",
+      "guete": "unbewertet",
+      "quelle": "Eintrag"
+     }
+    ]
+   }
+  },
+  "seq": {
+   "eigen": 1,
+   "kante": 0,
+   "galerie": 0,
+   "ausgang": 0,
+   "pin": 1,
+   "zone": 1
+  },
+  "bilder": {},
+  "galerie": {},
+  "koord": {},
+  "ausgang": [],
+  "pins": [
+   {
+    "id": "PIN-001",
+    "name": "Alt-Pin",
+    "ll": [
+     52.5,
+     13.4
+    ],
+    "zwecke": [],
+    "umgebung": {},
+    "notiz": "",
+    "t": "2026-11-15T04:11:38.513Z"
+   }
+  ],
+  "zonen": [
+   {
+    "id": "ZO-001",
+    "name": "Zone 1",
+    "ll": [
+     52.5,
+     13.41
+    ],
+    "r": 200,
+    "notiz": "",
+    "unterlagen": [],
+    "t": "2026-11-15T04:11:38.519Z",
+    "stand": "2026-11-15T04:11:38.519Z"
+   }
+  ],
+  "gesperrt": [],
+  "aenderungen": {},
+  "dossierDaten": {},
+  "tausch": {},
+  "identitaet": "haupt",
+  "dokFristen": {
+   "H-01": "2031-10-20T04:11:38.450Z",
+   "H-02": "2035-08-20T04:11:38.450Z",
+   "H-03": "2028-03-29T04:11:38.450Z",
+   "H-04": null,
+   "H-05": "2028-08-16T04:11:38.450Z",
+   "A-01": "2030-06-07T04:11:38.450Z",
+   "A-02": "2033-12-28T04:11:38.450Z",
+   "A-03": "2029-05-03T04:11:38.450Z",
+   "A-04": "2028-01-09T04:11:38.450Z",
+   "G-01": "2030-12-24T04:11:38.450Z",
+   "G-02": "2032-08-15T04:11:38.450Z",
+   "G-03": "2027-07-13T04:11:38.450Z",
+   "G-04": "2028-10-15T04:11:38.450Z"
+  },
+  "kartenProtokoll": {
+   "frist": 0,
+   "eintraege": [
+    {
+     "id": "KP-001",
+     "t": "2026-11-15T04:11:38.503Z",
+     "art": "Sichtung",
+     "aktion": "Sichtung eingetragen",
+     "text": "P-9101 Altprofil Person, SI-001 bei Altort: frühe Sichtung"
+    },
+    {
+     "id": "KP-002",
+     "t": "2026-11-15T04:11:38.513Z",
+     "art": "Pin",
+     "aktion": "Pin gesetzt",
+     "text": "Alt-Pin bei 52.5000, 13.4000",
+     "objekt": "PIN-001",
+     "objektName": "Alt-Pin"
+    },
+    {
+     "id": "KP-003",
+     "t": "2026-11-15T04:11:38.520Z",
+     "art": "Zone",
+     "aktion": "Zone angelegt",
+     "text": "Zone 1 bei 52.5000, 13.4100, Radius 200 m",
+     "objekt": "ZO-001",
+     "objektName": "Zone 1"
+    }
+   ],
+   "seq": 3
+  },
+  "recherche": {
+   "faelle": [
+    {
+     "id": "F-001",
+     "titel": "Alter Fall",
+     "frage": "",
+     "zustand": "offen",
+     "erfasst": "2026-11-15T04:11:39.268Z"
+    }
+   ],
+   "quellen": [
+    {
+     "id": "Q-001",
+     "fall": "F-001",
+     "art": "Text",
+     "herkunft": "",
+     "erfasst": "2026-11-15T04:11:39.268Z",
+     "aktuelleFassung": "V-001",
+     "notiz": ""
+    }
+   ],
+   "fassungen": [
+    {
+     "id": "V-001",
+     "quelle": "Q-001",
+     "erfasst": "2026-11-15T04:11:39.268Z",
+     "dateiname": null,
+     "groesse": 22,
+     "typ": "text/plain",
+     "hash": null,
+     "anhang": false
+    }
+   ],
+   "beobachtungen": [
+    {
+     "id": "B-001",
+     "fassung": "V-001",
+     "fundstelle": null,
+     "zitat": "Altes Zitat zur Person",
+     "ereignis": null,
+     "dossiers": [
+      "P-9101"
+     ],
+     "erfasst": "2026-11-15T04:11:39.268Z"
+    }
+   ],
+   "aussagen": [],
+   "seq": {
+    "fall": 1,
+    "quelle": 1,
+    "fassung": 1,
+    "beobachtung": 1,
+    "aussage": 0
+   }
+  }
+ }
+}
