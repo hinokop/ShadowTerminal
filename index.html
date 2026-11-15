@@ -756,6 +756,13 @@ const MODULES = [
   { id: 'verstaerkung', key: '8', titel: 'Support',         log: 'Verstärkung' },
   { id: 'freigabe',   key: '9', titel: 'Freigaben',             log: 'Freigabe' }
 ];
+/* Die alte Modulregistrierung bleibt für gespeicherte Stände und die interne Migration erhalten. */
+const ARBEITSMODULE = MODULES.filter(function (m) {
+  return ['profil', 'dossier', 'karte', 'akten'].indexOf(m.id) >= 0;
+});
+function arbeitsmodulWiederherstellen(zustand) {
+  if (!ARBEITSMODULE.some(function (m) { return m.id === zustand.ui.modul; })) zustand.ui.modul = 'profil';
+}
 const LOG_MODULE = ['System'].concat(MODULES.map(function (m) { return m.log; }));
 const STATUS_LISTE = ['Ruhend', 'Standby', 'Aktiv', 'Erhöhtes Risiko', 'Extraktion ausstehend'];
 const STATUS_KLASSE = { 'Ruhend': 's-dim', 'Aktiv': 's-accent', 'Standby': 's-dim', 'Erhöhtes Risiko': 's-warn', 'Extraktion ausstehend': 's-crit' };
@@ -4089,7 +4096,7 @@ const ACTIONS = {
   /* Ereignisse des Zugangsschirms (Zeitstempel stammt vom Ereignis selbst, da sie vor dem Laden des Zustands entstehen können) */
   AUTH_EREIGNIS: function (a) { return a.liste && a.liste.length ? a.liste : null; },
   IMPORT: function (a) {
-    STATE = a.state; const idNeu = identitaetUebernehmen(STATE); VIEW.draft = {}; planeAlle(); profilEinspielen(STATE); if (idNeu) profilSpeichern();
+    STATE = a.state; arbeitsmodulWiederherstellen(STATE); const idNeu = identitaetUebernehmen(STATE); VIEW.draft = {}; planeAlle(); profilEinspielen(STATE); if (idNeu) profilSpeichern();
     return { modul: 'System', aktion: 'Zustand importiert', detail: a.datei + ', ' + a.state.log.length + ' Protokolleinträge übernommen' };
   },
   IMPORT_ABGELEHNT: function (a) { return { modul: 'System', aktion: 'Import abgelehnt', detail: a.datei + ': ' + a.grund }; },
@@ -5786,7 +5793,7 @@ const NAV_BADGES = {
 };
 function buildNav() {
   const list = $('nav-list');
-  MODULES.forEach(function (m) {
+  ARBEITSMODULE.forEach(function (m) {
     const b = NAV_BADGES[m.id];
     list.appendChild(h('li', null,
       h('button', { type: 'button', id: 'nav-' + m.id, 'aria-keyshortcuts': m.key,
@@ -5797,7 +5804,7 @@ function buildNav() {
   });
 }
 function renderNav() {
-  MODULES.forEach(function (m) {
+  ARBEITSMODULE.forEach(function (m) {
     const btn = $('nav-' + m.id);
     if (STATE.ui.modul === m.id) btn.setAttribute('aria-current', 'page'); else btn.removeAttribute('aria-current');
     if (NAV_BADGES[m.id]) {
@@ -7864,8 +7871,8 @@ function renderSysbar() {
   const kb = Store.groesseKb();
   if (kb > 3500 && !renderSysbar.gewarnt) { renderSysbar.gewarnt = true; meldung('Archiv zu ' + Math.round(kb / 50) + ' % belegt (' + kb + ' KB von etwa 5000 KB). Export anlegen und alte Verläufe bereinigen.'); }
   $('sys-info').textContent = Store.isPersistent()
-    ? 'Archiv pgcl-eu3.arch07 verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X'
-    : 'Archiv pgcl-eu3.arch07 nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1–9, P, X';
+    ? 'Archiv pgcl-eu3.arch07 verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1, 3, 6, 7 · P, L, X'
+    : 'Archiv pgcl-eu3.arch07 nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1, 3, 6, 7 · P, L, X';
 }
 function meldung(text) { $('sys-msg').textContent = text ? dtg(new Date()) + ' · ' + text : ''; }
 /* Kurze, sichtbare Bestätigung einer Handlung (verschwindet nach etwa 4 Sekunden) */
@@ -8619,6 +8626,7 @@ function init() {
   const neu = !isValidState(geladen);
   if (neu && geladen) { try { Store.sichereDefekt(JSON.stringify(geladen)); } catch (e) { /* nicht serialisierbar */ } }
   STATE = neu ? buildInitialState(Date.now()) : geladen;
+  arbeitsmodulWiederherstellen(STATE);
   const idNeu = identitaetUebernehmen(STATE);
   if (idNeu) { if (!neu) profilEinspielen(STATE); profilSpeichern(); }       /* erst nach dem Einspielen des Profils speichern */
 
@@ -8646,11 +8654,9 @@ function init() {
   });
   window.addEventListener('pagehide', autosaveAlle);
 
-  /* Tastaturkürzel: 1 bis 5 Modulwechsel, P Protokoll; nur ohne Fokus in Eingabefeldern und ohne offenen Dialog.
-     Strg+Eingabe im Nachrichtenfeld sendet (siehe Modul 4). */
+  /* Tastaturkürzel: 1, 3, 6, 7 Modulwechsel, P Protokoll, L Sperren, X Beenden. */
   document.addEventListener('keydown', function (ev) {
     if (document.body.classList.contains('locked')) return;                 /* Zugangsschirm aktiv: keine Kürzel */
-    if (ev.ctrlKey && ev.shiftKey && ev.altKey && ev.code === 'KeyR') { ev.preventDefault(); if (!$('dlg').open) oeffneRegie(); return; }   /* Regie-Konsole */
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const t = ev.target, tag = t && t.tagName;
     const texteingabe = tag === 'INPUT' && ['checkbox', 'radio', 'button', 'submit'].indexOf(t.type) < 0;   /* Kontrollkästchen und Optionsfelder sperren die Kürzel nicht */
@@ -8659,7 +8665,7 @@ function init() {
     if (ev.key === 'p' || ev.key === 'P') { ev.preventDefault(); protokollUmschalten(); return; }
     if (ev.key === 'x' || ev.key === 'X') { ev.preventDefault(); Zugang.beenden(); return; }
     if (ev.key === 'l' || ev.key === 'L') { ev.preventDefault(); Zugang.sperren('Manuell (Taste L)'); return; }
-    const m = MODULES.find(function (x) { return x.key === ev.key; });
+    const m = ARBEITSMODULE.find(function (x) { return x.key === ev.key; });
     if (!m) return;
     ev.preventDefault();
     dispatch({ type: 'NAVIGATION', modul: m.id });

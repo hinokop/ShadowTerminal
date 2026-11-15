@@ -13,6 +13,10 @@ Das Projekt war zuvor ein Spiel. Dieser Stand beschreibt das Werkzeug. Reste der
 
 Kartenhintergründe und Wetter werden von externen Diensten geladen. Die Zugangsdaten für den Kartendienst liegen in der lokalen Datei `kartenschluessel.js`, die nie ins Repository gehört (`.gitignore`).
 
+## Arbeitsnavigation
+
+Die sichtbaren Arbeitsbereiche sind Profil (`1`), Dossiers (`3`), Karte (`6`) und Ablage (`7`). Die früheren Missionsreiter sind aus der Navigation und den Tastenkürzeln entfernt. Gespeicherte Altstände öffnen stattdessen das Profil. Missionsdaten und interne Abläufe bleiben in diesem Schritt unverändert.
+
 ## Bausteine
 
 | Datei | Inhalt |
