@@ -63,6 +63,7 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
       sichtungen: STATE.dossiers.entitaeten[e.id].sichtungen.length };
   });
   await p.waitForTimeout(500);
+  await p.locator("#rch-dossier-unterlagen > summary").click();
   ok.dossierUndUnterlage = r.dossier && r.beleg === 1 && r.fall && /Altes Zitat zur Person/.test(await p.evaluate(() => document.body.innerText));
   ok.fallpaket = r.paket && r.paketBeleg;
   ok.kartenobjekte = r.pinsNeu === 1 && r.zonenNeu === 1 && r.dossierNeu === 1 && r.sichtungen === 2;

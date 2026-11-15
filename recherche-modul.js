@@ -5,7 +5,7 @@
    Dateien liegen bytegetreu in einer eigenen IndexedDB ('fieldterminal.recherche'), die das Zurücksetzen des Zustands nicht leert.
    Klassisches Skript, wird nach dem Hauptskript geladen; vom Hauptskript nur zur Laufzeit referenziert.
    ===================================================================== */
-VIEW.recherche = Object.assign({ fall: '', offen: false, datei: null, weitere: false }, VIEW.recherche || {});
+VIEW.recherche = Object.assign({ fall: '', offen: false, datei: null, weitere: false, unterlagenOffen: new Set(), sprungziel: new Map() }, VIEW.recherche || {});
 PROFIL.recherche = PROFIL.recherche || { faelle: [], quellen: [], fassungen: [], beobachtungen: [], aussagen: [], seq: { fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 } };
 ['faelle', 'quellen', 'fassungen', 'beobachtungen', 'aussagen'].forEach(function (k) { PROFIL.recherche[k] = PROFIL.recherche[k] || []; });
 PROFIL.recherche.seq = Object.assign({ fall: 0, quelle: 0, fassung: 0, beobachtung: 0, aussage: 0 }, PROFIL.recherche.seq || {});
@@ -118,6 +118,44 @@ ACTIONS.RECHERCHE_UNTERLAGE_MARKIERT = function (a) {
 };
 PROFIL_AKTIONEN.RECHERCHE_UNTERLAGE_MARKIERT = 1;
 
+/* Gemeinsam genutzte Unterlagen bleiben im Fall erhalten. Nur die Dossierzuordnung wird gelöst. */
+function rchUnterlageTeiltBezug(b, dossier) {
+  return (b.dossiers || []).some(function (id) { return id !== dossier; }) ||
+    (PROFIL.zonen || []).some(function (z) { return (z.unterlagen || []).includes(b.id); }) ||
+    PROFIL.recherche.aussagen.some(function (x) {
+      return (x.stuetzend || []).concat(x.widersprechend || []).some(function (v) { return v.beob === b.id; });
+    });
+}
+ACTIONS.RECHERCHE_UNTERLAGE_ENTFERNT = function (a) {
+  const e = entitaet(a.dossier), R = PROFIL.recherche;
+  const b = R.beobachtungen.find(function (x) { return x.id === a.beob && (x.dossiers || []).includes(a.dossier); });
+  if (!e || !b || dossierGesperrt(e) || infoGesperrt(e) || !dossierOffen(e.mission)) return null;
+
+  const geteilt = rchUnterlageTeiltBezug(b, e.id), sicher = JSON.stringify(R);
+  let datei = null;
+  if (geteilt) b.dossiers = b.dossiers.filter(function (id) { return id !== e.id; });
+  else {
+    R.beobachtungen = R.beobachtungen.filter(function (x) { return x !== b; });
+    const f = R.fassungen.find(function (x) { return x.id === b.fassung; });
+    if (f && !R.beobachtungen.some(function (x) { return x.fassung === f.id; })) {
+      R.fassungen = R.fassungen.filter(function (x) { return x !== f; });
+      const weitere = R.fassungen.filter(function (x) { return x.quelle === f.quelle; });
+      const q = R.quellen.find(function (x) { return x.id === f.quelle; });
+      if (q && !weitere.length) R.quellen = R.quellen.filter(function (x) { return x !== q; });
+      else if (q && q.aktuelleFassung === f.id) q.aktuelleFassung = weitere[weitere.length - 1].id;
+      if (f.anhang && !R.fassungen.some(function (x) { return x.anhang === f.anhang; })) datei = f.anhang;
+    }
+  }
+  if (!profilSpeichern()) {
+    rchWiederherstellen(sicher);
+    meldung('Unterlage konnte nicht gespeichert werden. Sie bleibt erhalten.'); return null;
+  }
+  delete VIEW.draft['rch-n-' + b.id];
+  if (VIEW.recherche.sprungziel.get(e.id) === b.id) VIEW.recherche.sprungziel.delete(e.id);
+  if (datei) RIDB.del(datei).catch(function () { meldung('Unterlage entfernt. Die nicht mehr verknüpfte Dateikopie konnte nicht aufgeräumt werden.'); });
+  return { modul: 'Dossier', aktion: geteilt ? 'Unterlage vom Dossier gelöst' : 'Unterlage gelöscht', detail: b.id + ' · ' + e.id };
+};
+
 /* ---------- Aussagen (Altdaten) ----------
    Das Aussagenregister ist entfernt: keine Oberfläche, keine Bearbeitung. Vorhandene Aussagen in PROFIL.recherche.aussagen bleiben unverändert
    erhalten und reisen im Fallpaket mit (Export, Import, Zusammenführung). */
@@ -203,6 +241,17 @@ function rchErfassen(e) {
 
 /* ---------- Ansicht ---------- */
 /* ---------- Ansicht: Unterlagen zum Fall ---------- */
+function rchUnterlageZeigen(id) {
+  const bereich = $('rch-dossier-unterlagen'), zeile = $('rch-u-' + id), K = VIEW.recherche;
+  if (!bereich || !zeile || !bereich.contains(zeile)) { meldung('Unterlage in diesem Dossier nicht verfügbar.'); return; }
+  const dossier = bereich.dataset.dossier;
+  K.unterlagenOffen.add(dossier); K.sprungziel.set(dossier, id);
+  renderModule();
+  const ziel = $('rch-u-' + id);
+  if (!ziel) return;
+  ziel.focus({ preventScroll: true });
+  ziel.scrollIntoView({ block: 'center', inline: 'nearest' });
+}
 function rchUnterlageZeile(e, z) {
   const b = z.b, p = b.pruefung || null, ok = !!(p && p.nuetzlich), nk = 'rch-n-' + b.id;
   const titel = z.f.dateiname || kuerzen(String(b.zitat || '').replace(/\s+/g, ' '), 90) || z.q.id;
@@ -210,8 +259,9 @@ function rchUnterlageZeile(e, z) {
   const speichern = function (d) { if (rchSchreiben(Object.assign({ type: 'RECHERCHE_UNTERLAGE_MARKIERT', beob: b.id }, d), 'Unterlage geprüft')) { delete VIEW.draft[nk]; renderModule(); } };
   const notizText = function () { return VIEW.draft[nk] != null ? VIEW.draft[nk] : (p && p.notiz) || ''; };
   const zeile = function (k, v) { return h('div', null, h('span', { class: 'dim' }, k + ': '), v); };
-  return h('div', { class: 'pad', id: 'rch-u-' + b.id, tabindex: '-1', style: 'border-top:1px dashed #33425a;min-width:0;overflow-wrap:anywhere' },
-    h('div', null, h('strong', null, titel), ' ', ok ? h('span', { class: 'label s-accent' }, 'geprüft und nützlich') : null, fremd ? h('span', { class: 'label s-dim' }, ' anderes Dossier: ' + (b.dossiers || []).join(', ')) : null),
+  const sprung = VIEW.recherche.sprungziel.get(e.id) === b.id;
+  return h('div', { class: 'pad' + (sprung ? ' rch-sprungziel' : ''), id: 'rch-u-' + b.id, tabindex: '-1', style: 'border-top:1px dashed #33425a;min-width:0;overflow-wrap:anywhere' },
+    h('div', null, h('strong', null, titel), sprung ? h('span', { class: 'rch-sprungmarke' }, 'Verweis aus Kurzlage') : null, ' ', ok ? h('span', { class: 'label s-accent' }, 'geprüft und nützlich') : null, fremd ? h('span', { class: 'label s-dim' }, ' anderes Dossier: ' + (b.dossiers || []).join(', ')) : null),
     (function () { const zs = (PROFIL.zonen || []).filter(function (y) { return (y.unterlagen || []).indexOf(b.id) >= 0; }); return zs.length ? h('div', { class: 'note', id: 'rch-karte-' + b.id }, 'Auf der Karte: ', zs.map(function (y) { return [h('button', { type: 'button', class: 'link', 'data-zone': y.id, onclick: function () { if (typeof kartenObjektZeigen === 'function') kartenObjektZeigen(y.id); } }, 'Zone ' + y.name), ' ']; })) : null; })(),
     h('div', { class: 'note' }, 'Quelle: ' + (z.q.herkunft || 'nicht angegeben') + (b.fundstelle && b.fundstelle.typ ? ' · Fundstelle: ' + rchFundstelleText(b.fundstelle) : '')),
     z.b.zitat && z.f.dateiname ? h('details', { id: 'rch-z-' + b.id }, h('summary', null, 'Textauszug'), h('div', { class: 'note', style: 'white-space:pre-wrap', 'data-vollstaendig': '1' }, b.zitat))
@@ -220,7 +270,14 @@ function rchUnterlageZeile(e, z) {
       z.f.anhang ? h('button', { type: 'button', id: 'rch-o-' + b.id, onclick: function () { rchOeffnen({ b: b, f: z.f, q: z.q }); } }, 'Öffnen') : null,
       h('button', { type: 'button', id: 'rch-m-' + b.id, onclick: function () { speichern({ geprueft: !ok, notiz: notizText() }); } }, ok ? 'Markierung zurücknehmen' : 'Als geprüft und nützlich markieren'),
       entwurf('input', nk, nk, { autocomplete: 'off', type: 'text', 'aria-label': 'Notiz zu ' + b.id, placeholder: 'Notiz: warum geprüft und nützlich (optional)', maxlength: '500', value: notizText(), style: 'flex:1 1 220px;min-width:0' }),
-      h('button', { type: 'button', id: 'rch-ns-' + b.id, onclick: function () { speichern({ notiz: notizText() }); } }, 'Notiz speichern')),
+      h('button', { type: 'button', id: 'rch-ns-' + b.id, onclick: function () { speichern({ notiz: notizText() }); } }, 'Notiz speichern'),
+      fremd ? null : h('button', { type: 'button', id: 'rch-x-' + b.id, onclick: function () {
+        const geteilt = rchUnterlageTeiltBezug(b, e.id), aktion = geteilt ? 'Vom Dossier lösen' : 'Unterlage löschen';
+        bestaetigen(aktion, b.id + ' · ' + titel + '. ' + (geteilt
+          ? 'Andere Dossiers, Zonen und frühere Aussagen behalten ihren Bezug.'
+          : 'Die Unterlage wird gelöscht. Der Fall und andere Unterlagen bleiben erhalten.'),
+          aktion, function () { dispatch({ type: 'RECHERCHE_UNTERLAGE_ENTFERNT', dossier: e.id, beob: b.id }); });
+      } }, rchUnterlageTeiltBezug(b, e.id) ? 'Vom Dossier lösen' : 'Unterlage löschen')),
     h('details', { id: 'rch-d-' + b.id }, h('summary', null, 'Details'),
       h('div', { class: 'note', style: 'overflow-wrap:anywhere' },
         zeile('Nummern', z.q.id + ' · ' + z.f.id + ' · ' + b.id), zeile('Fall', z.fall.id + ' ' + z.fall.titel), zeile('Art', (z.q.art || '–') + (z.f.typ ? ', ' + z.f.typ : '') + (z.f.groesse ? ', ' + z.f.groesse + ' Byte' : '')),
@@ -259,13 +316,19 @@ function rechercheBelege(e) {
         h('button', { type: 'button', id: 'rch-ok', onclick: function () { rchErfassen(e); } }, 'Unterlage speichern'),
         h('button', { type: 'button', id: 'rch-abbruch', onclick: function () { K.offen = false; renderModule(); } }, 'Abbrechen')));
   }
-  return panel('Unterlagen zu diesem Dossier', [h('span', { class: 'badge' }, String(liste.length))],
+  const bereich = h('details', { class: 'panel dossier-unterlagen', id: 'rch-dossier-unterlagen', 'data-dossier': e.id, open: K.unterlagenOffen.has(e.id) },
+    h('summary', { onclick: function (ev) {
+      ev.preventDefault();
+      bereich.open = !bereich.open;
+      if (bereich.open) K.unterlagenOffen.add(e.id); else K.unterlagenOffen.delete(e.id);
+    } }, 'Unterlagen zu diesem Dossier', h('span', { class: 'badge' }, String(liste.length))),
     h('div', { class: 'row pad' },
       h('button', { type: 'button', id: 'rch-neu', 'aria-expanded': K.offen ? 'true' : 'false', onclick: function () { K.offen = !K.offen; renderModule(); } }, K.offen ? 'Formular schließen' : 'Unterlage hinzufügen'),
       alt ? h('span', { class: 'note' }, 'Ältere Unterlagen aus Aufträgen liegen unter Aufklärung und Freigabe.') : null),
     formular,
     liste.length ? liste.map(function (z) { return rchUnterlageZeile(e, z); })
       : h('p', { class: 'note pad' }, 'Diesem Dossier sind noch keine Unterlagen zugeordnet.'));
+  return bereich;
 }
 
 /* Orte zum Dossier: Zonen und Pins, die auf dieses Dossier verweisen (Rückbezug der Verknüpfung auf der Karte) */

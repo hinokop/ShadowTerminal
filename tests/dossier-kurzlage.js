@@ -51,6 +51,10 @@ const PF = require('./_pfad.js');
     assert.match(eigene, /^REG-[A-F0-9]{8}-[A-F0-9]{8}$/);
     assert.notEqual(eigene, archiv);
 
+    const bereich = p.locator('#rch-dossier-unterlagen');
+    const titelUnterlagen = bereich.locator(':scope > summary');
+    assert.equal(await bereich.getAttribute('open'), null);
+    await titelUnterlagen.click();
     await click('rch-neu');
     await p.locator('#rch-fall').selectOption('__neu');
     await p.locator('#rch-fall-titel').fill('Fall für den Dossiertest');
@@ -65,7 +69,15 @@ const PF = require('./_pfad.js');
     await click('kl-einfuegen');
     await click('kl-speichern');
     assert.match(await p.locator('#kl-text').locator('b,strong').innerText(), /^Belegte Kurzlage\b/);
+    await titelUnterlagen.click();
+    assert.equal(await bereich.getAttribute('open'), null);
     await p.locator('#kl-text button').click();
+    assert.notEqual(await bereich.getAttribute('open'), null);
+    const ziel = bereich.locator('.rch-sprungziel');
+    assert.equal(await ziel.getAttribute('id'), 'rch-u-' + unterlage);
+    assert.match(await ziel.innerText(), /Verweis aus Kurzlage/);
+    const pos = await ziel.boundingBox();
+    assert.ok(pos && pos.y >= 0 && pos.y + pos.height <= 1000, 'Referenzzeile wird ins Sichtfeld gescrollt');
     assert.equal(await p.evaluate(() => document.activeElement.id), 'rch-u-' + unterlage);
     assert.match(await p.locator('.mitfoto').innerText(), /Zuletzt verändert durch\s+CN /i);
 
@@ -110,14 +122,14 @@ const PF = require('./_pfad.js');
     await click('btn-dn');
     await p.locator('#vn-ziel').selectOption('P-9051');
     await click('btn-vn');
-    assert.deepEqual(await p.locator('#dossier-verbindungen th').allTextContents(), ['Gegenüber', 'Typ', 'Richtung', 'Bewertung', 'Quelle']);
+    assert.deepEqual(await p.locator('#dossier-verbindungen th').allTextContents(), ['Gegenüber', 'Typ', 'Richtung', 'Bewertung', 'Quelle', 'Aktion']);
     const unten = await p.locator('#dossier-verbindungen').evaluate(t => {
       const graph = t.parentElement.querySelector('.g-wrap');
       return !!graph && graph.getBoundingClientRect().bottom <= t.getBoundingClientRect().top;
     });
     assert.equal(unten, true);
     assert.match(await p.locator('#dossier-verbindungen tbody').innerText(), /P-9051.*ausgehend.*Eigene Angabe/s);
-    await p.locator('#dossier-verbindungen tbody button').click();
+    await p.locator('#dossier-verbindungen tbody button[id^=vl-]').click();
     assert.equal(await p.evaluate(() => STATE.dossiers.auswahl), 'P-9051');
 
     await anmelden();
@@ -126,8 +138,83 @@ const PF = require('./_pfad.js');
     assert.equal(await nummer(), eigene);
     assert.match(await p.locator('#kl-text').innerText(), /Belegte Kurzlage/);
     await p.waitForFunction(sel => document.querySelector(sel)?.naturalWidth === 960, vorschau);
-    assert.equal(await p.locator('#dossier-verbindungen tbody button').count(), 1);
+    assert.equal(await p.locator('#dossier-verbindungen tbody button[id^=vl-]').count(), 1);
+    assert.equal(await bereich.getAttribute('open'), null, 'Standard nach Neuladen ist zugeklappt');
+    await p.locator('#kl-text button').click();
+    const zuvor = await p.evaluate(() => JSON.stringify(PROFIL.recherche));
+    await click('rch-x-' + unterlage);
+    await click('dlg-cancel');
+    assert.equal(await p.evaluate(() => JSON.stringify(PROFIL.recherche)), zuvor);
+    await click('rch-x-' + unterlage);
+    await click('dlg-ok');
+    assert.equal(await p.locator('#rch-u-' + unterlage).count(), 0);
+    assert.equal(await p.locator('#kl-text button').count(), 0);
+    assert.match(await p.locator('#kl-text [title]').getAttribute('title'), /nicht verfügbar/);
+    assert.deepEqual(await p.evaluate(() => {
+      const r = PROFIL.recherche;
+      return [r.faelle.length, r.quellen.length, r.fassungen.length, r.beobachtungen.length];
+    }), [1, 0, 0, 0]);
+
+    await click('rch-neu');
+    await p.locator('#rch-datei').setInputFiles(png);
+    await p.locator("#rch-fall").selectOption("F-001");
+    await click('rch-ok');
+    const dateiZeile = bereich.locator('[id^=rch-u-]').filter({ hasText: 'ersatz.png' });
+    await dateiZeile.waitFor();
+    const dateiId = (await dateiZeile.getAttribute('id')).slice('rch-u-'.length);
+    const anhang = await p.evaluate(id => rchZuBeobachtung(id).f.anhang, dateiId);
+    assert.equal(await p.evaluate(async key => (await RIDB.get(key)).size, anhang), png.buffer.length);
+    await click('rch-x-' + dateiId);
+    await click('dlg-ok');
+    await dateiZeile.waitFor({ state: 'detached' });
+    await p.waitForFunction(async key => !(await RIDB.get(key)), anhang);
+
+    const geteilt = await p.evaluate(() => {
+      const id = STATE.dossiers.auswahl;
+      dispatch({ type: 'RECHERCHE_BELEG', dossier: id, fall: 'F-001', art: 'Text', fassung: { anhang: false }, zitat: 'Geteilte Unterlage' });
+      const b = PROFIL.recherche.beobachtungen[0];
+      b.dossiers.push('P-9051');
+      profilSpeichern();
+      renderModule();
+      return b.id;
+    });
+    assert.match(await p.locator('#rch-x-' + geteilt).innerText(), /Vom Dossier lösen/);
+    await click('rch-x-' + geteilt);
+    await click('dlg-ok');
+    assert.equal(await p.locator('#rch-u-' + geteilt).count(), 0);
+
+    const eigeneKante = p.locator('#dossier-verbindungen button[id^=vx-]');
+    const kante = await eigeneKante.getAttribute('id');
+    await eigeneKante.click();
+    await click('dlg-cancel');
+    assert.equal(await eigeneKante.count(), 1);
+    await eigeneKante.click();
+    await click('dlg-ok');
+    assert.equal(await eigeneKante.count(), 0);
+
+    const beispiel = await p.evaluate(() => {
+      const v = SCENARIO.standard.verbindungen.find(x => x.von === 'P-9051' || x.nach === 'P-9051');
+      return v && { id: v.id, gegenueber: v.von === 'P-9051' ? v.nach : v.von };
+    });
+    assert.ok(beispiel);
+    await oeffnen('P-9051');
+    await titelUnterlagen.click();
+    await p.locator('#rch-u-' + geteilt).waitFor();
+    await click('vx-' + beispiel.id);
+    await click('dlg-ok');
+    assert.equal(await p.locator('#vl-' + beispiel.id).count(), 0);
+    await oeffnen(beispiel.gegenueber);
+    assert.equal(await p.locator('#vl-' + beispiel.id).count(), 0);
+
+    await anmelden();
+    await p.evaluate(() => dispatch({ type: 'NAVIGATION', modul: 'dossier' }));
+    await oeffnen('P-9051');
+    assert.equal(await p.locator('#vl-' + beispiel.id).count(), 0);
+    assert.equal(await p.locator('#' + kante).count(), 0);
+    assert.deepEqual(await p.evaluate(() => PROFIL.recherche.beobachtungen.map(b => [b.id, b.dossiers])), [[geteilt, ['P-9051']]]);
+    assert.equal(await p.evaluate(() => STATE.dossiers.eigeneKanten.length), 0);
+    assert.equal(await p.evaluate(id => kantenPool().some(v => v.id === id), beispiel.id), false);
     assert.deepEqual(fehler, []);
-    console.log('Registernummer, Kurzlage, Lichtbild, Aufnahmen, Sichtung und klickbare Verbindungstabelle: grün');
+    console.log('Registernummer, Kurzlage, Lichtbild, Aufnahmen, Sichtung, Kurzlage-Sprung und Entfernen von Unterlagen und Verbindungen: grün');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
