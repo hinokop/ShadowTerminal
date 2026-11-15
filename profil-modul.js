@@ -251,6 +251,24 @@ function terminalDownload(d) {
   a.click();
   a.remove();
   setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+  return daten.byteLength;
+}
+function terminalWgetProtokoll(antwort, pfad, von, dauer, bytes) {
+  const uri = 'https://' + antwort.endpoint + '/' + [TERMINAL_DB].concat(pfad).map(encodeURIComponent).join('/');
+  const zahl = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
+  const menge = bytes >= 1048576 ? zahl.format(bytes / 1048576) + ' MiB' :
+    bytes >= 1024 ? zahl.format(bytes / 1024) + ' KiB' : bytes + ' B';
+  const sekunden = Math.max(0.001, dauer / 1000);
+  return [
+    '--' + von.toISOString().slice(0, 19).replace('T', ' ') + 'Z--  ' + uri,
+    'Verbindungsaufbau zu ' + antwort.endpoint + ':443 … verbunden (lokal).',
+    'Antwort der Archivbrücke … 200 OK',
+    'Länge: ' + bytes + ' (' + menge + ')',
+    'Wird an den Browser-Download übergeben: »' + antwort.name + '«',
+    '',
+    antwort.name + '  100%[==============================>]  ' + menge + '  in ' + zahl.format(sekunden) + ' s',
+    'Empfangen [' + bytes + '/' + bytes + '] · Download gestartet'
+  ].join('\n');
 }
 async function terminalDateiBefehl(befehl, arg, version) {
   const t = TERMINAL_ZUSTAND;
@@ -265,6 +283,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   if (!name && ['cat', 'head', 'tail', 'wget'].includes(befehl)) { terminalAusgabe('Dateiname fehlt'); return; }
   const pfad = t.ort ? terminalPfad(befehl === 'ls' ? '' : name) : [];
   if (!pfad) { terminalAusgabe('Permission denied'); return; }
+  const wgetStart = befehl === 'wget' ? { datum: new Date(), zeit: performance.now() } : null;
   const antwort = await terminalBruecke(befehl, pfad, arg === '-la' || arg === '-al');
   if (t.version !== version) return;
   if (antwort.error) { terminalAusgabe(antwort.error); return; }
@@ -279,8 +298,8 @@ async function terminalDateiBefehl(befehl, arg, version) {
     });
     terminalAusgabe(zeilen.join('\n') || '(leer)');
   } else if (befehl === 'wget') {
-    terminalDownload(antwort);
-    terminalAusgabe('Download gestartet · ' + antwort.name);
+    const bytes = terminalDownload(antwort);
+    terminalAusgabe(terminalWgetProtokoll(antwort, pfad, wgetStart.datum, performance.now() - wgetStart.zeit, bytes));
   } else terminalAusgabe(antwort.text);
 }
 

@@ -10,9 +10,11 @@ import secrets
 import stat
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DATABASE = "pgcl-eu3.arch07"
+ARCHIVE_ENDPOINT = "relay-07.pgcl-eu3.invalid"  # Display only. Never resolved or contacted.
 TOKEN_HEADER = "X-Shadow-Token"
 MAX_DOWNLOAD = 20 * 1024 * 1024
 MAX_TEXT = 64 * 1024
@@ -133,7 +135,7 @@ def terminal_file_op(root, request):
     if len(data) > limit:
         return {"error": "Datei zu groß"}
     if op == "wget":
-        return {"name": path.name, "data": base64.b64encode(data).decode("ascii")}
+        return {"name": path.name, "data": base64.b64encode(data).decode("ascii"), "endpoint": ARCHIVE_ENDPOINT}
     try:
         text = data.decode("utf-8-sig")
     except UnicodeError:
@@ -202,6 +204,20 @@ def make_server(root, token):
     return ThreadingHTTPServer(("127.0.0.1", 0), Handler)
 
 
+def startup_sequence(pause=time.sleep, output=print):
+    output("SHADOW TERMINAL  /  ARCHIV-START", flush=True)
+    output(f"Verbindung zu {ARCHIVE_ENDPOINT}:443 wird aufgebaut ...", flush=True)
+    for percent, phase, delay in (
+        (20, "Archivkennung gelesen", 0.6),
+        (50, "Lokaler Archivpfad bereit", 0.8),
+        (80, "Dateibruecke bereit", 0.8),
+        (100, "Uebergabe an Edge", 0.7),
+    ):
+        pause(delay)
+        balken = ("=" * (percent // 5)).ljust(20, ".")
+        output(f"  [{balken}] {percent:>3}%  {phase}", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--serve-only", action="store_true", help="Run the local bridge without starting Edge")
@@ -224,6 +240,7 @@ def main():
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
+            startup_sequence()
             result = subprocess.run(["cmd.exe", "/d", "/c", "START_3D.bat"], cwd=PROJECT, env=env, check=False)
             if result.returncode:
                 raise SystemExit(result.returncode)
