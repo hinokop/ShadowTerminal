@@ -13,8 +13,8 @@ const ARBEITS_IDENTITAETEN = {
 const ARBEITS_STATUS = ['Offline', 'Standby', 'Aktiv'];
 /* Die internen Speicherschlüssel bleiben beim Umbenennen der Achsen unverändert. */
 const AGENT_RADAR = [
-  ['sprache', 'Sprachkompetenz', 72], ['tradecraft', 'Kampferfahrung', 81], ['cyber', 'Cyber', 68],
-  ['physis', 'Physis', 87], ['stress', 'Sozialkompetenz', 90]
+  ['sprache', 'Sprachkompetenz', 55], ['tradecraft', 'Kampferfahrung', 90], ['cyber', 'Cyber', 80],
+  ['physis', 'Physis', 70], ['stress', 'Sozialkompetenz', 97]
 ];
 function arbeitsProfilStatus() {
   return ARBEITS_STATUS.includes(PROFIL.arbeitsstatus) ? PROFIL.arbeitsstatus : 'Offline';
@@ -66,7 +66,7 @@ function agentRadarPanel(stand) {
         return h('div', null, h('dt', null, a[1]), h('dd', { class: 'mono' }, String(werte[i])));
       }))),
     stand.quelle !== 'eigen' ? null : h('details', { class: 'pad' }, h('summary', null, 'Werte bearbeiten'),
-      h('p', { class: 'note' }, 'Fiktive Startwerte. Du kannst sie frei setzen. Sie ändern keine Freigaben und lösen nichts aus.'),
+      h('p', { class: 'note' }, 'Deine Startwerte sind vorbelegt. Änderungen bleiben in diesem Browser und lösen nichts aus.'),
       h('form', { class: 'profil-radar-formular', onsubmit: function (ev) {
         ev.preventDefault();
         const neu = {};
@@ -82,9 +82,9 @@ function agentRadarPanel(stand) {
       }), h('button', { id: 'profil-radar-speichern', type: 'submit' }, 'Werte speichern'))));
 }
 const PSYCH_FAKTOREN = [
-  ['stress', 'Stressresistenz', 88], ['stabil', 'Emotionale Stabilität', 85],
-  ['druck', 'Entscheidungsfähigkeit unter Druck', 91], ['belastung', 'Körperliche Belastungstoleranz', 90],
-  ['impuls', 'Impulskontrolle', 86], ['erholung', 'Erholungsfähigkeit', 84]
+  ['stress', 'Stressresistenz', 90], ['stabil', 'Emotionale Stabilität', 90],
+  ['druck', 'Entscheidungsfähigkeit unter Druck', 90], ['belastung', 'Körperliche Belastungstoleranz', 100],
+  ['impuls', 'Impulskontrolle', 70], ['erholung', 'Erholungsfähigkeit', 50]
 ];
 const ASSESSMENT_VORLAGEN = {
   B: { radar: [71, 65, 76, 70, 74], psycho: [69, 77, 72, 71, 78, 74] },
@@ -136,7 +136,7 @@ function assessmentStand(now) {
   };
   const liste = [];
   for (let p = periode; p >= 0 && p > periode - 3; p--) liste.push(daten(p));
-  return { aktuell: liste[0], liste: liste, naechster: assessmentTermin(start, periode + 1) };
+  return { aktuell: liste[0], liste: liste, phase: periode % 3 + 1, naechster: assessmentTermin(start, periode + 1) };
 }
 function psychoPanel(stand) {
   const werte = stand.psycho;
@@ -159,17 +159,43 @@ function psychoPanel(stand) {
         return h('label', null, a[1], h('input', { name: a[0], type: 'number', min: 0, max: 100, step: 1, required: true, value: werte[i] }));
       }), h('button', { id: 'profil-psycho-speichern', type: 'submit' }, 'Werte speichern'))));
 }
+function assessmentZyklusPanel(stand) {
+  return panel('Assessment-Zyklus', h('span', { class: 'badge' }, 'Phase ' + stand.phase + ' / 3'),
+    h('dl', { class: 'fields profil-zyklus-daten' },
+      feld('Aktueller Stichtag', fmtDatum(stand.aktuell.am)),
+      feld('Nächster Stichtag', fmtDatum(stand.naechster))),
+    h('ol', { class: 'profil-zyklus pad', 'aria-label': 'Phasen der aktuellen Rotation' }, [1, 2, 3].map(function (n) {
+      return h('li', { 'aria-current': n === stand.phase ? 'step' : null, class: n < stand.phase ? 'erledigt' : '' },
+        h('span', { class: 'mono' }, '0' + n), h('span', null, n === stand.phase ? 'Aktuell' : n < stand.phase ? 'Abgelaufen' : 'Ausstehend'));
+    })));
+}
+function assessmentSparkline(liste) {
+  const werte = liste.slice().reverse().map(function (x) { return x.score; });
+  const x = function (i) { return 5 + i * 126 / (werte.length - 1); };
+  const y = function (n) { return 38 - n * .32; };
+  return s('svg', { viewBox: '0 0 136 43', role: 'img', 'aria-label': 'Scoreverlauf von alt nach neu, Skala 0 bis 100: ' + werte.join(', ') },
+    [0, 50, 100].map(function (n) { return s('line', { class: 'profil-verlauf-raster', x1: 5, x2: 131, y1: y(n), y2: y(n) }); }),
+    s('polyline', { class: 'profil-verlauf-linie', points: werte.map(function (n, i) { return x(i) + ',' + y(n); }).join(' ') }),
+    werte.map(function (n, i) { return s('circle', { class: 'profil-radar-punkt', cx: x(i), cy: y(n), r: 2.4 }); }));
+}
 function assessmentVerlaufPanel(stand) {
-  return panel('Assessment-Verlauf', h('span', { class: 'badge' }, 'Nächster Wechsel · ' + fmtDatum(stand.naechster)),
+  const verlauf = panel('Assessment-Verlauf', h('span', { class: 'badge' }, stand.liste.length + ' / 3 Einträge'),
     tabelle(['Datum', 'Gesamtscore', 'Note'], stand.liste.map(function (x) {
       return [td('nw', fmtDatum(x.am)), td('nw', x.score + ' / 100'),
         h('span', { class: 'label ' + (x.note[0] === 'A' ? 's-accent' : x.note[0] === 'C' ? 's-warn' : x.note[0] === 'D' ? 's-crit' : 's-dim') }, x.note.join(' · '))];
-    }), ''));
+    }), ''),
+    h('div', { class: 'profil-verlauf-fuss pad' },
+      h('div', { class: 'profil-noten' }, h('span', { class: 'dim' }, 'Notenschwellen'),
+        h('span', { class: 'mono' }, 'C ≥ 50 · B ≥ 65 · A ≥ 80')),
+      stand.liste.length > 1 ? h('div', { class: 'profil-spark' }, h('span', { class: 'dim' }, 'Scoreverlauf'), assessmentSparkline(stand.liste)) :
+        h('span', { class: 'dim profil-verlauf-hinweis' }, 'Verlaufsgrafik ab dem zweiten Eintrag')));
+  verlauf.id = 'profil-verlauf';
+  return verlauf;
 }
 function assessmentAnsicht(kennung, now) {
   const plan = assessmentStand(now);
   return h('div', { id: 'profil-assessment', 'data-wechsel': plan.naechster },
-    h('div', { class: 'cols' }, kennung, agentRadarPanel(plan.aktuell)),
+    h('div', { class: 'cols' }, h('div', { class: 'profil-kennung-spalte' }, kennung, assessmentZyklusPanel(plan)), agentRadarPanel(plan.aktuell)),
     h('div', { class: 'cols' }, psychoPanel(plan.aktuell), assessmentVerlaufPanel(plan)));
 }
 function profilAssessmentAktualisieren(now) {
