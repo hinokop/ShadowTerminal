@@ -235,12 +235,15 @@ async function terminalBruecke(op, parts, hidden) {
   } finally { clearTimeout(t); }
 }
 function terminalSitzungTrennen() {
+  terminalKanalAbbruch();
   if (!TERMINAL_BRUECKE) return;
   TERMINAL_ZUSTAND.version++;
   TERMINAL_ZUSTAND.ort = null;
   return terminalBruecke('disconnect');
 }
 function terminalPrompt() {
+  const kanal = TERMINAL_ZUSTAND.kanal;
+  if (kanal) return kanal.phase === 'eingabe' ? 'you >' : '…';
   const ort = TERMINAL_ZUSTAND.ort;
   return 'root@terminal:' + (ort ? '/' + [TERMINAL_DB].concat(ort).join('/') : '~') + '#';
 }
@@ -309,7 +312,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   } else terminalAusgabe(antwort.text);
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, kanal: null };
 function terminalAusgabe(zeile) {
   const t = TERMINAL_ZUSTAND;
   t.ausgabe = t.ausgabe.concat(zeile).slice(-45);
@@ -339,12 +342,95 @@ async function terminalPing() {
     t.prueft = false;
   }
 }
+/* A staged dialogue, not a transport. No socket, storage, real key or mission state. */
+const TERMINAL_KANAL_BEFEHL = 'secure-channel --connect --onion --ephemeral';
+const TERMINAL_KANAL_LINIE = '────────────────────────────────────────';
+const TERMINAL_KANAL_START = [
+  '[*] Initializing encrypted tunnel...',
+  '[*] Generating ephemeral keypair... OK',
+  '[*] Establishing double-ratchet session...',
+  '[*] Handshake complete. Forward secrecy active.',
+  '[*] Assigning temporary identity...'
+];
+function terminalKanalZufall(n) {
+  return crypto.getRandomValues(new Uint32Array(1))[0] % n;
+}
+function terminalKanalZeichen(alphabet, laenge) {
+  return Array.from({ length: laenge }, function () { return alphabet[terminalKanalZufall(alphabet.length)]; }).join('');
+}
+function terminalKanalPromptSync() {
+  const label = $('profil-terminal-prompt');
+  if (label) label.textContent = terminalPrompt();
+}
+function terminalKanalAbbruch() {
+  const t = TERMINAL_ZUSTAND;
+  if (!t.kanal) return;
+  t.ausgabe = t.kanal.vorher;
+  t.kanal = null;
+  const eingabe = $('profil-terminal-eingabe');
+  if (eingabe) eingabe.value = '';
+  terminalKanalPromptSync();
+  terminalAusgabe([]);
+}
+const TERMINAL_KANAL_TEMPO = { aufbau: 620, abbau: 650 };
+async function terminalKanalFolge(kanal, zeilen, pause) {
+  const reduziert = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  for (const zeile of zeilen) {
+    await new Promise(function (ok) { setTimeout(ok, reduziert ? 0 : pause); });
+    if (TERMINAL_ZUSTAND.kanal !== kanal) return false;
+    terminalAusgabe(zeile);
+  }
+  return true;
+}
+async function terminalKanalStart() {
+  const t = TERMINAL_ZUSTAND;
+  if (t.dateiLaeuft || t.prueft) { terminalAusgabe('Eine Anfrage läuft bereits'); return; }
+  const kanal = { phase: 'start', vorher: t.ausgabe.slice() };
+  t.kanal = kanal;
+  terminalKanalPromptSync();
+  const hex = '0123456789abcdef', abc = 'abcdefghijklmnopqrstuvwxyz';
+  const knoten = 'NODE-' + String(terminalKanalZufall(10000)).padStart(4, '0') + '-' + terminalKanalZeichen(abc.toUpperCase(), 1);
+  const sitzung = [4, 4, 4].map(function (n) { return terminalKanalZeichen(hex, n); }).join('-');
+  const kontakt = terminalKanalZeichen(abc, 14);
+  terminalAusgabe('[*] Local channel simulation');
+  if (!await terminalKanalFolge(kanal, TERMINAL_KANAL_START, TERMINAL_KANAL_TEMPO.aufbau)) return;
+  terminalAusgabe([
+    'Connected to:  ' + knoten + '  (session: ' + sitzung + ')',
+    'Contact:       "' + kontakt + '"',
+    'Channel:       end-to-end · self-destruct after close',
+    TERMINAL_KANAL_LINIE
+  ]);
+  kanal.phase = 'eingabe';
+  terminalKanalPromptSync();
+}
+async function terminalKanalMeldung(zeile, kanal) {
+  if (zeile === '/close' || zeile === 'clear') { terminalKanalAbbruch(); return; }
+  if (kanal.phase !== 'eingabe') return;
+  if (!/^auftrag (erledigt|gescheitert)\.?$/i.test(zeile)) {
+    terminalAusgabe('Erwartet: Auftrag erledigt. / Auftrag gescheitert.');
+    return;
+  }
+  kanal.phase = 'ende';
+  terminalKanalPromptSync();
+  terminalAusgabe(['you > ' + zeile, '> Verstanden.', TERMINAL_KANAL_LINIE]);
+  const protokoll = [
+    '[*] Closing channel...',
+    '[*] Burning session keys...',
+    '[*] Wiping memory buffers... (' + (16 + terminalKanalZufall(81)) + ' kb)',
+    '[*] Connection terminated.'
+  ];
+  if (!await terminalKanalFolge(kanal, protokoll, TERMINAL_KANAL_TEMPO.abbau)) return;
+  terminalKanalAbbruch();
+  terminalAusgabe(['> Verstanden.', TERMINAL_KANAL_LINIE].concat(protokoll));
+}
+
 function terminalBefehl(zeile) {
   const m = /^(\S+)(?:\s+(.*))?$/.exec(zeile);
   const befehl = m[1], arg = m[2] || '', t = TERMINAL_ZUSTAND;
+  if (t.kanal) { void terminalKanalMeldung(zeile, t.kanal); return; }
   if (befehl === 'clear' && !arg) { t.version++; t.ausgabe = []; terminalAusgabe([]); return; }
   terminalAusgabe(terminalPrompt() + ' ' + zeile);
-  if (befehl === 'help' && !arg) terminalAusgabe('ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · whoami · uname -a · date · ping relay · clear');
+  if (befehl === 'help' && !arg) terminalAusgabe('ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · whoami · uname -a · date · ping relay · clear · ' + TERMINAL_KANAL_BEFEHL);
   else if (befehl === 'pwd' && !arg) terminalAusgabe(t.ort ? '/' + [TERMINAL_DB].concat(t.ort).join('/') : '/');
   else if (befehl === 'whoami' && !arg) terminalAusgabe('root');
   else if (befehl === 'uname' && arg === '-a') terminalAusgabe(TERMINAL_UBUNTU);
@@ -352,6 +438,9 @@ function terminalBefehl(zeile) {
   else if (befehl === 'ping') {
     if (arg === 'relay') terminalPing();
     else terminalAusgabe('ping: verfügbares Ziel ist relay');
+  } else if (befehl === 'secure-channel') {
+    if (arg === '--connect --onion --ephemeral') void terminalKanalStart();
+    else terminalAusgabe(TERMINAL_KANAL_BEFEHL);
   } else if (TERMINAL_DATEIBEFEHLE.includes(befehl)) {
     if (t.dateiLaeuft) { terminalAusgabe('Datenbankanfrage läuft bereits'); return; }
     t.dateiLaeuft = true;
@@ -362,7 +451,7 @@ function terminalBefehl(zeile) {
   } else terminalAusgabe('command not found');
 }
 const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
-const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear']);
+const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'secure-channel']);
 function terminalTabKandidaten(input, bisher, version, kopf, prefix, kandidaten, format) {
   if (!input.isConnected || input.value !== bisher || TERMINAL_ZUSTAND.version !== version ||
       document.activeElement !== input || input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
@@ -382,6 +471,10 @@ async function terminalTab(input, bisher, m) {
   };
   if (arg === undefined) {
     fertig('', befehl, TERMINAL_BEFEHLE, function (x) { return x + ' '; });
+    return;
+  }
+  if (befehl === 'secure-channel') {
+    fertig('secure-channel ', arg, ['--connect --onion --ephemeral'], function (x) { return x; });
     return;
   }
   if (befehl === 'ping' || befehl === 'uname' || befehl === 'ls') {
@@ -409,12 +502,16 @@ async function terminalTab(input, bisher, m) {
   });
 }
 function terminalTabTaste(ev) {
+  if (TERMINAL_ZUSTAND.kanal) {
+    if (ev.key === 'Escape') { ev.preventDefault(); terminalKanalAbbruch(); }
+    return;
+  }
   if (ev.key !== 'Tab' || ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || ev.isComposing) return;
   const input = ev.currentTarget, bisher = input.value;
   if (input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
   const m = /^(\S+)(?:\s+(.*))?$/.exec(bisher);
   if (TERMINAL_ZUSTAND.dateiLaeuft || !m || (m[2] === undefined ? !TERMINAL_BEFEHLE.some(function (x) { return x.startsWith(m[1]); }) :
-    !['cd', 'cat', 'head', 'tail', 'wget', 'ping', 'uname', 'ls'].includes(m[1]))) return;
+    !['cd', 'cat', 'head', 'tail', 'wget', 'ping', 'uname', 'ls', 'secure-channel'].includes(m[1]))) return;
   ev.preventDefault();
   terminalTab(input, bisher, m).catch(function () {});
 }
@@ -424,7 +521,11 @@ function profilTerminalPanel() {
   const input = h('input', { id: 'profil-terminal-eingabe', type: 'text', 'aria-label': 'Terminalbefehl',
     maxlength: 160, autocomplete: 'off', spellcheck: 'false', onkeydown: terminalTabTaste });
   return h('details', { id: 'profil-terminal', class: 'panel profil-terminal', open: t.offen,
-    ontoggle: function (ev) { t.offen = ev.currentTarget.open; } },
+    ontoggle: function (ev) {
+      if (!ev.currentTarget.isConnected) return;
+      t.offen = ev.currentTarget.open;
+      if (!t.offen) terminalKanalAbbruch();
+    } },
     h('summary', null, 'Diagnoseterminal'),
     h('div', { class: 'profil-terminal-kern' },
       h('pre', { id: 'profil-terminal-ausgabe', class: 'mono', role: 'log', 'aria-label': 'Terminalausgabe' }, t.ausgabe.join('\n')),
@@ -436,6 +537,11 @@ function profilTerminalPanel() {
       } }, h('label', { id: 'profil-terminal-prompt', for: input.id, class: 'mono' }, terminalPrompt()), input,
         h('button', { type: 'submit' }, 'Ausführen'))));
 }
+
+// Locking the app drops the temporary dialogue even when the window stays open.
+new MutationObserver(function () {
+  if (document.body.classList.contains('locked')) terminalKanalAbbruch();
+}).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
 function identitaetDateiSchluessel(id, nr) { return 'identitaet:' + id + ':' + nr; }
 function identitaetDateiZeile(id, d) {
