@@ -759,7 +759,7 @@ const MODULES = [
 /* Die alte Modulregistrierung bleibt für gespeicherte Stände und die interne Migration erhalten. */
 const ARBEITSMODULE = MODULES.filter(function (m) {
   return ['profil', 'dossier', 'karte', 'akten'].indexOf(m.id) >= 0;
-});
+}).map(function (m, n) { return Object.assign({}, m, { key: String(n + 1) }); });
 function arbeitsmodulWiederherstellen(zustand) {
   if (!ARBEITSMODULE.some(function (m) { return m.id === zustand.ui.modul; })) zustand.ui.modul = 'profil';
 }
@@ -1022,7 +1022,7 @@ const Store = (function () {
    ===================================================================== */
 const PROFIL_KEY = STORAGE_KEY + '.profil';
 const PROFIL = (function () {
-  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], daten: {}, seq: { eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
+  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], daten: {}, seq: { eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], karteBlanko: false, gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
   let p = leer();
   try {
     const raw = window.localStorage.getItem(PROFIL_KEY);
@@ -5190,6 +5190,33 @@ const ACTIONS = {
     x.stand = nowIso();
     return { modul: 'Karte', aktion: 'Pin geändert', leicht: true, objekt: x.id, objektName: x.name, detail: x.name };
   },
+  KARTE_BEREINIGEN: function () {
+    const alt = { pins: PROFIL.pins, zonen: PROFIL.zonen, koord: PROFIL.koord, ausgang: PROFIL.ausgang, karteBlanko: PROFIL.karteBlanko,
+      eigene: PROFIL.eigene, eigeneKanten: PROFIL.eigeneKanten, daten: PROFIL.daten, dossierDaten: PROFIL.dossierDaten, seq: Object.assign({}, PROFIL.seq) };
+    const sichtungen = Object.values(STATE.dossiers.entitaeten).filter(function (d) {
+      return d && Array.isArray(d.sichtungen) && d.sichtungen.length;
+    }).map(function (d) { return [d, d.sichtungen]; });
+    const anz = (alt.pins || []).length + ' Pins, ' + (alt.zonen || []).length + ' Zonen, ' +
+      sichtungen.reduce(function (n, a) { return n + a[1].length; }, 0) + ' Sichtungen und ' +
+      (Object.keys(alt.koord || {}).length + (alt.ausgang || []).filter(function (a) { return !!a.ll; }).length) + ' gesetzte Positionen';
+    PROFIL.pins = []; PROFIL.zonen = []; PROFIL.koord = {}; PROFIL.karteBlanko = true;
+    PROFIL.ausgang = (alt.ausgang || []).map(function (a) { return Object.assign({}, a, { ll: null }); });
+    sichtungen.forEach(function (a) { a[0].sichtungen = []; });
+    Store.save(STATE);
+    const zustandGespeichert = Store.isPersistent();
+    if (!zustandGespeichert || !profilSpeichern()) {
+      sichtungen.forEach(function (a) { a[0].sichtungen = a[1]; });
+      Object.assign(PROFIL, alt);
+      if (zustandGespeichert) Store.save(STATE);
+      meldung('Karte konnte nicht bereinigt werden. Die Änderungen wurden zurückgenommen.');
+      return null;
+    }
+    const K = VIEW.karte;
+    Object.keys(VIEW.draft).filter(function (key) { return /^(ko-|si-ort-|si-text-|oz-bem-)/.test(key); }).forEach(function (key) { delete VIEW.draft[key]; });
+    Object.assign(K, { auswahl: null, bezug: null, pick: null, pinSetzen: false, zoneSetzen: false, zugriffSetzen: false,
+      mehr: [], mehrModus: false, messPts: [], messen: false, kpObjekt: '', popupVersatz: null });
+    return { modul: 'Karte', aktion: 'Karte bereinigt', detail: anz + ' entfernt. Vorgegebene Dossierpositionen ausgeblendet.' };
+  },
   PIN_ENTFERNT: function (a) {
     const i = (PROFIL.pins || []).findIndex(function (y) { return y.id === a.id; });
     if (i < 0) return null;
@@ -7789,8 +7816,17 @@ function renderVerstaerkung(m) {
 }
 
 
+function karteBereinigenPanel() {
+  return panel('Karte bereinigen', null,
+    h('p', { class: 'note pad' }, 'Entfernt eigene Pins und Zonen, alle Sichtungen und gesetzte Positionen. Vorgegebene Dossierpositionen werden ausgeblendet. Dossiers, Notizen, Unterlagen, Identitäten und das Protokoll bleiben erhalten.'),
+    h('div', { class: 'row pad' }, h('button', { type: 'button', id: 'btn-karte-bereinigen', onclick: function () {
+      if (typeof $('dlg').showModal !== 'function') { meldung('Die Kartenbereinigung setzt einen Browser mit Dialogunterstützung voraus.'); return; }
+      bestaetigen('Karte bereinigen', 'Pins, Zonen, Sichtungen und gesetzte Kartenpositionen werden entfernt. Die Dossiers selbst bleiben unverändert.',
+        'Karte bereinigen', function () { dispatch({ type: 'KARTE_BEREINIGEN' }); }, { pflicht: 'Ich möchte die Karten- und Sichtungsdaten löschen.' });
+    } }, 'Karte bereinigen …')));
+}
 const RENDER = {
-  profil: function (m) { return STATE.vorlauf ? renderProfilVorlauf(m) : renderProfil(m); },
+  profil: function (m) { const panels = STATE.vorlauf ? renderProfilVorlauf(m) : renderProfil(m); return VIEW.profilReiter === 'tarn' ? panels : panels.concat(karteBereinigenPanel()); },
   mission: function (m) { return STATE.vorlauf ? renderMissionVorlauf(m) : renderMission(m); },
   dossier: renderDossier,
   komm: renderKomm,
@@ -7803,7 +7839,7 @@ const RENDER = {
 
 function renderModule() {
   if (STATE.ui.modul !== 'karte' && VIEW.karte) { VIEW.karte.messen = false; VIEW.karte.pinSetzen = false; VIEW.karte.zoneSetzen = false; VIEW.karte.zugriffSetzen = false; VIEW.karte.mehr = []; VIEW.karte.mehrModus = false; VIEW.karte.messPts = []; if (VIEW.karte.spiel) { clearInterval(VIEW.karte.spiel); VIEW.karte.spiel = null; } }
-  const m = MODULES.find(function (x) { return x.id === STATE.ui.modul; }) || MODULES[0];
+  const m = ARBEITSMODULE.concat(MODULES).find(function (x) { return x.id === STATE.ui.modul; }) || ARBEITSMODULE[0];
   const main = $('main'), act = document.activeElement;
   let halten = null;
   if (act && act.id && main.contains(act)) {
@@ -7871,8 +7907,8 @@ function renderSysbar() {
   const kb = Store.groesseKb();
   if (kb > 3500 && !renderSysbar.gewarnt) { renderSysbar.gewarnt = true; meldung('Archiv zu ' + Math.round(kb / 50) + ' % belegt (' + kb + ' KB von etwa 5000 KB). Export anlegen und alte Verläufe bereinigen.'); }
   $('sys-info').textContent = Store.isPersistent()
-    ? 'Archiv pgcl-eu3.arch07 verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1, 3, 6, 7 · P, L, X'
-    : 'Archiv pgcl-eu3.arch07 nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1, 3, 6, 7 · P, L, X';
+    ? 'Archiv pgcl-eu3.arch07 verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1–4 · P, L, X'
+    : 'Archiv pgcl-eu3.arch07 nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1–4 · P, L, X';
 }
 function meldung(text) { $('sys-msg').textContent = text ? dtg(new Date()) + ' · ' + text : ''; }
 /* Kurze, sichtbare Bestätigung einer Handlung (verschwindet nach etwa 4 Sekunden) */
@@ -8654,7 +8690,7 @@ function init() {
   });
   window.addEventListener('pagehide', autosaveAlle);
 
-  /* Tastaturkürzel: 1, 3, 6, 7 Modulwechsel, P Protokoll, L Sperren, X Beenden. */
+  /* Tastaturkürzel: 1–4 Modulwechsel, P Protokoll, L Sperren, X Beenden. */
   document.addEventListener('keydown', function (ev) {
     if (document.body.classList.contains('locked')) return;                 /* Zugangsschirm aktiv: keine Kürzel */
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
