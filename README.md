@@ -15,7 +15,9 @@ Kartenhintergründe und Wetter werden von externen Diensten geladen. Die Zugangs
 
 ## Arbeitsnavigation
 
-Die sichtbaren Arbeitsbereiche sind Profil (`1`), Dossiers (`3`), Karte (`6`) und Ablage (`7`). Die früheren Missionsreiter sind aus der Navigation und den Tastenkürzeln entfernt. Gespeicherte Altstände öffnen stattdessen das Profil. Missionsdaten und interne Abläufe bleiben in diesem Schritt unverändert.
+Die sichtbaren Arbeitsbereiche sind Profil (`1`), Dossiers (`2`), Karte (`3`) und Ablage (`4`). Die früheren Missionsreiter sind aus der Navigation und den Tastenkürzeln entfernt. Gespeicherte Altstände öffnen stattdessen das Profil. Missionsdaten und interne Abläufe bleiben in diesem Schritt unverändert.
+
+Im Profil entfernt „Karte bereinigen“ nach Bestätigung Pins, eigene Zonen, Sichtungen und gesetzte Kartenpositionen. Vorgegebene Dossierpositionen werden danach nicht mehr angezeigt. Dossiers, Unterlagen, Identitäten und Protokolle bleiben erhalten.
 
 ## Bausteine
 
