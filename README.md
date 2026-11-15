@@ -19,11 +19,19 @@ Die sichtbaren Arbeitsbereiche sind Profil (`1`), Dossiers (`2`), Karte (`3`) un
 
 Im Profil entfernt „Karte bereinigen“ nach Bestätigung Pins, eigene Zonen, Sichtungen und gesetzte Kartenpositionen. Vorgegebene Dossierpositionen werden danach nicht mehr angezeigt. Dossiers, Unterlagen, Identitäten und Protokolle bleiben erhalten.
 
+## Arbeitsprofil
+
+- **Profil** zeigt ein Kompetenzradar und sechs psychologische Balken. Das eigene Assessment ist editierbar. Es wechselt alle drei Kalendermonate mit zwei vorbereiteten Profilen, deren Reihenfolge beim ersten Start ausgelost und lokal gespeichert wird. Der Verlauf zeigt bis zu drei Termine. Der Gesamtscore ist das gerundete Mittel aller elf Werte, A ab 80, B ab 65, C ab 50, darunter D. Alte Notizen bleiben eingeklappt erhalten. Der Status in der Kopfzeile (Offline, Standby, Aktiv) steuert weder eine Mission noch den Netzwerkzustand.
+- **Diagnoseterminal** kennt die Befehle `ls`, `cat`, `whoami`, `date`, `clear`, `help` und `ping relay`. Letzterer fragt nur auf ausdrücklichen Aufruf einmal die öffentliche Wikidata-API per HTTPS ab, ohne Anmeldedaten und Referrer. Angezeigt wird die Dauer bis zur gelesenen Antwort, kein ICMP-Ping. Alle übrigen Befehle sind rein lokal und lesen keine Dateien auf dem Rechner.
+- **Identitäten** zeigt drei fiktive Karten untereinander. Ein Klick auf die Anlagennummer öffnet die Dateiauswahl. Pro Nummer wird maximal eine Datei bis 20 MB lokal gespeichert. Anlagen werden nicht im Profil-JSON oder Fallpaket exportiert. Die bestehenden Identitäts- und Lichtbildschlüssel bleiben erhalten.
+- **Ausgangsorte** stehen in einem eigenen Reiter. An vorhandenen Positionen und Dossiers ändert die neue Ansicht nichts.
+
 ## Bausteine
 
 | Datei | Inhalt |
 |---|---|
-| `index.html` | Anwendung: Ablauf `dispatch` → `ACTIONS` → `render`, Dossiers, Verbindungsgraph, Profil und Identitäten, Nachrichten |
+| `profil-modul.js` | Arbeitsprofil mit Kompetenzradar, fiktiven Identitätskarten und lokalen Anlagen |
+| `index.html` | Anwendung: Ablauf `dispatch` → `ACTIONS` → `render`, Dossiers, Verbindungsgraph, Nachrichten |
 | `karte-modul.js` | Lagekarte in 2D (Kacheln, Zonen, Pins, Messen), Brücke zur 3D-Ansicht |
 | `karte3d.html` | 3D-Ansicht mit MapLibre, eingebettet in die Karte |
 | `karte.js`, `karte2.js` | Kartendaten |

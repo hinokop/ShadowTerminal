@@ -576,7 +576,24 @@ body:not(.locked) #gate{display:none}
   .gate-dust{display:none}
   .gate-seq li.run .fill{transition:none}
 }
+/* Agentenprofil */
+.profil-identitaeten{display:grid;grid-template-columns:minmax(0,1fr)}
+.profil-identitaeten .fields{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}
+.profil-datei-aktionen{display:flex;flex-wrap:wrap;gap:5px}
+.profil-radar-inhalt{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(0,1fr);align-items:center;gap:8px;padding:6px 10px}
+.profil-radar{display:block;width:100%;max-width:400px;margin-inline:auto}
+.profil-radar-ring{fill:none;stroke:var(--border-strong)}
+.profil-radar-form{fill:var(--accent);fill-opacity:.25;stroke:var(--accent);stroke-width:2}
+.profil-radar-punkt{fill:var(--text)}
+.profil-radar-text{fill:var(--text-dim);font:9.5px var(--mono)}
+.profil-radar-werte > div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 8px;border-bottom:1px solid var(--border);padding:4px 0}
+.profil-radar-werte dd{margin:0;color:var(--text)}
+.profil-radar-formular{display:flex;flex-wrap:wrap;align-items:end;gap:8px;padding:6px 8px}
+.profil-radar-formular label{display:grid;gap:4px}
+.profil-radar-formular input{width:75px}
+@media(max-width:600px){.profil-radar-inhalt{grid-template-columns:minmax(0,1fr)}}
 </style>
+<link rel="stylesheet" href="profil-modul.css">
 </head>
 <body class="locked">
 <a class="skip" href="#main">Zum Inhalt springen</a>
@@ -600,11 +617,9 @@ body:not(.locked) #gate{display:none}
   <div class="hf"><span class="k">Status</span><span class="v" id="h-status"></span></div>
   <div class="hf"><span class="k">Zeit (UTC)</span><span class="v"><span id="h-dtg"></span> <span class="dim" id="h-long"></span></span></div>
   <div class="hf"><span class="k">Ortszeit Region</span><span class="v" id="h-orts"></span></div>
-  <div class="hf"><span class="k">Nächstes Meldefenster</span><span class="v"><span id="h-melde"></span> <span id="h-melde-l"></span></span></div>
   <div class="hf"><span class="k">Sitzungsdauer</span><span class="v" id="h-session"></span></div>
   <div class="hf"><span class="k">Verbindung</span><span class="v" id="h-kanal"></span></div>
   <div class="hf"><span class="k">Standortfreigabe</span><span class="v" id="h-standort"></span></div>
-  <div class="hf grow"><span class="k">Letzter Check-in</span><span class="v" id="h-checkin"></span></div>
   <div class="hf act">
     <span id="h-persist"></span>
     <button type="button" id="btn-log" aria-expanded="false" aria-controls="log" aria-keyshortcuts="P">Protokoll <span class="key" aria-hidden="true">P</span></button>
@@ -671,7 +686,7 @@ body:not(.locked) #gate{display:none}
     </div>
   </div>
   <div class="gate-box" id="gate-box">
-    <h1>Team 9 · Terminal</h1>
+    <h1>Shadow Terminal</h1>
     <p class="gate-sub" id="gate-sub">Anmeldung</p>
     <form class="gate-form" id="gate-form" autocomplete="off" novalidate>
       <label for="gate-pw" id="gate-lbl">Zugangskennung</label>
@@ -2893,7 +2908,7 @@ function abfrageErkennen(kanalId, text, nr) {
       return R('modul', wahl(MT.zustand).replace('{BEL}', belText()).replace('{RAT}', w < 50 ? MT.zustandRat.niedrig : w < 70 ? MT.zustandRat.mittel : MT.zustandRat.hoch));
     }
     if (hatW(/\b(welche identitaet|aktive identitaet|meine legende|meine identitaet|unter welchem namen)\b/)) {
-      const l = legende(aktiveLegendeId());
+      const l = ARBEITS_IDENTITAETEN[aktiveLegendeId()] || legende(aktiveLegendeId());
       return R('modul', MT.identitaet.replace('{B}', l.bezeichnung).replace('{N}', l.name).replace('{L}', l.land));
     }
     if (hatW(/\b(termine|zeitplan|was steht an|naechste termine|anstehend)\b/) && def) {
@@ -4146,8 +4161,9 @@ const ACTIONS = {
     const neu = legende(a.legende), alt = legende(aktiveLegendeId());
     if (!neu || (alt && neu.id === alt.id)) return null;
     PROFIL.identitaet = neu.id; STATE.agent.legende = neu.id;
+    const bezeichnung = function (l) { const k = ARBEITS_IDENTITAETEN[l.id] || l; return k.bezeichnung + ' (' + k.name + ', ' + k.land + ')'; };
     return { modul: 'Profil', aktion: 'Aktive Identität gewechselt',
-             detail: (alt ? alt.bezeichnung + ' (' + alt.name + ', ' + alt.land + ') → ' : '') + neu.bezeichnung + ' (' + neu.name + ', ' + neu.land + ')' };
+             detail: (alt ? bezeichnung(alt) + ' → ' : '') + bezeichnung(neu) };
   },
   CHECKIN: function (a) {
     const def = KM(), ort = def.standorte.find(function (o) { return o.id === a.standortId; });
@@ -5351,6 +5367,19 @@ const ACTIONS = {
     /* Recherche, Identität, Fristen: zusammengeführt statt verworfen; die lokale Identität bleibt, wenn eine gewählt ist */
     let rchText = '';
     if (!PROFIL.identitaet && typeof q.identitaet === 'string' && legende(q.identitaet)) PROFIL.identitaet = q.identitaet;
+    if (!ARBEITS_STATUS.includes(PROFIL.arbeitsstatus) && ARBEITS_STATUS.includes(q.arbeitsstatus)) PROFIL.arbeitsstatus = q.arbeitsstatus;
+    [['agentRadar', AGENT_RADAR], ['agentPsycho', PSYCH_FAKTOREN]].forEach(function (eintrag) {
+      const feld = eintrag[0];
+      eintrag[1].forEach(function (achse) {
+        const id = achse[0], n = q[feld] && q[feld][id], lokal = PROFIL[feld] && PROFIL[feld][id];
+        if (assessmentWertGueltig(n) && !assessmentWertGueltig(lokal)) {
+          PROFIL[feld] = Object.assign({}, PROFIL[feld], { [id]: n });
+        }
+      });
+    });
+    if (!assessmentRotationGueltig(PROFIL.assessmentRotation) && assessmentRotationGueltig(q.assessmentRotation)) {
+      PROFIL.assessmentRotation = { start: q.assessmentRotation.start, bZuerst: q.assessmentRotation.bZuerst };
+    }
     Object.keys(q.dokFristen || {}).forEach(function (k) { if (!(k in PROFIL.dokFristen)) PROFIL.dokFristen[k] = q.dokFristen[k]; });
     if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q);
     const zr = zonenImportieren(q, q.recherche && typeof rchProfilZusammenfuehren === 'function' ? rchProfilZusammenfuehren.abbildung : null);
@@ -5726,18 +5755,12 @@ function kanalAnzeige() {
 function renderHeader() {
   $('h-agent').textContent = SCENARIO.agent.codename + ' / ' + SCENARIO.agent.id;
   $('h-op').textContent = STATE.vorlauf ? 'kein Auftrag' : KM().nummer + ' ' + KM().name + ' · ' + MS(KM().id).status;
-  $('h-status').replaceChildren(statusLabel(STATE.agent.status));
+  $('h-status').replaceChildren(statusLabel(arbeitsProfilStatus()));
   $('h-kanal').textContent = kanalAnzeige();
   const sf = !!STATE.extraktion.standortfreigabe;                /* Schalter in der Kopfzeile: jederzeit erreichbar, nicht nur im Notfallmodul */
   $('h-standort').replaceChildren(h('button', { type: 'button', class: 'link', id: 'h-standort-btn', 'aria-pressed': sf ? 'true' : 'false',
     title: sf ? 'Standortfreigabe ausschalten' : 'Standortfreigabe einschalten', onclick: function () { dispatch({ type: 'STANDORTFREIGABE_GESETZT', ein: !sf }); } },
     sf ? 'ein' : 'aus'));
-  $('h-checkin').textContent = STATE.agent.checkin.standortId ? dtg(STATE.agent.checkin.t) + ' · ' + standortName(STATE.agent.checkin.standortId) : '–';
-  $('h-melde').textContent = meldeText(Date.now());
-  const n = STATE.melde.versaeumt, marken = [];
-  if (STATE.funkstille.aktiv) marken.push(h('span', { class: 'label s-warn' }, 'Funkstille'));
-  if (n > 0) marken.push(h('span', { class: 'label ' + (n >= 2 ? 's-crit' : 's-warn') }, 'Versäumt in Folge: ' + n));
-  $('h-melde-l').replaceChildren.apply($('h-melde-l'), marken);
   const p = $('h-persist');
   if (Store.isPersistent()) p.replaceChildren();
   else p.replaceChildren(h('span', { class: 'label s-warn' }, 'Sitzung nicht persistent'));
@@ -5756,6 +5779,7 @@ function fensterZelle(zelle, now) {
 }
 /* Sekündlich aktualisierte Anzeigen innerhalb des Modulbereichs */
 function tickModule(now) {
+  profilAssessmentAktualisieren(now);
   const txt = meldeText(now);
   document.querySelectorAll('[data-melde]').forEach(function (e) { if (e.textContent !== txt) e.textContent = txt; });
   document.querySelectorAll('[data-vk]').forEach(function (c) { const v = VK().find(function (x) { return x.id === c.getAttribute('data-vk'); }); if (v && c.textContent !== vkStatus(v, now)) c.textContent = vkStatus(v, now); });
@@ -5772,7 +5796,6 @@ function renderClock() {
   $('h-long').textContent = TAGE[d.getUTCDay()] + '., ' + fmtZ(d);
   $('h-orts').textContent = ortszeit(d);
   $('h-session').textContent = fmtDauer(now - SESSION_START);
-  $('h-melde').textContent = meldeText(now);
   tickModule(now);
 }
 const RUECKSTAU_SCHWELLE_MS = 90000, RUECKSTAU_ABSTAND_MS = 12000;
@@ -5904,39 +5927,8 @@ function reiterLeiste() {
     return h('button', { type: 'button', role: 'tab', id: 'reiter-' + id, class: 'reiter' + (VIEW.profilReiter === id ? ' on' : ''), 'aria-selected': VIEW.profilReiter === id ? 'true' : 'false',
       onclick: function () { VIEW.profilReiter = id; renderModule(); } }, text);
   };
-  return h('div', { class: 'reiterleiste', role: 'tablist', 'aria-label': 'Ansicht des Profils' }, t('agent', 'Profil'), t('tarn', 'Identitäten (' + legendeListe().length + ')'));
+  return h('div', { class: 'reiterleiste', role: 'tablist', 'aria-label': 'Ansicht des Profils' }, t('agent', 'Profil'), t('tarn', 'Identitäten (' + Object.keys(ARBEITS_IDENTITAETEN).length + ')'), t('orte', 'Ausgangsorte'));
 }
-function tarnPanels(now) {
-  const liste = legendeListe();
-  return [panel('Identitäten', [h('span', { class: 'badge' }, String(liste.length))],
-    h('p', { class: 'note pad' }, 'Die Identitäten, die dir zur Verfügung stehen. Die aktive Identität lässt sich jederzeit wechseln und bleibt nach einem Neustart erhalten. Lichtbilder lädst du je Identität hoch; sie bleiben nur lokal im Profil.')),
-    h('div', { class: 'cols breit' }, liste.map(function (L) { return legendePanel(L, now); }))];
-}
-function legendePanel(L, now) {
-  const aktiv = aktiveLegendeId() === L.id, eigenFoto = !!PROFIL.bilder['legende-' + L.id];
-  return panel(L.bezeichnung + ' (' + L.land + ')',
-    h('span', { class: 'label ' + (aktiv ? 's-accent' : 's-dim') }, aktiv ? 'aktive Identität' : 'nicht aktiv'),
-    h('div', { class: 'mitfoto' }, bildFeld(bildPfad(L, 'legende-' + L.id), 'Lichtbild ' + L.bezeichnung, 'Kein Lichtbild'), h('dl', { class: 'fields' },
-      feld('Name', L.name), feld('Nationalität', [L.nationalitaet + ' (', land(L.land), ')']),
-      feld('Wohnsitz laut Identität', L.wohnsitz), feld('Beruf', L.beruf),
-      feld('Hintergrund', L.legende, 'full'), feld('Tiefe', L.tiefe, 'full'))),
-    h('div', { class: 'row' },
-      bildWaehler('lb-' + L.id, function (b) { dispatch({ type: 'LEGENDE_BILD', id: L.id, bild: b }); }),
-      eigenFoto ? h('button', { type: 'button', id: 'lbx-' + L.id, onclick: function () { dispatch({ type: 'LEGENDE_BILD', id: L.id, bild: null }); } }, 'Lichtbild entfernen') : null),
-    h('h3', null, 'Supporting Documents'),
-    tabelle(['ID', 'Dokument', 'Staat', 'Nummer', 'Gültig bis', 'Zustand'], L.dokumente.map(function (d) { return dokZeile(d, now); })),
-    h('div', { class: 'row top' },
-      aktiv ? h('span', { class: 'dim' }, 'In Verwendung.')
-            : h('button', { type: 'button', id: 'btn-leg-' + L.id, onclick: function () {
-                bestaetigen('Aktive Identität wechseln',
-                  'Die aktive Identität wird auf "' + L.bezeichnung + '" (' + L.name + ', ' + L.land + ') gesetzt. Der Wechsel wird protokolliert.',
-                  'Identität wechseln', function () {
-                    dispatch({ type: 'LEGENDE_GEWECHSELT', legende: L.id });
-                    const b = document.querySelector('[id^="btn-leg-"]'); if (b) b.focus();
-                  });
-              } }, 'Als aktive Identität setzen')));
-}
-
 /* Ausgangsorte (privat, nur im Profil): Safehouses, Wohnungen und andere Orte, von denen aus der Agent anreist */
 function neuerAusgang() {
   const form = h('div', null,
@@ -5951,7 +5943,7 @@ function neuerAusgang() {
 function ausgangPanel() {
   const liste = PROFIL.ausgang;
   return panel('Ausgangsorte', [h('span', { class: 'badge' }, String(liste.length))],
-    h('p', { class: 'note pad' }, 'Orte, von denen aus du zu einem Auftrag anreist. Die Auswahl erfolgt in der Anreiseplanung; die App rechnet die Luftlinie zur Unterkunft und leitet Reisedauer je Verkehrsmittel ab. Bezeichnung und Position erscheinen im Protokoll und auf der Karte, die Adresse nur hier. Alles liegt nur im Profil dieses Browsers.'),
+    h('p', { class: 'note pad' }, 'Gespeicherte Bezugspunkte für die Karte. Eine Position ist optional. Die Adresse dient als eigene Notiz und erscheint nur hier.'),
     liste.length ? tabelle(['Kennung', 'Bezeichnung', 'Art', 'Adresse', 'Position', ''], liste.map(function (x) {
       return [td('nw', x.id), td('txt', x.name), td('nw', x.art), td('txt', x.adresse || h('span', { class: 'dim' }, '–')),
         td('nw', x.ll ? x.ll[0].toFixed(4) + ', ' + x.ll[1].toFixed(4) : h('span', { class: 'label s-warn' }, 'fehlt')),
@@ -5968,74 +5960,6 @@ function ausgangPanel() {
     }), '') : h('p', { class: 'note pad' }, 'Noch keine Ausgangsorte angelegt.'),
     h('div', { class: 'row top' }, h('button', { type: 'button', id: 'btn-ausgang-neu', onclick: neuerAusgang }, 'Ausgangsort anlegen')));
 }
-function renderProfil(m) {
-  const A = SCENARIO.agent, now = Date.now(), akt = legende(aktiveLegendeId()), M = KM().meldewesen, lauf = LM();
-  const ortId = VIEW.draft['sel-ort'] || STATE.agent.checkin.standortId;
-  if (VIEW.profilReiter === 'tarn') return [modKopf(m), reiterLeiste()].concat(tarnPanels(now));
-  return [
-    modKopf(m), reiterLeiste(),
-    h('div', { class: 'cols' },
-      panel('Agentenkennung', null,
-        h('dl', { class: 'fields' },
-          feld('Codename', A.codename), feld('Interne ID', A.id), feld('Freigabestufe', A.freigabe),
-          feld('Region', KM().schauplatz.einsatzraum),
-          feld('Auftrag', lauf ? opText(lauf) + ', laufend' : 'kein laufender Auftrag'),
-          feld('Abgelehnte Aufträge', String(STATE.agent.ablehnungen)),
-          feld('Aktive Identität', akt.bezeichnung + ': ' + akt.name + ' (' + akt.land + ')'),
-          feld('Status', statusLabel(STATE.agent.status)),
-          feld('Belastung', h('span', { class: 'label ' + belKlasse() }, belText())),
-          abdFeld('legende'), abdFeld('asset')),
-        h('div', { class: 'row top' },
-          h('label', { for: 'sel-status' }, 'Status setzen'),
-          h('select', { id: 'sel-status', onchange: function (ev) { dispatch({ type: 'STATUS_GESETZT', status: ev.target.value }); } },
-            STATUS_LISTE.map(function (x) { return h('option', { value: x, selected: x === STATE.agent.status, disabled: x === 'Ruhend' && (!!LM() || STATE.extraktion.anforderung.status !== 'keine') }, x); })),
-          (LM() || STATE.extraktion.anforderung.status !== 'keine') ? h('span', { class: 'note', id: 'ruhend-hinweis' }, 'Ruhend ist während eines laufenden Auftrags oder einer Extraktion gesperrt. Eine kurze Atempause geht auch im Einsatz.') : null,
-          atemKnopf())),
-      panel('Check-in und Meldewesen', null,
-        h('dl', { class: 'fields' },
-          feld('Letzter Check-in', fmtZ(STATE.agent.checkin.t)),
-          feld('Letzter bekannter Standort', ortText(STATE.agent.checkin)),
-          feld('Nächstes Meldefenster', h('span', { 'data-melde': '' }, meldeText(now))),
-          feld('Versäumte Meldefenster in Folge', STATE.melde.versaeumt === 0 ? '0'
-            : h('span', { class: 'label ' + (STATE.melde.versaeumt >= 2 ? 's-crit' : 's-warn') }, String(STATE.melde.versaeumt))),
-          feld('Authentisierung', [h('span', { class: 'label s-accent' }, M.kennwortverfahren), ' ', M.kennwortHinweis], 'full'),
-          feld('Eskalation gemäß Regel ' + M.roeNr, [M.eskalation[1], h('br'), M.eskalation[2]], 'full')),
-        h('div', { class: 'row top' },
-          h('label', { for: 'sel-ort' }, 'Standort'),
-          h('select', { id: 'sel-ort', onchange: function (ev) { VIEW.draft['sel-ort'] = ev.target.value; } },
-            KM().standorte.map(function (o) { return h('option', { value: o.id, selected: o.id === ortId }, o.id + ' ' + o.name + ' (' + o.land + ')'); })),
-          h('button', { type: 'button', id: 'btn-checkin', onclick: function () { dispatch({ type: 'CHECKIN', standortId: $('sel-ort').value }); } }, 'Check-in melden')),
-        h('div', { class: 'row top' },
-          h('label', { for: 'aw-name' }, 'Ausweichort'),
-          h('input', { type: 'text', id: 'aw-name', placeholder: 'Bezeichnung', maxlength: '40', value: VIEW.draft['aw-name'] || '', oninput: function (ev) { VIEW.draft['aw-name'] = ev.target.value; } }),
-          h('input', { type: 'text', id: 'aw-koord', placeholder: 'Breite, Länge', value: VIEW.draft['aw-koord'] || '', oninput: function (ev) { VIEW.draft['aw-koord'] = ev.target.value; } }),
-          h('button', { type: 'button', id: 'btn-aw-karte', onclick: function () { VIEW.karte.pick = 'CI-AUS'; VIEW.karte.auswahl = null; VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); } }, 'Auf Karte wählen')),
-        h('div', { class: 'row top' },
-          h('label', { for: 'aw-grund' }, 'Begründung'),
-          h('input', { type: 'text', id: 'aw-grund', placeholder: 'optional, warum dieser Ort', value: VIEW.draft['aw-grund'] || '', oninput: function (ev) { VIEW.draft['aw-grund'] = ev.target.value; } }),
-          h('button', { type: 'button', id: 'btn-aw', onclick: function () {
-            const ll = parseKoord(VIEW.draft['aw-koord']);
-            if (!ll) { meldung('Koordinaten bitte als „Breite, Länge“ angeben, zum Beispiel 52.4800, 13.4300, oder auf der Karte wählen.'); return; }
-            dispatch({ type: 'CHECKIN_AUSWEICH', name: VIEW.draft['aw-name'] || '', ll: ll, begruendung: VIEW.draft['aw-grund'] || '' });
-            VIEW.draft['aw-name'] = ''; VIEW.draft['aw-koord'] = ''; VIEW.draft['aw-grund'] = ''; renderModule();
-          } }, 'Ausweichort melden')),
-        h('div', { class: 'row top' },
-          h('label', null, 'Kennwortprüfung'),
-          h('span', { class: 'label ' + (kwS().an ? 's-accent' : 's-dim') }, kwS().an ? 'ein' : 'aus'),
-          h('button', { type: 'button', id: 'btn-kw', 'aria-pressed': kwS().an ? 'true' : 'false', onclick: function () { dispatch({ type: 'KENNWORT_SCHALTER', ein: !kwS().an }); } }, kwS().an ? 'Ausschalten' : 'Einschalten')))),
-    ausgangPanel(),
-    h('div', { class: 'cols' },
-      panel('Notizen', null,
-        h('div', { class: 'pad' }, autosaveFeld('ta-notizen', 'notizen', 'Notizen')),
-        h('p', { class: 'note mono' }, 'Stand: ', h('span', { 'data-geaendert': 'notizen' }, fmtZ(STATE.agent.notizenGeaendert)))),
-      panel('Operative Einschränkungen', null,
-        h('div', { class: 'pad' }, autosaveFeld('ta-einschr', 'einschraenkungen', 'Operative Einschränkungen')),
-        h('p', { class: 'note mono' }, 'Stand: ', h('span', { 'data-geaendert': 'einschraenkungen' }, fmtZ(STATE.agent.einschraenkungenGeaendert))))),
-    ausruestungPanel(),
-    erkennungPanel()
-  ];
-}
-
 /* =====================================================================
    MODUL 2: MISSIONSBRIEFING
    ===================================================================== */
@@ -7504,50 +7428,6 @@ function renderExtraktion(m) {
 
 /* Erststart (vorlauf): Ansichten ohne Bezug zu einem noch nicht angenommenen Auftrag */
 function leerAnsicht(m, titel, text) { return [modKopf(m), panel(titel, null, h('p', { class: 'note pad' }, text))]; }
-function ausruestungPanel() {
-  return panel('Ausrüstungsübersicht', null,
-      tabelle(['Kategorie', 'Zustand', 'Hinweis', ''], arListe().map(function (x) {
-        const frei = x.zustand !== 'einsatzbereit' && !x.anfrage && !LM() && STATE.agent.status !== 'Ruhend';
-        return [x.kategorie, td('nw', h('span', { class: 'label ' + (x.zustand === 'einsatzbereit' ? '' : 's-warn') }, x.anfrage ? 'in Bearbeitung' : x.zustand)), x.hinweis,
-                td('nw', x.zustand === 'einsatzbereit' ? '' : h('button', { type: 'button', 'data-ar': x.kategorie, disabled: !frei,
-                  title: LM() ? 'Während eines Auftrags nicht möglich' : '', onclick: function () { dispatch({ type: 'AUSRUESTUNG_ANFORDERN', kategorie: x.kategorie }); } }, x.anfrage ? 'angefordert' : 'Instandsetzen anfordern'))];
-      })));
-}
-function renderProfilVorlauf(m) {
-  const A = SCENARIO.agent;
-  if (VIEW.profilReiter === 'tarn') return [modKopf(m), reiterLeiste()].concat(tarnPanels(Date.now()));
-  return [
-    modKopf(m), reiterLeiste(),
-    h('div', { class: 'cols' },
-      panel('Agentenkennung', null,
-        h('dl', { class: 'fields' },
-          feld('Codename', A.codename), feld('Interne ID', A.id), feld('Freigabestufe', A.freigabe),
-          feld('Auftrag', 'kein laufender Auftrag'), feld('Abgelehnte Aufträge', String(STATE.agent.ablehnungen)),
-          feld('Status', statusLabel(STATE.agent.status)),
-          feld('Belastung', h('span', { class: 'label ' + belKlasse() }, belText())),
-          abdFeld('legende'), abdFeld('asset')),
-        h('div', { class: 'row top' },
-          h('label', { for: 'sel-status' }, 'Status setzen'),
-          h('select', { id: 'sel-status', onchange: function (ev) { dispatch({ type: 'STATUS_GESETZT', status: ev.target.value }); } },
-            STATUS_LISTE.map(function (x) { return h('option', { value: x, selected: x === STATE.agent.status, disabled: x === 'Ruhend' && (!!LM() || STATE.extraktion.anforderung.status !== 'keine') }, x); })),
-          (LM() || STATE.extraktion.anforderung.status !== 'keine') ? h('span', { class: 'note', id: 'ruhend-hinweis' }, 'Ruhend ist während eines laufenden Auftrags oder einer Extraktion gesperrt. Eine kurze Atempause geht auch im Einsatz.') : null,
-          atemKnopf())),
-      panel('Meldewesen', null,
-        h('div', { class: 'row top' },
-          h('label', null, 'Kennwortprüfung'),
-          h('span', { class: 'label ' + (kwS().an ? 's-accent' : 's-dim') }, kwS().an ? 'ein' : 'aus'),
-          h('button', { type: 'button', id: 'btn-kw', 'aria-pressed': kwS().an ? 'true' : 'false', onclick: function () { dispatch({ type: 'KENNWORT_SCHALTER', ein: !kwS().an }); } }, kwS().an ? 'Ausschalten' : 'Einschalten')),
-        h('p', { class: 'note pad' }, STATE.agent.status === 'Ruhend'
-        ? 'Status Ruhend: Der Ansprechpartner sendet keine Meldungen und weist keinen Auftrag zu. Mit "Standby" oder "Aktiv" geht das Terminal in Bereitschaft.'
-        : 'Kein laufender Auftrag. Identität, Standort und Meldefenster werden mit der Annahme eines Auftrags gesetzt.'))),
-    ausgangPanel(),
-    h('div', { class: 'cols' },
-      panel('Notizen', null, h('div', { class: 'pad' }, autosaveFeld('ta-notizen', 'notizen', 'Notizen'))),
-      panel('Operative Einschränkungen', null, h('div', { class: 'pad' }, autosaveFeld('ta-einschr', 'einschraenkungen', 'Operative Einschränkungen')))),
-    erkennungPanel(),
-    ausruestungPanel()
-  ];
-}
 function renderMissionVorlauf(m) {
   const neu = zugewiesene();
   return [modKopf(m), STATE.serie.ende ? abschlussansicht() : null,
@@ -7826,7 +7706,7 @@ function karteBereinigenPanel() {
     } }, 'Karte bereinigen …')));
 }
 const RENDER = {
-  profil: function (m) { const panels = STATE.vorlauf ? renderProfilVorlauf(m) : renderProfil(m); return VIEW.profilReiter === 'tarn' ? panels : panels.concat(karteBereinigenPanel()); },
+  profil: function (m) { return renderArbeitsprofil(m); },
   mission: function (m) { return STATE.vorlauf ? renderMissionVorlauf(m) : renderMission(m); },
   dossier: renderDossier,
   komm: renderKomm,
@@ -8722,5 +8602,6 @@ else window.addEventListener('load', function () { Zugang.start(init); });   /* 
 <script src="karte-modul.js"></script>
 <script src="akten-modul.js"></script>
 <script src="recherche-modul.js"></script>
+<script src="profil-modul.js"></script>
 </body>
 </html>

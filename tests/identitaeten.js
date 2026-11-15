@@ -58,7 +58,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   const r3 = await p2.evaluate(o => ({ app: STATE.dossiers.eigene.some(e => e.id === o.id), profil: JSON.parse(localStorage.getItem(PROFIL_KEY)).eigene.some(e => e.id === o.id), identitaet: aktiveLegendeId() }), r2);
   console.log(JSON.stringify(r3));
   /* Anzeige im Profil */
-  const ui = await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'profil' }); VIEW.profilReiter = 'tarn'; renderModule(); return { karten: document.querySelectorAll('[id^="btn-leg-"]').length, text: document.body.innerText.includes('aktive Identität'), frist: document.body.innerText.includes('2030') }; });
+  const ui = await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'profil' }); VIEW.profilReiter = 'tarn'; renderModule(); return { karten: document.querySelectorAll('[data-identitaet]').length, text: document.body.innerText.includes('aktive Identität'), anlage: !!document.getElementById('id-nr-H-01') }; });
   console.log(JSON.stringify(ui)); let ok = true; const chk = (n, v) => { console.log((v ? 'OK   ' : 'FAIL ') + n); if (!v) ok = false; };
   chk('Identitätsliste ohne Auftrag vorhanden', a.liste.length >= 2); chk('Wechsel ohne laufenden Auftrag', a.mission === false && a.aktiv === a.ziel);
   chk('Wechsel erzeugt keine Handler-Nachricht', a.handlerNachrichten === 0); chk('Aktive Identität nach Neustart erhalten', c.aktivNachNeustart);
@@ -67,6 +67,6 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   chk('Import: Profil hat Vorrang, Spiegel nachgeführt', d.impProfil === 'ausweich' && d.impSpiegel === 'ausweich' && d.impAktiv === 'ausweich');
   chk('Import älteren Zustands: Dossier nur im Profil bleibt in der App', r2.importApp); chk('Import älteren Zustands: Dossier bleibt im gespeicherten Profil', r2.importProfil); chk('Import: Altwert grenz übernommen', r2.importIdentitaet === 'grenz');
   chk('Laden älteren Zustands: Dossier bleibt in App und Profil', r3.app && r3.profil); chk('Laden: Altwert grenz übernommen', r3.identitaet === 'grenz'); chk('keine Seitenfehler (zweiter Start)', err2.length === 0);
-  chk('Profilansicht zeigt Identitäten, aktive Markierung und Frist', ui.karten >= 1 && ui.text && ui.frist); chk('keine Seitenfehler', err.length === 0); if (err.length) console.log(err.join('|'));
+  chk('Profilansicht zeigt drei Identitäten, aktive Markierung und Anlagennummer', ui.karten === 3 && ui.text && ui.anlage); chk('keine Seitenfehler', err.length === 0); if (err.length) console.log(err.join('|'));
   await b.close(); process.exit(ok ? 0 : 1);
 })();
