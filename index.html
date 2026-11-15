@@ -3012,6 +3012,9 @@ function antwortFuerRoh(kanalId, text, dringlichkeit, msgId) {
 
 /* Dossierstatus (Statuswerte aus SCENARIO.dossierStatus) */
 function statusDef(id) { return SCENARIO.dossierStatus.find(function (x) { return x.id === id; }) || null; }
+/* Wählbare Status: ohne Status, beobachtet, relevant, abgeschlossen, archiviert (ältere kritische Werte bleiben lesbar, werden aber nicht mehr angeboten) */
+function dossierStatusWahl() { return SCENARIO.dossierStatus.filter(function (x) { return !x.kritisch; }); }
+function istBeispiel(e) { return !!e && e.mission === 'STD' && !e.eigen; }
 function dossierStatusLabel(id) { const d = statusDef(id); return d ? h('span', { class: 'label ' + d.klasse }, d.label) : h('span', { class: 'dim' }, 'ohne Status'); }
 function dossierStatusSetzen(e, status, anlass, out) {
   const d = STATE.dossiers.entitaeten[e.id], neu = statusDef(status), alt = statusDef(d.status);
@@ -3454,6 +3457,7 @@ function schluesselIds() {
 function wissen(e) {
   if (!e || typeof STATE === 'undefined' || !STATE) return 'frei';
   if (e.eigen || e.typ === 'Ort') return 'frei';
+  if (!missionsbetrieb()) return 'frei';                  /* Recherchebetrieb: alle Dossiers voll zugänglich, keine Freigabe */
   const x = (STATE.infozugang || {})[e.id];
   if (x && x.status === 'frei') return 'frei';
   const def = LM();
@@ -5421,7 +5425,7 @@ const ACTIONS = {
     const e = entitaet(a.id), name = String(a.name || '').trim();
     if (!e || !name) return null;
     const zeilen = function (txt, trenner) { return String(txt || '').split(trenner).map(function (x) { return x.trim(); }).filter(Boolean); };
-    const stufe = Math.min(5, Math.max(1, Number(a.stufe) || e.bedrohung.stufe));
+    const stufe = Math.min(5, Math.max(1, Number(a.stufe) || e.bedrohung.stufe));         /* ohne Angabe bleibt die gespeicherte Stufe unverändert (Oberfläche zeigt sie nicht mehr) */
     const beg = String(a.begruendung || '').trim();
     const neu = { name: name, aliase: zeilen(a.aliase, ','), land: SCENARIO.laender[a.land] ? a.land : e.land,
                   rolle: String(a.rolle || '').trim() || e.rolle, eckdaten: zeilen(a.eckdaten, '\n'),
@@ -6576,26 +6580,20 @@ function bildWaehler(id, onBild) {
     } });
 }
 function dossierBearbeiten(e) {
-  const stufenText = h('p', { class: 'note', style: 'margin:2px 0 6px 128px' }, SCENARIO.bedrohungsHinweise[e.bedrohung.stufe]);
   const form = h('div', null,
     feldZeile('Name', 'bd-name', h('input', { type: 'text', id: 'bd-name', value: e.name, autocomplete: 'off', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' })),
     feldZeile('Staat', 'bd-land', h('select', { id: 'bd-land' }, Object.keys(SCENARIO.laender).map(function (k) { return h('option', { value: k, selected: k === e.land }, k + ' ' + SCENARIO.laender[k]); }))),
     feldZeile('Aliase', 'bd-alias', h('input', { type: 'text', id: 'bd-alias', value: e.aliase.join(', '), autocomplete: 'off', placeholder: 'durch Komma getrennt', style: 'flex:1 1 220px;min-width:0' })),
     feldZeile('Beschreibung', 'bd-rolle', h('textarea', { id: 'bd-rolle', rows: '3', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' }, e.rolle)),
-    feldZeile('Eckdaten', 'bd-eck', h('textarea', { id: 'bd-eck', rows: '4', placeholder: 'eine Angabe je Zeile', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' }, e.eckdaten.join('\n'))),
-    feldZeile('Einschätzung', 'bd-stufe', h('select', { id: 'bd-stufe', onchange: function (ev) { stufenText.textContent = SCENARIO.bedrohungsHinweise[ev.target.value]; } },
-      [1, 2, 3, 4, 5].map(function (n) { return h('option', { value: String(n), selected: n === e.bedrohung.stufe }, n + ' – ' + SCENARIO.bedrohungsstufen[n]); }))),
-    stufenText,
-    feldZeile('Begründung', 'bd-beg', h('input', { type: 'text', id: 'bd-beg', value: e.bedrohung.begruendung, autocomplete: 'off', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' })));
+    feldZeile('Eckdaten', 'bd-eck', h('textarea', { id: 'bd-eck', rows: '4', placeholder: 'eine Angabe je Zeile', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' }, e.eckdaten.join('\n'))));
   bestaetigen('Dossier bearbeiten: ' + e.id, form, 'Änderungen speichern', function () {
     dispatch({ type: 'DOSSIER_BEARBEITET', id: e.id, name: $('bd-name').value, land: $('bd-land').value, aliase: $('bd-alias').value,
-               rolle: $('bd-rolle').value, eckdaten: $('bd-eck').value, stufe: $('bd-stufe').value, begruendung: $('bd-beg').value });
+               rolle: $('bd-rolle').value, eckdaten: $('bd-eck').value });
   }, { pruefer: function () { return $('bd-name').value.trim().length > 0; }, klartext: 'Dossier ' + e.id + ' bearbeiten?' });
 }
 function neuesDossier() {
   let bild = null;
   const vorschau = h('div', { class: 'foto', id: 'nd-vorschau', style: 'margin:0' }, h('span', { class: 'ph' }, 'Kein Foto'));
-  const stufenText = h('p', { class: 'note', id: 'nd-stufentext', style: 'margin:2px 0 6px 128px' }, SCENARIO.bedrohungsHinweise[2]);
   const zeigen = function () {
     vorschau.replaceChildren(bild ? h('img', { src: bild, alt: 'Vorschau Lichtbild' }) : h('span', { class: 'ph' }, 'Kein Foto'));
     $('nd-entf').disabled = !bild;
@@ -6608,16 +6606,13 @@ function neuesDossier() {
     feldZeile('Beschreibung', 'nd-rolle', h('textarea', { id: 'nd-rolle', rows: '2', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' })),
     feldZeile('Eckdaten', 'nd-eck', h('textarea', { id: 'nd-eck', rows: '3', placeholder: 'eine Angabe je Zeile', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' })),
     feldZeile('Kartenposition', 'nd-koord', h('input', { type: 'text', id: 'nd-koord', autocomplete: 'off', spellcheck: 'false', placeholder: 'optional: Breite, Länge (z. B. 52.5200, 13.4050)', style: 'flex:1 1 220px;min-width:0' })),
-    feldZeile('Einschätzung', 'nd-stufe', h('select', { id: 'nd-stufe', onchange: function (ev) { stufenText.textContent = SCENARIO.bedrohungsHinweise[ev.target.value]; } },
-      [1, 2, 3, 4, 5].map(function (n) { return h('option', { value: String(n), selected: n === 2 }, n + ' – ' + SCENARIO.bedrohungsstufen[n]); }))),
-    stufenText,
     feldZeile('Lichtbild', 'nd-bild', h('div', { class: 'row', style: 'align-items:flex-start;gap:12px' }, vorschau,
       h('div', null, bildWaehler('nd-bild', function (b) { bild = b; zeigen(); }),
         h('div', { style: 'padding-top:6px' }, h('button', { type: 'button', id: 'nd-entf', disabled: true, onclick: function () { bild = null; $('nd-bild').value = ''; zeigen(); } }, 'Foto entfernen')),
         h('p', { class: 'note', style: 'margin:6px 0 0' }, 'Optional. Wird auf 4:5 zugeschnitten und nur lokal im Zustand gespeichert.')))));
   bestaetigen('Neues Dossier anlegen', form, 'Dossier anlegen', function () {
     dispatch({ type: 'DOSSIER_ANGELEGT', typ: $('nd-typ').value, name: $('nd-name').value, land: $('nd-land').value, aliase: $('nd-alias').value,
-               rolle: $('nd-rolle').value, eckdaten: $('nd-eck').value, stufe: $('nd-stufe').value, bild: bild, koord: $('nd-koord').value });
+               rolle: $('nd-rolle').value, eckdaten: $('nd-eck').value, bild: bild, koord: $('nd-koord').value });
   }, { pruefer: function () { return $('nd-name').value.trim().length > 0; }, klartext: 'Neues Dossier anlegen?' });
 }
 function eigenesPanel(e) {
@@ -6670,12 +6665,10 @@ function dossierListe() {
     const st = STATE.dossiers.entitaeten[e.id];
     if (F.typ !== 'Alle' && e.typ !== F.typ) return false;
     if (F.land !== 'Alle' && e.land !== F.land) return false;
-    if (infoGesperrt(e) && (F.stufe > 0 || F.status !== 'Alle')) return false;
-    if (bedrohung(e).stufe < F.stufe) return false;
-    if (F.status === 'mit' ? !st.status : (F.status !== 'Alle' && st.status !== F.status)) return false;
+    if (F.status === 'mit' ? !st.status : F.status === 'ohne' ? !!st.status : (F.status !== 'Alle' && st.status !== F.status)) return false;
     if (!q) return true;
     if (dossierGesperrt(e)) return e.id.toLowerCase().indexOf(q) >= 0;
-    return (infoGesperrt(e) ? e.name : e.id + ' ' + e.name + ' ' + e.aliase.join(' ') + ' ' + e.rolle + ' ' + e.reg).toLowerCase().indexOf(q) >= 0;
+    return (e.id + ' ' + e.name + ' ' + e.aliase.join(' ') + ' ' + e.rolle + ' ' + e.reg).toLowerCase().indexOf(q) >= 0;
   });
   const neu = function () { renderModule(); };
   return panel('Entitäten', [h('span', { class: 'badge' }, treffer.length + ' von ' + alle.length),
@@ -6687,27 +6680,23 @@ function dossierListe() {
       h('label', { for: 'df-typ' }, 'Typ'),
       h('select', { id: 'df-typ', onchange: function (ev) { F.typ = ev.target.value; neu(); } },
         ['Alle', 'Person', 'Organisation', 'Ort'].map(function (x) { return h('option', { value: x, selected: x === F.typ }, x); })),
-      h('label', { for: 'df-stufe' }, 'Bedrohung'),
-      h('select', { id: 'df-stufe', onchange: function (ev) { F.stufe = Number(ev.target.value); neu(); } },
-        [0, 2, 3, 4, 5].map(function (n) { return h('option', { value: String(n), selected: n === F.stufe }, n === 0 ? 'Alle Stufen' : n === 5 ? 'Stufe 5' : 'ab Stufe ' + n); })),
       h('label', { for: 'df-land' }, 'Staat'),
       h('select', { id: 'df-land', onchange: function (ev) { F.land = ev.target.value; neu(); } },
         ['Alle'].concat(Object.keys(SCENARIO.laender)).map(function (x) { return h('option', { value: x, selected: x === F.land }, x === 'Alle' ? 'Alle' : x + ' ' + SCENARIO.laender[x]); })),
       h('label', { for: 'df-status' }, 'Status'),
       h('select', { id: 'df-status', onchange: function (ev) { F.status = ev.target.value; neu(); } },
-        [['Alle', 'Alle'], ['mit', 'mit Status']].concat(SCENARIO.dossierStatus.map(function (x) { return [x.id, x.label]; }))
+        [['Alle', 'Alle'], ['mit', 'mit Status'], ['ohne', 'ohne Status']].concat(dossierStatusWahl().map(function (x) { return [x.id, x.label]; }))
           .map(function (x) { return h('option', { value: x[0], selected: x[0] === F.status }, x[1]); }))),
     h('ul', { class: 'elist', 'data-scroll': 'elist' },
       treffer.length ? treffer.map(function (e) {
         const st = STATE.dossiers.entitaeten[e.id];
         return h('li', null, h('button', { type: 'button', id: 'dl-' + e.id, 'aria-current': e.id === STATE.dossiers.auswahl ? 'true' : null,
             onclick: function () { oeffneDossier(e.id); } },
-          icon(e.typ), h('span', { class: 'nm' }, dossierGesperrt(e) ? e.id : e.name), dossierGesperrt(e) ? null : h('span', { class: 'meta' }, infoGesperrt(e) ? 'Rudiment · S' + bedrohung(e).stufe : 'S' + bedrohung(e).stufe + ' · ' + e.land),
-          dossierGesperrt(e) ? null : h('span', { class: 'sub' }, infoGesperrt(e) ? e.typ + ' · nur Rudiment, Freigabe offen' : e.id + ' · ' + e.typ + ' · ' + dossierQuelle(e) + (st.status ? ' · ' + statusDef(st.status).label : ''))));
+          icon(e.typ), h('span', { class: 'nm' }, dossierGesperrt(e) ? e.id : e.name), dossierGesperrt(e) ? null : h('span', { class: 'meta' }, e.land),
+          dossierGesperrt(e) ? null : h('span', { class: 'sub' }, e.id + ' · ' + e.typ + ' · ' + (istBeispiel(e) ? 'Beispiel' : dossierQuelle(e)) + (st.status ? ' · ' + statusDef(st.status).label : ''))));
       }) : h('li', { class: 'note' }, 'Keine Entität entspricht dem Filter.')),
     h('div', { class: 'legend', 'aria-label': 'Identität Typen' },
-      ['Person', 'Organisation', 'Ort'].map(function (t) { return h('span', null, icon(t), t); }),
-      h('span', null, 'S1 bis S5: Bedrohungsstufe')));
+      ['Person', 'Organisation', 'Ort'].map(function (t) { return h('span', null, icon(t), t); })));
 }
 
 function zielpersonKnopf(e) {
@@ -6790,9 +6779,7 @@ function chronikBlock(e) {
 }
 function sichtungenBlock(e) {
   const d = STATE.dossiers.entitaeten[e.id], L = (d.sichtungen || []).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
-  const rud = wissen(e) !== 'frei', hinterlegt = rud ? '' : adresseHinterlegt(e);
   return [
-    h('p', { class: 'note pad' }, rud ? 'Sichtungen sind eigene Beobachtungen zu ' + e.name + '. Sie zählen für die Freigabe der Akte. Du kannst sie auch im Kanal Ansprechpartner melden: Schaltfläche "Als Sichtung".' : 'Sichtungen sind eigene Beobachtungen zu ' + e.id + '. ARGUS greift darauf zurück, wenn du nach dem letzten Standort fragst. Ohne Eintrag nennt er die hinterlegte Adresse' + (hinterlegt ? ': ' + hinterlegt + '.' : ', die für dieses Dossier fehlt.')),
     tabelle(['Zeit (UTC)', 'ID', 'Güte', 'Ort', 'Beobachtung', ''], L.map(function (x) {
       return [td('nw', fmtZ(x.t)), td('nw', x.id), td('nw', gueteLabel(sichtungGuete(e, x))), td('txt', x.ort || '–'), td('txt', x.text || '–'),
               td('nw', h('button', { type: 'button', class: 'link', id: 'si-del-' + x.id, onclick: function () { dispatch({ type: 'SICHTUNG_ENTFERNT', id: e.id, sid: x.id }); } }, 'entfernen'))];
@@ -6910,7 +6897,7 @@ function dossierAnsicht(e) {
   }
   if (VIEW.dtab === 'chronik') return panel('Dossier ' + e.id + ' · ' + e.name, [h('span', { class: 'label' }, 'Chronik')], dossierTabs(e), chronikBlock(e));
   if (VIEW.dtab === 'sichtungen') return panel('Dossier ' + e.id + ' · ' + e.name, [h('span', { class: 'label' }, 'Sichtungen')], dossierTabs(e), sichtungenBlock(e));
-  return panel('Dossier ' + e.id, [h('span', { class: 'label ' + stufeKlasse(bedrohung(e).stufe) }, 'Stufe ' + bedrohung(e).stufe + ' – ' + SCENARIO.bedrohungsstufen[bedrohung(e).stufe]),
+  return panel('Dossier ' + e.id, [istBeispiel(e) ? h('span', { class: 'label' }, 'Beispiel') : null,
       st.status ? dossierStatusLabel(st.status) : null,
       h('button', { type: 'button', id: 'dg-sperren', style: 'margin-left:8px', onclick: function () { dispatch({ type: 'DOSSIER_SPERREN', id: e.id }); } }, 'Sperren')],
     dossierTabs(e),
@@ -6918,14 +6905,12 @@ function dossierAnsicht(e) {
       feld('Name', e.name), feld('Typ', e.typ),
       feld('Länderkennung', [land(e.land), ' ' + SCENARIO.laender[e.land] + (e.landHinweis ? ' (' + e.landHinweis + ')' : '')]),
       feld('Aliase', e.aliase.length ? e.aliase.join(', ') : 'keine bekannt'),
-      feld('Freigeschaltet mit', e.mission === 'STD' ? 'Standard-Dossier' : e.mission + ' ' + missionDef(e.mission).name),
       feld('Status', st.status ? [dossierStatusLabel(st.status), ' seit ' + fmtZ(st.statusAm)] : 'ohne Status'),
       feld('Registernummer', e.reg), feld('Letzte Aktualisierung', fmtZ(st.aktualisiert)),
       e.typ === 'Ort' ? null : feld('Erkenntnislage', (function () { const el = erkenntnisLage(e); return el.anzahl ? [frischeLabel(el.juengste.fr), ' jüngste Spur: ' + el.juengste.art + ' ' + el.juengste.fr.text + (el.aktuell ? '' : '. Nichts Frisches: neue Sichtung, Beleg oder Einschätzung einholen.')] : 'Keine eigene Erkenntnis erfasst. Verbindungen und Angaben im Archiv altern ab Nutzungsbeginn.'; })(), 'full'),
       feld('Verteilerbeschränkung', e.verteiler, 'full'),
-      feld(e.mission === 'STD' ? 'Beschreibung' : 'Rolle zur Mission', schutz(e.rolle), 'full'),
+      feld('Beschreibung', schutz(e.rolle), 'full'),
       feld(e.typ === 'Person' ? 'Biografische Eckdaten' : 'Eckdaten', schutz(e.eckdaten.join(' · ')), 'full'),
-      feld('Bedrohungsbewertung', [stufeLabel(bedrohung(e).stufe), ' ', schutz(bedrohung(e).begruendung)], 'full'),
       (e.nachtraege || []).filter(function (n) { return freigeschaltet(n.mission); }).map(function (n) {
         return [feld('Nachtrag ' + n.mission + ' ' + missionDef(n.mission).name + ': Rolle', schutz(n.rolle), 'full'),
                 feld('Nachtrag ' + n.mission + ': Eckdaten', schutz(n.eckdaten.join(' · ')), 'full')];
@@ -6938,18 +6923,15 @@ function dossierAnsicht(e) {
         ev.target.value = st.status || '';
         bestaetigen('Dossierstatus: ' + sd.label, e.id + ' ' + e.name + ' erhält den Status "' + sd.label + '". Die Änderung wird als kritisches Ereignis protokolliert.',
           'Status setzen', los, { pflicht: 'Status "' + sd.label + '" für ' + e.id + ' bestätigt.' });
-      } }, [h('option', { value: '', selected: !st.status }, 'ohne Status')].concat(SCENARIO.dossierStatus.map(function (x) {
+      } }, [h('option', { value: '', selected: !st.status }, 'ohne Status')].concat(dossierStatusWahl().concat(statusDef(st.status) && statusDef(st.status).kritisch ? [statusDef(st.status)] : []).map(function (x) {
         return h('option', { value: x.id, selected: x.id === st.status }, x.label);
       })))),
     h('div', { class: 'row' },
       h('button', { type: 'button', id: 'btn-dbearb', onclick: function () { dossierBearbeiten(e); } }, 'Dossier bearbeiten'),
       PROFIL.aenderungen[e.id] ? h('button', { type: 'button', id: 'btn-dorig', onclick: function () { dispatch({ type: 'DOSSIER_ZURUECKGESETZT', id: e.id }); } }, 'Auf Original zurücksetzen') : null,
       PROFIL.aenderungen[e.id] ? h('span', { class: 'label s-warn' }, 'bearbeitet') : null),
-    zusatzZeile(e),
     kartenKnopf(e),
     sichtungKnopf(e),
-    zielpersonKnopf(e),
-    haltungDossierPanel(e),
     h('h3', null, 'Verbindungen (' + vs.length + ')'),
     tabelle(['Gegenüber', 'Typ', 'Richtung', 'Bewertung', 'Quelle'], vs.map(function (v) {
       const g = entitaet(v.von === e.id ? v.nach : v.von);
@@ -7039,22 +7021,21 @@ function graphSvg(zentrum) {
     gL.appendChild(s('text', { x: mx, y: my + 3.5, 'text-anchor': 'middle', class: 'g-lbl' }, txt));
   });
   Object.keys(pos).forEach(function (id) {
-    const e = entitaet(id), p = pos[id], mitte = id === zentrum.id, st = bedrohung(e).stufe;
+    const e = entitaet(id), p = pos[id], mitte = id === zentrum.id;
     const oeffnen = function () { if (!mitte) oeffneDossier(id, 'Beziehungsansicht'); };
     const dst = STATE.dossiers.entitaeten[id].status, elim = dst === 'eliminiert', pfad = bildPfad(e, id);
-    const name = kuerzen(e.name, 22), kennung = (wissen(e) === 'frei' ? id + ' ' : '') + e.land + (pfad ? ' S' + st : '') + (elim ? ' · ELIMINIERT' : '');
+    const name = kuerzen(e.name, 22), kennung = (wissen(e) === 'frei' ? id + ' ' : '') + e.land + (elim ? ' · ELIMINIERT' : '');
     const clip = e.typ === 'Person' ? 'url(#clip-kreis)' : e.typ === 'Ort' ? 'url(#clip-raute)' : null;
     const oben = p.y < cy - 40;                           /* Beschriftung auf der dem Zentrum abgewandten Seite */
     const y1 = oben ? p.y - 41 : p.y + 38, y2 = oben ? p.y - 28 : p.y + 51;
     const bw = Math.max(name.length * 5.9, kennung.length * 6.7) + 8;
     const g = s('g', { class: 'node', id: 'gn-' + id, tabindex: '0', role: 'button',
-      'aria-label': anzeige(e) + ', ' + e.typ + ', ' + e.land + ', Bedrohungsstufe ' + st + (mitte ? ', ausgewählt' : ', Dossier öffnen'),
+      'aria-label': anzeige(e) + ', ' + e.typ + ', ' + e.land + (mitte ? ', ausgewählt' : ', Dossier öffnen'),
       onclick: oeffnen, onkeydown: function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); oeffnen(); } } },
-      s('title', null, anzeige(e) + ' (' + e.typ + ', ' + e.land + '), Stufe ' + st + ' – ' + SCENARIO.bedrohungsstufen[st] + (dst ? ', Status ' + statusDef(dst).label : '')),
+      s('title', null, anzeige(e) + ' (' + e.typ + ', ' + e.land + ')' + (dst ? ', Status ' + statusDef(dst).label : '')),
       s('rect', { x: p.x - bw / 2, y: y1 - 11, width: bw, height: 28, class: 'g-lblbg' }),
       mitte ? formRein(e.typ, p.x, p.y, 21, 'g-sel') : null,
-      formRein(e.typ, p.x, p.y, 16, 'g-shape' + (st >= 5 ? ' t5' : st === 4 ? ' t4' : '') + (elim ? ' elim' : '')),
-      s('text', { x: p.x, y: p.y + 3.5, 'text-anchor': 'middle', class: 'g-lvl' }, 'S' + st),
+      formRein(e.typ, p.x, p.y, 16, 'g-shape' + (elim ? ' elim' : '')),
       pfad ? s('image', { href: pfad, x: p.x - 15, y: p.y - 15, width: 30, height: 30, preserveAspectRatio: 'xMidYMid slice', 'clip-path': clip, onerror: function (ev) { ev.target.remove(); } }) : null,
       s('text', { x: p.x, y: y1, 'text-anchor': 'middle', class: 'g-id' }, kennung),
       s('text', { x: p.x, y: y2, 'text-anchor': 'middle', class: 'g-name' }, name));

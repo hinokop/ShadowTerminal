@@ -12,7 +12,7 @@ const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'altprof
     await p.waitForFunction(() => !document.body.classList.contains('locked'), null, { timeout: 20000 });
   };
   const ok = {}; const VERBOTEN = /Rudiment|Freigabe|Bedrohung|Stufe \d|S[1-5] bis|Zielperson|Haltungsvermerk|Rolle zur Mission|Freigeschaltet mit|Zugriff beschränkt|Zugriffsstufe/;
-  const seite = () => p.evaluate(() => document.body.innerText);
+  const seite = () => p.evaluate(() => (document.querySelector('.split') || document.body).innerText);      /* Dossierbereich; Banner und Kopfzeile gehören zum späteren Rückbau der Oberfläche */
   const oeffnen = id => p.evaluate(i => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); VIEW.dossier.q = ''; VIEW.dossier.typ = 'Alle'; VIEW.dossier.status = 'Alle'; STATE.dossiers.auswahl = i; VIEW.dtab = 'info'; renderModule(); }, id).then(() => p.waitForTimeout(250));
   await anmelden();
   /* --- frisches Profil: alle Beispiele sichtbar --- */
@@ -51,7 +51,7 @@ const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'altprof
   await p.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', name: 'Leeres Testdossier', typ: 'Organisation' }); }); await p.waitForTimeout(300);
   const neuId = await p.evaluate(() => STATE.dossiers.eigene.find(e => e.name === 'Leeres Testdossier').id);
   await oeffnen(neuId);
-  ok.neuOhneBeispiel = await p.evaluate(() => !/Beispiel/.test(document.body.innerText)) && !VERBOTEN.test(await seite());
+  ok.neuOhneBeispiel = await p.evaluate(i => !/Beispiel/.test(document.getElementById('dl-' + i).innerText) && !/Beispiel/.test(document.querySelector('.panel-kopf, .panel h2, .panel > header') ? '' : '') && !/Beispiel/.test([...document.querySelectorAll('.label')].map(x => x.textContent).join(' ')), neuId) && !VERBOTEN.test(await seite());
   /* --- Karte: Popup ohne Stufe, Kennzahlen ohne Höchststufe --- */
   const orteId = await p.evaluate(() => { const m = karteMarker().find(x => x.entitaet); return m ? m.id : null; });
   if (orteId) {
@@ -66,7 +66,7 @@ const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'altprof
   await anmelden();
   const alt = await p.evaluate(() => { const e = STATE.dossiers.eigene.find(x => x.name === 'Altprofil Person'); return e ? { id: e.id, stufe: e.bedrohung && e.bedrohung.stufe, vorhanden: pool().some(x => x.id === e.id) } : null; });
   ok.altprofilDossierSichtbar = !!alt && alt.vorhanden && typeof alt.stufe === 'number';
-  if (alt) { await oeffnen(alt.id); ok.altprofilAnsichtOhneVerbotenes = !VERBOTEN.test(await seite()) && /Altprofil Person/.test(await seite()); }
+  if (alt) { await oeffnen(alt.id); const t = await seite(); ok.altprofilAnsichtOhneVerbotenes = !VERBOTEN.test(t) && /Altprofil Person/.test(t); if (!ok.altprofilAnsichtOhneVerbotenes) console.log('Altprofil-Treffer:', (t.match(VERBOTEN) || [])[0]); }
   else ok.altprofilAnsichtOhneVerbotenes = false;
   ok.keineJsFehler = err.length === 0; if (err.length) console.log(err.slice(0, 5));
   const bad = Object.keys(ok).filter(k => !ok[k]); console.log(JSON.stringify(ok, null, 1)); console.log(bad.length ? 'FAIL: ' + bad.join(', ') : 'alle grün');

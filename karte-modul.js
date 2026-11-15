@@ -983,8 +983,8 @@ function karteAuswahlAnzeige() {
   }
   const e = m.entitaet ? entitaet(m.id) : null, w = karteFenster().filter(function (x) { return x.ort === m.id; });
   if (e) {
-    const b = bedrohung(e), d = STATE.dossiers.entitaeten[e.id], vs = verbindungenVon(e.id), kurz = schutz(String(e.rolle || '').split(/(?<=\.)\s/)[0]);
-    fertig(e.name, [h('p', { class: 'k-pop-sub' }, e.typ + (m.asset ? ' · Kontakt vor Ort' : '') + ' · ', stufeLabel(b.stufe)),
+    const d = STATE.dossiers.entitaeten[e.id], vs = verbindungenVon(e.id), kurz = schutz(String(e.rolle || '').split(/(?<=\.)\s/)[0]);
+    fertig(e.name, [h('p', { class: 'k-pop-sub' }, e.typ + (m.asset ? ' · Kontakt vor Ort' : '') + (istBeispiel(e) ? ' · Beispiel' : '') + (d && d.status ? ' · ' + statusDef(d.status).label : '')),
       h('p', { class: 'k-pop-text' }, kurz),
       h('p', { class: 'k-pop-meta' }, vs.length + ' Verbindung(en) · ' + ((d && d.sichtungen) || []).length + ' Sichtung(en)' + (w.length ? ' · Fenster ' + w.map(function (x) { return x.id + ' (' + x.zustand + ')'; }).join(', ') : '')),
       h('div', { class: 'k-pop-akt' }, dossierLink(e, 'Karte', 'k-dl-' + e.id), h('button', { type: 'button', class: 'link', id: 'k-pop-zentrum', onclick: function () { karteWaehlen(e.id, true); } }, 'Zentrieren'),
