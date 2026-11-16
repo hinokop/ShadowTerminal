@@ -1188,7 +1188,7 @@ function zonenImportieren(q, abbildung) {
   });
   return (neu ? '; ' + neu + ' Zone(n) übernommen' : '') + (neuId ? '; ' + neuId + ' Zone(n) mit gleicher Kennung, aber abweichendem Inhalt unter neuer Kennung übernommen' : '') + (doppelt ? '; ' + doppelt + ' Zone(n) bereits vorhanden' : '') + (verworfen ? '; ' + verworfen + ' Bezug/Bezüge zu Dossier oder Unterlage nicht eindeutig zuzuordnen und weggelassen' : '');
 }
-const PROFIL_AKTIONEN = { LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_KURZLAGE: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, DOSSIER_SPERREN: 1, DOSSIER_ENTSPERREN: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1, EXPORT_VERMERKT: 1 };
+const PROFIL_AKTIONEN = { LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, SICHTUNG_BEWERTET: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_KURZLAGE: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, DOSSIER_SPERREN: 1, DOSSIER_ENTSPERREN: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1, EXPORT_VERMERKT: 1 };
 function profilSpeichern() {
   if (STATE && STATE.dossiers) {
     const d = STATE.dossiers, daten = {};
@@ -1236,7 +1236,16 @@ function profilEinspielen(z) {
     }
     if (Array.isArray(q.sichtungen) && q.sichtungen.length && !(x.sichtungen && x.sichtungen.length)) {
       x.sichtungen = kopie(q.sichtungen);
-      q.sichtungen.forEach(function (n) { const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) z.seq.sichtung = Math.max(z.seq.sichtung || 0, Number(m[1])); });
+      /* Nummern sind nur je Stand eindeutig: kollidiert eine wiederhergestellte Nummer mit einer anderen Akte, wird sie neu vergeben und der Pin-Verweis mitgezogen */
+      const belegt = {}; let hoechst = 0;
+      Object.keys(D.entitaeten).forEach(function (k2) { if (k2 === id) return; ((D.entitaeten[k2] && D.entitaeten[k2].sichtungen) || []).forEach(function (n) { belegt[n.id] = true; const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) hoechst = Math.max(hoechst, Number(m[1])); }); });
+      x.sichtungen.forEach(function (n) { const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) hoechst = Math.max(hoechst, Number(m[1])); });
+      x.sichtungen.forEach(function (n) {
+        if (!belegt[n.id]) return;
+        const alt = n.id; hoechst += 1; n.id = 'SI-' + p3(hoechst);
+        (PROFIL.pins || []).forEach(function (y) { if (n.pin && y.id === n.pin && y.dossier === id && y.sichtung === alt) y.sichtung = n.id; });
+      });
+      x.sichtungen.forEach(function (n) { const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) z.seq.sichtung = Math.max(z.seq.sichtung || 0, Number(m[1])); });
     }
     if (q.status && !x.status) { x.status = q.status; x.statusAm = q.statusAm; }
     if (q.selbstBearbeitet === true) x.selbstBearbeitet = true;
@@ -2921,7 +2930,7 @@ function sichtungGuete(e, s) {
   const alter = Date.now() - Date.parse(s.t);
   if (frische('E', s.t).stufe === 'veraltet') return 'veraltet';
   const f = erkFold(s.ort || ''), L = (STATE.dossiers.entitaeten[e.id].sichtungen || []);
-  if (f && s.guete !== 'unbestaetigt' && L.some(function (x) { const g = erkFold(x.ort || ''); return x.id !== s.id && x.guete !== 'unbestaetigt' && g && Math.abs(Date.parse(x.t) - Date.parse(s.t)) < 3600000 && g.indexOf(f) < 0 && f.indexOf(g) < 0; })) return 'widerspruechlich';
+  if (f && s.guete && s.guete !== 'unbewertet' && s.guete !== 'unbestaetigt' && L.some(function (x) { const g = erkFold(x.ort || ''); return x.id !== s.id && x.guete && x.guete !== 'unbewertet' && x.guete !== 'unbestaetigt' && g && Math.abs(Date.parse(x.t) - Date.parse(s.t)) < 3600000 && g.indexOf(f) < 0 && f.indexOf(g) < 0; })) return 'widerspruechlich';
   return s.guete || 'unbewertet';
 }
 function gueteLabel(g) { const d = SCENARIO.guete[g] || SCENARIO.guete.unbewertet; return h('span', { class: 'label ' + d.klasse, title: d.text }, d.label); }
@@ -5487,7 +5496,8 @@ const ACTIONS = {
     if (!q || q.v !== 1 || !Array.isArray(q.eigene) || !Array.isArray(q.eigeneKanten)) return null;
     { delete q.idmap; const km = idImportAbbilden(q.eigene, (STATE.dossiers.eigene || []).concat(PROFIL.eigene)); idMigrieren(q, km); q.idv = 2; }
     let neu = 0;
-    q.eigene.forEach(function (e) { if (!PROFIL.eigene.some(function (x) { return x.id === e.id; })) { PROFIL.eigene.push(e); if (q.daten && q.daten[e.id]) PROFIL.daten[e.id] = q.daten[e.id]; neu += 1; } });
+    const uebernommen = [];                                                                      /* Dossierdaten, die dieser Import neu ins Profil bringt (eigene und Standarddossiers) */
+    q.eigene.forEach(function (e) { if (!PROFIL.eigene.some(function (x) { return x.id === e.id; })) { PROFIL.eigene.push(e); if (q.daten && q.daten[e.id]) { PROFIL.daten[e.id] = q.daten[e.id]; uebernommen.push({ id: e.id, daten: PROFIL.daten[e.id] }); } neu += 1; } });
     q.eigeneKanten.forEach(function (k) { if (!PROFIL.eigeneKanten.some(function (x) { return x.id === k.id; })) PROFIL.eigeneKanten.push(k); });
     if (Array.isArray(q.ausgeblendeteKanten)) {
       const bekannt = new Set(SCENARIO.verbindungen.concat(SCENARIO.standard.verbindungen).map(function (v) { return v.id; }));
@@ -5509,6 +5519,7 @@ const ACTIONS = {
     const hoechst = eingehend.concat(PROFIL.pins).reduce(function (m, y) { return Math.max(m, pinNr(y)); }, 0);
     PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, (q.seq && q.seq.pin) || 0, hoechst);
     const inhalt = function (y) { const c = Object.assign({}, y); delete c.importVon; delete c.importName; delete c.id; delete c.name; return JSON.stringify(c); };
+    const pinNeu = {};                                                                           /* alte Pin-Kennung -> neue, damit Sichtungen ihren Ursprungspin behalten */
     eingehend.forEach(function (x) {
       const gl = PROFIL.pins.find(function (y) { return y.id === x.id; });
       if (!gl) { PROFIL.pins.push(x); return; }
@@ -5516,7 +5527,7 @@ const ACTIONS = {
       /* gleiche ID, anderer Inhalt oder Name: als eigener Pin mit neuer ID übernehmen. Originalname und Importzusatz bleiben getrennt;
          dieselbe Datei erzeugt beim zweiten Import keine weitere Kopie, eine geänderte Fassung (auch nur umbenannt) dagegen schon */
       if (PROFIL.pins.some(function (y) { return y.importVon === x.id && inhalt(y) === inhalt(x) && y.importName === (x.name || 'Pin'); })) { pinDoppelt += 1; return; }
-      PROFIL.seq.pin += 1;
+      PROFIL.seq.pin += 1; pinNeu[x.id] = 'PIN-' + p3(PROFIL.seq.pin);
       PROFIL.pins.push(Object.assign({}, x, { id: 'PIN-' + p3(PROFIL.seq.pin), name: (x.name || 'Pin') + ' (Import ' + x.id + ')', importVon: x.id, importName: x.name || 'Pin' }));
       pinKonflikt += 1;
     });
@@ -5525,9 +5536,27 @@ const ACTIONS = {
     Object.keys(q.dossierDaten || {}).forEach(function (k) {
       const daten = q.dossierDaten[k];
       if (!daten || !entitaet(k)) return;
-      if (!PROFIL.dossierDaten[k]) PROFIL.dossierDaten[k] = daten;
+      if (!PROFIL.dossierDaten[k]) { PROFIL.dossierDaten[k] = daten; uebernommen.push({ id: k, daten: daten }); }
       else if (daten.selbstBearbeitet === true) PROFIL.dossierDaten[k].selbstBearbeitet = true;
     });
+    /* Sichtungen der übernommenen Dossiers: Pin-Verweise auf neue Pin-Kennungen umschreiben, kollidierende SI-Nummern neu vergeben und die Gegenseite (pin.sichtung) mitziehen */
+    (function () {
+      const ids = {}, belegt = {}; let hoechst = 0;
+      uebernommen.forEach(function (u) { ids[u.id] = true; });
+      const erfassen = function (l) { (l || []).forEach(function (n) { belegt[n.id] = true; const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) hoechst = Math.max(hoechst, Number(m[1])); }); };
+      Object.keys(STATE.dossiers.entitaeten).forEach(function (k) { if (!ids[k] && STATE.dossiers.entitaeten[k]) erfassen(STATE.dossiers.entitaeten[k].sichtungen); });
+      [PROFIL.daten, PROFIL.dossierDaten].forEach(function (S) { Object.keys(S || {}).forEach(function (k) { if (!ids[k] && S[k]) erfassen(S[k].sichtungen); }); });
+      uebernommen.forEach(function (u) { (u.daten.sichtungen || []).forEach(function (n) { const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) hoechst = Math.max(hoechst, Number(m[1])); }); });
+      uebernommen.forEach(function (u) {
+        (u.daten.sichtungen || []).forEach(function (n) {
+          const altNr = n.id;
+          if (n.pin && pinNeu[n.pin]) n.pin = pinNeu[n.pin];
+          if (belegt[n.id]) { hoechst += 1; n.id = 'SI-' + p3(hoechst); }
+          belegt[n.id] = true;
+          if (n.pin) (PROFIL.pins || []).forEach(function (y) { if (y.id === n.pin && y.dossier === u.id && (y.sichtung === altNr || y.sichtung === n.id)) y.sichtung = n.id; });
+        });
+      });
+    })();
     aenderungenAnwenden();
     ['eigen', 'kante', 'galerie', 'ausgang'].forEach(function (k) { PROFIL.seq[k] = Math.max(PROFIL.seq[k] || 0, (q.seq && q.seq[k]) || 0); });
     profilEinspielen(STATE);
@@ -5673,11 +5702,13 @@ const ACTIONS = {
     if (!e || (!ort && !text)) return null;
     const d = STATE.dossiers.entitaeten[e.id];
     d.sichtungen = d.sichtungen || [];
-    STATE.seq.sichtung = (STATE.seq.sichtung || 0) + 1;
+    let hoechst = 0;                                              /* Nummern folgen dem vorhandenen Bestand: nach dem Löschen beginnt die Zählung wieder bei 001 */
+    Object.keys(STATE.dossiers.entitaeten).forEach(function (k) { ((STATE.dossiers.entitaeten[k] && STATE.dossiers.entitaeten[k].sichtungen) || []).forEach(function (x) { const m = /^SI-(\d+)$/.exec(x.id || ''); if (m) hoechst = Math.max(hoechst, Number(m[1])); }); });
+    STATE.seq.sichtung = hoechst + 1;
     const id = 'SI-' + p3(STATE.seq.sichtung), t = nowIso();
     const guete = SCENARIO.guete[a.guete] ? a.guete : 'unbewertet';
-    d.sichtungen.push({ id: id, t: t, ort: ort, text: text, guete: guete, quelle: a.quelle || 'Eintrag', zone: a.zone || undefined });
     const pinX = a.pin ? (PROFIL.pins || []).find(function (y) { return y.id === a.pin && y.dossier === e.id; }) : null;
+    d.sichtungen.push({ id: id, t: t, ort: ort, text: text, guete: guete, quelle: a.quelle || 'Eintrag', zone: a.zone || undefined, pin: pinX ? pinX.id : undefined });
     if (pinX) pinX.sichtung = id;                                 /* der Entwurf ist damit als Sichtung eingetragen */
     dossierStempel(d, t);
     delete VIEW.draft['si-ort-' + e.id]; delete VIEW.draft['si-text-' + e.id];
@@ -5899,12 +5930,21 @@ const ACTIONS = {
     if (a.an && i < 0) L.push(e.id); else if (!a.an && i >= 0) L.splice(i, 1); else return null;
     return { modul: 'Dossier', aktion: a.an ? 'Als Zielperson geführt' : 'Nicht mehr als Zielperson geführt', detail: e.id + ' ' + e.name };
   },
+  SICHTUNG_BEWERTET: function (a) {
+    const e = entitaet(a.id), d = e && STATE.dossiers.entitaeten[e.id], si = d && (d.sichtungen || []).find(function (x) { return x.id === a.sid; });
+    if (!si || !SCENARIO.guete[a.guete] || (si.guete || 'unbewertet') === a.guete) return null;
+    const alt = si.guete || 'unbewertet';
+    si.guete = a.guete; dossierStempel(d, nowIso());
+    return { modul: 'Dossier', aktion: 'Sichtung bewertet', detail: e.id + ' ' + e.name + ', ' + a.sid + ': ' + SCENARIO.guete[alt].label + ' → ' + SCENARIO.guete[a.guete].label };
+  },
   SICHTUNG_ENTFERNT: function (a) {
     const e = entitaet(a.id), d = e && STATE.dossiers.entitaeten[e.id];
     if (!d || !d.sichtungen) return null;
     const i = d.sichtungen.findIndex(function (x) { return x.id === a.sid; });
     if (i < 0) return null;
+    const ent = d.sichtungen[i];
     d.sichtungen.splice(i, 1);
+    (PROFIL.pins || []).forEach(function (y) { if (ent.pin && y.id === ent.pin && y.dossier === e.id && y.sichtung === a.sid) delete y.sichtung; });          /* nur die konkrete Paarung lösen; der Entwurf erscheint wieder auf der Karte */
     return { modul: 'Dossier', aktion: 'Sichtung entfernt', detail: e.id + ' ' + e.name + ', ' + a.sid };
   }
 };
@@ -6979,7 +7019,7 @@ function sichtungsEntwuerfe(e) {
   if (!L.length) return null;
   return [h('h3', null, 'Sichtungsentwürfe (' + L.length + ')'), tabelle(['Pin', 'Position', 'Notiz', ''], L.map(function (y) {
     return [td('nw', y.name), td('nw', y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5)), td('txt', y.notiz || '–'),
-      td('nw', y.sichtung ? 'eingetragen als ' + y.sichtung : h('button', { type: 'button', class: 'link', id: 'si-pin-' + y.id, onclick: function () { dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5), text: 'Aus Entwurf ' + y.name, guete: 'unbewertet', pin: y.id }); } }, 'als Sichtung eintragen'))];
+      td('nw', pinSichtung(y) ? 'eingetragen als ' + y.sichtung : h('button', { type: 'button', class: 'link', id: 'si-pin-' + y.id, onclick: function () { dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5), text: 'Aus Entwurf ' + y.name, guete: 'unbewertet', pin: y.id }); } }, 'als Sichtung eintragen'))];
   }), '')];
 }
 function dossierTabs(e) {
@@ -7011,7 +7051,7 @@ function sichtungenBlock(e) {
   const d = STATE.dossiers.entitaeten[e.id], L = (d.sichtungen || []).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   return [
     tabelle(['Zeit (UTC)', 'ID', 'Güte', 'Ort', 'Beobachtung', ''], L.map(function (x) {
-      return [td('nw', fmtZ(x.t)), td('nw', x.id), td('nw', gueteLabel(sichtungGuete(e, x))), td('txt', x.ort || '–'), td('txt', x.text || '–'),
+      return [td('nw', fmtZ(x.t)), td('nw', x.id), td('nw', [gueteLabel(sichtungGuete(e, x)), ' ', h('select', { id: 'si-g-' + x.id, 'aria-label': 'Güte von ' + x.id, onchange: function (ev) { dispatch({ type: 'SICHTUNG_BEWERTET', id: e.id, sid: x.id, guete: ev.target.value }); } }, ['unbewertet', 'gesichert', 'plausibel', 'unbestaetigt'].map(function (g) { return h('option', { value: g, selected: (x.guete || 'unbewertet') === g }, SCENARIO.guete[g].label); }))]), td('txt', x.ort || '–'), td('txt', x.text || '–'),
               td('nw', h('button', { type: 'button', class: 'link', id: 'si-del-' + x.id, onclick: function () { dispatch({ type: 'SICHTUNG_ENTFERNT', id: e.id, sid: x.id }); } }, 'entfernen'))];
     }), 'Keine Sichtungen eingetragen.'),
     (function () {
