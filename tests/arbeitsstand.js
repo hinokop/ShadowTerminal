@@ -36,6 +36,9 @@ const { APP } = require('./_pfad');
     /* alles verändern, dann wiederherstellen */
     await p.evaluate(s => { STATE.dossiers.auswahl = s.d2; VIEW.dtab = 'info'; X_VIEW.id = s.f2; Object.assign(VIEW.karte, { lat: 40, lon: 5, zoom: 6, auswahl: null }); VIEW.karte.ebenen.sichtungen = true; VIEW.karte.ebenen.zonen = true; dispatch({ type: 'NAVIGATION', modul: 'akten' }); }, s);
     await p.click('#as-wieder');
+    assert.equal(await p.locator('#mod-title').textContent(), 'Karte', 'das Kartenmodul ist tatsächlich aufgebaut');
+    assert.ok(await p.locator('#k-svg').count() > 0, 'Kartenansicht sichtbar');
+    assert.equal(await p.locator('#nav-karte').getAttribute('aria-current'), 'page');
     const r = await p.evaluate(() => ({ modul: STATE.ui.modul, d: STATE.dossiers.auswahl, dtab: VIEW.dtab, fall: X_VIEW.id, k: { lat: VIEW.karte.lat, lon: VIEW.karte.lon, zoom: VIEW.karte.zoom, auswahl: VIEW.karte.auswahl, sicht: VIEW.karte.ebenen.sichtungen, zonen: VIEW.karte.ebenen.zonen } }));
     assert.deepEqual(r, { modul: 'karte', d: s.d, dtab: 'sichtungen', fall: s.f, k: { lat: 52.4, lon: 13.3, zoom: 11, auswahl: s.pin, sicht: false, zonen: false } });
     /* kein automatischer Sprung beim Start */
@@ -54,6 +57,14 @@ const { APP } = require('./_pfad');
     assert.equal(u.d, s.d2, 'gesperrtes Dossier wird nicht gewählt'); assert.equal(u.fall, s.f2, 'gelöschter Fall wird nicht gewählt');
     assert.equal(u.auswahl, null); assert.equal(u.zoom, 11); assert.equal(u.modul, 'karte');
     for (const t of ['übersprungen', 'Dossier ' + s.d, 'Fall ' + s.f, 'Kartenobjekt ' + s.pin]) assert.ok(u.msg.includes(t), 'Meldung nennt ' + t);
+    /* Dossier und X: das Modul baut sich sichtbar mit dem gespeicherten Objekt auf */
+    const ziele = await p.evaluate(() => { const l = alleEntitaeten().filter(e => !e.eigen && wissen(e) === 'frei'); return { d: l[0].id, name: l[0].name }; });
+    await p.evaluate(z => { PROFIL.gesperrt = []; STATE.dossiers.auswahl = z.d; VIEW.dtab = 'info'; dispatch({ type: 'NAVIGATION', modul: 'dossier' }); }, ziele);
+    await p.click('#as-speichern');
+    await p.evaluate(() => dispatch({ type: 'NAVIGATION', modul: 'akten' }));
+    await p.click('#as-wieder');
+    assert.equal(await p.locator('#mod-title').textContent(), 'Dossiers');
+    assert.ok((await p.locator('#main, main, body').first().innerText()).includes(ziele.name), 'gewähltes Dossier sichtbar');
     assert.deepEqual(fehler, []);
     console.log('OK: Arbeitsstand sichern und wiederherstellen, kein Autosprung, Überspringen');
   } finally { await browser.close(); }

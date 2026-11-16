@@ -5968,7 +5968,7 @@ const ACTIONS = {
     const r = asAnwenden(PROFIL.arbeitsstand);
     if (!r.ok) { meldung('Kein Arbeitsstand gespeichert.'); return null; }
     meldung('Arbeitsstand wiederhergestellt' + (r.uebersprungen.length ? ' · übersprungen: ' + r.uebersprungen.join(', ') : ''));
-    return { modul: 'Profil', aktion: 'Arbeitsstand wiederhergestellt', leicht: true, detail: 'Ansicht ' + STATE.ui.modul + (r.uebersprungen.length ? '; übersprungen: ' + r.uebersprungen.length : '') };
+    return { modul: 'Profil', aktion: 'Arbeitsstand wiederhergestellt', detail: 'Ansicht ' + STATE.ui.modul + (r.uebersprungen.length ? '; übersprungen: ' + r.uebersprungen.length : '') };
   },
   SICHTUNG_KENNUNG: function (a) {      /* Altbestand ohne Kennung: einmalig vergeben, damit ein Export einer konkreten Sichtung zugeordnet werden kann */
     const d = STATE.dossiers.entitaeten[a.id], si = d && (d.sichtungen || []).find(function (x) { return x.id === a.sid; });
