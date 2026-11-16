@@ -1,3 +1,4 @@
+const { vorbereiten } = require('./_satcon');
 /* Die statische Tab-Vervollständigung beweist keine Verbindung. Browserfehler und Abmeldung erklären den richtigen Neustart. */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
@@ -27,6 +28,7 @@ const PF = require('./_pfad');
     async function taste(wert, key) { await inp.fill(wert); await inp.press(key); }
     const erwartet = async wert => p.waitForFunction(wert => $('profil-terminal-eingabe').value === wert, wert);
     const ausgabe = async wert => p.waitForFunction(wert => $('profil-terminal-ausgabe').textContent.includes(wert), wert);
+    await vorbereiten(p);
     await taste('secure-channel --connect --onion --ephemeral', 'Enter');
     await p.waitForFunction(() => $('profil-terminal-prompt').textContent === 'you >');
     const prefix = 'send /pgcl-eu3.arch07/';

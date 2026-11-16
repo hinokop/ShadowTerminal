@@ -364,7 +364,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   } else terminalAusgabe(antwort.text);
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '' };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satAufbau: null, satBereit: null };
 function terminalAusgabe(zeile) {
   const t = TERMINAL_ZUSTAND;
   t.ausgabe = t.ausgabe.concat(zeile).slice(-45);
@@ -395,6 +395,43 @@ async function terminalPing() {
   }
 }
 /* A staged dialogue, not a transport. No socket, storage, real key or mission state. */
+const TERMINAL_SAT_TEILE = ['live', 'noaa_apt', '--source', 'rtlsdr', '--frequency', '137.1e6', '--samplerate', '2.4e6'];
+const TERMINAL_SAT_BEFEHL = 'satcon ' + TERMINAL_SAT_TEILE.join(' ');
+function terminalSatAbbruch() {
+  const t = TERMINAL_ZUSTAND, alt = t.satAufbau;
+  if (t.satBereit) {
+    const privat = terminalIdentitaetZeilen(t.satBereit);
+    t.ausgabe = t.ausgabe.filter(function (z) { return !privat.includes(z); });
+    terminalAusgabe([]);
+  }
+  t.satAufbau = null; t.satBereit = null;
+  if (alt) alt.abbrechen();
+}
+async function terminalSatStart(arg) {
+  const t = TERMINAL_ZUSTAND;
+  if (t.satAufbau || t.dateiLaeuft || t.prueft) { terminalAusgabe('Eine Anfrage läuft bereits'); return; }
+  if (arg.split(/\s+/).join(' ') !== TERMINAL_SAT_TEILE.join(' ')) { terminalAusgabe(TERMINAL_SAT_BEFEHL); return; }
+  terminalSatAbbruch();
+  const aufbau = { abbrechen: function () {} }, ident = terminalKanalIdentitaet();
+  t.satAufbau = aufbau;
+  const reduziert = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const frequenz = (Number(TERMINAL_SAT_TEILE[5]) / 1e6).toFixed(3);
+  const werte = ['137.620', '137.912']; if (terminalKanalZufall(2)) werte.reverse(); werte.push(frequenz);
+  const zeilen = ['[*] Initializing encrypted uplink...'].concat(werte.map(function (mhz) {
+    return '[*] Negotiating frequency lock (' + mhz + ' MHz)...';
+  }), ['[*] Establishing Doppler-compensated session...', '[*] Handshake complete. Forward secrecy active.', '[*] Assigning temporary identity...']);
+  for (const zeile of zeilen) {
+    await new Promise(function (ok) { const timer = setTimeout(ok, reduziert ? 0 : 420); aufbau.abbrechen = function () { clearTimeout(timer); ok(); }; });
+    if (t.satAufbau !== aufbau) return;
+    terminalAusgabe(zeile);
+  }
+  t.satAufbau = null; t.satBereit = ident;
+  terminalAusgabe(terminalIdentitaetZeilen(ident).concat([
+    'Satellite:     NOAA-19 (APT) · ' + frequenz + ' MHz',
+    'Link quality:  ' + (82 + terminalKanalZufall(15)) + ' % · SNR ' + ((120 + terminalKanalZufall(61)) / 10).toFixed(1) + ' dB',
+    '', 'Secure connection ready.'
+  ]));
+}
 const TERMINAL_KANAL_BEFEHL = 'secure-channel --connect --onion --ephemeral';
 const TERMINAL_KANAL_LINIE = '────────────────────────────────────────';
 const TERMINAL_KANAL_START = [
@@ -416,6 +453,7 @@ function terminalKanalPromptSync() {
 }
 function terminalKanalAbbruch() {
   const t = TERMINAL_ZUSTAND;
+  terminalSatAbbruch();
   if (!t.kanal) return;
   const kanal = t.kanal;
   t.ausgabe = kanal.vorher;
@@ -447,25 +485,31 @@ async function terminalKanalFolge(kanal, zeilen, pause) {
   }
   return true;
 }
+function terminalKanalIdentitaet() {
+  const hex = '0123456789abcdef', abc = 'abcdefghijklmnopqrstuvwxyz';
+  return {
+    knoten: 'NODE-' + String(terminalKanalZufall(10000)).padStart(4, '0') + '-' + terminalKanalZeichen(abc.toUpperCase(), 1),
+    sitzung: [4, 4, 4].map(function (n) { return terminalKanalZeichen(hex, n); }).join('-'),
+    kontakt: terminalKanalZeichen(abc, 14)
+  };
+}
+function terminalIdentitaetZeilen(ident) {
+  return [
+    'Connected to:  ' + ident.knoten + '  (session: ' + ident.sitzung + ')',
+    'Contact:       "' + ident.kontakt + '"',
+    'Channel:       end-to-end · self-destruct after close'
+  ];
+}
 async function terminalKanalStart() {
   const t = TERMINAL_ZUSTAND;
+  if (!t.satBereit) { terminalAusgabe('[!] keine sichere Verbindung hergestellt'); return; }
   if (t.dateiLaeuft || t.prueft) { terminalAusgabe('Eine Anfrage läuft bereits'); return; }
-  const kanal = { phase: 'start', vorher: t.ausgabe.slice() };
+  const ident = t.satBereit, kanal = { phase: 'start', vorher: t.ausgabe.filter(function (z) { return !terminalIdentitaetZeilen(ident).includes(z); }), knoten: ident.knoten, sitzung: ident.sitzung };
+  t.satBereit = null;
   t.kanal = kanal;
   terminalKanalPromptSync();
-  const hex = '0123456789abcdef', abc = 'abcdefghijklmnopqrstuvwxyz';
-  const knoten = 'NODE-' + String(terminalKanalZufall(10000)).padStart(4, '0') + '-' + terminalKanalZeichen(abc.toUpperCase(), 1);
-  const sitzung = [4, 4, 4].map(function (n) { return terminalKanalZeichen(hex, n); }).join('-');
-  const kontakt = terminalKanalZeichen(abc, 14);
-  kanal.knoten = knoten;
-  kanal.sitzung = sitzung;
   if (!await terminalKanalFolge(kanal, TERMINAL_KANAL_START, TERMINAL_KANAL_TEMPO.aufbau)) return;
-  terminalAusgabe([
-    'Connected to:  ' + knoten + '  (session: ' + sitzung + ')',
-    'Contact:       "' + kontakt + '"',
-    'Channel:       end-to-end · self-destruct after close',
-    TERMINAL_KANAL_LINIE
-  ]);
+  terminalAusgabe(terminalIdentitaetZeilen(ident).concat(TERMINAL_KANAL_LINIE));
   kanal.phase = 'eingabe';
   terminalKanalPromptSync();
 }
@@ -568,7 +612,7 @@ function terminalBefehl(zeile) {
   if (t.kanal) { void terminalKanalMeldung(zeile, t.kanal); return; }
   if (befehl === 'clear' && !arg) { t.version++; terminalTransferStop(); t.ausgabe = []; terminalAusgabe([]); return; }
   terminalAusgabe(terminalPrompt() + ' ' + zeile);
-  if (befehl === 'help' && !arg) terminalAusgabe('ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · send <datei> (im Kanal) · whoami · uname -a · date · ping relay · clear · exit · ' + TERMINAL_KANAL_BEFEHL);
+  if (befehl === 'help' && !arg) terminalAusgabe('ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · send <datei> (im Kanal) · whoami · uname -a · date · ping relay · clear · exit · ' + TERMINAL_SAT_BEFEHL + ' · ' + TERMINAL_KANAL_BEFEHL);
   else if (befehl === 'pwd' && !arg) terminalAusgabe(t.ort ? '/' + [TERMINAL_DB].concat(t.ort).join('/') : '/');
   else if (befehl === 'whoami' && !arg) terminalAusgabe('root');
   else if (befehl === 'uname' && arg === '-a') terminalAusgabe(TERMINAL_UBUNTU);
@@ -577,6 +621,7 @@ function terminalBefehl(zeile) {
     if (arg === 'relay') terminalPing();
     else terminalAusgabe('ping: verfügbares Ziel ist relay');
   } else if (befehl === 'send') terminalAusgabe('send ist im geöffneten Secure Channel verfügbar.');
+  else if (befehl === 'satcon') void terminalSatStart(arg);
   else if (befehl === 'secure-channel') {
     if (arg === '--connect --onion --ephemeral') void terminalKanalStart();
     else terminalAusgabe(TERMINAL_KANAL_BEFEHL);
@@ -590,7 +635,7 @@ function terminalBefehl(zeile) {
   } else terminalAusgabe('command not found');
 }
 const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
-const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit', 'secure-channel', 'send']);
+const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit', 'satcon', 'secure-channel', 'send']);
 function terminalTabKandidaten(input, bisher, version, kopf, prefix, kandidaten, format) {
   if (!input.isConnected || input.value !== bisher || TERMINAL_ZUSTAND.version !== version ||
       document.activeElement !== input || input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
@@ -610,6 +655,13 @@ async function terminalTab(input, bisher, m) {
   };
   if (arg === undefined) {
     fertig('', befehl, TERMINAL_BEFEHLE, function (x) { return x + ' '; });
+    return;
+  }
+  if (befehl === 'satcon') {
+    const teile = arg.split(/\s+/), prefix = teile.pop(), kandidat = TERMINAL_SAT_TEILE[teile.length];
+    if (kandidat && teile.every(function (x, i) { return x === TERMINAL_SAT_TEILE[i]; })) {
+      fertig(bisher.slice(0, bisher.length - prefix.length), prefix, [kandidat], function (x) { return x + ' '; });
+    }
     return;
   }
   if (befehl === 'secure-channel') {
@@ -699,6 +751,9 @@ function terminalVerlaufTaste(ev) {
   return true;
 }
 function terminalTabTaste(ev) {
+  if (ev.key === 'Escape' && TERMINAL_ZUSTAND.satAufbau) {
+    ev.preventDefault(); terminalSatAbbruch(); terminalAusgabe('[!] Verbindungsaufbau abgebrochen'); return;
+  }
   if (terminalVerlaufTaste(ev)) return;
   if (TERMINAL_ZUSTAND.kanal) {
     if (ev.key === 'Escape') { ev.preventDefault(); terminalKanalAbbruch(); return; }
@@ -715,7 +770,7 @@ function terminalTabTaste(ev) {
   if (input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
   const m = /^(\S+)(?:\s+(.*))?$/.exec(bisher);
   if (TERMINAL_ZUSTAND.dateiLaeuft || !m || (m[2] === undefined ? !TERMINAL_BEFEHLE.some(function (x) { return x.startsWith(m[1]); }) :
-    !['cd', 'cat', 'head', 'tail', 'wget', 'ping', 'uname', 'ls', 'secure-channel'].includes(m[1]))) return;
+    !['cd', 'cat', 'head', 'tail', 'wget', 'ping', 'uname', 'ls', 'satcon', 'secure-channel'].includes(m[1]))) return;
   ev.preventDefault();
   terminalTab(input, bisher, m).catch(function () {});
 }

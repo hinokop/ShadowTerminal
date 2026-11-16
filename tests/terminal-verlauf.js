@@ -1,3 +1,4 @@
+const { vorbereiten } = require('./_satcon');
 /* Terminal: Pfeiltasten blättern durch den Befehlsverlauf der Sitzung. Exit-Code 1 bei Fehlschlag. */
 const assert = require('node:assert/strict'); const { chromium } = require('playwright'); const PF = require('./_pfad');
 (async () => {
@@ -24,6 +25,7 @@ const assert = require('node:assert/strict'); const { chromium } = require('play
     await input.fill(''); await input.press('ArrowUp'); await input.press('Enter'); await p.waitForTimeout(150);   /* wiederholter Befehl */
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.join(',')), 'pwd,whoami,date');
     /* Kanal: nichts wird aufgenommen, Pfeiltasten blättern dort nicht */
+    await vorbereiten(p);
     await lauf('secure-channel --connect --onion --ephemeral');
     await p.waitForFunction(() => document.querySelector('#profil-terminal-prompt').textContent === 'you >', null, { timeout: 40000 });
     const vorher = await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.join(','));
