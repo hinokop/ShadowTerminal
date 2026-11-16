@@ -707,9 +707,13 @@ function kartenTxtExport(art, id) {
     'TXT speichern', async function () {
       const aktuell = pruefen();
       if (!aktuell) return;
-      const antwort = await terminalBruecke('export-txt', null, false, { art: art, id: id, ordner: ordner.value, text: textVon(aktuell) });
+      const schluessel = art + ':' + id + ':' + ordner.value, gemerkt = (PROFIL.exporte || {})[schluessel];
+      const antwort = await terminalBruecke('export-txt', null, false, { art: art, id: id, ordner: ordner.value, text: textVon(aktuell), last: gemerkt && gemerkt.name && gemerkt.sha ? { name: gemerkt.name, sha: gemerkt.sha } : null });
       if (antwort.error) { meldung('TXT-Export nicht gespeichert. ' + antwort.error); return; }
-      meldung('TXT gespeichert · /' + TERMINAL_DB + '/' + antwort.folder + '/' + antwort.name);
+      if (antwort.sha256) dispatch({ type: 'EXPORT_VERMERKT', schluessel: schluessel, name: antwort.name, sha: antwort.sha256 });
+      const ziel = '/' + TERMINAL_DB + '/' + antwort.folder + '/' + antwort.name;
+      meldung(antwort.mode === 'ersetzt' ? 'TXT ersetzt · ' + ziel : antwort.mode === 'unveraendert' ? 'TXT unverändert, keine neue Datei · ' + ziel
+        : antwort.mode === 'version' ? 'Vorhandene Datei wurde nicht ersetzt, da sie verändert wurde. Neue Version gespeichert · ' + ziel : 'TXT gespeichert · ' + ziel);
     });
 }
 function pinPopup(x, fertig) {
