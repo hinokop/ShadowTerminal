@@ -2926,11 +2926,9 @@ function sichtungRadiusM(si, genau) {
   const fr = frische('E', si.t), zuwachs = Math.min(fr.verhaeltnis, 3) * 400;
   return { m: Math.round((basis + zuwachs) / 10) * 10, basis: basis, alter: fr };
 }
-function sichtungGuete(e, s) {
-  const alter = Date.now() - Date.parse(s.t);
+const SICHTUNG_BEWERTUNGEN = ['unbewertet', 'gesichert', 'plausibel', 'unbestaetigt', 'widerspruechlich'];
+function sichtungGuete(s) {
   if (frische('E', s.t).stufe === 'veraltet') return 'veraltet';
-  const f = erkFold(s.ort || ''), L = (STATE.dossiers.entitaeten[e.id].sichtungen || []);
-  if (f && s.guete && s.guete !== 'unbewertet' && s.guete !== 'unbestaetigt' && L.some(function (x) { const g = erkFold(x.ort || ''); return x.id !== s.id && x.guete && x.guete !== 'unbewertet' && x.guete !== 'unbestaetigt' && g && Math.abs(Date.parse(x.t) - Date.parse(s.t)) < 3600000 && g.indexOf(f) < 0 && f.indexOf(g) < 0; })) return 'widerspruechlich';
   return s.guete || 'unbewertet';
 }
 function gueteLabel(g) { const d = SCENARIO.guete[g] || SCENARIO.guete.unbewertet; return h('span', { class: 'label ' + d.klasse, title: d.text }, d.label); }
@@ -2940,7 +2938,7 @@ function sichtungText(e) {
   if (e.typ === 'Ort') return fuell(T.ort, { E: kennung(e), N: e.name, H: e.name });
   if (L.length) {
     const s = L[0];
-    return fuell(T.sichtung, { E: kennung(e), N: e.name, T: fmtZ(s.t), O: s.ort ? ', ' + s.ort : '', X: (function () { let t = s.text || ''; if (s.quelle === 'Meldung') { [e.id, e.name].concat(e.aliase || []).forEach(function (n) { t = t.split(n).join(''); }); t = t.replace(/^[\s,.:;\-]+/, '').trim(); if (s.ort && t.toLowerCase().indexOf(s.ort.toLowerCase()) >= 0) t = t.replace(new RegExp(s.ort.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), s.ort); } return t ? ' (' + t + ')' : ''; })(), G: (function () { const g = sichtungGuete(e, s); return g === 'gesichert' ? '' : ' – ' + SCENARIO.guete[g].label + (g === 'veraltet' ? ', vor ' + Math.max(1, Math.round((Date.now() - Date.parse(s.t)) / 86400000)) + ' d' : ''); })(), ANZ: L.length > 1 ? L.length + ' Sichtungen im Dossier.' : '' }).trim();
+    return fuell(T.sichtung, { E: kennung(e), N: e.name, T: fmtZ(s.t), O: s.ort ? ', ' + s.ort : '', X: (function () { let t = s.text || ''; if (s.quelle === 'Meldung') { [e.id, e.name].concat(e.aliase || []).forEach(function (n) { t = t.split(n).join(''); }); t = t.replace(/^[\s,.:;\-]+/, '').trim(); if (s.ort && t.toLowerCase().indexOf(s.ort.toLowerCase()) >= 0) t = t.replace(new RegExp(s.ort.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), s.ort); } return t ? ' (' + t + ')' : ''; })(), G: (function () { const g = sichtungGuete(s); return g === 'gesichert' ? '' : ' – ' + SCENARIO.guete[g].label + (g === 'veraltet' ? ', vor ' + Math.max(1, Math.round((Date.now() - Date.parse(s.t)) / 86400000)) + ' d' : ''); })(), ANZ: L.length > 1 ? L.length + ' Sichtungen im Dossier.' : '' }).trim();
   }
   const hint = adresseHinterlegt(e);
   return hint ? fuell(T.adresse, { E: kennung(e), N: e.name, H: hint }) : fuell(T.nichts, { E: kennung(e), N: e.name });
@@ -4006,15 +4004,6 @@ function dossierMeldung(k, msg, text, out, modus) {
   let antwort = fill(T.quittung[Date.parse(msg.t) % T.quittung.length], { E: kennung(e), N: e.name, SI: si.id });
   if (guete === 'unbestaetigt') antwort += T.unbestaetigt;
   if (!ort) antwort += T.ohneOrt;
-  if (sichtungGuete(e, si) === 'widerspruechlich') {
-    antwort += T.zweitquelle;
-    const f1 = erkFold(si.ort || ''), anderes = d.sichtungen.find(function (x) { const g = erkFold(x.ort || ''); return x.id !== si.id && x.guete !== 'unbestaetigt' && g && Math.abs(Date.parse(x.t) - Date.parse(si.t)) < 3600000 && g.indexOf(f1) < 0 && f1.indexOf(g) < 0; });
-    if (anderes && !widerspruchOffen()) {
-      const A = SCENARIO.abfragen.aussagen;
-      out.push({ modul: 'Kommunikation', aktion: 'Widerspruch erkannt', detail: e.id + ': ' + anderes.id + ' gegen ' + si.id });
-      widerspruchAnlegen({ typ: 'ort', alt: anderes.id, neu: si.id }, e, A.frageOrt.replace('{E}', kennung(e)).replace('{N}', e.name).replace('{A}', anderes.ort).replace('{ZA}', fmtZ(anderes.t).slice(11, 16) + 'Z').replace('{B}', si.ort));
-    }
-  }
   fgAntwort(k, msg, antwort);
   return true;
 }
@@ -5932,7 +5921,7 @@ const ACTIONS = {
   },
   SICHTUNG_BEWERTET: function (a) {
     const e = entitaet(a.id), d = e && STATE.dossiers.entitaeten[e.id], si = d && (d.sichtungen || []).find(function (x) { return x.id === a.sid; });
-    if (!si || !SCENARIO.guete[a.guete] || (si.guete || 'unbewertet') === a.guete) return null;
+    if (!si || !SICHTUNG_BEWERTUNGEN.includes(a.guete) || (si.guete || 'unbewertet') === a.guete) return null;
     const alt = si.guete || 'unbewertet';
     si.guete = a.guete; dossierStempel(d, nowIso());
     return { modul: 'Dossier', aktion: 'Sichtung bewertet', detail: e.id + ' ' + e.name + ', ' + a.sid + ': ' + SCENARIO.guete[alt].label + ' → ' + SCENARIO.guete[a.guete].label };
@@ -7042,7 +7031,7 @@ function sichtungDialog(e) {
   const form = h('div', null,
     feldZeile('Ort', 'si-ort', h('input', { type: 'text', id: 'si-ort', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Ort der Sichtung', placeholder: 'Ortsangabe oder Koordinaten', style: 'flex:1 1 220px;min-width:0' })),
     feldZeile('Beobachtung', 'si-text', h('textarea', { id: 'si-text', rows: '3', 'aria-label': 'Beobachtung', style: 'flex:1 1 220px;min-width:0' })),
-    feldZeile('Bewertung', 'si-guete', h('select', { id: 'si-guete', 'aria-label': 'Güte der Information' }, ['unbewertet', 'gesichert', 'plausibel', 'unbestaetigt'].map(function (g) { return h('option', { value: g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); }))));
+    feldZeile('Bewertung', 'si-guete', h('select', { id: 'si-guete', 'aria-label': 'Güte der Information' }, SICHTUNG_BEWERTUNGEN.map(function (g) { return h('option', { value: g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); }))));
   bestaetigen('Sichtung hinzufügen: ' + e.id + ' ' + e.name, form, 'Sichtung eintragen', function () {
     dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: ($('si-ort').value || '').trim(), text: ($('si-text').value || '').trim(), guete: $('si-guete').value });
   }, { pruefer: function () { return !!(($('si-ort').value || '').trim() || ($('si-text').value || '').trim()); }, klartext: 'Sichtung zu ' + e.id + ' eintragen?' });
@@ -7051,7 +7040,7 @@ function sichtungenBlock(e) {
   const d = STATE.dossiers.entitaeten[e.id], L = (d.sichtungen || []).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   return [
     tabelle(['Zeit (UTC)', 'ID', 'Güte', 'Ort', 'Beobachtung', ''], L.map(function (x) {
-      return [td('nw', fmtZ(x.t)), td('nw', x.id), td('nw', [gueteLabel(sichtungGuete(e, x)), ' ', h('select', { id: 'si-g-' + x.id, 'aria-label': 'Güte von ' + x.id, onchange: function (ev) { dispatch({ type: 'SICHTUNG_BEWERTET', id: e.id, sid: x.id, guete: ev.target.value }); } }, ['unbewertet', 'gesichert', 'plausibel', 'unbestaetigt'].map(function (g) { return h('option', { value: g, selected: (x.guete || 'unbewertet') === g }, SCENARIO.guete[g].label); }))]), td('txt', x.ort || '–'), td('txt', x.text || '–'),
+      return [td('nw', fmtZ(x.t)), td('nw', x.id), td('nw', [gueteLabel(sichtungGuete(x)), ' ', h('select', { id: 'si-g-' + x.id, 'aria-label': 'Güte von ' + x.id, onchange: function (ev) { dispatch({ type: 'SICHTUNG_BEWERTET', id: e.id, sid: x.id, guete: ev.target.value }); } }, SICHTUNG_BEWERTUNGEN.map(function (g) { return h('option', { value: g, selected: (x.guete || 'unbewertet') === g }, SCENARIO.guete[g].label); }))]), td('txt', x.ort || '–'), td('txt', x.text || '–'),
               td('nw', h('button', { type: 'button', class: 'link', id: 'si-del-' + x.id, onclick: function () { dispatch({ type: 'SICHTUNG_ENTFERNT', id: e.id, sid: x.id }); } }, 'entfernen'))];
     }), 'Keine Sichtungen eingetragen.'),
     (function () {

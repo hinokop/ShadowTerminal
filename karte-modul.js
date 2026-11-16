@@ -134,7 +134,7 @@ function karteMarker() {
     if (fokus) { const f = alle.find(function (x) { return x.id === fokus; }); if (f && sicht.indexOf(f) < 0) sicht.push(f); }
     sicht.forEach(function (si) {
       const k = sichtungKoord(si);
-      if (k) out.push({ id: si.id, kat: 'sichtung', typ: 'Sichtung', name: e.id + ' ' + e.name + (si.ort ? ' · ' + si.ort : ''), ll: k.ll, genau: k.genau, bez: k.bez, entId: e.id, si: si, guete: sichtungGuete(e, si), unM: sichtungRadiusM(si, k.genau) });
+      if (k) out.push({ id: si.id, kat: 'sichtung', typ: 'Sichtung', name: e.id + ' ' + e.name + (si.ort ? ' · ' + si.ort : ''), ll: k.ll, genau: k.genau, bez: k.bez, entId: e.id, si: si, guete: sichtungGuete(si), unM: sichtungRadiusM(si, k.genau) });
     });
   });
   const gez = {}; out.forEach(function (m) { if (m.kat === 'sichtung') gez[m.entId + '|' + m.id] = true; });
@@ -1025,7 +1025,7 @@ function karteAuswahlAnzeige() {
       feld('Güte', gueteLabel(m.guete)), feld('Lage', 'Position ungefähr, abgeleitet aus ' + m.genau + (m.bez ? ' (' + m.bez + ')' : '') + '. Der gestrichelte Ring zeigt die Unschärfe: derzeit etwa ' + m.unM.m + ' m Radius, wachsend mit dem Alter der Sichtung (' + (m.unM.alter.text || 'jetzt') + ').', 'full'),
       feld('Beobachtung', m.si.text || '–', 'full')),
       h('div', { class: 'pin-form' }, h('label', { for: 'si-bewerten' }, 'Bewertung'), h('select', { id: 'si-bewerten', 'aria-label': 'Güte der Sichtung', onchange: function (ev) { dispatch({ type: 'SICHTUNG_BEWERTET', id: m.entId, sid: m.si.id, guete: ev.target.value }); karteNeuZeichnen(); } },
-        ['unbewertet', 'gesichert', 'plausibel', 'unbestaetigt'].map(function (g) { return h('option', { value: g, selected: (m.si.guete || 'unbewertet') === g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); }))),
+        SICHTUNG_BEWERTUNGEN.map(function (g) { return h('option', { value: g, selected: (m.si.guete || 'unbewertet') === g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); }))),
       pinX ? [h('h3', null, 'Aus Entwurf ' + pinX.name), pinFormular(pinX, function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: pinX.id }, patch)); karteNeuZeichnen(); }, false)] : null]);
     return;
   }
