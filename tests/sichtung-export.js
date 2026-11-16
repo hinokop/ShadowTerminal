@@ -86,19 +86,22 @@ const PF = require('./_pfad');
     await q.evaluate(d => { STATE.dossiers.entitaeten[d].sichtungen[0].text = 'Eins B'; }, z.d1);
     await exportVia(z.d1, 'TXT ersetzt');
     assert.match(await readFile(datei(n1), 'utf8'), /Eins B/);
-    /* gelöscht und neu vergeben: gleiche Nummer, andere Sichtung -> keine Aktualisierung der alten Datei */
+    /* gelöscht und neu vergeben: dieselbe Nummer SI-001 im selben Dossier, andere Sichtung -> keine Aktualisierung der alten Datei.
+       Das zweite Dossier belegt SI-001 im Altstand; für diese Probe wird es vorübergehend geleert, damit die Nummer tatsächlich wiederkehrt. */
+    const zweite = await q.evaluate(d => { const l = STATE.dossiers.entitaeten[d].sichtungen; STATE.dossiers.entitaeten[d].sichtungen = []; return l; }, z.d2);
     const neuId = await q.evaluate(d => {
+      const alteUid = STATE.dossiers.entitaeten[d].sichtungen[0].uid;
       dispatch({ type: 'SICHTUNG_ENTFERNT', id: d, sid: 'SI-001' });
-      const ander = Object.values(STATE.dossiers.entitaeten).some(x => (x.sichtungen || []).some(y => y.id === 'SI-001'));
       dispatch({ type: 'SICHTUNG_HINZU', id: d, ort: '52.6000, 13.5000', text: 'Eins neu', guete: 'unbewertet' });
-      const l = STATE.dossiers.entitaeten[d].sichtungen; return { id: l.at(-1).id, uid: l.at(-1).uid, ander };
+      const l = STATE.dossiers.entitaeten[d].sichtungen; return { id: l.at(-1).id, uid: l.at(-1).uid, alteUid };
     }, z.d1);
+    assert.equal(neuId.id, 'SI-001', 'die Nummer wird tatsächlich erneut vergeben');
+    assert.notEqual(neuId.uid, neuId.alteUid, 'neue Sichtung trägt eine neue Kennung');
     const alt1 = await readFile(datei(n1), 'utf8');
-    if (neuId.id === 'SI-001') {
-      await exportVia(z.d1, 'Neue Version gespeichert');
-      assert.equal(await readFile(datei(n1), 'utf8'), alt1, 'alte Datei bleibt unverändert');
-      assert.match(await readFile(datei('sichtung-' + z.d1 + '-SI-001-v2.txt'), 'utf8'), /Eins neu/);
-    } else assert.ok(neuId.ander, 'Nummer nur dann anders, wenn SI-001 anderswo vergeben ist');
+    await exportVia(z.d1, 'Neue Version gespeichert');
+    assert.equal(await readFile(datei(n1), 'utf8'), alt1, 'alte Datei bleibt bytegleich');
+    assert.match(await readFile(datei('sichtung-' + z.d1 + '-SI-001-v2.txt'), 'utf8'), /Eins neu/);
+    await q.evaluate(([d, l]) => { STATE.dossiers.entitaeten[d].sichtungen = l; }, [z.d2, zweite]);
     /* Altbestand: Vermerk nur mit Nummer und Sichtung ohne Kennung geben nichts zum Ersetzen frei */
     const alt2 = await readFile(datei(n2), 'utf8');
     const reg = await q.evaluate(() => { dispatch({ type: 'EXPORT_VERMERKT', schluessel: 'sichtung:SI-001:dokumente', name: 'x.txt', sha: 'a'.repeat(64) }); return Object.keys(PROFIL.exporte || {}).filter(k => k === 'sichtung:SI-001:dokumente').length; });
