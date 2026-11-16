@@ -108,6 +108,7 @@ label{color:var(--text-dim)}
 .field dd{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
 .field.full{grid-column:1 / -1}
 .note{padding:6px 8px;color:var(--text-dim)}
+.bearb-hinweis{margin-left:auto;color:var(--text-dim);font-size:11px}
 .note:empty{display:none}
 .pad{padding:6px 8px}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px 8px}
@@ -7291,7 +7292,7 @@ function dossierAnsicht(e) {
     h('div', { class: 'row' },
       h('button', { type: 'button', id: 'btn-dbearb', onclick: function () { dossierBearbeiten(e); } }, 'Dossier bearbeiten'),
       PROFIL.aenderungen[e.id] ? h('button', { type: 'button', id: 'btn-dorig', onclick: function () { dispatch({ type: 'DOSSIER_ZURUECKGESETZT', id: e.id }); } }, 'Auf Original zurücksetzen') : null,
-      PROFIL.aenderungen[e.id] ? h('span', { class: 'label s-warn' }, 'bearbeitet') : null),
+      PROFIL.aenderungen[e.id] ? h('span', { class: 'bearb-hinweis', title: 'Vom Original abweichend' }, 'bearbeitet') : null),
     kartenKnopf(e),
     sichtungKnopf(e),
     galerieBlock(e),
