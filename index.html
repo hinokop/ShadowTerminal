@@ -5322,11 +5322,10 @@ const ACTIONS = {
     if (!e || !dossierOffen(e.mission) || !bildGueltig(a.bild)) return null;
     const l = PROFIL.galerie[e.id] = PROFIL.galerie[e.id] || [];
     if (l.length >= 60) { meldung('Höchstens 60 Aufnahmen je Dossier.'); return null; }
-    PROFIL.seq.galerie = (PROFIL.seq.galerie || 0) + 1;
-    const f = { id: 'G-' + p3(PROFIL.seq.galerie), t: nowIso(), bild: a.bild, text: String(a.text || '').trim().slice(0, 200) };
+    const f = { id: 'G-' + p3(galerieHoechsteNr(l) + 1), t: nowIso(), bild: a.bild, text: String(a.text || '').trim().slice(0, 200) };
     l.push(f);
     if (!profilSpeichern()) {
-      l.pop(); PROFIL.seq.galerie -= 1;
+      l.pop();
       meldung('Speicher voll: Aufnahme nicht übernommen. Profil exportieren und ältere Aufnahmen entfernen.');
       return null;
     }
@@ -5532,7 +5531,7 @@ const ACTIONS = {
     Object.keys(q.koord || {}).forEach(function (k) { if (!PROFIL.koord[k]) PROFIL.koord[k] = q.koord[k]; });
     Object.keys(q.galerie || {}).forEach(function (k) {
       const l = PROFIL.galerie[k] = PROFIL.galerie[k] || [];
-      (q.galerie[k] || []).forEach(function (f) { if (f && bildGueltig(f.bild) && !l.some(function (x) { return x.id === f.id; })) l.push(f); });
+      galerieZusammenfuehren(l, q.galerie[k]);
     });
     (Array.isArray(q.ausgang) ? q.ausgang : []).forEach(function (x) { if (x && x.id && !PROFIL.ausgang.some(function (y) { return y.id === x.id; })) PROFIL.ausgang.push(x); });
     PROFIL.pins = PROFIL.pins || [];
@@ -7467,6 +7466,25 @@ function beziehungsansicht(e) {
         tabelle(['Information', 'Glaubhaftigkeit'], Object.keys(A.information).map(function (k) { return [td('nw', k), A.information[k]]; }))),
       h('p', { class: 'note' }, 'F und 6 bezeichnen fehlende Beurteilbarkeit, keine Negativbewertung; die Filter "bis" schließen sie nur in der weitesten Einstellung ein.')),
     h('section', { id: 'dossier-verbindungen', 'aria-label': 'Verbindungen' }, verbindungstabelle(e)));
+}
+/* Aufnahmenummern gelten je Dossier. Gelöschte Aufnahmen belegen keine Nummer. */
+function galerieHoechsteNr(liste) {
+  return liste.reduce(function (max, f) {
+    const treffer = f && /^G-(\d+)$/.exec(f.id || ''), nr = treffer ? Number(treffer[1]) : 0;
+    return Number.isSafeInteger(nr) && nr < Number.MAX_SAFE_INTEGER ? Math.max(max, nr) : max;
+  }, 0);
+}
+function galerieZusammenfuehren(lokal, eingang) {
+  if (!Array.isArray(eingang)) return;
+  const eing = eingang.filter(function (f) { return f && bildGueltig(f.bild); });
+  const inhaltGleich = function (a, b) { return a.bild === b.bild && a.t === b.t && (a.text || '') === (b.text || ''); };
+  let nr = Math.max(galerieHoechsteNr(lokal), galerieHoechsteNr(eing));
+  eing.forEach(function (f) {
+    if (lokal.some(function (x) { return (x.id === f.id || x.importVon === f.id) && inhaltGleich(x, f); })) return;
+    if (!/^G-\d+$/.test(f.id || '') || lokal.some(function (x) { return x.id === f.id; })) {
+      lokal.push(Object.assign({}, f, { id: 'G-' + p3(++nr), importVon: f.id }));
+    } else lokal.push(f);
+  });
 }
 function galerieZeigen(e, f) {
   const inhalt = h('div', null,

@@ -1,93 +1,27 @@
-# Field Terminal
+# Shadow Terminal
 
-Lokales Recherchewerkzeug im Stil eines Feldterminals. Eine einzelne Webanwendung in Vanilla JavaScript, ohne Server und ohne Build-Schritt. Falldaten werden lokal im Browserprofil gespeichert. Online-Karten und Wetter nutzen externe Dienste. Oberfläche und Dokumentation sind deutsch.
+Privates Recherchewerkzeug mit deutschsprachiger Oberfläche. Die Anwendung läuft lokal im Browser ohne Build-Schritt und ohne gehostetes Backend. Unter Windows steht für den Dateizugriff eine lokale Python-Brücke zur Verfügung.
 
-Das Projekt war zuvor ein Spiel. Dieser Stand beschreibt das Werkzeug. Reste der früheren Missionsmechanik sind noch im Code vorhanden und werden schrittweise und nur nach Freigabe entfernt (siehe „Bekannte Grenzen").
+## Ist-Stand
 
-## Starten
+| Modul | Funktion |
+| --- | --- |
+| **Profil** | Identitäten, Ausgangsorte, Arbeitsstatus und Terminal mit lokaler Dateibrücke. |
+| **Dossiers** | Personen, Organisationen und Orte mit Kurzlage, Notizen, Aufnahmen, Sichtungen, Verbindungen und Unterlagen. Fallverweise führen direkt zu X. |
+| **Karte** | 2D- und 3D-Lagekarte mit Pins, eigenen Zonen, Sichtungen, Messung und Kartenprotokoll. Online-Kacheln und Wetter nutzen externe Dienste. |
+| **Ablage** | Registratur und lokaler Eingang mit Dateivorschau. Bei der Zuordnung zu Fall und Dossier bleibt dieselbe Dateikopie erhalten. |
+| **X** | Fälle mit Kurzlage, Arbeitsstand und Bewertung der Informationslage. Dossiers und Pins sind verknüpft. Beim Löschen eines Falls bleiben die verknüpften Dossiers und Pins erhalten. |
 
-- Windows: `START_TERMINAL.bat` startet das Edge-Anwendungsfenster mit der lokalen Dateibrücke (Python 3). Direkter Start ohne Dateibrücke: `START_3D.bat`.
-- Linux: `bash START.sh` (Chromium-Anwendungsfenster; `FT_OHNE_GPU=1` bei schwarzem Fenster).
-- Das Browserprofil liegt im Ordner `profil` neben dem Starter. Ordner löschen setzt alles zurück.
-- Die Anmeldung erfolgt mit einem Kennwort, das beim ersten Start festgelegt wird.
+Profile und Anhänge liegen im lokalen Browserprofil. Profilexporte enthalten keine Belegdateien. Fallpakete enthalten fallbezogene Rechercheunterlagen samt Prüfsummen und den erforderlichen Dossierangaben. Die Satelliten- und Secure-Channel-Sequenzen des Terminals sind lokale Simulationen.
 
-Kartenhintergründe und Wetter werden von externen Diensten geladen. Die Zugangsdaten für den Kartendienst liegen in der lokalen Datei `kartenschluessel.js`, die nie ins Repository gehört (`.gitignore`).
+## Geplant
 
-## Arbeitsnavigation
+- Verbliebene Missionspfade und historische Tests auf tatsächliche Nutzung prüfen. Nachweislich ungenutzten Code und überholte Tests getrennt bereinigen.
+- Den Anwendungskern schrittweise in kleinere, eigenständig prüfbare Module aufteilen. Bestehende Profile sowie Import und Export bleiben kompatibel.
+- Ein appweiter Offline-Modus ist vorerst zurückgestellt.
 
-Die sichtbaren Arbeitsbereiche sind Profil (`1`), Dossiers (`2`), Karte (`3`), Ablage (`4`) und X (`5`). Die früheren Missionsreiter sind aus der Navigation und den Tastenkürzeln entfernt. Gespeicherte Altstände öffnen stattdessen das Profil. Missionsdaten und interne Abläufe bleiben in diesem Schritt unverändert.
+## Technische Referenz
 
-Im Profil entfernt „Karte bereinigen“ nach Bestätigung Pins, eigene Zonen, Sichtungen und gesetzte Kartenpositionen. Vorgegebene Dossierpositionen werden danach nicht mehr angezeigt. Dossiers, Unterlagen, Identitäten und Protokolle bleiben erhalten.
-
-## X – Fälle
-
-X zeigt die vorhandenen Fälle aus der Ablage. Fälle lassen sich dort anlegen oder direkt über „Zu Fall hinzufügen“ aus einem Dossier öffnen. In X werden Kurzlage, Arbeitsstand und Belastbarkeit getrennt gepflegt. Dossiers und Kartenpins lassen sich verknüpfen. Die Unterlagen des Falls bleiben dieselben Dateien wie in der Ablage.
-
-„Fall löschen“ entfernt nach Bestätigung den Fall mit seinen Unterlagen. Verknüpfte Dossiers und Kartenpins bleiben erhalten. Dateien, die ein anderer Fall noch nutzt, werden nicht gelöscht.
-
-## Arbeitsprofil
-
-- **Profil** zeigt ein Kompetenzradar und sechs psychologische Balken. Das eigene Assessment ist editierbar. Es wechselt alle drei Kalendermonate mit zwei vorbereiteten Profilen, deren Reihenfolge beim ersten Start ausgelost und lokal gespeichert wird. Der Verlauf zeigt bis zu drei Termine. Der Gesamtscore ist das gerundete Mittel aller elf Werte, A ab 80, B ab 65, C ab 50, darunter D. Alte Notizen bleiben eingeklappt erhalten. Der Status in der Kopfzeile (Offline, Standby, Aktiv) steuert weder eine Mission noch den Netzwerkzustand.
-- **Terminal:** Unter Windows startet `START_TERMINAL.bat` die App mit der lokalen Datenbank (Python 3 erforderlich). `START_3D.bat` funktioniert weiterhin ohne Python und ohne Dateibrücke. Der gewöhnliche Dateistart und das Browserprofil bleiben gleich. Das zusätzliche Konsolenfenster zeigt beim Start rund drei Sekunden einen Ladebalken neben der Archivadresse und anschließend `connected to: pgcl-eu3.arch07` an und muss für den Dateizugriff geöffnet bleiben. Die Adresse `relay-07.pgcl-eu3.inv` im Download-Protokoll ist reine Anzeige. Beim Start wird keine externe Verbindung aufgebaut. Bei mehreren Bildschirmen bevorzugt der Starter einen nicht primären Bildschirm. Beim Beenden über X zeigt die Konsole die Trennmeldung rund anderthalb Sekunden lang an und schließt sich dann automatisch. Für eine neue Dateisitzung erneut `START_TERMINAL.bat` starten. Wenn Tab nur den Archivnamen ergänzt und `send` die Datenbank nicht erreicht, zuerst das Konsolenfenster und den Windows-Starter prüfen. Die Ergänzung des Archivnamens allein bestätigt keine Verbindung.
-- Mit `cd pgcl-eu3.arch07` öffnest du den gleichnamigen Ordner neben dem Starter. `cd pg` und die Tabulatortaste ergänzen den Namen. Tab ergänzt auch Befehle und Pfade innerhalb der Datenbank. Bei mehreren Treffern werden die Möglichkeiten angezeigt, sobald kein gemeinsamer Anfang mehr ergänzt werden kann. `ls`, `ls -l`, `ls -la`, `cd`, `pwd`, `cat`, `head`, `tail` und `wget` arbeiten nur dort. `wget` speichert eine Datei (bis 20 MB) über den Browser-Download, ohne eine URL abzurufen. Das Ausgabeprotokoll zeigt den fiktiven Archivpfad und die tatsächlich empfangene Dateigröße. Ob der Browser die Datei anschließend speichert, entscheidet der Browser. Die Dateien selbst kannst du im Explorer ändern. `whoami` und `uname -a` sind Darstellung. `date`, `clear` und `help` bleiben lokal. `ping relay` fragt auf ausdrücklichen Aufruf die öffentliche Wikidata-API per HTTPS ab, ohne Anmeldedaten und Referrer.
-- **Kanal-Sequenz:** `secure-channel --connect --onion --ephemeral` öffnet einen lokalen, inszenierten Dialog im Terminal. Er verwendet keine Netzwerkverbindung, echte Verschlüsselung oder Missionsdaten. `Auftrag erledigt.` und `Auftrag gescheitert.` schließen den Kanal nach der Antwort. Die Antwort erscheint nach 15 Sekunden, zwei Sekunden danach beginnt die Abschlusssequenz. Im offenen Kanal nimmt `send /pgcl-eu3.arch07/dokumente/referenzmaterial.txt` eine lokale Datei an. `send` liest aus der Datenbank (bis 20 MB) und gibt Dateiname und Größe zurück. Es gibt keine externe Übertragung. Die Fortschrittsanzeige bei `send` und `wget` ist an die Dateigröße gekoppelt; die angezeigte Zeit ist die Dauer dieser Anzeige. Escape bricht den Dialog ab. Der Befehl exit klappt das Terminal zu, ohne die App zu schließen. Sitzungsdaten werden nur vorübergehend in der Anzeige gehalten.
-- **Satellitensitzung:** `satcon live noaa_apt --source rtlsdr --frequency 137.1e6 --samplerate 2.4e6` bereitet eine simulierte Sitzung vor. Tab ergänzt die Syntax Schritt für Schritt. Die Vorbereitung lässt den normalen Prompt stehen. `secure-channel --connect --onion --ephemeral` öffnet danach den Kanal mit derselben Identität. Nach dem Schließen ist erneut `satcon` nötig. Kein Funkempfang, keine Hardware, keine Netzverbindung für `satcon`.
-- **Ablage – Eingang:** PDF, Bild oder Textdatei bis 20 MB zuerst lokal ablegen und ansehen. Fall und Dossier werden erst bei „Zuordnen“ gewählt. Der Originalanhang wird ohne Kopie in den Fall übernommen. Der Eingang ist browserspezifisch und wird nicht als Teil des Profil-Exports gesichert. Bereits zugeordnete Dateien lassen sich wie gewohnt per Fallpaket sichern. Die bisherige Registratur bleibt im Nachbarreiter.
-- **Pin- und Zonenexport:** „Als TXT exportieren“ legt pro Pin oder eigener Zone eine neue UTF-8-Datei in `dokumente` oder `ops` an (max. 64 KiB, kein Überschreiben). Die Datei ist ohne Neustart per Tab und `send` erreichbar. Ohne Dateibrücke wird die TXT heruntergeladen und muss für `send` von Hand ins Archiv gelegt werden. Ist das über seine ID zugeordnete Dossier gesperrt, bleiben beide Exportwege gesperrt. Exportierte TXT-Dateien sind eigenständige Dateien und werden durch eine spätere Dossiersperre nicht verändert. Gezielter Test: `node tests/runall.js karten-txt-export terminal-lokal terminal-kanal eigene-zonen pins`.
-- **Identitäten** zeigt drei fiktive Karten untereinander. Ein Klick auf die Anlagennummer öffnet die Dateiauswahl. Pro Nummer wird maximal eine Datei bis 20 MB lokal gespeichert. Anlagen werden nicht im Profil-JSON oder Fallpaket exportiert. Die bestehenden Identitäts- und Lichtbildschlüssel bleiben erhalten.
-- **Ausgangsorte** stehen in einem eigenen Reiter. An vorhandenen Positionen und Dossiers ändert die neue Ansicht nichts.
-
-## Bausteine
-
-| Datei | Inhalt |
-|---|---|
-| `profil-modul.js` | Arbeitsprofil mit Kompetenzradar, fiktiven Identitätskarten und lokalen Anlagen |
-| `index.html` | Anwendung: Ablauf `dispatch` → `ACTIONS` → `render`, Dossiers, Verbindungsgraph, Nachrichten |
-| `karte-modul.js` | Lagekarte in 2D (Kacheln, Zonen, Pins, Messen), Brücke zur 3D-Ansicht |
-| `karte3d.html` | 3D-Ansicht mit MapLibre, eingebettet in die Karte |
-| `karte.js`, `karte2.js` | Kartendaten |
-| `akten-modul.js` | Ablage: Aktenliste, Dokumentenansicht, Schwärzungen, Einsichtsanträge |
-| `recherche-modul.js` | Recherche: Unterlagen zum Fall, Fallpaket (Export und Import) |
-| `szenario.js`, `dialog.js`, `klassifikator.js` | Szenariodaten und Dialogmaschine |
-| `docs/datenvertrag.md` | Datenvertrag der Recherche und des Fallpakets |
-| `tests/` | Playwright-Skripte |
-
-Die Module nach dem Hauptskript sind klassische Skripte und werden nach ihm geladen. Die Anwendung startet im `load`-Ereignis.
-
-## Daten
-
-- Das Profil (Dossiers, Pins, Ausgangsorte, Recherche, Kartenprotokoll) liegt in `localStorage`.
-- Belegdateien der Recherche liegen in einer eigenen IndexedDB `fieldterminal.recherche`, Prüfsummen werden mit SHA-256 gebildet.
-- Kennungen (Fall, Quelle, Fassung, Beobachtung, Aussage, Pin) werden fortlaufend vergeben und nicht wiederverwendet.
-
-## Recherche
-
-- **Unterlagen zum Fall:** Im Dossier werden Unterlagen einem Fall zugeordnet (Fall, Quelle, Fassung, Beobachtung). Das Formular ist einklappbar. Die Fundstelle (Seite, Absatz, Zeitmarke, Zeichenbereich) ist optional und richtet sich nach dem Material. Eine Unterlage lässt sich als geprüft und nützlich markieren, mit Notiz.
-- **Sichtung:** Ein Knopf im Dossier öffnet die Karte am letzten bekannten Punkt der Person und legt dort einen Entwurfs-Pin M-01, M-02 usw. an, der sich als Sichtung eintragen lässt.
-- **Frühere Aussagen:** Das Aussagenregister ist entfernt (keine Oberfläche, keine Bearbeitung). Vorhandene Aussagen bleiben unverändert erhalten und reisen im Fallpaket mit.
-- **Fallpaket:** Ein Fall mit Quellen, Unterlagen, Belegdateien und den benötigten Dossierangaben lässt sich als eine Datei sichern und laden. Das Paket trägt ein Manifest mit Prüfsummen. Beim Laden wird vor jeder Änderung geprüft (ganz oder gar nicht) und ohne Überschreiben zusammengeführt. Eine fehlende Belegdatei wird aus dem Paket ergänzt, eine abweichende nie überschrieben.
-
-## Karte
-
-- 2D und 3D über den Schalter in der Kartenleiste. Marker, Zonen und Kamera gehen per `postMessage` an die 3D-Ansicht. Klicks laufen in beiden Ansichten durch dieselbe Logik.
-- **Kartenprotokoll:** Ein eigener Reiter neben der Lagekarte erfasst Sichtungen, Zonen, Pins, Zugriffspunkte, Kartenpositionen und Ausgangsorte, nicht aber Mausbewegungen, Zoom oder Auswahl. Der Verfall ist wählbar (24, 48, 72 Stunden oder nie) und entfernt nur den Protokolleintrag, nie die Sichtung, Zone oder den Pin.
-- **Eigene Zonen:** Zone markieren setzt eine Zone mit Name, Radius, Notiz, optionalem Dossier und verknüpften Unterlagen. „Stand aktualisieren“ hält die eigene Prüfung mit Zeitstempel fest und löst keine Meldung und keine Sichtung aus. Das Kartenprotokoll lässt sich nach Objekt filtern. Änderungen an Radius, Name und Dossier zeigen sich sofort in 2D und 3D; das Popup lässt sich an der Titelleiste verschieben. Zone und Pin lassen sich einem Dossier zuordnen; das Dossier zeigt sie unter „Orte zu diesem Dossier“, eine verknüpfte Unterlage unter „Auf der Karte“. Der Profilimport führt Zonen wie Pins zusammen (keine Doppelung, abweichender Inhalt unter neuer Kennung).
-- **Lage-Box:** Ein gezielter Sprung (aus dem Dossier, über „Zentrieren“ einer Zone oder eines Pins) öffnet die Box mit dem Objekt (Name, Position, Stand), Licht und Wetter beziehen sich dann auf das Objekt. Erst eigenes Verschieben der Karte stellt auf die Kartenmitte zurück. Check-in, Ziele, Zeitfenster und die höchste Stufe im Bestand erscheinen nur während eines Auftrags. Offline erfolgt keine Wetterabfrage.
-- In 3D noch offen: Luftbild, Verbindungen, Route, Sichtungs-Unschärfe, Zeitfenster.
-- Zusatzquellen: Sentinel-2 cloudless (EOX, nicht kommerziell) und Brandenburg DOP20 (dl-de/by-2.0). Die Adressen sind nicht gegen die Dienste geprüft. Das BKG-DOP ist für Dritte gebührenpflichtig und wird nicht verwendet.
-- Die Zeile „Licht" arbeitet offline (NOAA-Näherung). Wetter kommt von Open-Meteo, höchstens eine Abfrage je 0,1-Grad-Feld und 15 Minuten.
-
-## Tests
-
-Die Skripte in `tests/` benötigen Node.js mit Playwright. Einige Skripte enthalten feste Pfade und müssen vor dem Lauf angepasst werden. Bekannt unzuverlässig: `abd`, `wk3`, `dp`; rot und nicht zu reparieren: `m1flow` (Missionsablauf).
-
-## Bekannte Grenzen
-
-- Eigene Zonen (Kennung ZO-nnn) lassen sich ohne Auftrag setzen. Lagezonen und Zugriffspunkte des Auftrags sind noch an den Missionsrahmen gekoppelt; eigene und Auftragszonen werden nicht gemeinsam bearbeitet. Eigene Zonen sind noch nicht Teil des Fallpakets.
-- Prüfsummen im Fallpaket erkennen Beschädigung, keine Fälschung.
-- Notizen und Bilder der Dossiers sind nicht Teil des Fallpakets, Belegdateien nicht Teil des Profilexports.
-- Die Anwendung wurde bisher nur mit Playwright und nicht systematisch von Hand geprüft.
-
-## Arbeitsweise
-
-Pro Arbeitsrunde ein Branch und kleine Commits, danach Zusammenführung nach `main`. Änderungen gehen über einen Pull Request und werden unabhängig geprüft. Jeder Schritt hat einen Test, der auf dem vorherigen Stand fehlschlägt. `CLAUDE.md` enthält die Arbeitsregeln für Claude Code.
+- [Datenvertrag und Fallpakete](docs/datenvertrag.md)
+- [Verbliebene Missionsabhängigkeiten](docs/missionsabhaengigkeiten.md)
+- [Stand der bisherigen Bereinigung](docs/r5-bereinigung.md)
