@@ -1,3 +1,4 @@
+const { vorbereiten } = require('./_satcon');
 const assert = require('node:assert/strict');
 const { randomBytes } = require('node:crypto');
 const { spawn } = require('node:child_process');
@@ -120,6 +121,7 @@ const PF = require('./_pfad');
     const prompt = p.locator('#profil-terminal-prompt');
     const wartePrompt = text => p.waitForFunction(t => $('profil-terminal-prompt').textContent === t, text);
     const oeffnen = async () => {
+      await vorbereiten(p);
       await cmd('secure-channel --connect --onion --ephemeral');
       await wartePrompt('you >');
     };
