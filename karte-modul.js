@@ -722,7 +722,7 @@ function kartenTxtExport(art, id, entId) {
   };
   const x = pruefen();
   if (!x) return;
-  const dateiname = (art === 'pin' ? 'lageblatt-' : art === 'sichtung' ? 'sichtung-' : 'zone-') + id + '.txt';
+  const dateiname = (art === 'pin' ? 'lageblatt-' : art === 'sichtung' ? 'sichtung-' + entId + '-' : 'zone-') + id + '.txt';   /* Sichtungsnummern gelten je Dossier, der Dateiname trägt deshalb das Dossier */
   const textVon = function (y) { return (art === 'pin' ? pinText(y) : art === 'sichtung' ? sichtungText(entitaet(entId), y) : eigeneZoneText(y)) + '\n'; };
   if (!terminalBrueckenAdresse()) {
     const a = h('a', { download: dateiname }), u = URL.createObjectURL(new Blob([textVon(x)], { type: 'text/plain;charset=utf-8' }));
@@ -736,12 +736,13 @@ function kartenTxtExport(art, id, entId) {
   bestaetigen('Als TXT exportieren', [h('p', { class: 'note' }, dateiname),
     h('div', { class: 'row' }, h('label', { for: 'k-txt-ordner' }, 'Archivordner'), ordner)],
     'TXT speichern', async function () {
+      if (art === 'sichtung') dispatch({ type: 'SICHTUNG_KENNUNG', id: entId, sid: id });          /* Altbestand: Kennung einmalig vergeben; ein vorhandener Vermerk ohne Kennung kann nie passen */
       const aktuell = pruefen();
       if (!aktuell) return;
-      const schluessel = art + ':' + id + ':' + ordner.value, gemerkt = (PROFIL.exporte || {})[schluessel];
-      const antwort = await terminalBruecke('export-txt', null, false, { art: art, id: id, ordner: ordner.value, text: textVon(aktuell), last: gemerkt && gemerkt.name && gemerkt.sha ? { name: gemerkt.name, sha: gemerkt.sha } : null });
+      const si = art === 'sichtung' ? aktuell : null, schluessel = art === 'sichtung' ? 'sichtung:' + (si.uid || '') + ':' + ordner.value : art + ':' + id + ':' + ordner.value, gemerkt = si && !si.uid ? null : (PROFIL.exporte || {})[schluessel];   /* Sichtung: Ersetzen nur über die dauerhafte Kennung; ohne Kennung stets neue Version */
+      const antwort = await terminalBruecke('export-txt', null, false, { art: art, id: art === 'sichtung' ? entId + '-' + id : id, ordner: ordner.value, text: textVon(aktuell), last: gemerkt && gemerkt.name && gemerkt.sha ? { name: gemerkt.name, sha: gemerkt.sha } : null });
       if (antwort.error) { meldung('TXT-Export nicht gespeichert. ' + antwort.error); return; }
-      if (antwort.sha256 && antwort.mode !== 'unveraendert') dispatch({ type: 'EXPORT_VERMERKT', schluessel: schluessel, name: antwort.name, sha: antwort.sha256 });
+      if (antwort.sha256 && antwort.mode !== 'unveraendert' && (!si || si.uid)) dispatch({ type: 'EXPORT_VERMERKT', schluessel: schluessel, name: antwort.name, sha: antwort.sha256 });
       const ziel = '/' + TERMINAL_DB + '/' + antwort.folder + '/' + antwort.name;
       meldung(antwort.mode === 'ersetzt' ? 'TXT ersetzt · ' + ziel : antwort.mode === 'unveraendert' ? 'TXT unverändert, keine neue Datei · ' + ziel
         : antwort.mode === 'version' ? 'Vorhandene Datei wurde nicht ersetzt, da sie verändert wurde. Neue Version gespeichert · ' + ziel : 'TXT gespeichert · ' + ziel);

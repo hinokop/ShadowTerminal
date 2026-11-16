@@ -21,7 +21,7 @@ TOKEN_HEADER = "X-Shadow-Token"
 MAX_DOWNLOAD = 20 * 1024 * 1024
 MAX_TEXT = 64 * 1024
 MAX_EXPORT_REQUEST = 2 * MAX_TEXT + 1024
-EXPORT_IDS = {"pin": re.compile(r"PIN-[0-9]{3,15}"), "zone": re.compile(r"ZO-[0-9]{3,15}"), "sichtung": re.compile(r"SI-[0-9]{3,15}")}
+EXPORT_IDS = {"pin": re.compile(r"PIN-[0-9]{3,15}"), "zone": re.compile(r"ZO-[0-9]{3,15}"), "sichtung": re.compile(r"[POL]-[0-9]{4,15}-SI-[0-9]{3,15}")}
 PROJECT = Path(__file__).resolve().parent
 DEVICE = re.compile(r"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)", re.I)
 
