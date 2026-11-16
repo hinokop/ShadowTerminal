@@ -29,17 +29,27 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   ok.popupBearbeitetPin = await p.evaluate(pid => PROFIL.pins.find(x => x.id === pid).notiz === 'im Popup geändert', s.pin);
   await p.locator('#si-bewerten').selectOption('plausibel'); await p.waitForTimeout(300);
   ok.popupBewertet = await p.evaluate(([d, sid]) => STATE.dossiers.entitaeten[d].sichtungen.find(x => x.id === sid).guete === 'plausibel', [s.d, a.id]);
-  /* Widerspruch nur unter bewerteten Sichtungen */
+  /* Unterschiedliche Orte ändern die manuelle Bewertung nicht. */
   const w = await p.evaluate(d => {
     dispatch({ type: 'SICHTUNG_HINZU', id: d, ort: '48.1000, 11.5000', text: 'zweite', guete: 'unbewertet' }); dispatch({ type: 'SICHTUNG_HINZU', id: d, ort: '53.5000, 10.0000', text: 'dritte', guete: 'unbewertet' });
-    const e = entitaet(d), L = STATE.dossiers.entitaeten[d].sichtungen, r = { unbewertet: L.slice(1).map(x => sichtungGuete(e, x)) };
-    L.slice(1).forEach(x => dispatch({ type: 'SICHTUNG_BEWERTET', id: d, sid: x.id, guete: 'gesichert' })); r.bewertet = L.slice(1).map(x => sichtungGuete(e, x)); return r;
+    const L = STATE.dossiers.entitaeten[d].sichtungen, r = { unbewertet: L.slice(1).map(x => sichtungGuete(x)) };
+    L.slice(1).forEach(x => dispatch({ type: 'SICHTUNG_BEWERTET', id: d, sid: x.id, guete: 'gesichert' })); r.bewertet = L.slice(1).map(x => sichtungGuete(x)); return r;
   }, s.d);
-  ok.widerspruchNurBewertet = w.unbewertet.every(g => g === 'unbewertet') && w.bewertet.every(g => g === 'widerspruechlich');
+  ok.bewertungenBleibenUnabhaengig = w.unbewertet.every(g => g === 'unbewertet') && w.bewertet.every(g => g === 'gesichert');
   /* Tabelle: Bewertung per Auswahl */
   await p.evaluate(d => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); STATE.dossiers.auswahl = d; VIEW.dtab = 'sichtungen'; renderModule(); }, s.d);
-  await p.locator('#si-g-' + a.id).selectOption('unbestaetigt'); await p.waitForTimeout(300);
-  ok.tabelleBewertet = await p.evaluate(([d, sid]) => STATE.dossiers.entitaeten[d].sichtungen.find(x => x.id === sid).guete === 'unbestaetigt', [s.d, a.id]);
+  await p.locator('#si-g-' + a.id).selectOption('widerspruechlich');
+  ok.tabelleBewertet = await p.evaluate(([d, sid]) => {
+    const si = STATE.dossiers.entitaeten[d].sichtungen.find(x => x.id === sid);
+    const gespeichert = JSON.parse(localStorage.getItem(PROFIL_KEY)).daten[d].sichtungen.find(x => x.id === sid);
+    return si.guete === 'widerspruechlich' && gespeichert.guete === si.guete && sichtungGuete(si) === si.guete &&
+      sichtungGuete({ ...si, t: new Date(0).toISOString() }) === 'veraltet';
+  }, [s.d, a.id]);
+  await p.evaluate(sid => { VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' }); setTimeout(() => karteWaehlen(sid, true), 0); }, a.id);
+  await p.locator('#si-bewerten').selectOption('unbestaetigt');
+  await p.locator('#si-bewerten').selectOption('widerspruechlich');
+  ok.popupWiderspruchManuell = await p.evaluate(sid => karteMarker().some(m => m.id === sid && m.guete === 'widerspruechlich'), a.id);
+  await p.evaluate(d => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); STATE.dossiers.auswahl = d; VIEW.dtab = 'sichtungen'; renderModule(); }, s.d);
   /* Sichtung entfernen: Entwurf erscheint wieder */
   await p.locator('#si-del-' + a.id).click(); await p.waitForTimeout(300);
   const r = await p.evaluate(pid => { const pin = PROFIL.pins.find(x => x.id === pid); return { sichtbar: karteMarker().some(m => m.id === pid), ref: pin && pin.sichtung, notiz: pin && pin.notiz }; }, s.pin);
