@@ -4,8 +4,8 @@ await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fil
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});});
 console.log(await p.evaluate(()=>JSON.stringify(akteurDaten('handler'))));
-await p.evaluate(()=>dispatch({type:'NACHRICHT_GESENDET',kanal:'handler',text:'Erbitte Informationen zu P-9058',dringlichkeit:'Priorität'}));
+await p.evaluate(()=>dispatch({type:'NACHRICHT_GESENDET',kanal:'handler',text:'Erbitte Informationen zu P-0011',dringlichkeit:'Priorität'}));
 console.log(await p.evaluate(()=>JSON.stringify(akteurDaten('handler'))));
-await p.evaluate(()=>dispatch({type:'NACHRICHT_GESENDET',kanal:'handler',text:'Erbitte Informationen zu P-9058',dringlichkeit:'Routine'}));
+await p.evaluate(()=>dispatch({type:'NACHRICHT_GESENDET',kanal:'handler',text:'Erbitte Informationen zu P-0011',dringlichkeit:'Routine'}));
 console.log(await p.evaluate(()=>JSON.stringify(akteurDaten('handler').vertrauen)));
 await b.close()})();

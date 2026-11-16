@@ -15,7 +15,7 @@ const sl=ms=>new Promise(r=>setTimeout(r,ms));
  const say=(k,t,dr,id)=>{ const r=w.eval('antwortFuer')(k,t,dr||'Routine',id); console.log(k.padEnd(8),JSON.stringify(t).padEnd(42),'=>',r?('['+r.kat+'] '+r.text+(r.frage?'  {Q:'+r.frage+'}':'')):'(keine)'); return r; };
  console.log('Kontext',w.eval('STATE.kontext'),'Locked',d.body.classList.contains('locked'),'Fehler',errs);
  const T=[['handler','Hallo'],['handler','Wie geht es Ihnen?'],['handler','Bin angekommen'],['handler','Alles ruhig hier'],['handler','Ich habe keine Angst'],['handler','Ich habe Angst'],
- ['handler','Wie spät ist es?'],['handler','Wo bin ich?'],['handler','Was ist mit P-0004?'],['handler','Was ist mit P-9999?'],['handler','blorp frimble'],['handler','Warum ist der Himmel blau?'],
+ ['handler','Wie spät ist es?'],['handler','Wo bin ich?'],['handler','Was ist mit P-0099?'],['handler','Was ist mit P-9999?'],['handler','blorp frimble'],['handler','Warum ist der Himmel blau?'],
  ['handler','Danke'],['handler','Brauche Hilfe, werde verfolgt'],['handler','Extraktion bitte'],['handler','x'],
  ['support','Wir brauchen ein Fahrzeug'],['support','Mein Handy-Akku ist leer'],['support','Hallo'],['support','Bis später'],
  ['asset','Hallo'],['asset','Wie geht es dir?'],['asset','Können wir uns treffen?'],['asset','Ich bin müde'],['asset','Wer bist du?'],['asset','Was hältst du davon?']];

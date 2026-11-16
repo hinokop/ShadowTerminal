@@ -8,5 +8,5 @@ const f=async(re)=>console.log(await p.evaluate((re)=>{const t=document.body.inn
 console.log('--P-0002 sichtbar:');await f('P-0002');
 console.log('--Unbekannte (P-90xx):');await f('[PO]-90');
 await p.evaluate(()=>{dispatch({type:'DOSSIER_GEOEFFNET',id:'P-0001',navigieren:true})});await p.waitForTimeout(300);
-console.log('--P-0001 Ansicht, Verbindungen:');await f('P-9054|P-0002|Nguyen|Kutscher|P-90|L-9052');
+console.log('--P-0001 Ansicht, Verbindungen:');await f('P-0007|P-0002|Nguyen|Kutscher|P-90|L-0002');
 await b.close()})();

@@ -14,34 +14,34 @@ ok(await p.evaluate(()=>MS('M1').eigene.length===1),'eigenes Ziel angelegt');
 ok(await p.evaluate(()=>document.getElementById('zz-Z-P1').textContent.startsWith('0 von 4')),'Zähler Fotos 0/4');
 ok(await p.evaluate(()=>document.getElementById('z-Z-P1').disabled),'Ziel gesperrt');
 // Dokument
-await p.setInputFiles('#dk-datei','/tmp/t/x.png');await p.selectOption('#dk-ent','P-9062');await p.selectOption('#dk-art','Frachtbrief');await p.click('#btn-dok');await p.waitForTimeout(600);
+await p.setInputFiles('#dk-datei','/tmp/t/x.png');await p.selectOption('#dk-ent','P-0015');await p.selectOption('#dk-art','Frachtbrief');await p.click('#btn-dok');await p.waitForTimeout(600);
 ok(await p.evaluate(()=>MS('M1').dokumente.length===1),'Dokument eingereicht');
 console.log(await p.evaluate(()=>JSON.stringify(STATE.plan.filter(x=>x.typ==='verlauf').map(x=>x.text.slice(0,60)))));
 ok(await p.evaluate(()=>IDB.get('DOK-001').then(b=>!!b&&b.size>0)),'Blob im IndexedDB');
 // Zugriff
 const pt=async(typ,bez,txt)=>{await p.selectOption('#zp-typ',typ);await p.selectOption('#zp-bezug',bez);await p.fill('#zp-text',txt);await p.click('#btn-zp');await p.waitForTimeout(200);};
-await pt('Zugriff','L-9052','Tordurchfahrt Sonnenallee, einzige Zufahrt');
-await pt('Eingriff','L-9058','Rastplatz nahe Zwischenlager, Wartezeiten');
+await pt('Zugriff','L-0002','Tordurchfahrt Sonnenallee, einzige Zufahrt');
+await pt('Eingriff','L-0008','Rastplatz nahe Zwischenlager, Wartezeiten');
 await p.click('#btn-zp-ein');await p.waitForTimeout(300);
 console.log(await p.evaluate(()=>JSON.stringify(MS('M1').zugriffUrteil)));
-await pt('Zugriff','L-9059','Stadtbrücke Frankfurt, Kontrolle vor der Grenze');
+await pt('Zugriff','L-0009','Stadtbrücke Frankfurt, Kontrolle vor der Grenze');
 await p.click('#btn-zp-ein');await p.waitForTimeout(300);
 console.log(await p.evaluate(()=>JSON.stringify(MS('M1').zugriffUrteil)));
 ok(await p.evaluate(()=>MS('M1').zugriffUrteil.ok),'Analyse brauchbar');
 // Wissen ohne Beleg
-await p.selectOption('#wi-s-P-9054','unwissentlich');await p.fill('#wi-b-P-9054','Händler nutzen die Werkstatt, Inhalt der Kisten vermutlich unbekannt');await p.click('#wi-g-P-9054');await p.waitForTimeout(200);
-ok(await p.evaluate(()=>!MS('M1').wissen['P-9054']),'ohne Beleg abgewiesen');
+await p.selectOption('#wi-s-P-0007','unwissentlich');await p.fill('#wi-b-P-0007','Händler nutzen die Werkstatt, Inhalt der Kisten vermutlich unbekannt');await p.click('#wi-g-P-0007');await p.waitForTimeout(200);
+ok(await p.evaluate(()=>!MS('M1').wissen['P-0007']),'ohne Beleg abgewiesen');
 // Lagebericht mit Begegnung + Kennung
-await p.fill('#lb-text','Gespräch mit P-9062 am Tor, wirkt nervös und kennt die Kisten, P-9054 hat Ware geliefert.');await p.click('#btn-lb');await p.waitForTimeout(200);
+await p.fill('#lb-text','Gespräch mit P-0015 am Tor, wirkt nervös und kennt die Kisten, P-0007 hat Ware geliefert.');await p.click('#btn-lb');await p.waitForTimeout(200);
 ok(await p.evaluate(()=>MS('M1').treffen===1),'Begegnung gezählt');
-await p.selectOption('#wi-s-P-9062','wissentlich');await p.fill('#wi-b-P-9062','Kannte die Kisten und wirkte nervös am Tor, Beobachtung im Lagebericht');await p.click('#wi-g-P-9062');await p.waitForTimeout(200);
-ok(await p.evaluate(()=>MS('M1').wissen['P-9062'].stand==='bestaetigt'),'Wissensstand bestätigt');
-await p.selectOption('#wi-s-P-9054','wissentlich');await p.fill('#wi-b-P-9054','Händler nutzen die Werkstatt, P-9054 liefert Ware, Inhalt wird gekannt');await p.click('#wi-g-P-9054');await p.waitForTimeout(200);
-ok(await p.evaluate(()=>MS('M1').wissen['P-9054'].stand==='widerspruch'),'Widerspruch Versuch 1');
-await p.selectOption('#wi-s-P-9054','unbeteiligt');await p.fill('#wi-b-P-9054','Händler nutzen die Werkstatt, P-9054 liefert Ware, Inhalt wird gekannt');await p.click('#wi-g-P-9054');await p.waitForTimeout(200);
-ok(await p.evaluate(()=>MS('M1').wissen['P-9054'].stand==='festgelegt'),'festgelegt nach 2. Versuch');
+await p.selectOption('#wi-s-P-0015','wissentlich');await p.fill('#wi-b-P-0015','Kannte die Kisten und wirkte nervös am Tor, Beobachtung im Lagebericht');await p.click('#wi-g-P-0015');await p.waitForTimeout(200);
+ok(await p.evaluate(()=>MS('M1').wissen['P-0015'].stand==='bestaetigt'),'Wissensstand bestätigt');
+await p.selectOption('#wi-s-P-0007','wissentlich');await p.fill('#wi-b-P-0007','Händler nutzen die Werkstatt, P-0007 liefert Ware, Inhalt wird gekannt');await p.click('#wi-g-P-0007');await p.waitForTimeout(200);
+ok(await p.evaluate(()=>MS('M1').wissen['P-0007'].stand==='widerspruch'),'Widerspruch Versuch 1');
+await p.selectOption('#wi-s-P-0007','unbeteiligt');await p.fill('#wi-b-P-0007','Händler nutzen die Werkstatt, P-0007 liefert Ware, Inhalt wird gekannt');await p.click('#wi-g-P-0007');await p.waitForTimeout(200);
+ok(await p.evaluate(()=>MS('M1').wissen['P-0007'].stand==='festgelegt'),'festgelegt nach 2. Versuch');
 // Fotos
-await p.evaluate(()=>{['P-9062','P-9063','P-9053','P-9060'].forEach(id=>{PROFIL.bilder[id]='data:image/png;base64,AAAA';});render();});await p.waitForTimeout(300);
+await p.evaluate(()=>{['P-0015','P-0016','P-0006','P-0013'].forEach(id=>{PROFIL.bilder[id]='data:image/png;base64,AAAA';});render();});await p.waitForTimeout(300);
 ok(await p.evaluate(()=>zielIst(LM(),LM().ziele[0])===4),'Foto-Zähler 4');
 await p.evaluate(()=>{dispatch({type:'ZIEL_GESETZT',id:'Z-P1',erledigt:true})});
 ok(await p.evaluate(()=>MS('M1').ziele['Z-P1'].erledigt),'Ziel P1 erledigt');

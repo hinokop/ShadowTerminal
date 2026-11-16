@@ -9,10 +9,10 @@ const send=async(t)=>{await p.evaluate((t)=>dispatch({type:'NACHRICHT_GESENDET',
  console.log('>',t,'\n  <',await p.evaluate(()=>{const n=STATE.komm.kanaele.handler.nachrichten;return n[n.length-1].text.slice(0,200)}));};
 await send('Fordere Freigabe für P-9503 an.');
 const ids=await p.evaluate(()=>SCENARIO.entitaeten.map(e=>e.id+':'+e.typ).join(' '));console.log(ids);
-await send('Fordere Freigabe für L-9052 an.');
+await send('Fordere Freigabe für L-0002 an.');
 await send('Observation');
 await send('Dort steht abends ein Fahrzeug, das die Ladung übernimmt, ich will die Fahrer identifizieren und die Abfahrtszeit belegen.');
 console.log(await p.evaluate(()=>JSON.stringify(FGL().map(f=>[f.id,f.massnahme,f.ziel,f.urteil]))));
-await send('Ordne P-9054 dem Auftrag zu als Hinweisgeber');
-await send('Beantrage Festsetzung gegen P-9060 weil er Mitwisser ist und die Ladung deckt. Ich habe Belege dafür vorliegen.');
+await send('Ordne P-0007 dem Auftrag zu als Hinweisgeber');
+await send('Beantrage Festsetzung gegen P-0013 weil er Mitwisser ist und die Ladung deckt. Ich habe Belege dafür vorliegen.');
 console.log(e.join()||'keine Fehler');await b.close()})();

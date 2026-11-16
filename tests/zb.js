@@ -9,7 +9,7 @@ const due=async(n=3)=>{for(let i=0;i<n;i++){await p.evaluate(()=>{STATE.plan.for
 const last=(k,n=3)=>p.evaluate(([k,n])=>STATE.komm.kanaele[k].nachrichten.slice(-n).map(m=>m.text),[k,n]);
 const send=(t,k='handler')=>p.evaluate(([t,k])=>dispatch({type:'NACHRICHT_GESENDET',kanal:k,text:t,dringlichkeit:'Routine'}),[t,k]);
 // --- Neumann
-const nm=await p.evaluate(()=>{const def=LM();const i=def.skript.findIndex(s=>s.nennt);const v0=wissen(entitaet('P-9062'));const out=[];sendeSkript(def,i,out);return {v0,v1:wissen(entitaet('P-9062')),log:out.map(o=>o.aktion)}});
+const nm=await p.evaluate(()=>{const def=LM();const i=def.skript.findIndex(s=>s.nennt);const v0=wissen(entitaet('P-0015'));const out=[];sendeSkript(def,i,out);return {v0,v1:wissen(entitaet('P-0015')),log:out.map(o=>o.aktion)}});
 console.log(JSON.stringify(nm));
 chk(nm.v0==='unbekannt'&&nm.v1==='bekannt'&&nm.log.indexOf('Neue Person im Umfeld bekannt')>=0,'Skriptnennung "Neumann": Dossier wird als Rudiment bekannt');
 // --- Wie viele Kisten
@@ -32,7 +32,7 @@ const S=await p.evaluate(()=>{
   dispatch({type:'ZONE_ANGELEGT',ll:[52.4817,13.4352]});dispatch({type:'ZONE_GEAENDERT',id:'ZN-001',wertung:'leicht',r:150});
   const zn=karteZoneFinden('ZN-001');
   // unbekannte Person in die Zone legen
-  const unb=poolAlle().find(e=>e.typ==='Person'&&wissen(e)==='unbekannt'&&e.id!=='P-9062');PROFIL.koord[unb.id]=[52.4817,13.4352];
+  const unb=poolAlle().find(e=>e.typ==='Person'&&wissen(e)==='unbekannt'&&e.id!=='P-0015');PROFIL.koord[unb.id]=[52.4817,13.4352];
   return {ids,unb:unb.id,unbName:unb.name,zr:zoneBericht(zn,1)};});
 console.log(JSON.stringify(S).slice(0,900));
 chk(S.zr.anzahl===2,'Bericht: zwei bekannte (eigene) Personen im Bereich');

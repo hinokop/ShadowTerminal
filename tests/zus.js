@@ -6,13 +6,13 @@ await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{ti
 await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});
  dispatch({type:'DOSSIER_ANGELEGT',typ:'Person',name:'Eigen Alpha',land:'DE',stufe:2,rolle:'x'});dispatch({type:'NAVIGATION',modul:'dossier'});});
 await p.waitForTimeout(300);
-const r=await p.evaluate(()=>{const out={};const lm=LM();['P-9060','P-9051','P-9055'].forEach(id=>{const e=entitaet(id);out[id]=[missionsAbstand(lm,e),JSON.stringify(zusatzBewerten(lm,e,'Kontakt'))]});return out});console.log(JSON.stringify(r,null,1));
-await p.evaluate(()=>dispatch({type:'DOSSIER_GEOEFFNET',id:'P-9060'}));await p.waitForTimeout(300);
+const r=await p.evaluate(()=>{const out={};const lm=LM();['P-0013','P-0004','P-0008'].forEach(id=>{const e=entitaet(id);out[id]=[missionsAbstand(lm,e),JSON.stringify(zusatzBewerten(lm,e,'Kontakt'))]});return out});console.log(JSON.stringify(r,null,1));
+await p.evaluate(()=>dispatch({type:'DOSSIER_GEOEFFNET',id:'P-0013'}));await p.waitForTimeout(300);
 ok(await p.isVisible('#btn-zusatz'),'Button sichtbar');
 await p.selectOption('#sel-zusatz','Gegenseite');await p.click('#btn-zusatz');await p.waitForTimeout(300);
 ok(await p.evaluate(()=>MS('M1').zusatz.length===1),'zugeordnet');
 console.log(await p.evaluate(()=>JSON.stringify(MS('M1').zusatz)));
-await p.evaluate(()=>{dispatch({type:'DOSSIER_GEOEFFNET',id:'P-9054'});dispatch({type:'MISSION_AKTEUR_ZUGEORDNET',id:'P-9054',rolle:'Hinweisgeber'});dispatch({type:'NAVIGATION',modul:'mission'})});await p.waitForTimeout(400);
+await p.evaluate(()=>{dispatch({type:'DOSSIER_GEOEFFNET',id:'P-0007'});dispatch({type:'MISSION_AKTEUR_ZUGEORDNET',id:'P-0007',rolle:'Hinweisgeber'});dispatch({type:'NAVIGATION',modul:'mission'})});await p.waitForTimeout(400);
 ok(await p.evaluate(()=>document.getElementById('main').innerText.includes('ZUSATZAKTEURE')||document.getElementById('main').innerText.includes('Zusatzakteure')),'Panel im Briefing');
 await p.screenshot({path:'zus.png',fullPage:false});
 console.log(e.join()||'keine Fehler');await b.close()})();

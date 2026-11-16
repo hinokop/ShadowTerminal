@@ -5,6 +5,6 @@ await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{ti
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});dispatch({type:'NAVIGATION',modul:'mission'});});await p.waitForTimeout(500);
 console.log(await p.evaluate(()=>[...document.querySelectorAll('[id^="wi-s-"]')].map(x=>x.id+':'+(entitaet(x.id.slice(5))||{}).name).join(' | ')));
 console.log(await p.evaluate(()=>[...document.querySelectorAll('.badge')].map(x=>x.textContent).join(' ; ')));
-await p.evaluate(()=>{infoFreigeben(entitaet('P-9054'),[]);dispatch({type:'NAVIGATION',modul:'karte'});dispatch({type:'NAVIGATION',modul:'mission'})});await p.waitForTimeout(400);
+await p.evaluate(()=>{infoFreigeben(entitaet('P-0007'),[]);dispatch({type:'NAVIGATION',modul:'karte'});dispatch({type:'NAVIGATION',modul:'mission'})});await p.waitForTimeout(400);
 console.log(await p.evaluate(()=>[...document.querySelectorAll('[id^="wi-s-"]')].map(x=>x.id.slice(5)).join(',')));
 await b.close()})();

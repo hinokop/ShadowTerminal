@@ -9,7 +9,7 @@ const v=()=>p.evaluate(()=>JSON.stringify({h:akteurDaten('handler'),a:akteurDate
 let r=JSON.parse(await v());ok(r.h.vertrauen===60&&r.a.vertrauen===55,'Startwerte');
 await p.evaluate(()=>dispatch({type:'LAGEBERICHT',text:'Treffen mit P-0001 an der Sonnenallee, kurzes Gespräch.'}));
 r=JSON.parse(await v());ok(r.a.belastung===30,'Begegnung P-0001: Belastung 30 ('+r.a.belastung+')');
-await p.evaluate(()=>dispatch({type:'VERSTAERKUNG_ANGEFORDERT',art:'beobachter',anzahl:1,ort:'L-9052',bezug:'',beginnH:8,dauerH:6,dringlichkeit:'Routine',zweck:'Am Kfz-Betrieb Sonnenallee wurde gestern abends ein Fahrzeug beladen; ich beobachte sechs Stunden, um die Anlieferungen und Gesichter zu belegen.'}));
+await p.evaluate(()=>dispatch({type:'VERSTAERKUNG_ANGEFORDERT',art:'beobachter',anzahl:1,ort:'L-0002',bezug:'',beginnH:8,dauerH:6,dringlichkeit:'Routine',zweck:'Am Kfz-Betrieb Sonnenallee wurde gestern abends ein Fahrzeug beladen; ich beobachte sechs Stunden, um die Anlieferungen und Gesichter zu belegen.'}));
 r=JSON.parse(await v());ok(r.a.belastung===42&&r.a.vertrauen===50,'Verstärkung im Umfeld ('+r.a.belastung+'/'+r.a.vertrauen+')');
 // Asset antwortet gemoddet
 await p.evaluate(()=>{STATE.akteure.asset.belastung=90});

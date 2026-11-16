@@ -11,6 +11,6 @@ const r=await p.evaluate((bg)=>{
  const res={id,eig:JSON.stringify(STATE.dossiers.eigene.slice(-1)[0]).slice(0,300)};
  res.arten=FG_ARTEN.filter(x=>fgSichtbar(x,def)).map(x=>x.id);
  ['festsetzung','eliminierung'].forEach(a=>{res[a]=fgBewerten(def,FG_ARTEN.find(x=>x.id===a),entitaet(id),bg,'Routine')});
- res.p9062=['festsetzung','eliminierung'].map(a=>JSON.stringify(fgBewerten(def,FG_ARTEN.find(x=>x.id===a),entitaet('P-9062'),bg,'Routine')));
+ res.p9062=['festsetzung','eliminierung'].map(a=>JSON.stringify(fgBewerten(def,FG_ARTEN.find(x=>x.id===a),entitaet('P-0015'),bg,'Routine')));
  return res},bg);
 console.log(JSON.stringify(r,null,1));await b.close()})();
