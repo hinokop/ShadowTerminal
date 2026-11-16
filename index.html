@@ -108,6 +108,10 @@ label{color:var(--text-dim)}
 .field dd{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
 .field.full{grid-column:1 / -1}
 .note{padding:6px 8px;color:var(--text-dim)}
+.ak-eingang-layout{display:grid;grid-template-columns:minmax(180px,1fr) minmax(0,2fr);gap:14px}
+.ak-eingang-layout section{min-width:0;overflow-wrap:anywhere}
+.ak-eingang-layout input[type=file]{max-width:100%}
+@media(max-width:720px){.ak-eingang-layout{grid-template-columns:minmax(0,1fr)}}
 .bearb-hinweis{margin-left:auto;color:var(--text-dim);font-size:11px}
 .note:empty{display:none}
 .pad{padding:6px 8px}
