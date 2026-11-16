@@ -10,7 +10,7 @@ const { spawn } = require('child_process'); const fs = require('fs'); const os =
 const GRUPPEN = [
   ['kt', 'kv3', 'zn'], ['zn3', 'zev', 'dp', 'al', 'abd'], ['zb', 'ds2', 'wk3'], ['fgy', 'fd', 'fg', 'rs', 'm1flow'],
   ['zp', 'un', 'tx', 'sm'], ['au', 'p2', 'p3', 'p4', 'pn', 'kwz', 'nx', 'kc', 'ak2'],
-  ['kartenprotokoll', 'pins', 'unterlagen', 'aussagen-alt', 'fallpaket', 'recherche'], ['kartensprung', 'identitaeten', 'verlaesslichkeit', 'arbeitsnavigation', 'kartenbereinigung', 'profil-arbeitsansicht'], ['profil-assessment', 'missionstrennung', 'dossier-einheitlich', 'dossier-kurzlage', 'dossier-nummern', 'dossier-maske', 'sichtung-pin', 'sichtung-import', 'bearbeitet-hinweis'], ['recherche-oberflaeche', 'karten-messen', 'ablage-eingang', 'lage-box', 'terminal-bruecken-ausfall', 'terminal-satcon', 'fall-modul', 'dossier-fallverweise', 'dossier-galerie-nummern', 'profil-seq-galerie', 'sichtung-export']
+  ['kartenprotokoll', 'pins', 'unterlagen', 'aussagen-alt', 'fallpaket', 'recherche'], ['kartensprung', 'identitaeten', 'verlaesslichkeit', 'arbeitsnavigation', 'kartenbereinigung', 'profil-arbeitsansicht'], ['profil-assessment', 'missionstrennung', 'dossier-einheitlich', 'dossier-kurzlage', 'dossier-nummern', 'dossier-maske', 'sichtung-pin', 'sichtung-import', 'bearbeitet-hinweis'], ['recherche-oberflaeche', 'karten-messen', 'ablage-eingang', 'lage-box', 'terminal-bruecken-ausfall', 'terminal-satcon', 'fall-modul', 'dossier-fallverweise', 'dossier-galerie-nummern', 'profil-seq-galerie', 'sichtung-export', 'arbeitsstand']
 ];
 const BEKANNT = { m1flow: 'Missionsablauf, auch auf main rot', abd: 'unzuverlässig', wk3: 'unzuverlässig', dp: 'unzuverlässig' };
 const FEHLER = /(^|\s)FAIL\b|FEHLER: [1-9]|Fehlschläge: [1-9]|Error/;
