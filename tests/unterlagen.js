@@ -77,7 +77,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   /* nächster Start liegt an der letzten Sichtung; Pinnummer zählt weiter */
   await p.evaluate(() => { const e = STATE.dossiers.eigene.find(x => x.name === 'Mit Ort'); dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: '52.6100, 13.5100', text: 'neuere Sichtung', guete: 'unbewertet' }); });
   await zeigen('Mit Ort'); await p.evaluate(() => { VIEW.dtab = 'info'; renderModule(); }); await p.click('#btn-dk-sichtung'); await p.waitForTimeout(300);
-  const s3 = await p.evaluate(() => { const pin = PROFIL.pins[PROFIL.pins.length - 1]; return { name: pin.name, ll: pin.ll, n: PROFIL.pins.length }; });
+  const s3 = await p.evaluate(() => ({ lat: VIEW.karte.lat, lon: VIEW.karte.lon, mod: STATE.ui.modul, n: PROFIL.pins.length }));   /* vorhandene Sichtung mit Ort: Verweis, kein weiterer Entwurfs-Pin */
   const r = {
     titelUnterlagen: ueberschriften.some(t => t.startsWith('Unterlagen zu diesem Dossier')) && !ueberschriften.some(t => /^Recherchebelege/i.test(t)), ohneAussagenmaske: ohneAussagenmaske && !ueberschriften.some(t => /^Aussagen$/i.test(t)),
     formularEingeklappt: formularZu && offen && zu2, labelQuelle: labels.quelle && !labels.alt, ohneFallFrage: ohneFall === 0 && /Fall/.test(msgFall),
@@ -93,7 +93,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
     sichtungOhneOrt: ohneOrt.pins === 0 && ohneOrt.tab === 'sichtungen',
     sichtungPin: s1.name === 'M-01' && Math.abs(s1.ll[0] - 52.5) < 1e-6 && Math.abs(s1.ll[1] - 13.4) < 1e-6 && s1.dossier && s1.mod === 'karte' && Math.abs(s1.lat - 52.5) < 1e-6 && s1.auswahl && s1.marker,
     sichtungAusPin: s2.n === 1 && /^SI-/.test(s2.id) && s2.pin === s2.id && s2.ll && Math.abs(s2.ll[0] - 52.5) < 1e-4 && s2.markerSichtung,
-    sichtungLetzterPunkt: s3.name === 'M-02' && Math.abs(s3.ll[0] - 52.61) < 1e-6 && Math.abs(s3.ll[1] - 13.51) < 1e-6 && s3.n === 2,
+    sichtungLetzterPunkt: s3.mod === 'karte' && Math.abs(s3.lat - 52.61) < 0.05 && Math.abs(s3.lon - 13.51) < 0.05 && s3.n === 1,
     keineFehler: err.length === 0
   };
   console.log(JSON.stringify({ r, a1, a2, a3, oText, oVideo, oBild, oPdf, m2, voll2, gp, ohneOrt, s1, s2, s3, msgOeffnen, err }));
