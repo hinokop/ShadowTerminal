@@ -152,6 +152,30 @@ async function akEingangAblegen(file) {
     meldung('Datei konnte nicht im Eingang abgelegt werden.');
   } finally { akEingangFertig(); }
 }
+async function akEingangLoeschen(eintrag) {
+  if (AK_EINGANG.arbeit) return;
+  AK_EINGANG.arbeit = true;
+  let alt, entfernt = false;
+  try {
+    alt = akEingangLesen();
+    if (!akEingangSichtbar(alt).some(function (x) { return x.anhang === eintrag.anhang; })) {
+      meldung('Datei ist nicht mehr im Eingang.'); return;
+    }
+    akEingangSpeichern(alt.filter(function (x) { return x.anhang !== eintrag.anhang; }));
+    entfernt = true;
+    await RIDB.del(eintrag.anhang);
+    if (AK_EINGANG.auswahl === eintrag.anhang) AK_EINGANG.auswahl = null;
+    meldung('Datei aus dem Eingang gelöscht.');
+  } catch (e) {
+    if (entfernt) {
+      try {
+        const aktuell = akEingangLesen();
+        if (!aktuell.some(function (x) { return x.anhang === eintrag.anhang; })) akEingangSpeichern(aktuell.concat(eintrag));
+      } catch (ex) { meldung('Datei konnte nicht gelöscht und der Listeneintrag nicht wiederhergestellt werden.'); return; }
+    }
+    meldung('Datei konnte nicht aus dem Eingang gelöscht werden.');
+  } finally { akEingangFertig(); }
+}
 function akVorschauFreigeben() {
   if (akVorschauUrl) { URL.revokeObjectURL(akVorschauUrl); akVorschauUrl = null; }
 }
@@ -234,5 +258,10 @@ function akEingangAnsicht() {
     h('button', { type: 'submit', id: 'ak-eingang-zuordnen', disabled: AK_EINGANG.arbeit }, 'Zuordnen'));
   setTimeout(function () { if (vorschau.isConnected) void akEingangVorschau(cur, vorschau); }, 0);
   return panel('Eingang', null, h('div', { class: 'pad ak-eingang-layout' }, seite,
-    h('section', null, h('h3', null, cur.dateiname), vorschau, form)));
+    h('section', null, h('h3', null, cur.dateiname), vorschau, form,
+      h('div', { class: 'row' }, h('button', { type: 'button', id: 'ak-eingang-loeschen', disabled: AK_EINGANG.arbeit,
+        onclick: function () {
+          bestaetigen('Datei aus dem Eingang löschen?', '„' + cur.dateiname + '“ wird aus dem lokalen Eingang entfernt. Die Originaldatei außerhalb des Terminals bleibt erhalten.',
+            'Datei löschen', function () { void akEingangLoeschen(cur); });
+        } }, 'Datei löschen')))));
 }
