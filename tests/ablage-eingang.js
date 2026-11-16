@@ -57,6 +57,24 @@ const { APP } = require('./_pfad');
       buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nt1cAAAAASUVORK5CYII=', 'base64')
     });
     await p.waitForFunction(() => document.querySelector('#ak-eingang-vorschau img')?.naturalWidth === 1);
+    const lang = 'Screenshot 2025-02-16 222343 ' + 'LangerDateiname'.repeat(10) + '.txt';
+    await p.locator('#ak-eingang-datei').setInputFiles({ ...datei, name: lang });
+    const zeile = p.locator('#ak-eingang-wahl-0');
+    await zeile.getByText(lang, {exact:true}).waitFor();
+    assert.equal(await zeile.getAttribute('title'), lang);
+    await p.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen(); });
+    for (const width of [1500, 760, 390]) {
+      await p.setViewportSize({width, height:900});
+      const layout = await zeile.evaluate(el => {
+        const name = el.firstElementChild, list = el.closest('ul');
+        const b = el.getBoundingClientRect(), n = name.getBoundingClientRect();
+        return { zeile:b.height, name:n.width, anteil:n.width/b.width, scrollt:list.scrollWidth > list.clientWidth, umbruch:getComputedStyle(name).whiteSpace };
+      });
+      assert.ok(layout.zeile <= 45 && layout.name > 100 && layout.anteil > .8 && !layout.scrollt && layout.umbruch === 'nowrap', JSON.stringify({width, ...layout}));
+    }
+    await p.locator('#ak-eingang-wahl-1').click();
+    await p.waitForFunction(() => document.querySelector('#ak-eingang-vorschau img')?.naturalWidth === 1);
+    assert.equal(await p.locator('#ak-eingang-wahl-1').getAttribute('aria-current'), 'true');
     await p.click('#ak-tab-registratur'); await p.locator('#ak-suche').waitFor();
     assert.deepEqual(errors,[]);
     console.log('OK: Eingang, Textvorschau, Neustart, Speicherrücknahme, Zuordnung ohne Kopie und Registratur');

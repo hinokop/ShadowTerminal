@@ -214,8 +214,8 @@ function akEingangAnsicht() {
     h('label', { for: 'ak-eingang-datei' }, 'Datei ablegen'),
     h('input', { id: 'ak-eingang-datei', type: 'file', disabled: AK_EINGANG.arbeit, onchange: function (ev) { const f = ev.target.files[0]; ev.target.value = ''; void akEingangAblegen(f); } }),
     h('p', { class: 'note' }, 'Lokal in diesem Browserprofil. Nicht in der Profil-JSON enthalten. Nach Zuordnung über das Fallpaket sicherbar.'),
-    h('ul', { class: 'elist' }, liste.slice().reverse().map(function (x, i) {
-      return h('li', null, h('button', { type: 'button', id: 'ak-eingang-wahl-' + i, 'aria-current': x === cur ? 'true' : null, onclick: function () { AK_EINGANG.auswahl = x.anhang; renderModule(); } }, h('span', { class: 'nm' }, x.dateiname)));
+    h('ul', { class: 'ak-eingang-liste', 'aria-label': 'Dateien im Eingang' }, liste.slice().reverse().map(function (x, i) {
+      return h('li', null, h('button', { type: 'button', id: 'ak-eingang-wahl-' + i, title: x.dateiname, 'aria-current': x === cur ? 'true' : null, onclick: function () { AK_EINGANG.auswahl = x.anhang; renderModule(); } }, h('span', { class: 'ak-eingang-name' }, x.dateiname)));
     })));
   if (!cur) return panel('Eingang', null, h('div', { class: 'pad' }, seite, h('p', { class: 'note' }, 'Noch keine Dateien abgelegt.')));
   const vorschau = h('div', { id: 'ak-eingang-vorschau', 'aria-live': 'polite' }, 'Vorschau wird geladen …');
