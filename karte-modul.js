@@ -118,10 +118,12 @@ function karteMarker() {
   });
   if (def && Z.route !== false) MS(def.id).zugriff.forEach(function (z) { if (z.ll) out.push({ id: z.id, kat: 'zugriff', name: z.typ + ' ' + z.id, ll: z.ll, r: z.r || 0, zp: z }); });
   if (Z.pins !== false) (PROFIL.pins || []).forEach(function (x) { if (x.ll) out.push({ id: x.id, kat: 'pin', name: x.name, ll: x.ll }); });
-  if (Z.sichtungen !== false) pool().forEach(function (e) {
+  const fokus = VIEW.karte.sichtungFokus || null;             /* gezielt angesprungene Sichtung: auch wenn älter als die letzten drei oder die Ebene ausgeblendet ist */
+  if (Z.sichtungen !== false || fokus) pool().forEach(function (e) {
     if (infoGesperrt(e) || dossierGesperrt(e)) return;
-    const d = STATE.dossiers.entitaeten[e.id];
-    ((d && d.sichtungen) || []).slice(-3).forEach(function (si) {
+    const d = STATE.dossiers.entitaeten[e.id], alle = (d && d.sichtungen) || [], sicht = Z.sichtungen !== false ? alle.slice(-3) : [];
+    if (fokus) { const f = alle.find(function (x) { return x.id === fokus; }); if (f && sicht.indexOf(f) < 0) sicht.push(f); }
+    sicht.forEach(function (si) {
       const k = sichtungKoord(si);
       if (k) out.push({ id: si.id, kat: 'sichtung', typ: 'Sichtung', name: e.id + ' ' + e.name + (si.ort ? ' · ' + si.ort : ''), ll: k.ll, genau: k.genau, bez: k.bez, entId: e.id, si: si, guete: sichtungGuete(e, si), unM: sichtungRadiusM(si, k.genau) });
     });
@@ -1203,6 +1205,7 @@ function zonePopup(zn, fertig) {
 function karteWaehlen(id, zentrieren) {
   const K = VIEW.karte, m = id ? (karteMarker().find(function (x) { return x.id === id; }) || (karteKoord(id) ? { ll: karteKoord(id) } : null) || (karteZoneFinden(id) ? { ll: karteZoneFinden(id).ll } : null)) : null;
   if (K.auswahl !== id) K.popupVersatz = null;       /* neue Auswahl: Popup wieder an der Standardstelle */
+  if (K.sichtungFokus && K.sichtungFokus !== id) K.sichtungFokus = null;
   K.auswahl = id; K.mehr = [];
   const svg = $('k-svg');
   if (zentrieren && m) { karteFlug(m.ll[0], m.ll[1], Math.max(K.zoom, 11), karteAuswahlAnzeige, id); }
@@ -1387,6 +1390,15 @@ function karteSteuerung(svg) {
       K.pick = null;
       VIEW.draft['aw-koord'] = P.lat(c[1]).toFixed(5) + ', ' + P.lon(c[0]).toFixed(5);
       dispatch({ type: 'NAVIGATION', modul: 'profil' });
+      renderModule();
+      return;
+    }
+    if (typeof K.pick === 'string' && K.pick.indexOf('SI:') === 0) {      /* Sichtung platzieren: Entwurfs-Pin zum Dossier */
+      const c = koordUm(ev), P = karteProj(), eid = K.pick.slice(3), de = entitaet(eid);
+      K.pick = null;
+      if (de) {
+        dispatch({ type: 'PIN_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])], name: sichtungsPinName(), dossier: de.id, notiz: 'Sichtungsentwurf zu ' + de.id + ' ' + de.name + ' (Punkt auf der Karte gesetzt)' });
+      }
       renderModule();
       return;
     }
@@ -1621,7 +1633,7 @@ function renderKarte(m) {
       h('input', { type: 'checkbox', id: 'ke-' + keys[0], checked: keys.some(function (k) { return K.ebenen[k]; }), onchange: function (ev) { keys.forEach(function (k) { K.ebenen[k] = ev.target.checked; }); karteWahlSichern(); st.neu(); karteAuswahlAnzeige(); karteFensterListe(); if (keys[0] === 'kacheln') renderModule(); } }),
       ikon || h('span', { class: 'k-ik leer' }), h('span', null, text));
   };
-  const pickE = K.pick ? (K.pick === 'CI-AUS' ? { id: 'Check-in', name: 'Ausweichort' } : K.pick.indexOf('AO-') === 0 ? (PROFIL.ausgang.find(function (x) { return x.id === K.pick; }) || null) : K.pick.indexOf('ZP-') === 0 ? { id: K.pick, name: 'Zugriffspunkt' } : entitaet(K.pick)) : null;
+  const pickE = K.pick ? (K.pick.indexOf('SI:') === 0 ? (entitaet(K.pick.slice(3)) ? { id: 'Sichtung zu ' + K.pick.slice(3), name: entitaet(K.pick.slice(3)).name } : null) : K.pick === 'CI-AUS' ? { id: 'Check-in', name: 'Ausweichort' } : K.pick.indexOf('AO-') === 0 ? (PROFIL.ausgang.find(function (x) { return x.id === K.pick; }) || null) : K.pick.indexOf('ZP-') === 0 ? { id: K.pick, name: 'Zugriffspunkt' } : entitaet(K.pick)) : null;
   const kopf = [knopf('k-raum', 'Region', function () { const a = { lat: K.lat, lon: K.lon, zoom: K.zoom }; karteGrundansicht(); const z = { lat: K.lat, lon: K.lon, zoom: K.zoom }; K.lat = a.lat; K.lon = a.lon; K.zoom = a.zoom; karteFlug(z.lat, z.lon, z.zoom); }),
     knopf('k-eu', 'Europa', function () { karteFlug(50, 10, 4.4); }),
     knopf('k-welt', 'Welt', function () { karteFlug(25, 20, 1.9); }),
@@ -1694,7 +1706,7 @@ function renderKarte(m) {
     modKopf(m),
     kartenReiter('karte'),
     panel('Lagekarte', null,
-      pickE ? h('div', { class: 'row k-pickbar' }, h('span', null, 'Klick auf die Karte setzt die Position von ' + pickE.id + ' ' + pickE.name + '.'),
+      pickE ? h('div', { class: 'row k-pickbar' }, h('span', null, K.pick.indexOf('SI:') === 0 ? 'Klick auf die Karte setzt einen Sichtungsentwurf zu ' + K.pick.slice(3) + ' ' + pickE.name + '.' : 'Klick auf die Karte setzt die Position von ' + pickE.id + ' ' + pickE.name + '.'),
         knopf('k-pick-x', 'Abbrechen', function () { K.pick = null; renderModule(); })) : null,
       h('div', { class: 'row' }, kopf),
       h('div', { class: 'karte-wrap' + (K.ansicht3d ? ' ist3d' : '') }, svg, K.ansicht3d ? karte3dRahmen() : null, leiste,

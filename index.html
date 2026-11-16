@@ -1201,9 +1201,9 @@ function profilSpeichern() {
       const x = d.entitaeten[e.id];
       if (!x) return;
       const std = !mid[e.id];
-      if ((x.notizen && x.notizen.length) || (x.sichtungen && x.sichtungen.length) || (std && x.status) || x.reg || typeof x.kurzlage === 'string' || x.durch || x.selbstBearbeitet === true) {
+      if ((x.notizen && x.notizen.length) || (x.sichtungen && x.sichtungen.length) || (std && x.status) || x.reg || typeof x.kurzlage === 'string' || typeof x.erkenntnis === 'string' || x.durch || x.selbstBearbeitet === true) {
         dd[e.id] = { status: std ? x.status : null, statusAm: std ? x.statusAm : null, notizen: x.notizen || [], sichtungen: x.sichtungen || [] };
-        ['reg', 'kurzlage', 'durch', 'aktualisiert'].forEach(function (k) { if (x[k] || (k === 'kurzlage' && x[k] === '')) dd[e.id][k] = x[k]; });
+        ['reg', 'kurzlage', 'erkenntnis', 'durch', 'aktualisiert'].forEach(function (k) { if (x[k] || (k === 'kurzlage' && x[k] === '')) dd[e.id][k] = x[k]; });
         if (x.selbstBearbeitet === true) dd[e.id].selbstBearbeitet = true;
       }
     });
@@ -1242,6 +1242,7 @@ function profilEinspielen(z) {
     if (q.selbstBearbeitet === true) x.selbstBearbeitet = true;
     if (!x.reg && typeof q.reg === 'string') x.reg = q.reg;
     if (typeof x.kurzlage !== 'string' && typeof q.kurzlage === 'string') x.kurzlage = q.kurzlage;
+    if (typeof x.erkenntnis !== 'string' && typeof q.erkenntnis === 'string' && q.erkenntnis) x.erkenntnis = q.erkenntnis;
     if (q.durch && (!x.durch || Date.parse(q.aktualisiert) > Date.parse(x.aktualisiert))) {
       x.durch = kopie(q.durch); x.aktualisiert = q.aktualisiert;
     }
@@ -2903,6 +2904,11 @@ function erkenntnisLage(e) {
   const frisch = L.filter(function (z) { return z.fr.stufe !== 'veraltet'; }).sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   const alle = L.slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   return { aktuell: !!frisch.length, juengste: alle[0] || null, frisch: frisch[0] || null, anzahl: L.length };
+}
+/* Erkenntnislage als Text: eigener Eintrag des Dossiers, sonst die Zusammenfassung der vorhandenen Spuren (Sichtungen, Belege, Berichte, Einschätzung) */
+function erkenntnisText(e) {
+  const el = erkenntnisLage(e);
+  return el.anzahl ? el.anzahl + (el.anzahl === 1 ? ' Spur' : ' Spuren') + ', jüngste: ' + el.juengste.art + ' vom ' + fmtZ(el.juengste.t) : 'Keine Erkenntnis erfasst.';
 }
 /* Unschärfe einer Sichtung in Metern: Grundwert nach Genauigkeit der Ortsangabe, dazu Wachstum mit dem Alter
    (Verhältnis zur Altersgrenze, vgl. frische). Ohne Alterung (Faktor 0) bleibt es beim Grundwert. */
@@ -5599,7 +5605,12 @@ const ACTIONS = {
     const neu = { name: name, aliase: zeilen(a.aliase, ','), land: SCENARIO.laender[a.land] ? a.land : e.land,
                   rolle: String(a.rolle || '').trim() || e.rolle, eckdaten: zeilen(a.eckdaten, '\n'),
                   bedrohung: { stufe: stufe, begruendung: beg || (stufe !== e.bedrohung.stufe ? 'Eigene Neubewertung.' : e.bedrohung.begruendung) } };
+    const erkNeu = typeof a.erkenntnis === 'string' && e.typ !== 'Ort' ? a.erkenntnis.replace(/\r\n?/g, '\n').trim().slice(0, 2000) : null;
+    const erkWert = erkNeu === null || erkNeu === erkenntnisText(e) ? null : erkNeu;           /* unveränderter Standardtext wird nicht als eigener Eintrag gespeichert */
+    const erkAlt = d.erkenntnis || '';
+    const erkGeaendert = erkNeu !== null && (erkWert === null ? erkAlt !== '' && erkNeu === erkenntnisText(e) : erkWert !== erkAlt);
     const diff = [], altName = e.name;
+    if (erkGeaendert) diff.push('Erkenntnislage');
     if (neu.name !== e.name) diff.push('Name: ' + e.name + ' → ' + neu.name);
     if (neu.aliase.join('|') !== e.aliase.join('|')) diff.push('Aliase');
     if (neu.land !== e.land) diff.push('Staat: ' + e.land + ' → ' + neu.land);
@@ -5610,6 +5621,7 @@ const ACTIONS = {
     if (dossierRegisterBeiSpeichern(e, d)) diff.push('Registernummer vergeben');
     if (beispiel) diff.push('Beispielkennzeichnung entfernt');
     if (!diff.length) return null;
+    if (erkGeaendert) { if (erkWert) d.erkenntnis = erkWert; else delete d.erkenntnis; }
     if (!e.eigen) d.selbstBearbeitet = true;
     if (e.eigen) Object.assign(e, neu);
     else {
@@ -6786,10 +6798,11 @@ function dossierBearbeiten(e) {
     feldZeile('Staat', 'bd-land', h('select', { id: 'bd-land' }, Object.keys(SCENARIO.laender).map(function (k) { return h('option', { value: k, selected: k === e.land }, k + ' ' + SCENARIO.laender[k]); }))),
     feldZeile('Aliase', 'bd-alias', h('input', { type: 'text', id: 'bd-alias', value: e.aliase.join(', '), autocomplete: 'off', style: 'flex:1 1 220px;min-width:0' })),
     feldZeile('Beschreibung', 'bd-rolle', h('textarea', { id: 'bd-rolle', rows: '3', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' }, e.rolle)),
-    feldZeile('Eckdaten', 'bd-eck', h('textarea', { id: 'bd-eck', rows: '4', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' }, e.eckdaten.join('\n'))));
+    feldZeile('Eckdaten', 'bd-eck', h('textarea', { id: 'bd-eck', rows: '4', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' }, e.eckdaten.join('\n'))),
+    e.typ === 'Ort' ? null : feldZeile('Erkenntnislage', 'bd-erk', h('textarea', { id: 'bd-erk', rows: '3', spellcheck: 'false', style: 'flex:1 1 220px;min-width:0' }, (STATE.dossiers.entitaeten[e.id] || {}).erkenntnis || erkenntnisText(e))));
   bestaetigen('Dossier bearbeiten: ' + e.id, form, 'Änderungen speichern', function () {
     dispatch({ type: 'DOSSIER_BEARBEITET', id: e.id, name: $('bd-name').value, land: $('bd-land').value, aliase: $('bd-alias').value,
-               rolle: $('bd-rolle').value, eckdaten: $('bd-eck').value });
+               rolle: $('bd-rolle').value, eckdaten: $('bd-eck').value, erkenntnis: $('bd-erk') ? $('bd-erk').value : undefined });
   }, { pruefer: function () { return $('bd-name').value.trim().length > 0; }, klartext: 'Dossier ' + e.id + ' bearbeiten?' });
 }
 function neuesDossier() {
@@ -6932,19 +6945,34 @@ function sichtungsPinName() {
   while (belegt['M-' + (n < 10 ? '0' : '') + n]) n++;
   return 'M-' + (n < 10 ? '0' : '') + n;
 }
+function sichtungLetzteMitOrt(e) {
+  const d = STATE.dossiers.entitaeten[e.id], L = ((d && d.sichtungen) || []).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
+  for (let i = 0; i < L.length; i++) { const k = typeof sichtungKoord === 'function' ? sichtungKoord(L[i]) : null; if (k) return { s: L[i], ll: k.ll }; }
+  return null;
+}
 function sichtungKnopf(e) {
-  const st = sichtungsStart(e);
+  const st = sichtungsStart(e), letzte = sichtungLetzteMitOrt(e);
+  const zurKarte = function (ll, zoom, wahl) {
+    const K = VIEW.karte; K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, zoom); K.sichtungFokus = wahl && /^SI-/.test(wahl) ? wahl : null;
+    VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
+    if (wahl) setTimeout(function () { if (typeof karteWaehlen === 'function') karteWaehlen(wahl, true); }, 0);
+  };
   return h('div', { class: 'row pad' },
     h('button', { type: 'button', id: 'btn-dk-sichtung', onclick: function () {
+      if (letzte) { zurKarte(letzte.ll, 14, letzte.s.id); return; }             /* vorhandene Sichtung: dorthin verweisen */
       const s2 = sichtungsStart(e);
-      if (!s2) { VIEW.dtab = 'sichtungen'; renderModule(); meldung('Kein bekannter Standort. Die Sichtung mit Ortsangabe im Reiter Sichtungen eintragen.'); return; }
+      if (!s2) { VIEW.dtab = 'sichtungen'; renderModule(); meldung('Kein bekannter Standort. Mit "Sichtung platzieren" einen Punkt auf der Karte setzen oder die Sichtung mit Ortsangabe im Reiter Sichtungen eintragen.'); return; }
       dispatch({ type: 'PIN_ANGELEGT', ll: s2.ll, name: sichtungsPinName(), dossier: e.id, notiz: 'Sichtungsentwurf zu ' + e.id + ' ' + e.name + ' (Ausgangspunkt: ' + s2.bez + ')' });
-      const K = VIEW.karte; K.pick = null; K.lat = s2.ll[0]; K.lon = s2.ll[1]; K.zoom = Math.max(K.zoom, 14);
-      const pid = K.auswahl;
-      VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
-      setTimeout(function () { if (typeof karteWaehlen === 'function') karteWaehlen(pid, true); }, 0);          /* zentriert und wählt den Entwurfs-Pin */
+      const pid = VIEW.karte.auswahl;
+      zurKarte(s2.ll, 14, pid);
     } }, 'Sichtung auf der Karte'),
-    h('span', { class: 'note' }, st ? 'Setzt einen Entwurfs-Pin am Punkt: ' + st.bez + ' (' + st.ll[0].toFixed(4) + ', ' + st.ll[1].toFixed(4) + ').' : 'Kein Standort bekannt; die Sichtung wird im Reiter Sichtungen eingetragen.'));
+    h('button', { type: 'button', id: 'btn-dk-platzieren', onclick: function () {
+      const K = VIEW.karte, s2 = sichtungsStart(e);
+      K.pick = 'SI:' + e.id; K.auswahl = null; K.reiter = 'karte';
+      if (s2) { K.lat = s2.ll[0]; K.lon = s2.ll[1]; K.zoom = Math.max(K.zoom, 11); }
+      dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule();
+    } }, 'Sichtung platzieren'),
+    h('span', { class: 'note' }, letzte ? 'Letzte Sichtung mit Ort: ' + letzte.s.id + ' (' + letzte.ll[0].toFixed(4) + ', ' + letzte.ll[1].toFixed(4) + ').' : st ? 'Setzt einen Entwurfs-Pin am Punkt: ' + st.bez + ' (' + st.ll[0].toFixed(4) + ', ' + st.ll[1].toFixed(4) + ').' : 'Kein Standort bekannt; "Sichtung platzieren" setzt den Punkt per Klick auf die Karte.'));
 }
 function sichtungsEntwuerfe(e) {
   const L = (PROFIL.pins || []).filter(function (y) { return y.dossier === e.id; });
@@ -6970,6 +6998,15 @@ function chronikBlock(e) {
     tabelle(['Zeit (UTC)', 'Modul', 'Aktion', 'Detail'], L.map(function (x) { return [td('nw', fmtZ(x.t)), td('nw', x.modul), td('nw', x.aktion), td('txt', x.detail)]; }), 'Keine Einträge zu diesem Dossier.')
   ];
 }
+function sichtungDialog(e) {
+  const form = h('div', null,
+    feldZeile('Ort', 'si-ort', h('input', { type: 'text', id: 'si-ort', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Ort der Sichtung', placeholder: 'Ortsangabe oder Koordinaten', style: 'flex:1 1 220px;min-width:0' })),
+    feldZeile('Beobachtung', 'si-text', h('textarea', { id: 'si-text', rows: '3', 'aria-label': 'Beobachtung', style: 'flex:1 1 220px;min-width:0' })),
+    feldZeile('Bewertung', 'si-guete', h('select', { id: 'si-guete', 'aria-label': 'Güte der Information' }, ['unbewertet', 'gesichert', 'plausibel', 'unbestaetigt'].map(function (g) { return h('option', { value: g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); }))));
+  bestaetigen('Sichtung hinzufügen: ' + e.id + ' ' + e.name, form, 'Sichtung eintragen', function () {
+    dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: ($('si-ort').value || '').trim(), text: ($('si-text').value || '').trim(), guete: $('si-guete').value });
+  }, { pruefer: function () { return !!(($('si-ort').value || '').trim() || ($('si-text').value || '').trim()); }, klartext: 'Sichtung zu ' + e.id + ' eintragen?' });
+}
 function sichtungenBlock(e) {
   const d = STATE.dossiers.entitaeten[e.id], L = (d.sichtungen || []).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   return [
@@ -6985,18 +7022,7 @@ function sichtungenBlock(e) {
         }), '')] : null];
     })(),
     sichtungsEntwuerfe(e),
-    h('div', { class: 'row top' },
-      h('label', { for: 'si-ort' }, 'Ort'),
-      entwurf('input', 'si-ort', 'si-ort-' + e.id, { type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Ort der Sichtung', style: 'flex:1 1 200px;min-width:0' }),
-      h('label', { for: 'si-text' }, 'Beobachtung'),
-      entwurf('input', 'si-text', 'si-text-' + e.id, { type: 'text', autocomplete: 'off', 'aria-label': 'Beobachtung', style: 'flex:2 1 260px;min-width:0',
-        onkeydown: function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); $('btn-si').click(); } } }),
-      h('select', { id: 'si-guete', 'aria-label': 'Güte der Information' }, ['unbewertet', 'gesichert', 'plausibel', 'unbestaetigt'].map(function (g) { return h('option', { value: g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); })),
-      h('button', { type: 'button', id: 'btn-si', onclick: function () {
-        const o = ($('si-ort').value || '').trim(), t = ($('si-text').value || '').trim();
-        if (!o && !t) { meldung('Sichtung ohne Ort und ohne Beobachtung wird nicht eingetragen.'); return; }
-        dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: o, text: t, guete: $('si-guete').value });
-      } }, 'Sichtung eintragen'))
+    h('div', { class: 'row top' }, h('button', { type: 'button', id: 'btn-si', onclick: function () { sichtungDialog(e); } }, 'Sichtung hinzufügen'))
   ];
 }
 function standortRudiment(e) {
@@ -7213,8 +7239,7 @@ function dossierAnsicht(e) {
       feld('Aliase', e.aliase.length ? e.aliase.join(', ') : 'keine bekannt'),
       feld('Status', st.status ? [dossierStatusLabel(st.status), ' seit ' + fmtZ(st.statusAm)] : 'ohne Status'),
       feld('Registernummer', dossierRegisternummer(e, st) || 'ohne'),
-      e.typ === 'Ort' ? null : feld('Erkenntnislage', (function () { const el = erkenntnisLage(e); return el.anzahl ? [frischeLabel(el.juengste.fr), ' jüngste Spur: ' + el.juengste.art + ' ' + el.juengste.fr.text + (el.aktuell ? '' : '. Nichts Frisches: neue Sichtung, Beleg oder Einschätzung einholen.')] : 'Keine eigene Erkenntnis erfasst. Verbindungen und Angaben im Archiv altern ab Nutzungsbeginn.'; })(), 'full'),
-      feld('Verteilerbeschränkung', e.verteiler, 'full'),
+      e.typ === 'Ort' ? null : feld('Erkenntnislage', st.erkenntnis || erkenntnisText(e), 'full'),
       kurzlageFeld(e, st),
       feld('Beschreibung', schutz(e.rolle), 'full'),
       feld(e.typ === 'Person' ? 'Biografische Eckdaten' : 'Eckdaten', schutz(e.eckdaten.join(' · ')), 'full'),
