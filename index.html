@@ -1154,11 +1154,11 @@ function idMigrieren(obj, karte) {
   })(obj);
 }
 const PROFIL = (function () {
-  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], ausgeblendeteKanten: [], daten: {}, seq: { eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], idv: 2, idmap: {}, karteBlanko: false, gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
+  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], ausgeblendeteKanten: [], daten: {}, seq: { eigen: 0, kante: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], idv: 2, idmap: {}, karteBlanko: false, gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
   let p = leer();
   try {
     const raw = window.localStorage.getItem(PROFIL_KEY);
-    if (raw) { const o = JSON.parse(raw); if (o && o.v === 1) p = Object.assign(leer(), o, { idv: o.idv, seq: Object.assign({ eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, o.seq || {}) }); }
+    if (raw) { const o = JSON.parse(raw); if (o && o.v === 1) p = Object.assign(leer(), o, { idv: o.idv, seq: Object.assign({ eigen: 0, kante: 0, ausgang: 0 }, o.seq || {}) }); }
   } catch (e) { /* ohne Profil */ }
   if (p.idv !== 2) {
     if (!p.idmap || typeof p.idmap !== 'object') p.idmap = {};
@@ -5566,7 +5566,7 @@ const ACTIONS = {
       });
     })();
     aenderungenAnwenden();
-    ['eigen', 'kante', 'galerie', 'ausgang'].forEach(function (k) { PROFIL.seq[k] = Math.max(PROFIL.seq[k] || 0, (q.seq && q.seq[k]) || 0); });
+    ['eigen', 'kante', 'ausgang'].forEach(function (k) { PROFIL.seq[k] = Math.max(PROFIL.seq[k] || 0, (q.seq && q.seq[k]) || 0); });
     profilEinspielen(STATE);
     /* Recherche, Identität, Fristen: zusammengeführt statt verworfen; die lokale Identität bleibt, wenn eine gewählt ist */
     let rchText = '';
