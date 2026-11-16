@@ -1082,12 +1082,39 @@ function idEigeneZuordnen(ids, karte) {
     karte[id] = t + '-' + String(ID_BASIS[t] + n + 1).padStart(4, '0');
   });
 }
+/* Gemeinsame, kollisionsfreie Vergabe: belegt = Menge bereits vergebener Nummern; die nächste Nummer folgt je Typ auf die höchste vorhandene (unter 9000). */
+function idNaechste(praefix, belegt) {
+  let hoechst = ID_BASIS[praefix] || 0;
+  belegt.forEach(function (id) { if (id[0] === praefix && /^[POL]-[0-9]{4}$/.test(id) && Number(id.slice(2)) < 9000) hoechst = Math.max(hoechst, Number(id.slice(2))); });
+  const id = praefix + '-' + String(hoechst + 1).padStart(4, '0');
+  belegt.add(id);
+  return id;
+}
+function idBelegtLokal(lokalListe) {
+  const b = new Set(Object.keys(ID_STD).map(function (k) { return ID_STD[k]; }));
+  (lokalListe || []).forEach(function (e) { if (e && typeof e.id === 'string') b.add(e.id); });
+  return b;
+}
+/* Abbildung eingehender eigener Dossiers auf lokale Nummern: gleiches Dossier (Name und Typ) bleibt dasselbe, sonst bei belegter oder alter Nummer die nächste freie. */
+function idImportAbbilden(eingehend, lokalListe) {
+  const belegt = idBelegtLokal(lokalListe), karte = {}, lok = {};
+  (lokalListe || []).forEach(function (e) { if (e && e.eigen !== false) lok[e.typ + '|' + e.name] = lok[e.typ + '|' + e.name] || e.id; });
+  (eingehend || []).filter(function (e) { return e && typeof e.id === 'string' && /^[POL]-[0-9]{4}$/.test(e.id) && !ID_STD[e.id]; })
+    .sort(function (a, b) { return Number(a.id.slice(2)) - Number(b.id.slice(2)); })
+    .forEach(function (e) {
+      const gleich = lok[e.typ + '|' + e.name];
+      if (gleich) { if (gleich !== e.id) karte[e.id] = gleich; return; }
+      if (Number(e.id.slice(2)) < 9000 && !belegt.has(e.id)) { belegt.add(e.id); return; }
+      karte[e.id] = idNaechste(e.id[0], belegt);
+    });
+  return karte;
+}
 function idMigrieren(obj, karte) {
-  const such = /\b([POL])-(9[0-9]{3})\b/g, neu = function (id) { return ID_STD[id] || karte[id] || id; }, ersetzen = function (t) { return t.replace(such, function (m) { return neu(m); }); };
+  const such = /\b([POL])-([0-9]{4})\b/g, neu = function (id) { return ID_STD[id] || karte[id] || id; }, ersetzen = function (t) { return t.replace(such, function (m) { return neu(m); }); };
   (function gehen(x) {
     if (Array.isArray(x)) { for (let i = 0; i < x.length; i++) { if (typeof x[i] === 'string') x[i] = ersetzen(x[i]); else if (x[i] && typeof x[i] === 'object') gehen(x[i]); } return; }
     Object.keys(x).forEach(function (k) {
-      const nk = /^[POL]-9[0-9]{3}$/.test(k) ? neu(k) : k;
+      const nk = /^[POL]-[0-9]{4}$/.test(k) ? neu(k) : k;
       let v = x[k];
       if (nk !== k) { delete x[k]; }
       if (typeof v === 'string') v = ersetzen(v); else if (v && typeof v === 'object') gehen(v);
@@ -4221,7 +4248,7 @@ const ACTIONS = {
   /* Ereignisse des Zugangsschirms (Zeitstempel stammt vom Ereignis selbst, da sie vor dem Laden des Zustands entstehen können) */
   AUTH_EREIGNIS: function (a) { return a.liste && a.liste.length ? a.liste : null; },
   IMPORT: function (a) {
-    if (a.state && a.state.idv !== 2 && a.state.dossiers) { idEigeneZuordnen((a.state.dossiers.eigene || []).map(function (e) { return e && e.id; }), PROFIL.idmap); idMigrieren(a.state, PROFIL.idmap); a.state.idv = 2; }
+    if (a.state && a.state.dossiers) { const km = idImportAbbilden(a.state.dossiers.eigene, PROFIL.eigene); idMigrieren(a.state, km); a.state.idv = 2; }
     STATE = a.state; arbeitsmodulWiederherstellen(STATE); const idNeu = identitaetUebernehmen(STATE); VIEW.draft = {}; planeAlle(); profilEinspielen(STATE); if (idNeu) profilSpeichern();
     return { modul: 'System', aktion: 'Zustand importiert', detail: a.datei + ', ' + a.state.log.length + ' Protokolleinträge übernommen' };
   },
@@ -5175,9 +5202,7 @@ const ACTIONS = {
     const zeilen = function (txt, trenner) { return String(txt || '').split(trenner).map(function (x) { return x.trim(); }).filter(Boolean); };
     STATE.seq.eigen = (STATE.seq.eigen || 0) + 1;
     const praefix = typ === 'Person' ? 'P' : typ === 'Organisation' ? 'O' : 'L';
-    let nummer = 0;                                               /* je Typ durchlaufend: nächste freie Nummer nach dem höchsten vorhandenen Dossier */
-    alleEntitaeten().concat(PROFIL.eigene || []).forEach(function (e) { const m = new RegExp('^' + praefix + '-([0-9]{4})$').exec(e.id); if (m && Number(m[1]) < 9000) nummer = Math.max(nummer, Number(m[1])); });
-    const id = praefix + '-' + String(nummer + 1).padStart(4, '0');
+    const id = idNaechste(praefix, idBelegtLokal(alleEntitaeten().concat(PROFIL.eigene || [])));   /* je Typ durchlaufend, kollisionsfrei */
     const land = SCENARIO.laender[a.land] ? a.land : 'DE';
     STATE.dossiers.eigene.push({ id: id, typ: typ, land: land, mission: 'STD', name: name, bild: null, aliase: zeilen(a.aliase, ','), reg: 'ohne',
       verteiler: 'Eigener Eintrag', rolle: String(a.rolle || '').trim() || 'Keine Beschreibung.', eckdaten: zeilen(a.eckdaten, '\n'),
@@ -5445,7 +5470,7 @@ const ACTIONS = {
   PROFIL_IMPORT: function (a) {
     const q = a.profil;
     if (!q || q.v !== 1 || !Array.isArray(q.eigene) || !Array.isArray(q.eigeneKanten)) return null;
-    if (q.idv !== 2) { delete q.idmap; const km = Object.assign({}, PROFIL.idmap); idEigeneZuordnen(q.eigene.map(function (e) { return e && e.id; }), km); idMigrieren(q, km); Object.assign(PROFIL.idmap, km); q.idv = 2; }
+    { delete q.idmap; const km = idImportAbbilden(q.eigene, (STATE.dossiers.eigene || []).concat(PROFIL.eigene)); idMigrieren(q, km); q.idv = 2; }
     let neu = 0;
     q.eigene.forEach(function (e) { if (!PROFIL.eigene.some(function (x) { return x.id === e.id; })) { PROFIL.eigene.push(e); if (q.daten && q.daten[e.id]) PROFIL.daten[e.id] = q.daten[e.id]; neu += 1; } });
     q.eigeneKanten.forEach(function (k) { if (!PROFIL.eigeneKanten.some(function (x) { return x.id === k.id; })) PROFIL.eigeneKanten.push(k); });

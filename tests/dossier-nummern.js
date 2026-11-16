@@ -48,7 +48,38 @@ const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'altprof
   ok.altNeuesDossierFortgesetzt = danach === 'P-0019';
   /* Erneutes Laden ändert nichts mehr */
   await an();
-  ok.erneutLadenStabil = await p.evaluate(() => JSON.stringify(PROFIL.eigene.map(e => e.id)) === '["P-0018","O-0006","P-0019"]' || JSON.stringify(PROFIL.eigene.map(e => e.id)));
+  const reloadIds = await p.evaluate(() => JSON.stringify({ p: PROFIL.eigene.map(e => e.id), s: STATE.dossiers.eigene.map(e => e.id) }));
+  ok.erneutLadenStabil = reloadIds === JSON.stringify({ p: ['P-0018', 'O-0006', 'P-0019'], s: ['P-0018', 'O-0006', 'P-0019'] }); if (!ok.erneutLadenStabil) console.log('Reload:', reloadIds);
+  /* Regression 1: lokal ist P-0018 bereits ein anderes Dossier; ein Profil mit anderem P-9101 und einem darauf verweisenden Pin kommt dazu */
+  await p.evaluate(() => { localStorage.clear(); });
+  await an();
+  const kol = await p.evaluate(() => {
+    dispatch({ type: 'DOSSIER_ANGELEGT', name: 'Lokal Achtzehn', typ: 'Person' });            /* P-0018 */
+    const lokalId = STATE.dossiers.auswahl;
+    const q = JSON.parse(JSON.stringify(PROFIL)); q.idv = 1; q.idmap = {};
+    q.eigene = [{ id: 'P-9101', typ: 'Person', land: 'DE', mission: 'STD', name: 'Importierte Person', bild: null, aliase: [], reg: 'ohne', verteiler: 'Eigener Eintrag', rolle: 'x', eckdaten: [], bedrohung: { stufe: 2, begruendung: '' }, nachtraege: [], eigen: true }];
+    q.daten = {}; q.pins = [{ id: 'PIN-901', name: 'Importpin', ll: [50.1, 8.2], zwecke: [], umgebung: {}, notiz: '', dossier: 'P-9101', t: new Date().toISOString() }];
+    q.zonen = []; q.gesperrt = []; q.aenderungen = {}; q.dossierDaten = {}; q.recherche = undefined;
+    dispatch({ type: 'PROFIL_IMPORT', profil: q, datei: 'alt.json' });
+    const imp = PROFIL.eigene.find(e => e.name === 'Importierte Person'), lok = PROFIL.eigene.find(e => e.name === 'Lokal Achtzehn') || STATE.dossiers.eigene.find(e => e.name === 'Lokal Achtzehn');
+    const pin = PROFIL.pins.find(x => x.name === 'Importpin');
+    return { lokalId, imp: imp && imp.id, lok: lok && lok.id, pin: pin && pin.dossier };
+  });
+  ok.importKollisionBeideErhalten = kol.lokalId === 'P-0018' && kol.lok === 'P-0018' && kol.imp === 'P-0019' && kol.pin === 'P-0019';
+  if (!ok.importKollisionBeideErhalten) console.log('Kollision:', JSON.stringify(kol));
+  /* Regression 2: Fallpaket mit alter Nummer eines Beispieldossiers wird dem vorhandenen Beispiel zugeordnet, ohne Dublette */
+  const paket = await p.evaluate(async () => {
+    const ex = entitaet('P-0004'); dispatch({ type: 'RECHERCHE_BELEG', dossier: 'P-0004', fall: null, neuerFall: { titel: 'Altpaket', frage: '' }, art: 'Text', herkunft: '', notiz: '', fassung: { dateiname: null, groesse: 5, typ: 'text/plain', hash: null, anhang: false }, fundstelle: { typ: 'Absatz', wert: '1' }, zitat: 'Beleg' });
+    const f = PROFIL.recherche.faelle[PROFIL.recherche.faelle.length - 1].id, b = await rchPaketBauen(f), o = JSON.parse(b.text);
+    o.inhalt = JSON.parse(JSON.stringify(o.inhalt).replace(/P-0004/g, 'P-9051'));
+    o.manifest.inhaltHash = await rchTextHash(rchKanon({ inhalt: o.inhalt, dateien: o.manifest.dateien }));
+    return { text: JSON.stringify(o), name: ex.name, hat9051: JSON.stringify(o.inhalt).indexOf('P-9051') >= 0 };
+  });
+  const vorher = await p.evaluate(() => STATE.dossiers.eigene.length);
+  await p.evaluate(async t => { PROFIL.recherche.faelle = []; PROFIL.recherche.quellen = []; PROFIL.recherche.fassungen = []; PROFIL.recherche.beobachtungen = []; PROFIL.recherche.aussagen = []; rchPaketLaden(new File([t], 'alt.json')); await new Promise(r => setTimeout(r, 1800)); }, paket.text);
+  const nachher = await p.evaluate(() => ({ n: STATE.dossiers.eigene.length, beob: PROFIL.recherche.beobachtungen.map(b => b.dossiers), fall: PROFIL.recherche.faelle.length }));
+  ok.altpaketOhneDublette = paket.hat9051 && nachher.fall === 1 && nachher.n === vorher && JSON.stringify(nachher.beob).indexOf('P-0004') >= 0 && JSON.stringify(nachher.beob).indexOf('P-9') < 0;
+  if (!ok.altpaketOhneDublette) console.log('Altpaket:', JSON.stringify({ paket9051: paket.hat9051, vorher, nachher }));
   ok.keineJsFehler = err.length === 0; if (err.length) console.log(err.slice(0, 4));
   const bad = Object.keys(ok).filter(k => ok[k] !== true); console.log(JSON.stringify(ok, null, 1)); console.log(bad.length ? 'FAIL: ' + bad.join(', ') : 'alle grün');
   await b.close(); process.exit(bad.length ? 1 : 0);

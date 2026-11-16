@@ -530,14 +530,14 @@ ACTIONS.RECHERCHE_PAKET_IMPORT = function (a) {
   const i = a.inhalt; if (!i || !Array.isArray(i.dossiers)) return null;
   const t = nowIso(), neueDossiers = [], dmap = {};
   i.dossiers.forEach(function (d) {
-    const lok = entitaet(d.id);
+    const lok = entitaet(ID_STD[d.id] || d.id);                       /* Pakete mit alten Nummern: Beispiele über die Zuordnungstabelle */
     if (lok && lok.name === d.name && lok.typ === d.typ) { dmap[d.id] = lok.id; return; }
     const kopie = STATE.dossiers.eigene.find(function (e) { return e.importVon && e.importVon.id === d.id && e.importVon.name === d.name && e.typ === d.typ; });
     if (kopie) { dmap[d.id] = kopie.id; return; }
     const typ = ['Person', 'Organisation', 'Ort'].indexOf(d.typ) >= 0 ? d.typ : 'Person', name = String(d.name || '').trim().slice(0, 120) || '(ohne Namen)';
     const zl = function (l) { return (Array.isArray(l) ? l : []).map(function (x) { return String(x).slice(0, 200); }).filter(Boolean).slice(0, 30); };
     STATE.seq.eigen = (STATE.seq.eigen || 0) + 1;
-    const id = (typ === 'Person' ? 'P' : typ === 'Organisation' ? 'O' : 'L') + '-' + (9100 + STATE.seq.eigen);
+    const id = idNaechste(typ === 'Person' ? 'P' : typ === 'Organisation' ? 'O' : 'L', idBelegtLokal(alleEntitaeten().concat(PROFIL.eigene || [])));
     const b = d.bedrohung && typeof d.bedrohung === 'object' ? { stufe: Math.min(5, Math.max(1, Number(d.bedrohung.stufe) || 2)), begruendung: String(d.bedrohung.begruendung || 'Aus Fallpaket übernommen.').slice(0, 300) } : { stufe: 2, begruendung: 'Aus Fallpaket übernommen.' };
     STATE.dossiers.eigene.push({ id: id, typ: typ, land: SCENARIO.laender[d.land] ? d.land : 'DE', mission: 'STD', name: name, bild: null, aliase: zl(d.aliase), reg: 'ohne', verteiler: 'Eigener Eintrag',
       rolle: String(d.rolle || '').slice(0, 500) || 'Aus Fallpaket übernommen.', eckdaten: zl(d.eckdaten), bedrohung: b, nachtraege: [], eigen: true, importVon: { id: d.id, name: d.name } });
