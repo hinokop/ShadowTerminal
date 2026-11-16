@@ -116,6 +116,18 @@ const PF = require('./_pfad');
     assert.match(await readFile(join(root, 'dokumente', 'lageblatt-PIN-001-v2.txt'), 'utf8'), /Zuletzt/);
     assert.match(await readFile(pin, 'utf8'), /Handnotiz/);
     assert.equal(await p.evaluate(() => Object.keys(PROFIL.exporte).length > 0), true);
+    /* Fremddatei: identischer Inhalt wird als unverändert gemeldet, darf aber nicht als eigener Export gemerkt werden */
+    await p.evaluate(() => dispatch({ type: 'PIN_ANGELEGT', ll: [50.2, 8.3], name: 'Fremdpin' }));
+    await choose(p, 'PIN-002');
+    await exportVia('pin-export', 'dokumente', '/pgcl-eu3.arch07/dokumente/lageblatt-PIN-002.txt');
+    const fremd = join(root, 'dokumente', 'lageblatt-PIN-002.txt'), fremdInhalt = await readFile(fremd);
+    await p.evaluate(() => { Object.keys(PROFIL.exporte).filter(k => /PIN-002/.test(k)).forEach(k => delete PROFIL.exporte[k]); });   /* Terminal kennt die Datei nicht mehr */
+    await exportVia('pin-export', 'dokumente', 'unverändert');
+    assert.equal(await p.evaluate(() => Object.keys(PROFIL.exporte).filter(k => /PIN-002/.test(k)).length), 0);
+    await p.evaluate(() => dispatch({ type: 'PIN_GEAENDERT', id: 'PIN-002', notiz: 'Geändert' }));
+    await exportVia('pin-export', 'dokumente', 'Neue Version gespeichert');
+    assert.deepEqual(await readFile(fremd), fremdInhalt);                                 /* Originaldatei bytegleich */
+    assert.match(await readFile(join(root, 'dokumente', 'lageblatt-PIN-002-v2.txt'), 'utf8'), /Geändert/);
     await choose(p, 'ZO-001');
     await exportVia('oz-export', 'ops', '/pgcl-eu3.arch07/ops/zone-ZO-001.txt');
     assert.match(await readFile(join(root, 'ops', 'zone-ZO-001.txt'), 'utf8'), /ZO-001 Testzone[\s\S]*Radius: 300 m[\s\S]*Größe geprüft/);
