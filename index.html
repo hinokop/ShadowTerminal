@@ -1132,9 +1132,9 @@ function profilSpeichern() {
       const x = d.entitaeten[e.id];
       if (!x) return;
       const std = !mid[e.id];
-      if ((x.notizen && x.notizen.length) || (x.sichtungen && x.sichtungen.length) || (std && x.status) || x.reg || typeof x.kurzlage === 'string' || x.durch || x.selbstBearbeitet === true) {
+      if ((x.notizen && x.notizen.length) || (x.sichtungen && x.sichtungen.length) || (std && x.status) || x.reg || typeof x.kurzlage === 'string' || typeof x.erkenntnis === 'string' || x.durch || x.selbstBearbeitet === true) {
         dd[e.id] = { status: std ? x.status : null, statusAm: std ? x.statusAm : null, notizen: x.notizen || [], sichtungen: x.sichtungen || [] };
-        ['reg', 'kurzlage', 'durch', 'aktualisiert'].forEach(function (k) { if (x[k] || (k === 'kurzlage' && x[k] === '')) dd[e.id][k] = x[k]; });
+        ['reg', 'kurzlage', 'erkenntnis', 'durch', 'aktualisiert'].forEach(function (k) { if (x[k] || (k === 'kurzlage' && x[k] === '')) dd[e.id][k] = x[k]; });
         if (x.selbstBearbeitet === true) dd[e.id].selbstBearbeitet = true;
       }
     });
@@ -1173,6 +1173,7 @@ function profilEinspielen(z) {
     if (q.selbstBearbeitet === true) x.selbstBearbeitet = true;
     if (!x.reg && typeof q.reg === 'string') x.reg = q.reg;
     if (typeof x.kurzlage !== 'string' && typeof q.kurzlage === 'string') x.kurzlage = q.kurzlage;
+    if (typeof x.erkenntnis !== 'string' && typeof q.erkenntnis === 'string' && q.erkenntnis) x.erkenntnis = q.erkenntnis;
     if (q.durch && (!x.durch || Date.parse(q.aktualisiert) > Date.parse(x.aktualisiert))) {
       x.durch = kopie(q.durch); x.aktualisiert = q.aktualisiert;
     }
@@ -6878,7 +6879,7 @@ function sichtungLetzteMitOrt(e) {
 function sichtungKnopf(e) {
   const st = sichtungsStart(e), letzte = sichtungLetzteMitOrt(e);
   const zurKarte = function (ll, zoom, wahl) {
-    const K = VIEW.karte; K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, zoom);
+    const K = VIEW.karte; K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, zoom); K.sichtungFokus = wahl && /^SI-/.test(wahl) ? wahl : null;
     VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
     if (wahl) setTimeout(function () { if (typeof karteWaehlen === 'function') karteWaehlen(wahl, true); }, 0);
   };

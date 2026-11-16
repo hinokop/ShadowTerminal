@@ -55,6 +55,35 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.locator('#k-svg').click({ position: { x: 400, y: 300 } }); await p.waitForTimeout(400);
   const k3 = await p.evaluate(() => { const pin = PROFIL.pins[PROFIL.pins.length - 1]; return { pick: VIEW.karte.pick, dossier: pin && pin.dossier, name: pin && pin.name, ll: pin && pin.ll, n: PROFIL.pins.length }; });
   ok.klickSetztEntwurfspin = k3.pick === null && k3.dossier === ids.ohne && /^M-\d\d$/.test(k3.name) && Array.isArray(k3.ll) && k3.n === pins0 + 1;
+  /* Befund 1: ältere Sichtung mit Ort, danach drei ohne Ort und ausgeblendete Ebene: der Sprung zeigt und wählt die Sichtung trotzdem */
+  const alt = await p.evaluate(() => {
+    dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Altsichtung', land: 'DE' }); const i = STATE.dossiers.auswahl;
+    dispatch({ type: 'SICHTUNG_HINZU', id: i, ort: '48.1370, 11.5750', text: 'alt mit Ort', guete: 'unbewertet' }); const sid = STATE.dossiers.entitaeten[i].sichtungen[0].id;
+    ['a', 'b', 'c'].forEach(x => dispatch({ type: 'SICHTUNG_HINZU', id: i, ort: '', text: 'ohne Ort ' + x, guete: 'unbewertet' }));
+    VIEW.karte.ebenen.sichtungen = false; return { i, sid, pins: (PROFIL.pins || []).length };
+  });
+  await oeffnen(alt.i); await p.click('#btn-dk-sichtung'); await p.waitForTimeout(1500);
+  const sp = await p.evaluate(sid => ({ mod: STATE.ui.modul, lat: VIEW.karte.lat, lon: VIEW.karte.lon, auswahl: VIEW.karte.auswahl, im: karteMarker().some(m => m.id === sid), pins: (PROFIL.pins || []).length }), alt.sid);
+  ok.aeltereSichtungAngezeigtUndGewaehlt = sp.mod === 'karte' && sp.im && sp.auswahl === alt.sid && Math.abs(sp.lat - 48.137) < 0.05 && Math.abs(sp.lon - 11.575) < 0.05 && sp.pins === alt.pins;
+  await p.evaluate(() => { VIEW.karte.ebenen.sichtungen = true; });
+  /* Befund 2: eigene Erkenntnislage eines Beispiels bleibt in der Profilsicherung erhalten; Leeren bleibt wirksam */
+  const prof = await p.evaluate(i => { profilSpeichern(); const dd = JSON.parse(localStorage.getItem(PROFIL_KEY)).dossierDaten; return dd[i] && dd[i].erkenntnis; }, ids.beispiel);
+  ok.erkenntnisInProfilsicherung = prof === 'Eigene Einschätzung zur Lage.';
+  const profilText = await p.evaluate(() => localStorage.getItem(PROFIL_KEY));
+  await p.evaluate(() => { localStorage.removeItem(STORAGE_KEY); }); await p.goto(PF.APP); await p.waitForTimeout(5200);
+  await p.fill('#gate-pw', 'pw-test-123'); const z2 = await p.$('#gate-pw2'); if (z2 && await z2.isVisible()) await z2.fill('pw-test-123'); await p.click('#gate-go');
+  await p.waitForFunction(() => !document.body.classList.contains('locked'), null, { timeout: 20000 });
+  ok.erkenntnisNachNeuemZustand = await p.evaluate(i => STATE.dossiers.entitaeten[i].erkenntnis === 'Eigene Einschätzung zur Lage.', ids.beispiel);
+  await oeffnen(ids.beispiel); await bearbeiten(); await p.locator('#bd-erk').fill(''); await p.click('#dlg-ok'); await p.waitForTimeout(300);
+  await p.evaluate(() => { localStorage.removeItem(STORAGE_KEY); }); await p.goto(PF.APP); await p.waitForTimeout(5200);
+  await p.fill('#gate-pw', 'pw-test-123'); const z3 = await p.$('#gate-pw2'); if (z3 && await z3.isVisible()) await z3.fill('pw-test-123'); await p.click('#gate-go');
+  await p.waitForFunction(() => !document.body.classList.contains('locked'), null, { timeout: 20000 });
+  ok.leerenBleibtNachWiederherstellung = await p.evaluate(i => typeof STATE.dossiers.entitaeten[i].erkenntnis !== 'string', ids.beispiel);
+  /* Profilimport in ein frisches Profil */
+  await p.evaluate(() => { localStorage.clear(); }); await p.goto(PF.APP); await p.waitForTimeout(5200);
+  await p.fill('#gate-pw', 'pw-test-123'); const z4 = await p.$('#gate-pw2'); if (z4 && await z4.isVisible()) await z4.fill('pw-test-123'); await p.click('#gate-go');
+  await p.waitForFunction(() => !document.body.classList.contains('locked'), null, { timeout: 20000 });
+  ok.erkenntnisBeiProfilimport = await p.evaluate(([t, i]) => { dispatch({ type: 'PROFIL_IMPORT', profil: JSON.parse(t), datei: 'p.json' }); return STATE.dossiers.entitaeten[i].erkenntnis === 'Eigene Einschätzung zur Lage.'; }, [profilText, ids.beispiel]);
   ok.keineJsFehler = err.length === 0; if (err.length) console.log(err.slice(0, 4));
   const bad = Object.keys(ok).filter(k => ok[k] !== true); console.log(JSON.stringify(ok, null, 1)); console.log(bad.length ? 'FAIL: ' + bad.join(', ') : 'alle grün');
   await b.close(); process.exit(bad.length ? 1 : 0);

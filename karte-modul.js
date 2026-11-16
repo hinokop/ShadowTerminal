@@ -118,10 +118,12 @@ function karteMarker() {
   });
   if (def && Z.route !== false) MS(def.id).zugriff.forEach(function (z) { if (z.ll) out.push({ id: z.id, kat: 'zugriff', name: z.typ + ' ' + z.id, ll: z.ll, r: z.r || 0, zp: z }); });
   if (Z.pins !== false) (PROFIL.pins || []).forEach(function (x) { if (x.ll) out.push({ id: x.id, kat: 'pin', name: x.name, ll: x.ll }); });
-  if (Z.sichtungen !== false) pool().forEach(function (e) {
+  const fokus = VIEW.karte.sichtungFokus || null;             /* gezielt angesprungene Sichtung: auch wenn älter als die letzten drei oder die Ebene ausgeblendet ist */
+  if (Z.sichtungen !== false || fokus) pool().forEach(function (e) {
     if (infoGesperrt(e) || dossierGesperrt(e)) return;
-    const d = STATE.dossiers.entitaeten[e.id];
-    ((d && d.sichtungen) || []).slice(-3).forEach(function (si) {
+    const d = STATE.dossiers.entitaeten[e.id], alle = (d && d.sichtungen) || [], sicht = Z.sichtungen !== false ? alle.slice(-3) : [];
+    if (fokus) { const f = alle.find(function (x) { return x.id === fokus; }); if (f && sicht.indexOf(f) < 0) sicht.push(f); }
+    sicht.forEach(function (si) {
       const k = sichtungKoord(si);
       if (k) out.push({ id: si.id, kat: 'sichtung', typ: 'Sichtung', name: e.id + ' ' + e.name + (si.ort ? ' · ' + si.ort : ''), ll: k.ll, genau: k.genau, bez: k.bez, entId: e.id, si: si, guete: sichtungGuete(e, si), unM: sichtungRadiusM(si, k.genau) });
     });
@@ -1203,6 +1205,7 @@ function zonePopup(zn, fertig) {
 function karteWaehlen(id, zentrieren) {
   const K = VIEW.karte, m = id ? (karteMarker().find(function (x) { return x.id === id; }) || (karteKoord(id) ? { ll: karteKoord(id) } : null) || (karteZoneFinden(id) ? { ll: karteZoneFinden(id).ll } : null)) : null;
   if (K.auswahl !== id) K.popupVersatz = null;       /* neue Auswahl: Popup wieder an der Standardstelle */
+  if (K.sichtungFokus && K.sichtungFokus !== id) K.sichtungFokus = null;
   K.auswahl = id; K.mehr = [];
   const svg = $('k-svg');
   if (zentrieren && m) { karteFlug(m.ll[0], m.ll[1], Math.max(K.zoom, 11), karteAuswahlAnzeige, id); }
