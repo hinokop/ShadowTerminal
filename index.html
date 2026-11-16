@@ -1113,13 +1113,17 @@ function idMigrieren(obj, karte) {
   const such = /\b([POL])-([0-9]{4})\b/g, neu = function (id) { return ID_STD[id] || karte[id] || id; }, ersetzen = function (t) { return t.replace(such, function (m) { return neu(m); }); };
   (function gehen(x) {
     if (Array.isArray(x)) { for (let i = 0; i < x.length; i++) { if (typeof x[i] === 'string') x[i] = ersetzen(x[i]); else if (x[i] && typeof x[i] === 'object') gehen(x[i]); } return; }
-    Object.keys(x).forEach(function (k) {
-      const nk = /^[POL]-[0-9]{4}$/.test(k) ? neu(k) : k;
-      let v = x[k];
-      if (nk !== k) { delete x[k]; }
+    /* erst alle Schlüssel und Werte erfassen, dann umschreiben: bei Tausch oder Kettenabbildung (P-0018 → P-0019 → P-0020) darf kein Schlüssel überschrieben werden, bevor sein Inhalt gelesen ist */
+    const paare = Object.keys(x).map(function (k) { return [k, /^[POL]-[0-9]{4}$/.test(k) ? neu(k) : k, x[k]]; });
+    paare.forEach(function (p) { if (p[0] !== p[1]) delete x[p[0]]; });
+    const setzen = function (p) {
+      let v = p[2];
       if (typeof v === 'string') v = ersetzen(v); else if (v && typeof v === 'object') gehen(v);
-      x[nk] = v;
-    });
+      x[p[1]] = v;
+    };
+    /* unveränderte Schlüssel zuerst, umbenannte danach: trifft ein umbenannter Schlüssel auf einen vorhandenen (z. B. beim Laden ergänzter Standardeintrag), gewinnt der umgeschriebene Altbestand */
+    paare.filter(function (p) { return p[0] === p[1]; }).forEach(setzen);
+    paare.filter(function (p) { return p[0] !== p[1]; }).forEach(setzen);
   })(obj);
 }
 const PROFIL = (function () {

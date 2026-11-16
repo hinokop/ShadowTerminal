@@ -30,7 +30,7 @@ const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'altprof
   alt.profil.eigene.push({ id: 'O-9102', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Alt-Organisation', bild: null, aliase: [], reg: 'ohne', verteiler: 'Eigener Eintrag', rolle: 'x', eckdaten: [], bedrohung: { stufe: 2, begruendung: '' }, nachtraege: [], eigen: true });
   alt.state.dossiers.eigene.push(JSON.parse(JSON.stringify(alt.profil.eigene[alt.profil.eigene.length - 1])));
   alt.state.dossiers.entitaeten['O-9102'] = { status: 'beobachtet', statusAm: new Date().toISOString(), notizen: [] };
-  alt.state.dossiers.entitaeten['P-9060'] = Object.assign({ status: null, notizen: [] }, alt.state.dossiers.entitaeten['P-9060'] || {}, { status: 'relevant' });
+  alt.state.dossiers.entitaeten['P-9060'] = Object.assign({ status: null, notizen: [] }, alt.state.dossiers.entitaeten['P-9060'] || {}, { status: 'relevant', statusAm: new Date().toISOString() });
   await p.evaluate(a => { localStorage.setItem(STORAGE_KEY, a.s); localStorage.setItem(PROFIL_KEY, a.p); }, { s: JSON.stringify(alt.state), p: JSON.stringify(alt.profil) });
   await an();
   const m = await p.evaluate(() => {
@@ -80,6 +80,23 @@ const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'altprof
   const nachher = await p.evaluate(() => ({ n: STATE.dossiers.eigene.length, beob: PROFIL.recherche.beobachtungen.map(b => b.dossiers), fall: PROFIL.recherche.faelle.length }));
   ok.altpaketOhneDublette = paket.hat9051 && nachher.fall === 1 && nachher.n === vorher && JSON.stringify(nachher.beob).indexOf('P-0004') >= 0 && JSON.stringify(nachher.beob).indexOf('P-9') < 0;
   if (!ok.altpaketOhneDublette) console.log('Altpaket:', JSON.stringify({ paket9051: paket.hat9051, vorher, nachher }));
+  /* Regression 3: Kettenabbildung P-0018 -> P-0019 -> P-0020; Notiz und Koordinaten bleiben je Dossier erhalten (kein Überschreiben beim Umschreiben der Schlüssel) */
+  await p.evaluate(() => { localStorage.clear(); });
+  await an();
+  const kette = await p.evaluate(() => {
+    dispatch({ type: 'DOSSIER_ANGELEGT', name: 'Lokal Achtzehn', typ: 'Person' });
+    const mk = (id, name) => ({ id, typ: 'Person', land: 'DE', mission: 'STD', name, bild: null, aliase: [], reg: 'ohne', verteiler: 'Eigener Eintrag', rolle: 'x', eckdaten: [], bedrohung: { stufe: 2, begruendung: '' }, nachtraege: [], eigen: true });
+    const q = JSON.parse(JSON.stringify(PROFIL)); q.idv = 2; q.idmap = {};
+    q.eigene = [mk('P-0018', 'Import A'), mk('P-0019', 'Import B')];
+    q.daten = { 'P-0018': { notiz: 'Notiz A' }, 'P-0019': { notiz: 'Notiz B' } }; q.koord = { 'P-0018': [50.1, 8.1], 'P-0019': [51.2, 9.2] };
+    q.pins = []; q.zonen = []; q.gesperrt = []; q.aenderungen = {}; q.dossierDaten = {}; q.recherche = undefined; q.eigeneKanten = [];
+    dispatch({ type: 'PROFIL_IMPORT', profil: q, datei: 'kette.json' });
+    const a = PROFIL.eigene.find(e => e.name === 'Import A'), b = PROFIL.eigene.find(e => e.name === 'Import B');
+    return { a: a && a.id, b: b && b.id, da: a && PROFIL.daten[a.id], db: b && PROFIL.daten[b.id], ka: a && PROFIL.koord[a.id], kb: b && PROFIL.koord[b.id], alt: [PROFIL.daten['P-0018'], PROFIL.koord['P-0018']] };
+  });
+  ok.importKetteBehaeltInhalte = kette.a === 'P-0019' && kette.b === 'P-0020' && kette.da && kette.da.notiz === 'Notiz A' && kette.db && kette.db.notiz === 'Notiz B'
+    && JSON.stringify(kette.ka) === '[50.1,8.1]' && JSON.stringify(kette.kb) === '[51.2,9.2]';
+  if (!ok.importKetteBehaeltInhalte) console.log('Kette:', JSON.stringify(kette));
   ok.keineJsFehler = err.length === 0; if (err.length) console.log(err.slice(0, 4));
   const bad = Object.keys(ok).filter(k => ok[k] !== true); console.log(JSON.stringify(ok, null, 1)); console.log(bad.length ? 'FAIL: ' + bad.join(', ') : 'alle grün');
   await b.close(); process.exit(bad.length ? 1 : 0);
