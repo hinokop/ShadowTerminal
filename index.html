@@ -150,6 +150,19 @@ ol.num li:last-child{border-bottom:0}
 /* Dossiers */
 .split{display:grid;grid-template-columns:1fr;gap:0 10px;align-items:start}
 .split > *{min-width:0}
+.x-layout > div > .panel + .panel{margin-top:10px}
+.x-form{display:grid;gap:8px;justify-items:start}
+.x-form>div{width:100%}
+.x-form textarea,.x-form input{max-width:100%;width:min(100%,44rem)}
+.x-items,.x-faelle{list-style:none;padding:0;margin:8px 0 0}
+.x-items li{display:flex;align-items:flex-start;flex-wrap:wrap;gap:6px;padding:7px 0;border-bottom:1px solid var(--border)}
+.x-unterlage{min-width:0;flex:1 1 15rem;overflow-wrap:anywhere}
+.x-unterlage>span,.x-faelle span,.x-faelle strong{display:block}
+.x-faelle li+li{margin-top:4px}
+.x-faelle button{width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere}
+.x-faelle button[aria-current=true]{outline:1px solid currentColor}
+.x-kurztext{white-space:pre-wrap}
+.x-vorschau{flex:0 0 100%;min-width:0}
 @media (min-width:760px){ .split{grid-template-columns:minmax(250px,300px) 1fr} }
 .flt{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border)}
 .flt input[type="search"],.flt select{width:100%;min-width:0}
@@ -802,12 +815,13 @@ const MODULES = [
   { id: 'extraktion', key: '5', titel: 'Notfall',    log: 'Extraktion' },
   { id: 'karte',      key: '6', titel: 'Karte',             log: 'Karte' },
   { id: 'akten',      key: '7', titel: 'Ablage',                 log: 'Akten' },
+  { id: 'x',          key: '5', titel: 'X', log: 'X' },
   { id: 'verstaerkung', key: '8', titel: 'Support',         log: 'Verstärkung' },
   { id: 'freigabe',   key: '9', titel: 'Freigaben',             log: 'Freigabe' }
 ];
 /* Die alte Modulregistrierung bleibt für gespeicherte Stände und die interne Migration erhalten. */
 const ARBEITSMODULE = MODULES.filter(function (m) {
-  return ['profil', 'dossier', 'karte', 'akten'].indexOf(m.id) >= 0;
+  return ['profil', 'dossier', 'karte', 'akten', 'x'].indexOf(m.id) >= 0;
 }).map(function (m, n) { return Object.assign({}, m, { key: String(n + 1) }); });
 function arbeitsmodulWiederherstellen(zustand) {
   if (!ARBEITSMODULE.some(function (m) { return m.id === zustand.ui.modul; })) zustand.ui.modul = 'profil';
@@ -5275,6 +5289,7 @@ const ACTIONS = {
     STATE.dossiers.eigeneKanten = STATE.dossiers.eigeneKanten.filter(function (v) { return v.von !== e.id && v.nach !== e.id; });
     delete STATE.dossiers.entitaeten[e.id];
     delete PROFIL.bilder[e.id]; delete PROFIL.galerie[e.id]; delete PROFIL.koord[e.id];
+    PROFIL.recherche.faelle.forEach(function (f) { if (xDossiers(f).includes(e.id)) f.dossiers = xDossiers(f).filter(function (id) { return id !== e.id; }); });
     if (STATE.dossiers.auswahl === e.id) STATE.dossiers.auswahl = SCENARIO.standard.dossiers[0].id;
     return { modul: 'Dossier', aktion: 'Eigenes Dossier gelöscht', detail: e.id + ' ' + e.name + ' mit allen Verbindungen entfernt' };
   },
@@ -5347,6 +5362,8 @@ const ACTIONS = {
     let nr = 1;                                       /* kleinste freie Nummer: wurde Pin 1 gelöscht, heißt der nächste wieder Pin 1 */
     while (PROFIL.pins.some(function (y) { return y.name === 'Pin ' + nr; })) nr++;
     /* Die ID wird nie wiederverwendet (Verweise aus Plänen und Importen); nur die Anzeigenummer darf Lücken füllen */
+    const fall = a.xFall && xFall(a.xFall), vorher = PROFIL.seq.pin;
+    if (a.xFall && !fall) return null;
     const hoechste = PROFIL.pins.reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0);
     PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, hoechste) + 1;
     const id = 'PIN-' + p3(PROFIL.seq.pin);
@@ -5354,6 +5371,7 @@ const ACTIONS = {
     const px = { id: id, name: eigen || 'Pin ' + nr, ll: [Number(a.ll[0]), Number(a.ll[1])], zwecke: [], umgebung: {}, notiz: typeof a.notiz === 'string' ? a.notiz.slice(0, 1500) : '', t: nowIso() };
     if (de) px.dossier = de.id;                                   /* Bezug zum Dossier (Sichtungsentwurf) */
     PROFIL.pins.push(px);
+    if (fall && !xPinUebernehmen(fall, px)) { PROFIL.pins.pop(); PROFIL.seq.pin = vorher; return null; }
     VIEW.karte.auswahl = id;
     return { modul: 'Karte', aktion: 'Pin gesetzt', objekt: id, objektName: px.name, detail: px.name + ' bei ' + Number(a.ll[0]).toFixed(4) + ', ' + Number(a.ll[1]).toFixed(4) };
   },
@@ -5382,6 +5400,8 @@ const ACTIONS = {
     const anz = (alt.pins || []).length + ' Pins, ' + (alt.zonen || []).length + ' Zonen, ' +
       sichtungen.reduce(function (n, a) { return n + a[1].length; }, 0) + ' Sichtungen und ' +
       (Object.keys(alt.koord || {}).length + (alt.ausgang || []).filter(function (a) { return !!a.ll; }).length) + ' gesetzte Positionen';
+    const fallPins = PROFIL.recherche.faelle.map(function (f) { return [f, f.pins]; });
+    xPinsLoesen(new Set((PROFIL.pins || []).map(function (p) { return p.id; })));
     PROFIL.pins = []; PROFIL.zonen = []; PROFIL.koord = {}; PROFIL.karteBlanko = true;
     PROFIL.ausgang = (alt.ausgang || []).map(function (a) { return Object.assign({}, a, { ll: null }); });
     sichtungen.forEach(function (a) { a[0].sichtungen = []; });
@@ -5390,6 +5410,7 @@ const ACTIONS = {
     if (!zustandGespeichert || !profilSpeichern()) {
       sichtungen.forEach(function (a) { a[0].sichtungen = a[1]; });
       Object.assign(PROFIL, alt);
+      fallPins.forEach(function (a) { if (a[1] !== undefined) a[0].pins = a[1]; });
       if (zustandGespeichert) Store.save(STATE);
       meldung('Karte konnte nicht bereinigt werden. Die Änderungen wurden zurückgenommen.');
       return null;
@@ -5404,6 +5425,7 @@ const ACTIONS = {
     const i = (PROFIL.pins || []).findIndex(function (y) { return y.id === a.id; });
     if (i < 0) return null;
     const x = PROFIL.pins.splice(i, 1)[0];
+    xPinsLoesen(new Set([x.id]));
     if (VIEW.karte.auswahl === x.id) VIEW.karte.auswahl = null;
     return { modul: 'Karte', aktion: 'Pin entfernt', objekt: x.id, objektName: x.name, detail: x.name };
   },
@@ -5528,7 +5550,8 @@ const ACTIONS = {
       if (JSON.stringify(gl) === JSON.stringify(x)) { pinDoppelt += 1; return; }                  /* vollständig identisch */
       /* gleiche ID, anderer Inhalt oder Name: als eigener Pin mit neuer ID übernehmen. Originalname und Importzusatz bleiben getrennt;
          dieselbe Datei erzeugt beim zweiten Import keine weitere Kopie, eine geänderte Fassung (auch nur umbenannt) dagegen schon */
-      if (PROFIL.pins.some(function (y) { return y.importVon === x.id && inhalt(y) === inhalt(x) && y.importName === (x.name || 'Pin'); })) { pinDoppelt += 1; return; }
+      const kopie = PROFIL.pins.find(function (y) { return y.importVon === x.id && inhalt(y) === inhalt(x) && y.importName === (x.name || 'Pin'); });
+      if (kopie) { pinNeu[x.id] = kopie.id; pinDoppelt += 1; return; }
       PROFIL.seq.pin += 1; pinNeu[x.id] = 'PIN-' + p3(PROFIL.seq.pin);
       PROFIL.pins.push(Object.assign({}, x, { id: 'PIN-' + p3(PROFIL.seq.pin), name: (x.name || 'Pin') + ' (Import ' + x.id + ')', importVon: x.id, importName: x.name || 'Pin' }));
       pinKonflikt += 1;
@@ -5579,7 +5602,7 @@ const ACTIONS = {
       PROFIL.assessmentRotation = { start: q.assessmentRotation.start, bZuerst: q.assessmentRotation.bZuerst };
     }
     Object.keys(q.dokFristen || {}).forEach(function (k) { if (!(k in PROFIL.dokFristen)) PROFIL.dokFristen[k] = q.dokFristen[k]; });
-    if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q);
+    if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q, pinNeu);
     const zr = zonenImportieren(q, q.recherche && typeof rchProfilZusammenfuehren === 'function' ? rchProfilZusammenfuehren.abbildung : null);
     return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + zr + rchText };
   },
@@ -5590,6 +5613,8 @@ const ACTIONS = {
     const alt = PROFIL.leer(), zoneZaehler = Math.max((PROFIL.seq && PROFIL.seq.zone) || 0, (PROFIL.zonen || []).reduce(function (m, y) { const k = /^ZO-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0)), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
     ['eigene', 'eigeneKanten', 'ausgeblendeteKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten', 'gesperrt'].forEach(function (k) { PROFIL[k] = alt[k]; });
     if (PROFIL.kartenProtokoll) PROFIL.kartenProtokoll.eintraege = [];
+    xPinsLoesen(new Set((PROFIL.pins || []).map(function (p) { return p.id; })));
+    PROFIL.recherche.faelle.forEach(function (f) { if (xDossiers(f).some(function (id) { return ids.includes(id); })) f.dossiers = xDossiers(f).filter(function (id) { return !ids.includes(id); }); });
     PROFIL.pins = []; PROFIL.seq.pin = pinZaehler;     /* IDs werden auch nach dem Leeren nie neu vergeben */
     PROFIL.seq.zone = zoneZaehler; PROFIL.zonen = [];
     Object.keys(STATE.dossiers.entitaeten).forEach(function (id) {
@@ -7284,6 +7309,7 @@ function dossierAnsicht(e) {
       })))),
     h('div', { class: 'row' },
       h('button', { type: 'button', id: 'btn-dbearb', onclick: function () { dossierBearbeiten(e); } }, 'Dossier bearbeiten'),
+      xDossierKnopf(e),
       PROFIL.aenderungen[e.id] ? h('button', { type: 'button', id: 'btn-dorig', onclick: function () { dispatch({ type: 'DOSSIER_ZURUECKGESETZT', id: e.id }); } }, 'Auf Original zurücksetzen') : null,
       PROFIL.aenderungen[e.id] ? h('span', { class: 'bearb-hinweis', title: 'Vom Original abweichend' }, 'bearbeitet') : null),
     kartenKnopf(e),
@@ -8071,13 +8097,14 @@ const RENDER = {
   komm: renderKomm,
   karte: function () { return renderKarte.apply(null, arguments); },   /* Modul 6 liegt in karte-modul.js (nach dem Hauptskript geladen) */
   akten: function () { return renderAkten.apply(null, arguments); },   /* Modul 7 liegt in akten-modul.js */
+  x: function (m) { return renderX(m); },
   verstaerkung: renderVerstaerkung,
   freigabe: renderFreigabe,
   extraktion: function (m) { return STATE.vorlauf ? leerAnsicht(m, 'Extraktion', 'Kein laufender Auftrag. Extraktionsanforderungen sind erst mit einem laufenden Auftrag möglich.') : renderExtraktion(m); }
 };
 
 function renderModule() {
-  if (STATE.ui.modul !== 'karte' && VIEW.karte) { VIEW.karte.messen = false; VIEW.karte.pinSetzen = false; VIEW.karte.zoneSetzen = false; VIEW.karte.zugriffSetzen = false; VIEW.karte.mehr = []; VIEW.karte.mehrModus = false; VIEW.karte.messPts = []; if (VIEW.karte.spiel) { clearInterval(VIEW.karte.spiel); VIEW.karte.spiel = null; } }
+  if (STATE.ui.modul !== 'karte' && VIEW.karte) { if (VIEW.karte.pick && VIEW.karte.pick.startsWith('X:')) VIEW.karte.pick = null; VIEW.karte.messen = false; VIEW.karte.pinSetzen = false; VIEW.karte.zoneSetzen = false; VIEW.karte.zugriffSetzen = false; VIEW.karte.mehr = []; VIEW.karte.mehrModus = false; VIEW.karte.messPts = []; if (VIEW.karte.spiel) { clearInterval(VIEW.karte.spiel); VIEW.karte.spiel = null; } }
   const m = ARBEITSMODULE.concat(MODULES).find(function (x) { return x.id === STATE.ui.modul; }) || ARBEITSMODULE[0];
   const main = $('main'), act = document.activeElement;
   let halten = null;
@@ -8973,5 +9000,6 @@ else window.addEventListener('load', function () { Zugang.start(init); });   /* 
 <script src="akten-modul.js"></script>
 <script src="recherche-modul.js"></script>
 <script src="profil-modul.js"></script>
+<script src="fall-modul.js"></script>
 </body>
 </html>

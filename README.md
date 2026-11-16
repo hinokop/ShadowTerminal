@@ -6,7 +6,7 @@ Das Projekt war zuvor ein Spiel. Dieser Stand beschreibt das Werkzeug. Reste der
 
 ## Starten
 
-- Windows: `START_3D.bat`. Öffnet `index.html` in einem Edge-Anwendungsfenster mit Grafikbeschleunigung, die für die 3D-Karte nötig ist.
+- Windows: `START_TERMINAL.bat` startet das Edge-Anwendungsfenster mit der lokalen Dateibrücke (Python 3). Direkter Start ohne Dateibrücke: `START_3D.bat`.
 - Linux: `bash START.sh` (Chromium-Anwendungsfenster; `FT_OHNE_GPU=1` bei schwarzem Fenster).
 - Das Browserprofil liegt im Ordner `profil` neben dem Starter. Ordner löschen setzt alles zurück.
 - Die Anmeldung erfolgt mit einem Kennwort, das beim ersten Start festgelegt wird.
@@ -15,9 +15,15 @@ Kartenhintergründe und Wetter werden von externen Diensten geladen. Die Zugangs
 
 ## Arbeitsnavigation
 
-Die sichtbaren Arbeitsbereiche sind Profil (`1`), Dossiers (`2`), Karte (`3`) und Ablage (`4`). Die früheren Missionsreiter sind aus der Navigation und den Tastenkürzeln entfernt. Gespeicherte Altstände öffnen stattdessen das Profil. Missionsdaten und interne Abläufe bleiben in diesem Schritt unverändert.
+Die sichtbaren Arbeitsbereiche sind Profil (`1`), Dossiers (`2`), Karte (`3`), Ablage (`4`) und X (`5`). Die früheren Missionsreiter sind aus der Navigation und den Tastenkürzeln entfernt. Gespeicherte Altstände öffnen stattdessen das Profil. Missionsdaten und interne Abläufe bleiben in diesem Schritt unverändert.
 
 Im Profil entfernt „Karte bereinigen“ nach Bestätigung Pins, eigene Zonen, Sichtungen und gesetzte Kartenpositionen. Vorgegebene Dossierpositionen werden danach nicht mehr angezeigt. Dossiers, Unterlagen, Identitäten und Protokolle bleiben erhalten.
+
+## X – Fälle
+
+X zeigt die vorhandenen Fälle aus der Ablage. Fälle lassen sich dort anlegen oder direkt über „Zu Fall hinzufügen“ aus einem Dossier öffnen. In X werden Kurzlage, Arbeitsstand und Belastbarkeit getrennt gepflegt. Dossiers und Kartenpins lassen sich verknüpfen. Die Unterlagen des Falls bleiben dieselben Dateien wie in der Ablage.
+
+„Fall löschen“ entfernt nach Bestätigung den Fall mit seinen Unterlagen. Verknüpfte Dossiers und Kartenpins bleiben erhalten. Dateien, die ein anderer Fall noch nutzt, werden nicht gelöscht.
 
 ## Arbeitsprofil
 

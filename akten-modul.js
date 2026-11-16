@@ -180,9 +180,9 @@ function akVorschauFreigeben() {
   if (akVorschauUrl) { URL.revokeObjectURL(akVorschauUrl); akVorschauUrl = null; }
 }
 new MutationObserver(function () {
-  if (STATE && (STATE.ui.modul !== 'akten' || document.body.classList.contains('locked'))) akVorschauFreigeben();
+  if (STATE && (!['akten', 'x'].includes(STATE.ui.modul) || document.body.classList.contains('locked'))) akVorschauFreigeben();
 }).observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
-async function akEingangVorschau(eintrag, ziel) {
+async function akDateivorschau(eintrag, ziel) {
   try {
     const blob = await RIDB.get(eintrag.anhang);
     if (!ziel.isConnected || document.body.classList.contains('locked')) return;
@@ -256,7 +256,7 @@ function akEingangAnsicht() {
     feldZeile('Fundstelle (optional)', 'ak-eingang-ft', h('input', { id: 'ak-eingang-ft', name: 'fundstelle', maxlength: 120 })),
     feldZeile('Notiz (optional)', 'ak-eingang-notiz', h('input', { id: 'ak-eingang-notiz', name: 'notiz', maxlength: 300 })),
     h('button', { type: 'submit', id: 'ak-eingang-zuordnen', disabled: AK_EINGANG.arbeit }, 'Zuordnen'));
-  setTimeout(function () { if (vorschau.isConnected) void akEingangVorschau(cur, vorschau); }, 0);
+  setTimeout(function () { if (vorschau.isConnected) void akDateivorschau(cur, vorschau); }, 0);
   return panel('Eingang', null, h('div', { class: 'pad ak-eingang-layout' }, seite,
     h('section', null, h('h3', null, cur.dateiname), vorschau, form,
       h('div', { class: 'row' }, h('button', { type: 'button', id: 'ak-eingang-loeschen', disabled: AK_EINGANG.arbeit,

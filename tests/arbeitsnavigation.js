@@ -20,12 +20,12 @@ const { chromium } = require('playwright');
     await page.goto(PF.APP);
     await starten();
 
-    assert.deepEqual(await page.locator('#nav-list .ttl').allTextContents(), ['Profil', 'Dossiers', 'Karte', 'Ablage']);
-    for (const [taste, titel] of [['3', 'Karte'], ['4', 'Ablage'], ['2', 'Dossiers'], ['1', 'Profil']]) {
+    assert.deepEqual(await page.locator('#nav-list .ttl').allTextContents(), ['Profil', 'Dossiers', 'Karte', 'Ablage', 'X']);
+    for (const [taste, titel] of [['3', 'Karte'], ['4', 'Ablage'], ['5', 'X'], ['2', 'Dossiers'], ['1', 'Profil']]) {
       await page.keyboard.press(taste);
       assert.equal(await page.locator('#mod-title').innerText(), titel);
     }
-    for (const taste of ['5', '6', '7', '8', '9', 'Control+Shift+Alt+KeyR']) {
+    for (const taste of ['6', '7', '8', '9', 'Control+Shift+Alt+KeyR']) {
       await page.keyboard.press(taste);
       assert.equal(await page.locator('#mod-title').innerText(), 'Profil');
       assert.equal(await page.locator('#regie[open]').count(), 0);
