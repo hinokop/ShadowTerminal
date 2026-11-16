@@ -5496,7 +5496,8 @@ const ACTIONS = {
     if (!q || q.v !== 1 || !Array.isArray(q.eigene) || !Array.isArray(q.eigeneKanten)) return null;
     { delete q.idmap; const km = idImportAbbilden(q.eigene, (STATE.dossiers.eigene || []).concat(PROFIL.eigene)); idMigrieren(q, km); q.idv = 2; }
     let neu = 0;
-    q.eigene.forEach(function (e) { if (!PROFIL.eigene.some(function (x) { return x.id === e.id; })) { PROFIL.eigene.push(e); if (q.daten && q.daten[e.id]) PROFIL.daten[e.id] = q.daten[e.id]; neu += 1; } });
+    const uebernommen = [];                                                                      /* Dossierdaten, die dieser Import neu ins Profil bringt (eigene und Standarddossiers) */
+    q.eigene.forEach(function (e) { if (!PROFIL.eigene.some(function (x) { return x.id === e.id; })) { PROFIL.eigene.push(e); if (q.daten && q.daten[e.id]) { PROFIL.daten[e.id] = q.daten[e.id]; uebernommen.push({ id: e.id, daten: PROFIL.daten[e.id] }); } neu += 1; } });
     q.eigeneKanten.forEach(function (k) { if (!PROFIL.eigeneKanten.some(function (x) { return x.id === k.id; })) PROFIL.eigeneKanten.push(k); });
     if (Array.isArray(q.ausgeblendeteKanten)) {
       const bekannt = new Set(SCENARIO.verbindungen.concat(SCENARIO.standard.verbindungen).map(function (v) { return v.id; }));
@@ -5535,9 +5536,27 @@ const ACTIONS = {
     Object.keys(q.dossierDaten || {}).forEach(function (k) {
       const daten = q.dossierDaten[k];
       if (!daten || !entitaet(k)) return;
-      if (!PROFIL.dossierDaten[k]) { (daten.sichtungen || []).forEach(function (si) { if (si.pin && pinNeu[si.pin]) si.pin = pinNeu[si.pin]; }); PROFIL.dossierDaten[k] = daten; }
+      if (!PROFIL.dossierDaten[k]) { PROFIL.dossierDaten[k] = daten; uebernommen.push({ id: k, daten: daten }); }
       else if (daten.selbstBearbeitet === true) PROFIL.dossierDaten[k].selbstBearbeitet = true;
     });
+    /* Sichtungen der übernommenen Dossiers: Pin-Verweise auf neue Pin-Kennungen umschreiben, kollidierende SI-Nummern neu vergeben und die Gegenseite (pin.sichtung) mitziehen */
+    (function () {
+      const ids = {}, belegt = {}; let hoechst = 0;
+      uebernommen.forEach(function (u) { ids[u.id] = true; });
+      const erfassen = function (l) { (l || []).forEach(function (n) { belegt[n.id] = true; const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) hoechst = Math.max(hoechst, Number(m[1])); }); };
+      Object.keys(STATE.dossiers.entitaeten).forEach(function (k) { if (!ids[k] && STATE.dossiers.entitaeten[k]) erfassen(STATE.dossiers.entitaeten[k].sichtungen); });
+      [PROFIL.daten, PROFIL.dossierDaten].forEach(function (S) { Object.keys(S || {}).forEach(function (k) { if (!ids[k] && S[k]) erfassen(S[k].sichtungen); }); });
+      uebernommen.forEach(function (u) { (u.daten.sichtungen || []).forEach(function (n) { const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) hoechst = Math.max(hoechst, Number(m[1])); }); });
+      uebernommen.forEach(function (u) {
+        (u.daten.sichtungen || []).forEach(function (n) {
+          const altNr = n.id;
+          if (n.pin && pinNeu[n.pin]) n.pin = pinNeu[n.pin];
+          if (belegt[n.id]) { hoechst += 1; n.id = 'SI-' + p3(hoechst); }
+          belegt[n.id] = true;
+          if (n.pin) (PROFIL.pins || []).forEach(function (y) { if (y.id === n.pin && y.dossier === u.id && (y.sichtung === altNr || y.sichtung === n.id)) y.sichtung = n.id; });
+        });
+      });
+    })();
     aenderungenAnwenden();
     ['eigen', 'kante', 'galerie', 'ausgang'].forEach(function (k) { PROFIL.seq[k] = Math.max(PROFIL.seq[k] || 0, (q.seq && q.seq[k]) || 0); });
     profilEinspielen(STATE);
