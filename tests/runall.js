@@ -1,5 +1,5 @@
 /* Standard-Testauswahl der Playwright-Tests, unabhängig vom Ablageort des Projekts. Sie umfasst nicht alle Skripte in tests/ (siehe GRUPPEN);
-   weitere Skripte lassen sich einzeln angeben.
+   Historische UI-Tests (siehe docs/r5-bereinigung.md) sind per Namen weiterhin aufrufbar.
    Aufruf (im Ordner tests/, Playwright installiert):   node runall.js            Standardauswahl
                                                         node runall.js zev zp     nur diese Skripte (ohne .js)
    Je Gruppe laufen die Skripte parallel; Ausgaben und von den Tests geschriebene Dateien (zum Beispiel Screenshots) liegen in <TMP>/ft-out/.
@@ -8,11 +8,11 @@
    werden getrennt ausgewiesen. Exit-Code 1 bei jedem anderen roten oder ungeprüften Skript und bei einem ausdrücklich angeforderten, fehlenden Skript. */
 const { spawn } = require('child_process'); const fs = require('fs'); const os = require('os'); const path = require('path');
 const GRUPPEN = [
-  ['kt', 'kv3', 'kv4', 'zn'], ['zn3', 'zev', 'dp', 'al', 'abd'], ['zb', 'ds2', 'wk', 'wk3', 'ev2'], ['fgy', 'fd', 'fg', 'rs', 'm1flow'],
-  ['st', 'zp', 'un', 'tx', 'sm'], ['fc', 'sk', 'au', 'p2', 'p3', 'p4', 'pn', 'kwz', 'nx', 'kc', 'ak2'],
-  ['kartenprotokoll', 'pins', 'unterlagen', 'aussagen-alt', 'fallpaket', 'recherche'], ['kartensprung', 'identitaeten', 'verlaesslichkeit', 'arbeitsnavigation', 'kartenbereinigung', 'profil-arbeitsansicht'], ['profil-assessment', 'missionstrennung', 'dossier-einheitlich', 'dossier-kurzlage', 'dossier-nummern', 'dossier-maske', 'sichtung-pin', 'sichtung-import', 'bearbeitet-hinweis'], ['recherche-oberflaeche', 'lage-box', 'terminal-bruecken-ausfall', 'terminal-satcon']
+  ['kt', 'kv3', 'zn'], ['zn3', 'zev', 'dp', 'al', 'abd'], ['zb', 'ds2', 'wk3'], ['fgy', 'fd', 'fg', 'rs', 'm1flow'],
+  ['zp', 'un', 'tx', 'sm'], ['au', 'p2', 'p3', 'p4', 'pn', 'kwz', 'nx', 'kc', 'ak2'],
+  ['kartenprotokoll', 'pins', 'unterlagen', 'aussagen-alt', 'fallpaket', 'recherche'], ['kartensprung', 'identitaeten', 'verlaesslichkeit', 'arbeitsnavigation', 'kartenbereinigung', 'profil-arbeitsansicht'], ['profil-assessment', 'missionstrennung', 'dossier-einheitlich', 'dossier-kurzlage', 'dossier-nummern', 'dossier-maske', 'sichtung-pin', 'sichtung-import', 'bearbeitet-hinweis'], ['recherche-oberflaeche', 'karten-messen', 'lage-box', 'terminal-bruecken-ausfall', 'terminal-satcon']
 ];
-const BEKANNT = { m1flow: 'Missionsablauf, auch auf main rot', abd: 'unzuverlässig', wk3: 'unzuverlässig', wk: 'prüft die Freigabe-Sichtbarkeit, durch die Dossier-Vereinheitlichung überholt (Löschung mit R5)', dp: 'unzuverlässig' };
+const BEKANNT = { m1flow: 'Missionsablauf, auch auf main rot', abd: 'unzuverlässig', wk3: 'unzuverlässig', dp: 'unzuverlässig' };
 const FEHLER = /(^|\s)FAIL\b|FEHLER: [1-9]|Fehlschläge: [1-9]|Error/;
 const ausgabe = path.join(process.env.TMPDIR || os.tmpdir(), 'ft-out'); fs.mkdirSync(ausgabe, { recursive: true });
 const wahl = process.argv.slice(2);
