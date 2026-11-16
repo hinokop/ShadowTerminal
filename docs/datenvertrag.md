@@ -101,3 +101,11 @@ Profilimport übernimmt Recherchedaten nach derselben Regel; Belegdateien sind n
 - Entfernt: Oberfläche (auch „Frühere Aussagen"), die Aktionen `RECHERCHE_AUSSAGE_NEU`, `RECHERCHE_AUSSAGE_SETZEN`, `RECHERCHE_BELEG_VERKNUEPFT`, `RECHERCHE_PRUEFSTAND`, `RECHERCHE_BELEG_GELOEST` sowie die Fundstellenregel für Einschätzungen.
 - Erhalten: Datensätze in `PROFIL.recherche.aussagen` bleiben unverändert (Text, Status, Einschätzung, Begründung, Verknüpfungen, Prüfstand). Fallpaket (Version 1) exportiert, importiert und führt sie weiter zusammen; ein erneuter Export verliert nichts. Beim Import wird eine Einschätzung nicht mehr zurückgenommen, weil die Fundstellenregel entfällt.
 - Nicht mehr bearbeitbar. Das Fallpaket-Panel nennt die Zahl der früheren Aussagen. Test: `tests/aussagen-alt.js`.
+
+## Modul 5 – X
+
+- X bearbeitet dieselben Fälle wie Dossier und Ablage. Leere und bestehende Fälle sind ohne neue Unterlage sichtbar. Die bisherige Leitfrage bleibt als Kurzlage / Leitfrage im Feld `frage` erhalten.
+- `zustand` ist der Arbeitsstand: Informationsgewinnung (`sammlung`), Laufend, On hold oder Abgeschlossen. Ältere Werte `offen` und `ruhend` erscheinen als Informationsgewinnung beziehungsweise On hold.
+- `bewertung` beschreibt manuell die Belastbarkeit der Informationslage. Ohne Eingabe erscheint „Unbewertet“. Eine optionale Begründung wird als `begruendung` gespeichert. Die Bewertung verändert weder Unterlagen noch deren Prüfstand.
+- Optionale `dossiers`- und `pins`-Listen enthalten profilweite Kennungen. Diese Verknüpfungen sind unabhängig von den Dossierbezügen einzelner Unterlagen. Im Fallpaket reisen explizit verknüpfte Dossiers mit. Pins und ihre Verknüpfungen reisen nur im Profilexport mit.
+- Beim Löschen eines Falls werden seine Quellen, Fassungen, Beobachtungen und Altaussagen entfernt. Dossiers, Kartenobjekte und in anderen Fällen oder im Eingang benötigte Dateikopien bleiben erhalten. Unterlagenverweise auf gelöschte Beobachtungen werden aufgelöst. Dateien außerhalb des Terminals werden nie verändert.

@@ -91,8 +91,7 @@ ACTIONS.RECHERCHE_BELEG = function (a) {
   const ft = a.fundstelle && a.fundstelle.typ ? { typ: String(a.fundstelle.typ).slice(0, 40), wert: String(a.fundstelle.wert || '').slice(0, 120) } : null;      /* Fundstelle ist optional */
   let fall = a.fall ? R.faelle.find(function (f) { return f.id === a.fall; }) : null, neuerFall = false;
   if (!fall && a.neuerFall && a.neuerFall.titel) {
-    fall = { id: rchNr('fall'), titel: String(a.neuerFall.titel).slice(0, 120), frage: String(a.neuerFall.frage || '').slice(0, 300), zustand: 'offen', erfasst: nowIso() };
-    R.faelle.push(fall); neuerFall = true;
+    fall = xAnlegen(a.neuerFall); neuerFall = !!fall;
   }
   if (!fall) return null;                                    /* kein stiller Standardfall */
   const t = nowIso(), q = { id: rchNr('quelle'), fall: fall.id, art: a.art, herkunft: String(a.herkunft || '').slice(0, 300), erfasst: t, aktuelleFassung: null, notiz: String(a.notiz || '').slice(0, 300) };
@@ -377,7 +376,8 @@ function rchPaketBauen(fallId) {
   const fassungen = R.fassungen.filter(function (f) { return qid[f.quelle]; }), fid = {}; fassungen.forEach(function (f) { fid[f.id] = 1; });
   const beobachtungen = R.beobachtungen.filter(function (b) { return fid[b.fassung]; });
   const aussagen = R.aussagen.filter(function (a) { return a.fall === fall.id; });
-  const dids = {}; beobachtungen.concat(aussagen).forEach(function (x) { (x.dossiers || []).forEach(function (d) { dids[d] = 1; }); });
+  if (xDossiers(fall).some(function (id) { const e = entitaet(id); return e && !xDossierLesbar(e); })) return Promise.reject(new Error('Ein verknüpftes Dossier ist gesperrt oder nicht freigegeben.'));
+  const dids = {}; xDossiers(fall).forEach(function (id) { dids[id] = 1; }); beobachtungen.concat(aussagen).forEach(function (x) { (x.dossiers || []).forEach(function (d) { dids[d] = 1; }); });
   const dossiers = Object.keys(dids).sort().map(function (id) {
     const e = entitaet(id);
     if (!e) return { id: id, name: '(unbekannt)', typ: 'Person', land: 'DE', fehlt: true };
@@ -385,7 +385,8 @@ function rchPaketBauen(fallId) {
     if (PROFIL.koord[e.id]) d.koord = PROFIL.koord[e.id];
     return d;
   });
-  const inhalt = rchKopie({ fall: fall, quellen: quellen, fassungen: fassungen, beobachtungen: beobachtungen, aussagen: aussagen, dossiers: dossiers });
+  const paketFall = Object.assign({}, fall); delete paketFall.pins;   /* Die Profil-JSON transportiert Kartenpins. Fallpakete enthalten nur Recherchematerial. */
+  const inhalt = rchKopie({ fall: paketFall, quellen: quellen, fassungen: fassungen, beobachtungen: beobachtungen, aussagen: aussagen, dossiers: dossiers });
   const dateien = {}, liste = [];
   const mitDatei = fassungen.filter(function (f) { return f.anhang; });
   return mitDatei.reduce(function (kette, f) {
@@ -476,21 +477,28 @@ function rchZusammenfuehren(inh, opt) {
     const k = RCH_ID[art][1], hoechst = (inh[RCH_PLURAL[art]] || []).reduce(function (mx, x) { const n = /^[A-Z]-(\d+)$/.exec(x && x.id || ''); return n ? Math.max(mx, Number(n[1])) : mx; }, 0);
     R.seq[k] = Math.max(R.seq[k] || 0, hoechst);
   });
-  const inhaltVon = function (y) { const c = rchKopie(y); delete c.id; delete c.importVon; delete c.aktuelleFassung; delete c._af; return rchKanon(c); };
+  const inhaltVon = function (y, art) { const c = rchKopie(y); if (art === 'fall' && !opt.pin) delete c.pins; delete c.id; delete c.importVon; delete c.aktuelleFassung; delete c._af; return rchKanon(c); };
   const schritt = function (art, umbau) {
     (inh[RCH_PLURAL[art]] || []).forEach(function (x) {
       const liste = R[RCH_PLURAL[art]], c = umbau(rchKopie(x));
       if (!c) { z.verworfen += 1; return; }
       const lokal = liste.find(function (y) { return y.id === x.id; });
       if (!lokal) { liste.push(c); map[art][x.id] = c.id; z.neu += 1; return; }
-      if (inhaltVon(lokal) === inhaltVon(c)) { map[art][x.id] = lokal.id; z.gleich += 1; return; }
-      const kopie = liste.find(function (y) { return y.importVon === x.id && inhaltVon(y) === inhaltVon(c); });
+      if (inhaltVon(lokal, art) === inhaltVon(c, art)) { map[art][x.id] = lokal.id; z.gleich += 1; return; }
+      const kopie = liste.find(function (y) { return y.importVon === x.id && inhaltVon(y, art) === inhaltVon(c, art); });
       if (kopie) { map[art][x.id] = kopie.id; z.gleich += 1; return; }
       c.id = rchNr(art); c.importVon = x.id; liste.push(c); map[art][x.id] = c.id; z.neueNr += 1;
     });
   };
   const dos = function (l) { const aus = []; (l || []).forEach(function (d) { const n = opt.dossier(d); if (n) { if (aus.indexOf(n) < 0) aus.push(n); } else z.ohneDossier += 1; }); return aus; };
-  schritt('fall', function (c) { return c; });
+  schritt('fall', function (c) {
+    if (Object.prototype.hasOwnProperty.call(c, 'dossiers')) c.dossiers = dos(xDossiers(c));
+    if (Object.prototype.hasOwnProperty.call(c, 'pins')) {
+      if (opt.pin) c.pins = Array.from(new Set(xPins(c).map(opt.pin).filter(Boolean)));
+      else delete c.pins;
+    }
+    return c;
+  });
   schritt('quelle', function (c) { c.fall = map.fall[c.fall]; if (!c.fall) return null; c._af = c.aktuelleFassung; c.aktuelleFassung = null; return c; });
   schritt('fassung', function (c) { c.quelle = map.quelle[c.quelle]; if (!c.quelle) return null; if (c.anhang && opt.dateiKey && opt.dateiKey[c.anhang]) c.anhang = opt.dateiKey[c.anhang]; return c; });
   R.quellen.forEach(function (qq) { if (qq._af !== undefined) { qq.aktuelleFassung = map.fassung[qq._af] || null; delete qq._af; } });
@@ -511,7 +519,7 @@ function rchZusammenfassung(z) {
     (z.verworfen ? ', ' + z.verworfen + ' Datensatz/Datensätze unvollständig, nicht übernommen' : '');
 }
 /* Profilimport: Dossiernummern gelten nur, wenn das lokale Dossier dasselbe ist */
-function rchProfilZusammenfuehren(rq, q) {
+function rchProfilZusammenfuehren(rq, q, pinNeu) {
   rchProfilZusammenfuehren.abbildung = null;      /* eingehende → lokale Nummern des letzten Laufs, für Verweise aus anderen Objekten (Zonen) */
   if (!rq || !['faelle', 'quellen', 'fassungen', 'beobachtungen', 'aussagen'].every(function (k) { return Array.isArray(rq[k] || []); })) return '; Recherchedaten im Profil unlesbar, nicht übernommen';
   const eing = {}; (q.eigene || []).forEach(function (e) { eing[e.id] = e; });
@@ -519,6 +527,8 @@ function rchProfilZusammenfuehren(rq, q) {
     const lok = entitaet(id), e = eing[id];
     if (e) return lok && lok.name === e.name && lok.typ === e.typ ? id : null;
     return lok ? id : null;
+  }, pin: function (id) {
+    return Array.isArray(q.pins) && q.pins.some(function (p) { return p && p.id === id && Array.isArray(p.ll); }) ? ((pinNeu || {})[id] || id) : null;
   } });
   rchProfilZusammenfuehren.abbildung = z.map;
   const mitDatei = (rq.fassungen || []).some(function (f) { return f && f.anhang; });
