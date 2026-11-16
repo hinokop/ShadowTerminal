@@ -126,7 +126,21 @@ function xDossierOeffnen(id, unterlage) {
   if (unterlage) rchUnterlageZeigen(unterlage);
 }
 function xDossierKnopf(e) {
-  return xDossierLesbar(e) ? xBtn('x-dossier-fall', 'Zu Fall hinzufügen', function () { xNeu(e); }) : null;
+  if (!xDossierLesbar(e)) return null;
+  const unterlagen = new Set(rchBelege(e).filter(function (z) { return !!z.fall; }).map(function (z) { return z.fall.id; }));
+  const faelle = PROFIL.recherche.faelle.filter(function (f) { return xDossiers(f).includes(e.id) || unterlagen.has(f.id); });
+  return [
+    xBtn('x-dossier-fall', 'Zu Fall hinzufügen', function () { xNeu(e); }),
+    faelle.length ? h('div', { class: 'row', id: 'x-dossier-faelle', role: 'group', 'aria-label': 'Zugehörige Fälle' },
+      h('span', { class: 'dim' }, 'Fälle in X'),
+      faelle.map(function (f) {
+        const basis = xDossiers(f).includes(e.id) ? '' : ' · über Unterlagen';
+        return h('button', {
+          type: 'button', class: 'link', id: 'x-dossier-verweis-' + f.id,
+          title: xStatus(f.zustand)[1], onclick: function () { if (xFall(f.id)) xOeffnen(f.id); }
+        }, f.id + ' · ' + f.titel + basis);
+      })) : h('span', { id: 'x-dossier-kein-fall', class: 'dim' }, 'Keinem Fall zugeordnet')
+  ];
 }
 function xPinLesbar(p) { return !!(p && (!p.dossier || xDossierLesbar(entitaet(p.dossier)))); }
 function xZurKarte(f, pin) {
