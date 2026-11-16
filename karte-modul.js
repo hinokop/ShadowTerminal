@@ -108,15 +108,14 @@ function karteAssetId(e) {
 function karteOhneMission() { return STATE.vorlauf || !missionsbetrieb(); }
 /* Darstellung getrennt von zDef() für den historischen Ablauf. Kein Wiederaufleben des Karten-UI aus Altdaten. */
 function karteAuftragsansicht() { return VIEW.missionsansicht === STATE && !PROFIL.karteBlanko ? zDef() : null; }
-/* Ein Entwurfs-Pin gilt als bestätigt, sobald die zugehörige Sichtung im Dossier existiert; dann zeigt die Karte nur noch die Sichtung (Pin-Daten bleiben erhalten) */
+/* Pin und Sichtung gehören nur zusammen, wenn beide Seiten dieselbe Paarung nennen: Pin im selben Dossier, pin.sichtung = Sichtungs-Nr., Sichtung.pin = Pin-Kennung.
+   Eine bloße Nummer genügt nicht (Nummern werden nach dem Löschen wieder vergeben). */
 function pinSichtung(x) {
-  if (!x || !x.sichtung) return null;
-  const ds = STATE.dossiers.entitaeten;
-  for (const id in ds) { const l = ds[id] && ds[id].sichtungen; if (l) { const si = l.find(function (y) { return y.id === x.sichtung; }); if (si) return si; } }
-  return null;
+  if (!x || !x.sichtung || !x.dossier) return null;
+  const d = STATE.dossiers.entitaeten[x.dossier], l = d && d.sichtungen;
+  return (l && l.find(function (y) { return y.id === x.sichtung && y.pin === x.id; })) || null;
 }
-function pinBestaetigt(x) { return !!pinSichtung(x); }
-function sichtungPin(si) { return (PROFIL.pins || []).find(function (y) { return y.sichtung === si.id; }) || null; }
+function sichtungPin(si, entId) { return (PROFIL.pins || []).find(function (y) { return y.dossier === entId && y.sichtung === si.id && si.pin === y.id; }) || null; }
 function karteMarker() {
   const Z = VIEW.karte.ebenen, def = karteAuftragsansicht(), out = [];
   if (Z.ausgang) PROFIL.ausgang.forEach(function (x) { if (x.ll) out.push({ id: x.id, kat: 'ausgang', name: x.name, ll: x.ll, art: x.art }); });
@@ -126,17 +125,20 @@ function karteMarker() {
     if (ll) out.push({ id: st.id, kat: 'standort', name: st.name, ll: ll, land: st.land });
   });
   if (def && Z.route !== false) MS(def.id).zugriff.forEach(function (z) { if (z.ll) out.push({ id: z.id, kat: 'zugriff', name: z.typ + ' ' + z.id, ll: z.ll, r: z.r || 0, zp: z }); });
-  if (Z.pins !== false) (PROFIL.pins || []).forEach(function (x) { if (x.ll && !pinBestaetigt(x)) out.push({ id: x.id, kat: 'pin', name: x.name, ll: x.ll }); });
+  if (Z.pins !== false) (PROFIL.pins || []).forEach(function (x) { if (x.ll) out.push({ id: x.id, kat: 'pin', name: x.name, ll: x.ll }); });
   const fokus = VIEW.karte.sichtungFokus || null;             /* gezielt angesprungene Sichtung: auch wenn älter als die letzten drei oder die Ebene ausgeblendet ist */
   if (Z.sichtungen !== false || fokus) pool().forEach(function (e) {
     if (infoGesperrt(e) || dossierGesperrt(e)) return;
     const d = STATE.dossiers.entitaeten[e.id], alle = (d && d.sichtungen) || [], sicht = Z.sichtungen !== false ? alle.slice(-3) : [];
+    if (Z.sichtungen !== false) alle.forEach(function (si) { if (si.pin && sicht.indexOf(si) < 0 && sichtungPin(si, e.id)) sicht.push(si); });          /* Sichtung mit Ursprungspin wird immer gezeichnet, sonst fehlte beides */
     if (fokus) { const f = alle.find(function (x) { return x.id === fokus; }); if (f && sicht.indexOf(f) < 0) sicht.push(f); }
     sicht.forEach(function (si) {
       const k = sichtungKoord(si);
       if (k) out.push({ id: si.id, kat: 'sichtung', typ: 'Sichtung', name: e.id + ' ' + e.name + (si.ort ? ' · ' + si.ort : ''), ll: k.ll, genau: k.genau, bez: k.bez, entId: e.id, si: si, guete: sichtungGuete(e, si), unM: sichtungRadiusM(si, k.genau) });
     });
   });
+  const gez = {}; out.forEach(function (m) { if (m.kat === 'sichtung') gez[m.entId + '|' + m.id] = true; });
+  for (let i = out.length - 1; i >= 0; i--) { const m = out[i]; if (m.kat !== 'pin') continue; const px = (PROFIL.pins || []).find(function (y) { return y.id === m.id; }); if (px && px.sichtung && px.dossier && pinSichtung(px) && gez[px.dossier + '|' + px.sichtung]) out.splice(i, 1); }   /* Pin nur ausblenden, wenn seine Sichtung tatsächlich gezeichnet wird */
   const zusatzIds = {};
   if (def) (MS(def.id).zusatz || []).forEach(function (x) { if (x.urteil !== 'abgelehnt') zusatzIds[x.id] = true; });
   pool().forEach(function (e) {
@@ -1018,7 +1020,7 @@ function karteAuswahlAnzeige() {
   const m = karteMarker().find(function (x) { return x.id === id; });
   if (!m) { box.hidden = true; box.replaceChildren(); return; }
   if (m.kat === 'sichtung') {
-    const e0 = entitaet(m.entId), pinX = sichtungPin(m.si);
+    const e0 = entitaet(m.entId), pinX = sichtungPin(m.si, m.entId);
     fertig('Sichtung ' + m.id, [h('dl', { class: 'fields' }, feld('Dossier', e0 ? dossierLink(e0, 'Karte', 'k-dl-' + e0.id) : m.entId), feld('Zeit', fmtZ(m.si.t)), feld('Ort laut Meldung', m.si.ort || '–'),
       feld('Güte', gueteLabel(m.guete)), feld('Lage', 'Position ungefähr, abgeleitet aus ' + m.genau + (m.bez ? ' (' + m.bez + ')' : '') + '. Der gestrichelte Ring zeigt die Unschärfe: derzeit etwa ' + m.unM.m + ' m Radius, wachsend mit dem Alter der Sichtung (' + (m.unM.alter.text || 'jetzt') + ').', 'full'),
       feld('Beobachtung', m.si.text || '–', 'full')),

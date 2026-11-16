@@ -53,6 +53,45 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
     return { erst, danach: L().map(x => x.id) };
   }, s.d);
   ok.sichtungsnummernNachLoeschen = JSON.stringify(nr.erst) === '["SI-001","SI-002"]' && JSON.stringify(nr.danach) === '["SI-001","SI-002"]';
+  /* Gegenprobe 1: Pin und Dreieck dürfen nie beide fehlen (Sichtung älter als die letzten drei, Karte zeichnet nur diese) */
+  const g1 = await p.evaluate(() => {
+    dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Dreierprobe', land: 'DE' }); const d = STATE.dossiers.auswahl;
+    dispatch({ type: 'PIN_ANGELEGT', ll: [52.5, 13.4], name: 'Erster', dossier: d, notiz: '' }); const pin = PROFIL.pins[PROFIL.pins.length - 1];
+    dispatch({ type: 'SICHTUNG_HINZU', id: d, ort: '52.5000, 13.4000', text: 'aus Entwurf', guete: 'unbewertet', pin: pin.id }); const si0 = STATE.dossiers.entitaeten[d].sichtungen[0].id;
+    ['51.1, 10.1', '51.2, 10.2', '51.3, 10.3'].forEach(o => dispatch({ type: 'SICHTUNG_HINZU', id: d, ort: o, text: 'weitere', guete: 'unbewertet' }));
+    const M = karteMarker(); return { pin: M.some(m => m.id === pin.id), si: M.some(m => m.id === si0) };
+  });
+  ok.pinOderDreieckImmerDa = g1.pin || g1.si; ok.dreieckBleibtBeiDreiWeiteren = g1.si === true && g1.pin === false;
+  /* Gegenprobe 2: wiedervergebene Nummer darf einen fremden Pin weder ausblenden noch lösen */
+  const g2 = await p.evaluate(() => {
+    dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Fremdpin', land: 'DE' }); const d1 = STATE.dossiers.auswahl;
+    dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Nummerngeber', land: 'DE' }); const d2 = STATE.dossiers.auswahl;
+    Object.keys(STATE.dossiers.entitaeten).forEach(k => (STATE.dossiers.entitaeten[k].sichtungen || []).slice().forEach(x => dispatch({ type: 'SICHTUNG_ENTFERNT', id: k, sid: x.id })));
+    dispatch({ type: 'PIN_ANGELEGT', ll: [50.5, 9.5], name: 'Fremd', dossier: d1, notiz: '' }); const pin = PROFIL.pins[PROFIL.pins.length - 1];
+    pin.sichtung = 'SI-001';                                  /* veralteter Verweis, wie aus einer älteren Profilsicherung */
+    dispatch({ type: 'SICHTUNG_HINZU', id: d2, ort: '49.0000, 8.0000', text: 'andere Akte', guete: 'unbewertet' }); const nr = STATE.dossiers.entitaeten[d2].sichtungen[0].id;
+    const vorher = karteMarker().some(m => m.id === pin.id);
+    dispatch({ type: 'SICHTUNG_ENTFERNT', id: d2, sid: nr });
+    return { nr, vorher, nachher: karteMarker().some(m => m.id === pin.id), ref: pin.sichtung, d1 };
+  });
+  ok.fremdePinBleibtSichtbar = g2.nr === 'SI-001' && g2.vorher === true && g2.nachher === true;
+  ok.fremderVerweisUnangetastet = g2.ref === 'SI-001';
+  /* Gegenprobe 3: Wiederherstellung einer älteren Sicherung mit gleicher Nummer in zwei Akten vergibt neu und zieht den Pin-Verweis mit */
+  const g3 = await p.evaluate(() => {
+    dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Rueck A', land: 'DE' }); const a = STATE.dossiers.auswahl;
+    dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Rueck B', land: 'DE' }); const b = STATE.dossiers.auswahl;
+    [a, b].forEach(k => { STATE.dossiers.entitaeten[k].sichtungen = []; });
+    dispatch({ type: 'PIN_ANGELEGT', ll: [50.1, 9.1], name: 'PA', dossier: a, notiz: '' }); const pa = PROFIL.pins[PROFIL.pins.length - 1];
+    dispatch({ type: 'PIN_ANGELEGT', ll: [50.2, 9.2], name: 'PB', dossier: b, notiz: '' }); const pb = PROFIL.pins[PROFIL.pins.length - 1];
+    pa.sichtung = 'SI-001'; pb.sichtung = 'SI-001';
+    const mk = pin => ({ notizen: [], sichtungen: [{ id: 'SI-001', t: nowIso(), ort: '50.0000, 9.0000', text: 'alt', guete: 'unbewertet', quelle: 'Eintrag', pin }] });
+    PROFIL.dossierDaten[a] = mk(pa.id); PROFIL.dossierDaten[b] = mk(pb.id);
+    profilEinspielen(STATE);
+    const sa = STATE.dossiers.entitaeten[a].sichtungen[0], sb = STATE.dossiers.entitaeten[b].sichtungen[0], M = karteMarker();
+    return { ids: [sa.id, sb.id], verw: [pa.sichtung, pb.sichtung], gepaart: [pinSichtung(pa) === sa, pinSichtung(pb) === sb], pinsDa: M.some(m => m.id === pa.id) || M.some(m => m.id === sa.id) };
+  });
+  ok.wiederherstellungNummernEindeutig = g3.ids[0] !== g3.ids[1];
+  ok.wiederherstellungPaarungErhalten = g3.gepaart[0] && g3.gepaart[1] && g3.verw[0] === g3.ids[0] && g3.verw[1] === g3.ids[1];
   ok.keineJsFehler = err.length === 0; if (err.length) console.log(err.slice(0, 4));
   const bad = Object.keys(ok).filter(k => ok[k] !== true); console.log(JSON.stringify(ok, null, 1)); console.log(bad.length ? 'FAIL: ' + bad.join(', ') : 'alle grün');
   await b.close(); process.exit(bad.length ? 1 : 0);

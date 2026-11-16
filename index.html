@@ -1236,7 +1236,16 @@ function profilEinspielen(z) {
     }
     if (Array.isArray(q.sichtungen) && q.sichtungen.length && !(x.sichtungen && x.sichtungen.length)) {
       x.sichtungen = kopie(q.sichtungen);
-      q.sichtungen.forEach(function (n) { const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) z.seq.sichtung = Math.max(z.seq.sichtung || 0, Number(m[1])); });
+      /* Nummern sind nur je Stand eindeutig: kollidiert eine wiederhergestellte Nummer mit einer anderen Akte, wird sie neu vergeben und der Pin-Verweis mitgezogen */
+      const belegt = {}; let hoechst = 0;
+      Object.keys(D.entitaeten).forEach(function (k2) { if (k2 === id) return; ((D.entitaeten[k2] && D.entitaeten[k2].sichtungen) || []).forEach(function (n) { belegt[n.id] = true; const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) hoechst = Math.max(hoechst, Number(m[1])); }); });
+      x.sichtungen.forEach(function (n) { const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) hoechst = Math.max(hoechst, Number(m[1])); });
+      x.sichtungen.forEach(function (n) {
+        if (!belegt[n.id]) return;
+        const alt = n.id; hoechst += 1; n.id = 'SI-' + p3(hoechst);
+        (PROFIL.pins || []).forEach(function (y) { if (n.pin && y.id === n.pin && y.dossier === id && y.sichtung === alt) y.sichtung = n.id; });
+      });
+      x.sichtungen.forEach(function (n) { const m = /^SI-(\d+)$/.exec(n.id || ''); if (m) z.seq.sichtung = Math.max(z.seq.sichtung || 0, Number(m[1])); });
     }
     if (q.status && !x.status) { x.status = q.status; x.statusAm = q.statusAm; }
     if (q.selbstBearbeitet === true) x.selbstBearbeitet = true;
@@ -5509,6 +5518,7 @@ const ACTIONS = {
     const hoechst = eingehend.concat(PROFIL.pins).reduce(function (m, y) { return Math.max(m, pinNr(y)); }, 0);
     PROFIL.seq.pin = Math.max(PROFIL.seq.pin || 0, (q.seq && q.seq.pin) || 0, hoechst);
     const inhalt = function (y) { const c = Object.assign({}, y); delete c.importVon; delete c.importName; delete c.id; delete c.name; return JSON.stringify(c); };
+    const pinNeu = {};                                                                           /* alte Pin-Kennung -> neue, damit Sichtungen ihren Ursprungspin behalten */
     eingehend.forEach(function (x) {
       const gl = PROFIL.pins.find(function (y) { return y.id === x.id; });
       if (!gl) { PROFIL.pins.push(x); return; }
@@ -5516,7 +5526,7 @@ const ACTIONS = {
       /* gleiche ID, anderer Inhalt oder Name: als eigener Pin mit neuer ID übernehmen. Originalname und Importzusatz bleiben getrennt;
          dieselbe Datei erzeugt beim zweiten Import keine weitere Kopie, eine geänderte Fassung (auch nur umbenannt) dagegen schon */
       if (PROFIL.pins.some(function (y) { return y.importVon === x.id && inhalt(y) === inhalt(x) && y.importName === (x.name || 'Pin'); })) { pinDoppelt += 1; return; }
-      PROFIL.seq.pin += 1;
+      PROFIL.seq.pin += 1; pinNeu[x.id] = 'PIN-' + p3(PROFIL.seq.pin);
       PROFIL.pins.push(Object.assign({}, x, { id: 'PIN-' + p3(PROFIL.seq.pin), name: (x.name || 'Pin') + ' (Import ' + x.id + ')', importVon: x.id, importName: x.name || 'Pin' }));
       pinKonflikt += 1;
     });
@@ -5525,7 +5535,7 @@ const ACTIONS = {
     Object.keys(q.dossierDaten || {}).forEach(function (k) {
       const daten = q.dossierDaten[k];
       if (!daten || !entitaet(k)) return;
-      if (!PROFIL.dossierDaten[k]) PROFIL.dossierDaten[k] = daten;
+      if (!PROFIL.dossierDaten[k]) { (daten.sichtungen || []).forEach(function (si) { if (si.pin && pinNeu[si.pin]) si.pin = pinNeu[si.pin]; }); PROFIL.dossierDaten[k] = daten; }
       else if (daten.selbstBearbeitet === true) PROFIL.dossierDaten[k].selbstBearbeitet = true;
     });
     aenderungenAnwenden();
@@ -5913,8 +5923,9 @@ const ACTIONS = {
     if (!d || !d.sichtungen) return null;
     const i = d.sichtungen.findIndex(function (x) { return x.id === a.sid; });
     if (i < 0) return null;
+    const ent = d.sichtungen[i];
     d.sichtungen.splice(i, 1);
-    (PROFIL.pins || []).forEach(function (y) { if (y.sichtung === a.sid) delete y.sichtung; });          /* der Entwurf erscheint wieder auf der Karte */
+    (PROFIL.pins || []).forEach(function (y) { if (ent.pin && y.id === ent.pin && y.dossier === e.id && y.sichtung === a.sid) delete y.sichtung; });          /* nur die konkrete Paarung lösen; der Entwurf erscheint wieder auf der Karte */
     return { modul: 'Dossier', aktion: 'Sichtung entfernt', detail: e.id + ' ' + e.name + ', ' + a.sid };
   }
 };
@@ -6989,7 +7000,7 @@ function sichtungsEntwuerfe(e) {
   if (!L.length) return null;
   return [h('h3', null, 'Sichtungsentwürfe (' + L.length + ')'), tabelle(['Pin', 'Position', 'Notiz', ''], L.map(function (y) {
     return [td('nw', y.name), td('nw', y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5)), td('txt', y.notiz || '–'),
-      td('nw', y.sichtung ? 'eingetragen als ' + y.sichtung : h('button', { type: 'button', class: 'link', id: 'si-pin-' + y.id, onclick: function () { dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5), text: 'Aus Entwurf ' + y.name, guete: 'unbewertet', pin: y.id }); } }, 'als Sichtung eintragen'))];
+      td('nw', pinSichtung(y) ? 'eingetragen als ' + y.sichtung : h('button', { type: 'button', class: 'link', id: 'si-pin-' + y.id, onclick: function () { dispatch({ type: 'SICHTUNG_HINZU', id: e.id, ort: y.ll[0].toFixed(5) + ', ' + y.ll[1].toFixed(5), text: 'Aus Entwurf ' + y.name, guete: 'unbewertet', pin: y.id }); } }, 'als Sichtung eintragen'))];
   }), '')];
 }
 function dossierTabs(e) {
