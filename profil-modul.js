@@ -364,7 +364,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   } else terminalAusgabe(antwort.text);
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, kanal: null, fortschritt: '' };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '' };
 function terminalAusgabe(zeile) {
   const t = TERMINAL_ZUSTAND;
   t.ausgabe = t.ausgabe.concat(zeile).slice(-45);
@@ -671,7 +671,35 @@ async function terminalKanalTab(input, bisher, kanal) {
     return basis + x.name + (x.dir ? '/' : '');
   }), format);
 }
+/* Befehlsverlauf: nur im Speicher der Sitzung (50 Einträge), nicht im Profil. Nicht aufgenommen werden exit und alles innerhalb des Kanals. */
+function terminalVerlaufNehmen(zeile) {
+  const t = TERMINAL_ZUSTAND;
+  t.vpos = -1; t.entwurf = '';
+  if (t.kanal || zeile === 'exit') return;
+  if (t.verlauf[t.verlauf.length - 1] !== zeile) t.verlauf.push(zeile);
+  if (t.verlauf.length > 50) t.verlauf.shift();
+}
+function terminalVerlaufLeeren() { const t = TERMINAL_ZUSTAND; t.verlauf = []; t.vpos = -1; t.entwurf = ''; }
+function terminalVerlaufTaste(ev) {
+  const t = TERMINAL_ZUSTAND, input = ev.currentTarget, n = t.verlauf.length;
+  if (ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || ev.isComposing || t.kanal) return false;
+  if (ev.key === 'Escape') {
+    if (t.vpos === -1) return false;
+    ev.preventDefault(); t.vpos = -1; input.value = t.entwurf; return true;
+  }
+  if ((ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') || !n) return false;
+  if (ev.key === 'ArrowDown' && t.vpos === -1) return false;
+  ev.preventDefault();
+  if (ev.key === 'ArrowUp') {
+    if (t.vpos === -1) { t.entwurf = input.value; t.vpos = n - 1; } else if (t.vpos > 0) t.vpos--;
+    input.value = t.verlauf[t.vpos];
+  } else if (t.vpos < n - 1) { t.vpos++; input.value = t.verlauf[t.vpos]; }
+  else { t.vpos = -1; input.value = t.entwurf; }
+  input.setSelectionRange(input.value.length, input.value.length);
+  return true;
+}
 function terminalTabTaste(ev) {
+  if (terminalVerlaufTaste(ev)) return;
   if (TERMINAL_ZUSTAND.kanal) {
     if (ev.key === 'Escape') { ev.preventDefault(); terminalKanalAbbruch(); return; }
     const kanal = TERMINAL_ZUSTAND.kanal, input = ev.currentTarget, wert = input.value;
@@ -710,14 +738,14 @@ function profilTerminalPanel() {
         ev.preventDefault();
         const zeile = input.value.trim();
         input.value = '';
-        if (zeile) terminalBefehl(zeile);
+        if (zeile) { terminalVerlaufNehmen(zeile); terminalBefehl(zeile); }
       } }, h('label', { id: 'profil-terminal-prompt', for: input.id, class: 'mono' }, terminalPrompt()), input,
         h('button', { type: 'submit' }, 'Ausführen'))));
 }
 
 // Locking the app drops the temporary dialogue even when the window stays open.
 new MutationObserver(function () {
-  if (document.body.classList.contains('locked')) terminalKanalAbbruch();
+  if (document.body.classList.contains('locked')) { terminalKanalAbbruch(); terminalVerlaufLeeren(); }
 }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
 function identitaetDateiSchluessel(id, nr) { return 'identitaet:' + id + ':' + nr; }
