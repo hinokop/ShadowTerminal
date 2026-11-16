@@ -143,6 +143,24 @@ const { APP } = require('./_pfad');
       const p = PROFIL.pins.find(x => x.name.startsWith('Importierter Pin'));
       return [faelle.length, faelle[0].dossiers[0], faelle[0].pins[0], p.id, PROFIL.pins.length, dossier];
     }, dossier).then(([n,d,fp,p,np,erw]) => [n,d === erw,fp === p,np]), [1,true,true,2]);
+    // Feste IDs im Bestand bleiben unverändert. Nur die nächste Nummer richtet sich nach dem Bestand.
+    await p.evaluate(async () => { await xLoeschen('F-080'); });
+    await p.click('#x-neu');
+    await p.fill('#x-dialog-titel', 'Nach dem höchsten Fall');
+    await p.click('#dlg-ok');
+    const naechster = 'F-' + String(Number(keys[1].slice(2)) + 1).padStart(3, '0');
+    assert.equal(await p.evaluate(() => X_VIEW.id), naechster);
+    assert.ok(await p.evaluate(id => !!xFall(id), keys[1]));
+    await loeschen();
+    await p.click('#x-fall-' + keys[1]);
+    await loeschen();
+    assert.equal(await p.locator('[id^="x-fall-"]').count(), 0);
+    await start();
+    await p.click('#nav-x');
+    await p.click('#x-neu');
+    await p.fill('#x-dialog-titel', 'Erster Fall nach Leerstand');
+    await p.click('#dlg-ok');
+    assert.equal(await p.evaluate(() => X_VIEW.id), 'F-001');
     assert.deepEqual(errors, []);
     console.log('OK: X, Fallstatus, Bewertung, Karte, Unterlagen, Löschbestätigung, Rücknahme, geteilte Dateien und Reload');
   } finally { await browser.close(); }

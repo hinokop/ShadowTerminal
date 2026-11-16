@@ -13,9 +13,10 @@ function xAnlegen(daten, dossier) {
   const R = PROFIL.recherche;
   const titel = String(daten.titel || '').trim().slice(0, 120);
   if (!titel) return null;
+  /* Nur vorhandene Fälle belegen Nummern. Der Import verwendet weiterhin seine eigene Reservierung. */
   R.seq.fall = R.faelle.reduce(function (max, f) {
     return /^F-\d+$/.test(f.id) ? Math.max(max, Number(f.id.slice(2))) : max;
-  }, R.seq.fall || 0);
+  }, 0);
   const f = { id: rchNr('fall'), titel: titel, frage: String(daten.frage || '').trim().slice(0, 300), zustand: 'sammlung', erfasst: nowIso() };
   if (dossier) f.dossiers = [dossier];
   R.faelle.push(f);
@@ -126,7 +127,21 @@ function xDossierOeffnen(id, unterlage) {
   if (unterlage) rchUnterlageZeigen(unterlage);
 }
 function xDossierKnopf(e) {
-  return xDossierLesbar(e) ? xBtn('x-dossier-fall', 'Zu Fall hinzufügen', function () { xNeu(e); }) : null;
+  if (!xDossierLesbar(e)) return null;
+  const unterlagen = new Set(rchBelege(e).filter(function (z) { return !!z.fall; }).map(function (z) { return z.fall.id; }));
+  const faelle = PROFIL.recherche.faelle.filter(function (f) { return xDossiers(f).includes(e.id) || unterlagen.has(f.id); });
+  return [
+    xBtn('x-dossier-fall', 'Zu Fall hinzufügen', function () { xNeu(e); }),
+    faelle.length ? h('div', { class: 'row', id: 'x-dossier-faelle', role: 'group', 'aria-label': 'Zugehörige Fälle' },
+      h('span', { class: 'dim' }, 'Fälle in X'),
+      faelle.map(function (f) {
+        const basis = xDossiers(f).includes(e.id) ? '' : ' · über Unterlagen';
+        return h('button', {
+          type: 'button', class: 'link', id: 'x-dossier-verweis-' + f.id,
+          title: xStatus(f.zustand)[1], onclick: function () { if (xFall(f.id)) xOeffnen(f.id); }
+        }, f.id + ' · ' + f.titel + basis);
+      })) : h('span', { id: 'x-dossier-kein-fall', class: 'dim' }, 'Keinem Fall zugeordnet')
+  ];
 }
 function xPinLesbar(p) { return !!(p && (!p.dossier || xDossierLesbar(entitaet(p.dossier)))); }
 function xZurKarte(f, pin) {
