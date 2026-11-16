@@ -691,21 +691,39 @@ function eigeneZoneText(x) {
     'Radius: ' + x.r + ' m', 'Notiz: ' + (x.notiz || '–'), 'Stand: ' + fmtZ(x.stand || x.t),
     'Bemerkung zur Prüfung: ' + (x.standBemerkung || '–')].join('\n');
 }
-function kartenTxtExport(art, id) {
-  const objekt = function () { return ((art === 'pin' ? PROFIL.pins : PROFIL.zonen) || []).find(function (x) { return x.id === id; }); };
-  const muster = art === 'pin' ? /^PIN-[0-9]{3,15}$/ : /^ZO-[0-9]{3,15}$/;
+/* Bestätigte Sichtung als Textblatt: Sichtungsdaten und, falls vorhanden, die Daten des Entwurfs-Pins, aus dem sie entstand */
+function sichtungText(e, si) {
+  const k = sichtungKoord(si), pin = sichtungPin(si, e.id);
+  const z = [si.id + ' · Dossier ' + e.id + ' ' + e.name, 'Zeit: ' + fmtZ(si.t), 'Ort laut Meldung: ' + (si.ort || '–'),
+    'Position: ' + (k ? k.ll[0].toFixed(5) + ', ' + k.ll[1].toFixed(5) + ' (ungefähr, aus ' + k.genau + ')' : '–'),
+    'Güte: ' + gueteLabel(sichtungGuete(e, si)), 'Beobachtung: ' + (si.text || '–')];
+  if (pin) z.push('', 'Entwurf: ' + pinText(pin));
+  return z.join('\n');
+}
+function kartenTxtExport(art, id, entId) {
+  const objekt = function () {
+    if (art === 'sichtung') {
+      const d = STATE.dossiers.entitaeten[entId], si = d && (d.sichtungen || []).find(function (y) { return y.id === id; });
+      return si ? Object.assign({}, si, { dossier: entId }) : null;
+    }
+    return ((art === 'pin' ? PROFIL.pins : PROFIL.zonen) || []).find(function (x) { return x.id === id; });
+  };
+  const muster = art === 'pin' ? /^PIN-[0-9]{3,15}$/ : art === 'sichtung' ? /^SI-[0-9]{3,15}$/ : /^ZO-[0-9]{3,15}$/;
   const pruefen = function () {
     const x = objekt();
     if (!x || !muster.test(x.id)) { meldung('TXT-Export nicht möglich. Kartenobjekt nicht vorhanden.'); return null; }
     if (x.dossier && (PROFIL.gesperrt || []).includes(x.dossier)) {
       meldung('TXT-Export blockiert. Das verknüpfte Dossier ist gesperrt.'); return null;
     }
+    if (art === 'sichtung' && (!entitaet(x.dossier) || infoGesperrt(entitaet(x.dossier)) || dossierGesperrt(entitaet(x.dossier)))) {
+      meldung('TXT-Export blockiert. Das Dossier ist gesperrt.'); return null;
+    }
     return x;
   };
   const x = pruefen();
   if (!x) return;
-  const dateiname = (art === 'pin' ? 'lageblatt-' : 'zone-') + id + '.txt';
-  const textVon = function (y) { return (art === 'pin' ? pinText(y) : eigeneZoneText(y)) + '\n'; };
+  const dateiname = (art === 'pin' ? 'lageblatt-' : art === 'sichtung' ? 'sichtung-' : 'zone-') + id + '.txt';
+  const textVon = function (y) { return (art === 'pin' ? pinText(y) : art === 'sichtung' ? sichtungText(entitaet(entId), y) : eigeneZoneText(y)) + '\n'; };
   if (!terminalBrueckenAdresse()) {
     const a = h('a', { download: dateiname }), u = URL.createObjectURL(new Blob([textVon(x)], { type: 'text/plain;charset=utf-8' }));
     a.href = u; document.body.appendChild(a); a.click(); a.remove();
@@ -1026,6 +1044,7 @@ function karteAuswahlAnzeige() {
       feld('Beobachtung', m.si.text || '–', 'full')),
       h('div', { class: 'pin-form' }, h('label', { for: 'si-bewerten' }, 'Bewertung'), h('select', { id: 'si-bewerten', 'aria-label': 'Güte der Sichtung', onchange: function (ev) { dispatch({ type: 'SICHTUNG_BEWERTET', id: m.entId, sid: m.si.id, guete: ev.target.value }); karteNeuZeichnen(); } },
         SICHTUNG_BEWERTUNGEN.map(function (g) { return h('option', { value: g, selected: (m.si.guete || 'unbewertet') === g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); }))),
+      h('div', { class: 'k-pop-akt' }, h('button', { type: 'button', class: 'link', id: 'si-export', title: 'Sichtung als Textdatei speichern', onclick: function () { kartenTxtExport('sichtung', m.id, m.entId); } }, 'Als TXT exportieren')),
       pinX ? [h('h3', null, 'Aus Entwurf ' + pinX.name), pinFormular(pinX, function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: pinX.id }, patch)); karteNeuZeichnen(); }, false)] : null]);
     return;
   }
@@ -1414,7 +1433,7 @@ function karteSteuerung(svg) {
       const c = koordUm(ev), P = karteProj(), eid = K.pick.slice(3), de = entitaet(eid);
       K.pick = null;
       if (de) {
-        dispatch({ type: 'PIN_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])], name: sichtungsPinName(), dossier: de.id, notiz: 'Sichtungsentwurf zu ' + de.id + ' ' + de.name + ' (Punkt auf der Karte gesetzt)' });
+        dispatch({ type: 'PIN_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])], name: sichtungsPinName(), dossier: de.id, notiz: '' });
       }
       renderModule();
       return;
