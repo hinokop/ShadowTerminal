@@ -2528,22 +2528,6 @@ function haltungText(id) {
   const a = akteurDaten(id), z = ZUSTAND.zweiter[id];
   return a ? 'Vertrauen ' + zustandStufe(id, 'vertrauen', a.vertrauen) + ' (' + a.vertrauen + '), ' + (z === 'druck' ? 'Druck' : 'Belastung') + ' ' + zustandStufe(id, z, a[z]) + ' (' + a[z] + ')' : '';
 }
-function haltungPanelInhalt(id) {
-  const a = akteurDaten(id), z = ZUSTAND.zweiter[id];
-  if (!a) return null;
-  const letzte = a.verlauf.slice(-5).reverse();
-  return [
-    h('dl', { class: 'fields' },
-      feld('Vertrauen zu dir', zustandStufe(id, 'vertrauen', a.vertrauen)),
-      feld(z === 'druck' ? 'Druck von oben' : 'Belastung', zustandStufe(id, z, a[z])),
-      feld('Zuletzt verändert durch', letzte.length ? letzte.map(function (x) { return x.grund + ' (' + dtg(x.t) + ')'; }).join(' · ') : 'noch nichts', 'full'))
-  ];
-}
-function haltungDossierPanel(e) {
-  const def = STATE.vorlauf ? null : KM();
-  if (!def || !def.haltung || def.haltung.asset.dossier !== e.id) return null;
-  return h('div', null, h('h3', null, 'Haltungsvermerk ' + ZUSTAND.name.asset), haltungPanelInhalt('asset'));
-}
 /* Gegenstelle reagiert je nach Zustand; Notfallwörter und Extraktion bleiben unberührt */
 const FUNKRUHE_MIN = 60, ASSET_SPERRE_AUS = 70;
 /* Meldet sich das Asset nach Schweigen oder Funkruhe wieder: einmal, kurz, ohne Anlass zu Rückfragen. Prüft wiederholt, bis die Belastung unter der Schwelle liegt. */
