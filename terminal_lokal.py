@@ -1,6 +1,7 @@
 """Local file bridge with narrow TXT export. No OS commands or generic file serving."""
 import argparse
 import base64
+import hashlib
 import hmac
 import json
 import os
@@ -132,8 +133,138 @@ def export_directory_windows(path):
         close(handle)
 
 
+VERSION_NAME = re.compile(r"-v([2-9]|[1-9][0-9])")
+MAX_VERSIONEN = 99
+
+
+class _ExportPosix:
+    """Schreibt relativ zu Verzeichnisdeskriptoren, ohne Links zu folgen."""
+    def __init__(self, base_fd, folder):
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        self.dir = os.open(folder, flags, dir_fd=base_fd)
+
+    def close(self):
+        os.close(self.dir)
+
+    def read(self, name):
+        """None: nicht vorhanden. False: vorhanden, aber keine einzelne normale Datei. Sonst die Bytes."""
+        try:
+            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=self.dir)
+        except FileNotFoundError:
+            return None
+        except OSError:
+            return False
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > MAX_TEXT:
+                return False
+            return stream.read(MAX_TEXT + 1)
+
+    def create(self, name, data):
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=self.dir)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(data)
+        except OSError:
+            os.unlink(name, dir_fd=self.dir)
+            raise
+
+    def replace(self, name, data):
+        temp = ".ft-" + secrets.token_hex(8)
+        self.create(temp, data)
+        try:
+            os.replace(temp, name, src_dir_fd=self.dir, dst_dir_fd=self.dir)
+        except OSError:
+            os.unlink(temp, dir_fd=self.dir)
+            raise
+
+
+class _ExportWindows:
+    """Schreibt in ein Verzeichnis, dessen Handle Änderungen und Löschen des Ordners selbst sperrt."""
+    def __init__(self, path):
+        self.path = path
+
+    def close(self):
+        pass
+
+    def read(self, name):
+        target = self.path / name
+        try:
+            info = os.lstat(target)
+        except FileNotFoundError:
+            return None
+        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_TEXT or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            return False
+        try:
+            with target.open("rb") as stream:
+                return stream.read(MAX_TEXT + 1)
+        except OSError:
+            return False
+
+    def create(self, name, data):
+        target = self.path / name
+        stream = target.open("xb")
+        try:
+            with stream:
+                stream.write(data)
+        except OSError:
+            target.unlink(missing_ok=True)
+            raise
+
+    def replace(self, name, data):
+        temp = ".ft-" + secrets.token_hex(8)
+        self.create(temp, data)
+        try:
+            os.replace(self.path / temp, self.path / name)
+        except OSError:
+            (self.path / temp).unlink(missing_ok=True)
+            raise
+
+
+def _sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def export_decide(target, base, data, last):
+    """Entscheidet beim Export, ob neu angelegt, unverändert gelassen, ersetzt oder als neue Version gespeichert wird.
+    Ersetzt wird nur die vom Terminal zuletzt geschriebene Datei, und nur wenn ihr Inhalt noch der gemerkten Prüfsumme entspricht."""
+    new_sha = _sha(data)
+    stem = base[:-4]
+    candidate = base
+    if last is not None and re.fullmatch(re.escape(stem) + r"(?:-v[0-9]{1,2})?\.txt", last["name"]) and (
+            last["name"] == base or VERSION_NAME.fullmatch(last["name"][len(stem):-4])):
+        candidate = last["name"]
+    for _ in range(4):
+        existing = target.read(candidate)
+        if existing is None:
+            try:
+                target.create(candidate, data)
+                return candidate, new_sha, "neu"
+            except FileExistsError:
+                continue
+        if existing is not False and _sha(existing) == new_sha:
+            return candidate, new_sha, "unveraendert"
+        if existing is not False and last is not None and last["name"] == candidate and _sha(existing) == last["sha"]:
+            target.replace(candidate, data)
+            return candidate, new_sha, "ersetzt"
+        for number in range(2, MAX_VERSIONEN + 1):
+            name = stem + "-v" + str(number) + ".txt"
+            existing = target.read(name)
+            if existing is not False and existing is not None and _sha(existing) == new_sha:
+                return name, new_sha, "unveraendert"
+            if existing is None:
+                try:
+                    target.create(name, data)
+                    return name, new_sha, "version"
+                except FileExistsError:
+                    continue
+        raise Refused
+    raise Refused
+
+
 def terminal_export_txt(root, request):
-    if set(request) != {"op", "folder", "kind", "id", "text"}:
+    keys = set(request)
+    if not {"op", "folder", "kind", "id", "text"} <= keys or not keys <= {"op", "folder", "kind", "id", "text", "last"}:
         raise Refused
     folder, kind, ident, text = (request[k] for k in ("folder", "kind", "id", "text"))
     if folder not in ("dokumente", "ops") or kind not in ("pin", "zone"):
@@ -147,37 +278,29 @@ def terminal_export_txt(root, request):
         raise Refused
     if len(data) > MAX_TEXT:
         return {"error": "TXT-Export zu groß (maximal 64 KiB)"}
-    name = ("lageblatt-" if kind == "pin" else "zone-") + ident + ".txt"
+    last = request.get("last")
+    if last is not None:
+        if not isinstance(last, dict) or set(last) != {"name", "sha"} or not isinstance(last["name"], str) or not isinstance(last["sha"], str) \
+                or not re.fullmatch(r"[0-9a-f]{64}", last["sha"]) or len(last["name"]) > 64:
+            raise Refused
+    base = ("lageblatt-" if kind == "pin" else "zone-") + ident + ".txt"
     try:
         if os.name == "nt":
             with export_directory_windows(root), export_directory_windows(root / folder):
-                path = root / folder / name
-                stream = path.open("xb")
-                try:
-                    with stream:
-                        stream.write(data)
-                except OSError:
-                    path.unlink(missing_ok=True)
-                    raise
+                name, sha, mode = export_decide(_ExportWindows(root / folder), base, data, last)
         elif hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd:
             with ExitStack() as stack:
                 flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-                base = os.open(root, flags)
-                stack.callback(os.close, base)
-                dst = os.open(folder, flags, dir_fd=base)
-                stack.callback(os.close, dst)
-                fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dst)
-                try:
-                    with os.fdopen(fd, "wb") as stream:
-                        stream.write(data)
-                except OSError:
-                    os.unlink(name, dir_fd=dst)
-                    raise
+                top = os.open(root, flags)
+                stack.callback(os.close, top)
+                target = _ExportPosix(top, folder)
+                stack.callback(target.close)
+                name, sha, mode = export_decide(target, base, data, last)
         else:
             raise Refused
-    except FileExistsError:
-        return {"error": "Datei existiert bereits. Sie wurde nicht überschrieben."}
-    return {"name": name, "folder": folder, "bytes": len(data)}
+    except PermissionError:
+        return {"error": "Datei ist geöffnet oder schreibgeschützt. Sie wurde nicht ersetzt."}
+    return {"name": name, "folder": folder, "bytes": len(data), "sha256": sha, "mode": mode}
 
 
 def terminal_file_op(root, request):

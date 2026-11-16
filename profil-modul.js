@@ -239,7 +239,8 @@ async function terminalBruecke(op, parts, hidden, exportDaten) {
       method: 'POST', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
       headers: { 'Content-Type': 'application/json', 'X-Shadow-Token': bruecke[2] },
       body: JSON.stringify(op === 'export-txt' ? {
-        op: op, folder: exportDaten.ordner, kind: exportDaten.art, id: exportDaten.id, text: exportDaten.text
+        op: op, folder: exportDaten.ordner, kind: exportDaten.art, id: exportDaten.id, text: exportDaten.text,
+        last: exportDaten.last || undefined
       } : { op: op, parts: parts, hidden: hidden }), signal: controller.signal
     });
     if (!r.ok) return { error: r.status === 403 ? 'Zugriff auf die lokale Datenbank verweigert. ' + TERMINAL_BRUECKE_START : TERMINAL_BRUECKE_FEHLER };
