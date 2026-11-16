@@ -108,6 +108,18 @@ label{color:var(--text-dim)}
 .field dd{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
 .field.full{grid-column:1 / -1}
 .note{padding:6px 8px;color:var(--text-dim)}
+.ak-eingang-layout{display:grid;grid-template-columns:minmax(180px,1fr) minmax(0,2fr);gap:14px}
+.ak-eingang-layout section{min-width:0;overflow-wrap:anywhere}
+.ak-eingang-layout input[type=file]{max-width:100%}
+.ak-eingang-liste{list-style:none;margin:4px 0 0;padding:0;max-height:60vh;overflow:auto;border:1px solid var(--border)}
+.ak-eingang-liste:empty{display:none}
+.ak-eingang-liste li+li{border-top:1px solid var(--border)}
+.ak-eingang-liste button{display:block;width:100%;min-width:0;min-height:34px;padding:6px 10px;text-align:left;background:transparent;border:0;border-left:2px solid transparent}
+.ak-eingang-liste button:hover,.ak-eingang-liste button[aria-current=true]{background:var(--panel-raised)}
+.ak-eingang-liste button[aria-current=true]{border-left-color:var(--accent)}
+.ak-eingang-liste button:focus-visible{outline-offset:-3px}
+.ak-eingang-name{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+@media(max-width:720px){.ak-eingang-layout{grid-template-columns:minmax(0,1fr)}}
 .bearb-hinweis{margin-left:auto;color:var(--text-dim);font-size:11px}
 .note:empty{display:none}
 .pad{padding:6px 8px}
