@@ -1064,13 +1064,82 @@ const Store = (function () {
    Bilder, Aufnahmen und Kartenpositionen liegen nur dort, nicht im Spielstand.
    ===================================================================== */
 const PROFIL_KEY = STORAGE_KEY + '.profil';
+/* Dossier-Nummern laufen je Typ durchgehend ab 0001 (Personen P-0001, Organisationen O-0001, Orte L-0001). Ältere Bestände (Beispiele 9051 ff., eigene 9101 ff.)
+   werden einmalig umgeschrieben (Schlüssel und Zeichenketten in Zustand und Profil; Marker idv = 2); die Zuordnung eigener Dossiers liegt in PROFIL.idmap. */
+const ID_BASIS = { P: 17, O: 5, L: 9 };
+const ID_STD = (function () {
+  const m = {}, z = function (n) { return String(n).padStart(4, '0'); };
+  for (let n = 9051; n <= 9064; n++) m['P-' + n] = 'P-' + z(n - 9047);
+  for (let n = 9051; n <= 9055; n++) m['O-' + n] = 'O-' + z(n - 9050);
+  for (let n = 9051; n <= 9059; n++) m['L-' + n] = 'L-' + z(n - 9050);
+  return m;
+})();
+function idEigeneZuordnen(ids, karte) {
+  const alt = Array.from(new Set(ids.filter(function (id) { return typeof id === 'string' && /^[POL]-9[1-9][0-9]{2}$/.test(id) && !karte[id]; })))
+    .sort(function (a, b) { return Number(a.slice(2)) - Number(b.slice(2)); });
+  alt.forEach(function (id) {
+    const t = id[0], n = Object.keys(karte).filter(function (k) { return k[0] === t; }).length;
+    karte[id] = t + '-' + String(ID_BASIS[t] + n + 1).padStart(4, '0');
+  });
+}
+/* Gemeinsame, kollisionsfreie Vergabe: belegt = Menge bereits vergebener Nummern; die nächste Nummer folgt je Typ auf die höchste vorhandene (unter 9000). */
+function idNaechste(praefix, belegt) {
+  let hoechst = ID_BASIS[praefix] || 0;
+  belegt.forEach(function (id) { if (id[0] === praefix && /^[POL]-[0-9]{4}$/.test(id) && Number(id.slice(2)) < 9000) hoechst = Math.max(hoechst, Number(id.slice(2))); });
+  const id = praefix + '-' + String(hoechst + 1).padStart(4, '0');
+  belegt.add(id);
+  return id;
+}
+function idBelegtLokal(lokalListe) {
+  const b = new Set(Object.keys(ID_STD).map(function (k) { return ID_STD[k]; }));
+  (lokalListe || []).forEach(function (e) { if (e && typeof e.id === 'string') b.add(e.id); });
+  return b;
+}
+/* Abbildung eingehender eigener Dossiers auf lokale Nummern: gleiches Dossier (Name und Typ) bleibt dasselbe, sonst bei belegter oder alter Nummer die nächste freie. */
+function idImportAbbilden(eingehend, lokalListe) {
+  const belegt = idBelegtLokal(lokalListe), karte = {}, lok = {};
+  (lokalListe || []).forEach(function (e) { if (e && e.eigen !== false) lok[e.typ + '|' + e.name] = lok[e.typ + '|' + e.name] || e.id; });
+  (eingehend || []).filter(function (e) { return e && typeof e.id === 'string' && /^[POL]-[0-9]{4}$/.test(e.id) && !ID_STD[e.id]; })
+    .sort(function (a, b) { return Number(a.id.slice(2)) - Number(b.id.slice(2)); })
+    .forEach(function (e) {
+      const gleich = lok[e.typ + '|' + e.name];
+      if (gleich) { if (gleich !== e.id) karte[e.id] = gleich; return; }
+      if (Number(e.id.slice(2)) < 9000 && !belegt.has(e.id)) { belegt.add(e.id); return; }
+      karte[e.id] = idNaechste(e.id[0], belegt);
+    });
+  return karte;
+}
+function idMigrieren(obj, karte) {
+  const such = /\b([POL])-([0-9]{4})\b/g, neu = function (id) { return ID_STD[id] || karte[id] || id; }, ersetzen = function (t) { return t.replace(such, function (m) { return neu(m); }); };
+  (function gehen(x) {
+    if (Array.isArray(x)) { for (let i = 0; i < x.length; i++) { if (typeof x[i] === 'string') x[i] = ersetzen(x[i]); else if (x[i] && typeof x[i] === 'object') gehen(x[i]); } return; }
+    /* erst alle Schlüssel und Werte erfassen, dann umschreiben: bei Tausch oder Kettenabbildung (P-0018 → P-0019 → P-0020) darf kein Schlüssel überschrieben werden, bevor sein Inhalt gelesen ist */
+    const paare = Object.keys(x).map(function (k) { return [k, /^[POL]-[0-9]{4}$/.test(k) ? neu(k) : k, x[k]]; });
+    paare.forEach(function (p) { if (p[0] !== p[1]) delete x[p[0]]; });
+    const setzen = function (p) {
+      let v = p[2];
+      if (typeof v === 'string') v = ersetzen(v); else if (v && typeof v === 'object') gehen(v);
+      x[p[1]] = v;
+    };
+    /* unveränderte Schlüssel zuerst, umbenannte danach: trifft ein umbenannter Schlüssel auf einen vorhandenen (z. B. beim Laden ergänzter Standardeintrag), gewinnt der umgeschriebene Altbestand */
+    paare.filter(function (p) { return p[0] === p[1]; }).forEach(setzen);
+    paare.filter(function (p) { return p[0] !== p[1]; }).forEach(setzen);
+  })(obj);
+}
 const PROFIL = (function () {
-  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], ausgeblendeteKanten: [], daten: {}, seq: { eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], karteBlanko: false, gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
+  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], ausgeblendeteKanten: [], daten: {}, seq: { eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], idv: 2, idmap: {}, karteBlanko: false, gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
   let p = leer();
   try {
     const raw = window.localStorage.getItem(PROFIL_KEY);
-    if (raw) { const o = JSON.parse(raw); if (o && o.v === 1) p = Object.assign(leer(), o, { seq: Object.assign({ eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, o.seq || {}) }); }
+    if (raw) { const o = JSON.parse(raw); if (o && o.v === 1) p = Object.assign(leer(), o, { idv: o.idv, seq: Object.assign({ eigen: 0, kante: 0, galerie: 0, ausgang: 0 }, o.seq || {}) }); }
   } catch (e) { /* ohne Profil */ }
+  if (p.idv !== 2) {
+    if (!p.idmap || typeof p.idmap !== 'object') p.idmap = {};
+    const karte = p.idmap; delete p.idmap;                          /* die Zuordnung selbst bleibt unverändert */
+    idEigeneZuordnen((p.eigene || []).map(function (e) { return e && e.id; }), karte);
+    idMigrieren(p, karte);
+    p.idmap = karte; p.idv = 2;
+  }
   p.leer = leer;
   return p;
 })();
@@ -1599,7 +1668,7 @@ function eingang(kanalId, p) {
   const k = STATE.komm.kanaele[kanalId];
   const offen = STATE.ui.modul === 'komm' && STATE.komm.aktiv === kanalId;
   STATE.seq.nachricht += 1;
-  const roh = p.von === 'gegenstelle' ? namenAufloesen(p.text) : p.text;            /* Platzhalter {P-9062} und {P-9062|nach} folgen dem aktuellen Dossier */
+  const roh = p.von === 'gegenstelle' ? namenAufloesen(p.text) : p.text;            /* Platzhalter {P-0015} und {P-0015|nach} folgen dem aktuellen Dossier */
   const tx = p.von === 'gegenstelle' && PROFIL.tausch && PROFIL.tausch[roh] ? PROFIL.tausch[roh] : roh;
   const msg = { id: 'N-' + p3(STATE.seq.nachricht), von: p.von, absender: p.absender, t: nowIso(), text: tx, original: tx !== roh ? roh : undefined,
                 status: offen ? 'gelesen' : 'zugestellt', dringlichkeit: p.dringlichkeit || 'Routine', lagerelevant: !!p.lagerelevant, art: p.art || null };
@@ -1607,7 +1676,7 @@ function eingang(kanalId, p) {
   if (!offen) k.ungelesen += 1;
   return msg;
 }
-/* Platzhalter in Szenariotexten: {P-9062} = aktueller Name des Dossiers, {P-9062|nach} = letztes Wort des Namens */
+/* Platzhalter in Szenariotexten: {P-0015} = aktueller Name des Dossiers, {P-0015|nach} = letztes Wort des Namens */
 function namenAufloesen(t) {
   return String(t).replace(/\{([A-Z]-\d{4})(\|nach)?\}/g, function (m, id, nach) {
     const e = entitaet(id);
@@ -3421,8 +3490,8 @@ function standortNameVon(c) { return c.standortId === 'AW' ? c.name : standortNa
 
 
 /* =====================================================================
-   FREIGABEANFRAGE PER TEXT (Kanal Ansprechpartner): "Fordere Freigabe für P-0002 an", "Beantrage Observation gegen L-9052",
-   "Ordne P-9060 dem Auftrag zu". Fehlt Maßnahme oder Begründung, fragt ARGUS nach; die Begründung geht in dieselbe Prüfung wie im Formular.
+   FREIGABEANFRAGE PER TEXT (Kanal Ansprechpartner): "Fordere Freigabe für P-0002 an", "Beantrage Observation gegen L-0002",
+   "Ordne P-0013 dem Auftrag zu". Fehlt Maßnahme oder Begründung, fragt ARGUS nach; die Begründung geht in dieselbe Prüfung wie im Formular.
    ===================================================================== */
 const FG_TEXTMAP = [['observ', 'observation'], ['beobacht', 'observation'], ['abfang', 'abfangen'], ['ladung stoppen', 'abfangen'], ['sabotage', 'sabotage'], ['festsetz', 'festsetzung'], ['festnahme', 'festsetzung'], ['eliminier', 'eliminierung'], ['ausschalt', 'eliminierung'], ['personenschaden', 'eliminierung']];
 function fgRueck() { return STATE.fgRueck && Date.now() - Date.parse(STATE.fgRueck.t) < 600000 ? STATE.fgRueck : null; }
@@ -3510,7 +3579,7 @@ function freigabeAbsenden(k, msg, r, out) {
 
 /* =====================================================================
    INFORMATIONSZUGANG: eigene Dossiers und Auftragsdossiers sind frei. Archivdossiers (Standard) von Personen und Organisationen
-   sind je nach Bedrohungsstufe beschränkt. "Erbitte Informationen zu P-9058" beantwortet ARGUS erst nach einer tragfähigen Begründung.
+   sind je nach Bedrohungsstufe beschränkt. "Erbitte Informationen zu P-0011" beantwortet ARGUS erst nach einer tragfähigen Begründung.
    Zugriffsstufe 1: Anlass, Beleg oder Nutzen (zwei von drei). 2: zusätzlich keine bloße Sorge, mind. 50 Zeichen, Vertrauen ab 30.
    3: alle drei Punkte, mind. 60 Zeichen, Vertrauen ab 50. Zuordnung zum Auftrag oder bewilligte Verstärkung/Freigabe öffnet das Dossier ebenfalls.
    ===================================================================== */
@@ -4183,6 +4252,7 @@ const ACTIONS = {
   /* Ereignisse des Zugangsschirms (Zeitstempel stammt vom Ereignis selbst, da sie vor dem Laden des Zustands entstehen können) */
   AUTH_EREIGNIS: function (a) { return a.liste && a.liste.length ? a.liste : null; },
   IMPORT: function (a) {
+    if (a.state && a.state.dossiers) { const km = idImportAbbilden(a.state.dossiers.eigene, PROFIL.eigene); idMigrieren(a.state, km); a.state.idv = 2; }
     STATE = a.state; arbeitsmodulWiederherstellen(STATE); const idNeu = identitaetUebernehmen(STATE); VIEW.draft = {}; planeAlle(); profilEinspielen(STATE); if (idNeu) profilSpeichern();
     return { modul: 'System', aktion: 'Zustand importiert', detail: a.datei + ', ' + a.state.log.length + ' Protokolleinträge übernommen' };
   },
@@ -5135,7 +5205,8 @@ const ACTIONS = {
     const stufe = Math.min(5, Math.max(1, Number(a.stufe) || 2)), t = nowIso(), bildbereit = bildGueltig(a.bild);
     const zeilen = function (txt, trenner) { return String(txt || '').split(trenner).map(function (x) { return x.trim(); }).filter(Boolean); };
     STATE.seq.eigen = (STATE.seq.eigen || 0) + 1;
-    const id = (typ === 'Person' ? 'P' : typ === 'Organisation' ? 'O' : 'L') + '-' + (9100 + STATE.seq.eigen);
+    const praefix = typ === 'Person' ? 'P' : typ === 'Organisation' ? 'O' : 'L';
+    const id = idNaechste(praefix, idBelegtLokal(alleEntitaeten().concat(PROFIL.eigene || [])));   /* je Typ durchlaufend, kollisionsfrei */
     const land = SCENARIO.laender[a.land] ? a.land : 'DE';
     STATE.dossiers.eigene.push({ id: id, typ: typ, land: land, mission: 'STD', name: name, bild: null, aliase: zeilen(a.aliase, ','), reg: 'ohne',
       verteiler: 'Eigener Eintrag', rolle: String(a.rolle || '').trim() || 'Keine Beschreibung.', eckdaten: zeilen(a.eckdaten, '\n'),
@@ -5408,6 +5479,7 @@ const ACTIONS = {
   PROFIL_IMPORT: function (a) {
     const q = a.profil;
     if (!q || q.v !== 1 || !Array.isArray(q.eigene) || !Array.isArray(q.eigeneKanten)) return null;
+    { delete q.idmap; const km = idImportAbbilden(q.eigene, (STATE.dossiers.eigene || []).concat(PROFIL.eigene)); idMigrieren(q, km); q.idv = 2; }
     let neu = 0;
     q.eigene.forEach(function (e) { if (!PROFIL.eigene.some(function (x) { return x.id === e.id; })) { PROFIL.eigene.push(e); if (q.daten && q.daten[e.id]) PROFIL.daten[e.id] = q.daten[e.id]; neu += 1; } });
     q.eigeneKanten.forEach(function (k) { if (!PROFIL.eigeneKanten.some(function (x) { return x.id === k.id; })) PROFIL.eigeneKanten.push(k); });
@@ -6789,6 +6861,8 @@ function dossierListe() {
     if (dossierGesperrt(e)) return e.id.toLowerCase().indexOf(q) >= 0;
     return (e.id + ' ' + e.name + ' ' + e.aliase.join(' ') + ' ' + e.rolle + ' ' + (dossierRegisternummer(e, STATE.dossiers.entitaeten[e.id]) || '')).toLowerCase().indexOf(q) >= 0;
   });
+  const typReihe = { Person: 0, Organisation: 1, Ort: 2 };
+  treffer.sort(function (a, b) { return (typReihe[a.typ] - typReihe[b.typ]) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });      /* Personen, Organisationen, Orte, je nach Nummer */
   const neu = function () { renderModule(); };
   return panel('Entitäten', [h('span', { class: 'badge' }, treffer.length + ' von ' + alle.length),
     h('button', { type: 'button', id: 'btn-dneu', style: 'margin-left:8px', onclick: neuesDossier }, 'Neues Dossier')],
@@ -8786,6 +8860,10 @@ function init() {
   const neu = !isValidState(geladen);
   if (neu && geladen) { try { Store.sichereDefekt(JSON.stringify(geladen)); } catch (e) { /* nicht serialisierbar */ } }
   STATE = neu ? buildInitialState(Date.now()) : geladen;
+  if (STATE.idv !== 2) {                                          /* einmalige Umschreibung älterer Dossier-Nummern (siehe ID_STD) */
+    if (!neu) { idEigeneZuordnen(((STATE.dossiers && STATE.dossiers.eigene) || []).map(function (e) { return e && e.id; }), PROFIL.idmap); idMigrieren(STATE, PROFIL.idmap); }
+    STATE.idv = 2; profilSpeichern();
+  }
   arbeitsmodulWiederherstellen(STATE);
   const idNeu = identitaetUebernehmen(STATE);
   if (idNeu) { if (!neu) profilEinspielen(STATE); profilSpeichern(); }       /* erst nach dem Einspielen des Profils speichern */

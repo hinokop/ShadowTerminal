@@ -9,7 +9,7 @@ await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',ein:false});dispatch({t
 const due=(typ)=>p.evaluate((typ)=>{STATE.plan.filter(x=>!typ||x.typ===typ).forEach(x=>{x.faelligAm=new Date(Date.now()-1000).toISOString()});STATE.plan.slice().forEach(x=>{if(STATE.plan.includes(x)&&(!typ||x.typ===typ))dispatch({type:'FAELLIG',id:x.id})})},typ);
 const send=(t,k='handler')=>p.evaluate(([t,k])=>dispatch({type:'NACHRICHT_GESENDET',kanal:k,text:t,dringlichkeit:'Routine'}),[t,k]);
 const alle=(k)=>p.evaluate((k)=>STATE.komm.kanaele[k].nachrichten.map(m=>m.text),k);
-const umb=(n)=>p.evaluate((n)=>dispatch({type:'DOSSIER_BEARBEITET',id:'P-9062',name:n,land:'DE',aliase:'',rolle:entitaet('P-9062').rolle,eckdaten:entitaet('P-9062').eckdaten.join('\n'),stufe:entitaet('P-9062').bedrohung.stufe,begruendung:''}),n);
+const umb=(n)=>p.evaluate((n)=>dispatch({type:'DOSSIER_BEARBEITET',id:'P-0015',name:n,land:'DE',aliase:'',rolle:entitaet('P-0015').rolle,eckdaten:entitaet('P-0015').eckdaten.join('\n'),stufe:entitaet('P-0015').bedrohung.stufe,begruendung:''}),n);
 
 /* M6a: Platzhalter, Umbenennung vor dem Senden */
 await boot();
@@ -25,7 +25,7 @@ await umb('Frederik Bourges');
 t=await alle('asset');ok(t.some(x=>/Bourges verstanden/.test(x))&&!t.some(x=>/Neumann/.test(x)),'M6b: gesendete Nachricht folgt dem Namen');
 const agent=await alle('handler');ok(agent.some(x=>/Ralf Neumann/.test(x)),'eigene Eingabe bleibt unverändert');
 const logAlt=await p.evaluate(()=>JSON.stringify(STATE.log).includes('Neumann'));ok(logAlt,'Protokoll bleibt unverändert');
-await p.evaluate(()=>dispatch({type:'DOSSIER_ZURUECKGESETZT',id:'P-9062'}));
+await p.evaluate(()=>dispatch({type:'DOSSIER_ZURUECKGESETZT',id:'P-0015'}));
 t=await alle('asset');ok(t.some(x=>/Neumann verstanden/.test(x)),'Zurücksetzen zieht den Namen zurück');
 
 /* M3: Zurückstellung im Schweigen */

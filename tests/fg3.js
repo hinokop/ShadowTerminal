@@ -8,13 +8,13 @@ const send=async(t)=>{await p.evaluate((t)=>dispatch({type:'NACHRICHT_GESENDET',
  await p.waitForTimeout(1500);
  console.log('>',t,'\n  <',await p.evaluate(()=>{const n=STATE.komm.kanaele.handler.nachrichten;return n[n.length-1].text.slice(0,160)}));};
 const ids=await p.evaluate(()=>SCENARIO.entitaeten.filter(e=>freigeschaltet(e.mission)).map(e=>e.id+':'+e.typ+':'+e.name).join(' | '));console.log(ids);
-await send('Fordere Freigabe für L-9052 an.');
+await send('Fordere Freigabe für L-0002 an.');
 await send('Observation');
 await send('Ich will es halt wissen.');
 await send('Ich brauche das, weil er verdächtig wirkt und ich ihn überprüfen will.');
-await send('Beantrage Observation gegen P-9101 weil er interessant ist');
-await send('Beantrage Festsetzung gegen P-9060');
+await send('Beantrage Observation gegen P-0018 weil er interessant ist');
+await send('Beantrage Festsetzung gegen P-0013');
 await send('Ich habe ihn gesehen und will ihn festsetzen, um ihn zu befragen.');
-await send('Beantrage Ladung abfangen gegen L-9052 weil dort etwas verladen wird und ich es kontrollieren will.');
+await send('Beantrage Ladung abfangen gegen L-0002 weil dort etwas verladen wird und ich es kontrollieren will.');
 console.log(await p.evaluate(()=>JSON.stringify(FGL().map(f=>[f.id,f.massnahme,f.ziel,f.urteil,(f.begruendung||'').slice(0,50)]))));
 console.log(e.join()||'keine Fehler');await b.close()})();

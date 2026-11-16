@@ -24,5 +24,5 @@ a=await send('Was weißt du über den Kutscher?');console.log('4:',a.slice(0,200
 chk(/P-0002/.test(a)||/Fahrer/.test(a),'Vollauskunft nach Freigabe');
 // unbekannte Person: Sichtung abgewiesen
 a=await send('Murat Aydın hat gerade das Lager verlassen','sichtung');console.log('5:',a);
-chk(await p.evaluate(()=>(STATE.dossiers.entitaeten['P-9058'].sichtungen||[]).length)===0,'keine Sichtung zu Unbekanntem');
+chk(await p.evaluate(()=>(STATE.dossiers.entitaeten['P-0011'].sichtungen||[]).length)===0,'keine Sichtung zu Unbekanntem');
 console.log('Fehler:',e.join()||'keine','| Fehlschläge:',fail);await b.close()})();

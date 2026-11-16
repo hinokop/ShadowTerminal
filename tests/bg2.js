@@ -7,7 +7,7 @@ await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatc
 await p.waitForTimeout(400);
 const fg=(m,z,t)=>p.evaluate(([m,z,t])=>{dispatch({type:'FREIGABE_BEANTRAGT',massnahme:m,ziel:z,begruendung:t,dringlichkeit:'Routine'});const f=FGL();if(!f.length)return 'KEINE FG; entitaet='+!!entitaet(z);const x=f[f.length-1];return x.urteil+'|'+(x.grund||x.auflage||'')},[m,z,t]);
 const U='Person gefährdet akut einen weiteren Asset, wenn dieser auffliegt, scheitert die Mission und ich verliere meinen Asset.';
-const r1=await fg('eliminierung','P-9062',U);console.log(r1);ok(!/Das reicht mir so noch nicht|trägt nicht/.test(r1)||/Ziel|Verhältn|Auflage|abgelehnt/.test(r1)&&false,'Satz Nutzer (Ausgabe prüfen)');
-for(const t of ['ich mache mir Sorgen','kurz','Ich denke, das wäre gut.','Es ist mir einfach wichtig.']){console.log(t,'=>',await fg('eliminierung','P-9062',t));}
-console.log('beob',await fg('observation','P-9062','Asset meldet Sichtung am Hof, zur Bestätigung nötig.'));
+const r1=await fg('eliminierung','P-0015',U);console.log(r1);ok(!/Das reicht mir so noch nicht|trägt nicht/.test(r1)||/Ziel|Verhältn|Auflage|abgelehnt/.test(r1)&&false,'Satz Nutzer (Ausgabe prüfen)');
+for(const t of ['ich mache mir Sorgen','kurz','Ich denke, das wäre gut.','Es ist mir einfach wichtig.']){console.log(t,'=>',await fg('eliminierung','P-0015',t));}
+console.log('beob',await fg('observation','P-0015','Asset meldet Sichtung am Hof, zur Bestätigung nötig.'));
 console.log(e.join()||'keine Fehler');await b.close()})();

@@ -90,7 +90,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   /* --- Profilimport mit Recherche; Dossiernummer kollidiert in E mit anderem Namen --- */
   const E = await neu();
   await E.evaluate(() => { dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Ganz Anders', land: 'DE' }); });
-  const pm = await E.evaluate(async t => { const o = JSON.parse(t); const vor = PROFIL.recherche.faelle.length; dispatch({ type: 'PROFIL_IMPORT', profil: o, datei: 'p.json' }); return { msg: STATE.log[STATE.log.length - 1].detail, faelle: PROFIL.recherche.faelle.length - vor, aussagen: PROFIL.recherche.aussagen.length, eingeschaetzt: PROFIL.recherche.aussagen[0] && PROFIL.recherche.aussagen[0].einschaetzung }; }, profil);
+  const pm = await E.evaluate(async t => { const o = JSON.parse(t); const vor = PROFIL.recherche.faelle.length; dispatch({ type: 'PROFIL_IMPORT', profil: o, datei: 'p.json' }); return { msg: STATE.log[STATE.log.length - 1].detail, faelle: PROFIL.recherche.faelle.length - vor, aussagen: PROFIL.recherche.aussagen.length, verkn: PROFIL.recherche.aussagen[0] && PROFIL.recherche.aussagen[0].dossiers.join(','), eigene: PROFIL.eigene.map(x => x.id + ':' + x.name).join(','), eingeschaetzt: PROFIL.recherche.aussagen[0] && PROFIL.recherche.aussagen[0].einschaetzung }; }, profil);
   const F = await neu();
   const pf = await F.evaluate(async t => { dispatch({ type: 'PROFIL_IMPORT', profil: JSON.parse(t), datei: 'p.json' }); const R = PROFIL.recherche, x = R.aussagen[0]; const d = STATE.dossiers.eigene.find(e => e.name === 'Paketperson');
     return { a: R.aussagen.length, b: R.beobachtungen.length, ei: x && x.einschaetzung, dossier: !!d && x.dossiers[0] === d.id, gespeichert: JSON.parse(localStorage.getItem(PROFIL_KEY)).recherche.aussagen.length }; }, profil);
@@ -103,7 +103,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
     manipulationAbgelehnt: JSON.stringify(b3) === JSON.stringify(b1) && /abgelehnt/.test(msgInh),
     konfliktOhneUeberschreiben: konflikt.lokalErhalten === lokalVor && konflikt.faelle.length === 2 && konflikt.neuerFall !== 'F-001' && konflikt.importVon === 'F-001' && konflikt.verkn && konflikt.aussageFall === konflikt.neuerFall && konflikt.einzigartig && konflikt.dossiers.length === 2,
     vollerSpeicher: d1.f === 0 && d1.q === 0 && d1.b === 0 && d1.a === 0 && d1.dos === d0.dos && d1.keys === d0.keys && d1.log === 0 && /nicht gespeichert/i.test(voll),
-    profilimportKonflikt: pm.faelle === 1 && pm.aussagen === 1 && /nicht zuordenbar/.test(pm.msg) && /Belegdateien sind nicht Teil/.test(pm.msg),
+    profilimportKonflikt: pm.faelle === 1 && pm.aussagen === 1 && !/nicht zuordenbar/.test(pm.msg) && pm.eigene === 'P-0018:Ganz Anders,P-0019:Paketperson' && pm.verkn === 'P-0019' && /Belegdateien sind nicht Teil/.test(pm.msg),   /* belegte Nummer: eingehendes Dossier erhält die nächste freie, Verweise folgen */
     profilimportRecherche: pf.a === 1 && pf.b === 2 && pf.ei === 'dafuer' && pf.dossier && pf.gespeichert === 1,
     dateiManipulationAbgelehnt: JSON.stringify(bt0) === JSON.stringify(bt1) && /abgelehnt/.test(msgT1) && /abgelehnt/.test(msgT2),
     dateiWiederhergestellt: w0.keys === w1.keys - 1 && w1.b === w0.b && w1.q === w0.q && wDatei === sha && /wiederhergestellt/.test(msgW),

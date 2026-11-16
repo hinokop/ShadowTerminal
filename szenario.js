@@ -210,161 +210,161 @@ var SCENARIO = {
   /* Standard-Dossier: steht immer zur Verfügung (Schlüsselfiguren in Berlin, Hamburg, NRW und Brandenburg samt Verbindungen); eigene Einträge legt der Agent im Terminal an. Bilder: bilder/<kennung>.jpg (Kleinbuchstaben). */
   standard: {
     dossiers: [
-      { id: 'P-9051', typ: 'Person', land: 'DE', mission: 'STD', name: 'Dr. Mehmet Yıldırım', bild: 'bilder/p-9051.jpg', aliase: ['M. Yildirim'], reg: 'ohne',
+      { id: 'P-0004', typ: 'Person', land: 'DE', mission: 'STD', name: 'Dr. Mehmet Yıldırım', bild: 'bilder/p-9051.jpg', aliase: ['M. Yildirim'], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Immobilienentwickler und Treuhänder für Beteiligungsgesellschaften, Berlin. Hält Objekte für Dritte über mehrere Gesellschaften.',
-        eckdaten: ['Jahrgang 1969', 'Wohnlage Charlottenburg', 'Beirat bei O-9051'], bedrohung: { stufe: 3, begruendung: 'Verschleiert wirtschaftlich Berechtigte; gut beraten und kaum angreifbar.' }, nachtraege: [] },
-      { id: 'P-9052', typ: 'Person', land: 'DE', mission: 'STD', name: 'Anja Kowalczyk', bild: 'bilder/p-9052.jpg', aliase: [], reg: 'ohne',
+        eckdaten: ['Jahrgang 1969', 'Wohnlage Charlottenburg', 'Beirat bei O-0001'], bedrohung: { stufe: 3, begruendung: 'Verschleiert wirtschaftlich Berechtigte; gut beraten und kaum angreifbar.' }, nachtraege: [] },
+      { id: 'P-0005', typ: 'Person', land: 'DE', mission: 'STD', name: 'Anja Kowalczyk', bild: 'bilder/p-9052.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Steuerberaterin mit Mandanten im Mittelstand und Handel, Berlin.',
-        eckdaten: ['Jahrgang 1977', 'Kanzlei in Berlin-Mitte', 'betreut mehrere Gesellschaften aus dem Umfeld von O-9051'], bedrohung: { stufe: 2, begruendung: 'Rechtlich unauffällig; Wert liegt in der Aktenführung ihrer Mandanten.' }, nachtraege: [] },
-      { id: 'P-9053', typ: 'Person', land: 'DE', mission: 'STD', name: 'Dmitri Petrenko', bild: 'bilder/p-9053.jpg', aliase: ['Dima'], reg: 'ohne',
+        eckdaten: ['Jahrgang 1977', 'Kanzlei in Berlin-Mitte', 'betreut mehrere Gesellschaften aus dem Umfeld von O-0001'], bedrohung: { stufe: 2, begruendung: 'Rechtlich unauffällig; Wert liegt in der Aktenführung ihrer Mandanten.' }, nachtraege: [] },
+      { id: 'P-0006', typ: 'Person', land: 'DE', mission: 'STD', name: 'Dmitri Petrenko', bild: 'bilder/p-9053.jpg', aliase: ['Dima'], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Inhaber eines IT-Sicherheitsdienstleisters, Berlin. Betreibt Netze und Server für Kunden aus dem Handel.',
         eckdaten: ['Jahrgang 1983', 'Wohnlage Kreuzberg', 'zuvor Rechenzentrumsbetrieb'], bedrohung: { stufe: 3, begruendung: 'Technisch versiert, verschlüsselte Kommunikation, Auftragslage nicht zuordenbar.' }, nachtraege: [] },
-      { id: 'P-9054', typ: 'Person', land: 'DE', mission: 'STD', name: 'Nguyen Thi Lan', bild: 'bilder/p-9054.jpg', aliase: ['Lan Nguyen'], reg: 'ohne',
+      { id: 'P-0007', typ: 'Person', land: 'DE', mission: 'STD', name: 'Nguyen Thi Lan', bild: 'bilder/p-9054.jpg', aliase: ['Lan Nguyen'], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Großhändlerin für Textilien und Elektronik, Berlin. Beliefert Händler in Berlin und Brandenburg.',
         eckdaten: ['Jahrgang 1974', 'Wohnlage Lichtenberg', 'Lieferanten in Vietnam und Polen'], bedrohung: { stufe: 2, begruendung: 'Weitreichendes Händlernetz, überwiegend Bargeldgeschäft; Aussagebereitschaft unbekannt.' }, nachtraege: [] },
-      { id: 'P-9055', typ: 'Person', land: 'DE', mission: 'STD', name: 'Henrik Brandt', bild: 'bilder/p-9055.jpg', aliase: ['H. Brandt'], reg: 'ohne',
+      { id: 'P-0008', typ: 'Person', land: 'DE', mission: 'STD', name: 'Henrik Brandt', bild: 'bilder/p-9055.jpg', aliase: ['H. Brandt'], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Speditionsagent und Hafenmakler, Hamburg. Vermittelt Umschlag, Lagerung und Weitertransport.',
-        eckdaten: ['Jahrgang 1966', 'Wohnlage Eppendorf', 'Inhaber hinter O-9052'], bedrohung: { stufe: 3, begruendung: 'Kennt Umschlag und Papiere; geht mit Fremden vorsichtig um.' }, nachtraege: [] },
-      { id: 'P-9056', typ: 'Person', land: 'DE', mission: 'STD', name: 'Samira El-Khoury', bild: 'bilder/p-9056.jpg', aliase: [], reg: 'ohne',
+        eckdaten: ['Jahrgang 1966', 'Wohnlage Eppendorf', 'Inhaber hinter O-0002'], bedrohung: { stufe: 3, begruendung: 'Kennt Umschlag und Papiere; geht mit Fremden vorsichtig um.' }, nachtraege: [] },
+      { id: 'P-0009', typ: 'Person', land: 'DE', mission: 'STD', name: 'Samira El-Khoury', bild: 'bilder/p-9056.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Rechtsanwältin für Außenwirtschaftsrecht, Hamburg. Mandate im Hafen- und Handelsumfeld.',
         eckdaten: ['Jahrgang 1981', 'Wohnlage Altona', 'Kanzlei in der Innenstadt'], bedrohung: { stufe: 2, begruendung: 'Das Berufsgeheimnis schützt ihre Mandanten; Kontakte zu Zoll und Reedereien.' }, nachtraege: [] },
-      { id: 'P-9057', typ: 'Person', land: 'DE', mission: 'STD', name: 'Jan-Ole Petersen', bild: 'bilder/p-9057.jpg', aliase: ['J.-O. Petersen'], reg: 'ohne',
+      { id: 'P-0010', typ: 'Person', land: 'DE', mission: 'STD', name: 'Jan-Ole Petersen', bild: 'bilder/p-9057.jpg', aliase: ['J.-O. Petersen'], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Zolldienstleister für Sammelladungen, Hamburg.',
         eckdaten: ['Jahrgang 1972', 'Wohnlage Winterhude', 'Anmeldungen für mehrere Speditionen'], bedrohung: { stufe: 3, begruendung: 'Hinweise auf beschleunigte Abfertigung gegen Gefälligkeiten.' }, nachtraege: [] },
-      { id: 'P-9058', typ: 'Person', land: 'DE', mission: 'STD', name: 'Murat Aydın', bild: 'bilder/p-9058.jpg', aliase: ['M. Aydin'], reg: 'ohne',
+      { id: 'P-0011', typ: 'Person', land: 'DE', mission: 'STD', name: 'Murat Aydın', bild: 'bilder/p-9058.jpg', aliase: ['M. Aydin'], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Gebrauchtwagenhändler mit Export nach Afrika und Osteuropa, Duisburg.',
         eckdaten: ['Jahrgang 1975', 'Wohnlage Marxloh', 'Verladung im Hafenumfeld'], bedrohung: { stufe: 3, begruendung: 'Barzahlungen; Fahrzeuge verlassen das Land teils ohne vollständige Papiere.' }, nachtraege: [] },
-      { id: 'P-9059', typ: 'Person', land: 'DE', mission: 'STD', name: 'Katarina Schwarz', bild: 'bilder/p-9059.jpg', aliase: [], reg: 'ohne',
+      { id: 'P-0012', typ: 'Person', land: 'DE', mission: 'STD', name: 'Katarina Schwarz', bild: 'bilder/p-9059.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Geschäftsführerin eines Chemiehandels für Lösungsmittel und Vorprodukte, Köln.',
-        eckdaten: ['Jahrgang 1971', 'Wohnlage Ehrenfeld', 'Treuhandkunde von O-9053'], bedrohung: { stufe: 2, begruendung: 'Branchenüblich; Endverbleib der Ware nicht immer geprüft.' }, nachtraege: [] },
-      { id: 'P-9060', typ: 'Person', land: 'DE', mission: 'STD', name: 'Wladimir Kremer', bild: 'bilder/p-9060.jpg', aliase: ['Wolodja', 'W. Kremer'], reg: 'ohne',
+        eckdaten: ['Jahrgang 1971', 'Wohnlage Ehrenfeld', 'Treuhandkunde von O-0003'], bedrohung: { stufe: 2, begruendung: 'Branchenüblich; Endverbleib der Ware nicht immer geprüft.' }, nachtraege: [] },
+      { id: 'P-0013', typ: 'Person', land: 'DE', mission: 'STD', name: 'Wladimir Kremer', bild: 'bilder/p-9060.jpg', aliase: ['Wolodja', 'W. Kremer'], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Inhaber eines Sicherheitsdienstes, Dortmund. Stellt Objektschutz und Begleitpersonal.',
         eckdaten: ['Jahrgang 1967', 'Wohnlage Nordstadt', 'früher Objektschutz und Türdienste'], bedrohung: { stufe: 4, begruendung: 'Verfügt über kampferprobte Kräfte; hohe Aufmerksamkeit gegenüber Beobachtern.' }, nachtraege: [] },
-      { id: 'P-9061', typ: 'Person', land: 'DE', mission: 'STD', name: 'Fatima Haidari', bild: 'bilder/p-9061.jpg', aliase: [], reg: 'ohne',
+      { id: 'P-0014', typ: 'Person', land: 'DE', mission: 'STD', name: 'Fatima Haidari', bild: 'bilder/p-9061.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Freie Journalistin, Düsseldorf. Recherchiert zu Briefkastenfirmen und Treuhandstrukturen.',
         eckdaten: ['Jahrgang 1988', 'Wohnlage Pempelfort', 'schreibt für überregionale Medien'], bedrohung: { stufe: 1, begruendung: 'Eigene Interessen; kann Hinweise weitergeben, aber auch veröffentlichen.' }, nachtraege: [] },
-      { id: 'P-9062', typ: 'Person', land: 'DE', mission: 'STD', name: 'Ralf Neumann', bild: 'bilder/p-9062.jpg', aliase: [], reg: 'ohne',
+      { id: 'P-0015', typ: 'Person', land: 'DE', mission: 'STD', name: 'Ralf Neumann', bild: 'bilder/p-9062.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Betreiber eines Logistikparks in Ludwigsfelde, Brandenburg. Vermietet Hallenflächen an Dritte.',
         eckdaten: ['Jahrgang 1970', 'Wohnlage Ludwigsfelde', 'Mieter wechseln häufig'], bedrohung: { stufe: 3, begruendung: 'Vermietet an wechselnde Mieter; Kontrolle der Lagerinhalte begrenzt.' }, nachtraege: [] },
-      { id: 'P-9063', typ: 'Person', land: 'DE', mission: 'STD', name: 'Ewa Zielińska', bild: 'bilder/p-9063.jpg', aliase: ['E. Zielinska'], reg: 'ohne',
+      { id: 'P-0016', typ: 'Person', land: 'DE', mission: 'STD', name: 'Ewa Zielińska', bild: 'bilder/p-9063.jpg', aliase: ['E. Zielinska'], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Leiterin einer Spedition für den Grenzverkehr nach Polen, Frankfurt (Oder).',
         eckdaten: ['Jahrgang 1979', 'Wohnlage Frankfurt (Oder)', 'Fuhrpark mit Verkehr über die Oder'], bedrohung: { stufe: 3, begruendung: 'Kennt die Grenzabläufe; viele Fahrer, wenig Aktenführung.' }, nachtraege: [] },
-      { id: 'P-9064', typ: 'Person', land: 'DE', mission: 'STD', name: 'Dr. Tobias Hellwig', bild: 'bilder/p-9064.jpg', aliase: [], reg: 'ohne',
+      { id: 'P-0017', typ: 'Person', land: 'DE', mission: 'STD', name: 'Dr. Tobias Hellwig', bild: 'bilder/p-9064.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Referent in einer Landesbehörde, Potsdam. Zuständig für Genehmigungen im Gewerbebereich.',
         eckdaten: ['Jahrgang 1976', 'Wohnlage Babelsberg', 'Sachbearbeitung für Gewerbeansiedlungen'], bedrohung: { stufe: 2, begruendung: 'Mutmaßlich nicht eingeweiht; Verfahrensakten machen Zusammenhänge sichtbar.' }, nachtraege: [] },
-      { id: 'O-9051', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Havelstahl Handels GmbH', bild: 'bilder/o-9051.jpg', aliase: [], reg: 'ohne',
+      { id: 'O-0001', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Havelstahl Handels GmbH', bild: 'bilder/o-9051.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Handel mit Stahl und Metallen, Berlin und Brandenburg.',
         eckdaten: ['Gegründet 2011', 'Sitz Berlin-Mitte, Friedrichstraße 131', 'rund 35 Beschäftigte'], bedrohung: { stufe: 3, begruendung: 'Warenströme mit unklarem Endverbleib.' }, nachtraege: [] },
-      { id: 'O-9052', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Nordwerk Logistik GmbH', bild: 'bilder/o-9052.jpg', aliase: [], reg: 'ohne',
+      { id: 'O-0002', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Nordwerk Logistik GmbH', bild: 'bilder/o-9052.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Spedition und Umschlagbetrieb im Hamburger Hafenumfeld.',
         eckdaten: ['Gegründet 2006', 'Sitz Hamburg-Billbrook, Billbrookdeich 187', 'rund 60 Beschäftigte'], bedrohung: { stufe: 3, begruendung: 'Umschlag in Teilen nicht nachvollziehbar.' }, nachtraege: [] },
-      { id: 'O-9053', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Rheinkontor Treuhand AG', bild: 'bilder/o-9053.jpg', aliase: [], reg: 'ohne',
+      { id: 'O-0003', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Rheinkontor Treuhand AG', bild: 'bilder/o-9053.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Treuhand- und Verwaltungsgesellschaft für Beteiligungen, Düsseldorf.',
         eckdaten: ['Gegründet 1999', 'Sitz Düsseldorf, Speditionstraße 22', 'rund 25 Beschäftigte'], bedrohung: { stufe: 2, begruendung: 'Übliche Branchenpraxis; Eigentümerketten schwer nachzuvollziehen.' }, nachtraege: [] },
-      { id: 'O-9054', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Ruhrschild Sicherheitsdienste GmbH', bild: 'bilder/o-9054.jpg', aliase: [], reg: 'ohne',
+      { id: 'O-0004', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Ruhrschild Sicherheitsdienste GmbH', bild: 'bilder/o-9054.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Sicherheitsdienst für Objekte, Veranstaltungen und Transporte, Dortmund.',
         eckdaten: ['Gegründet 2008', 'Sitz Dortmund-Hörde, Hörder Burgstraße 18', 'rund 120 Beschäftigte'], bedrohung: { stufe: 4, begruendung: 'Bewaffnetes Personal im Hintergrund; enge Bindung an die Inhaberfamilie.' }, nachtraege: [] },
-      { id: 'O-9055', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Oderland Transit GmbH', bild: 'bilder/o-9055.jpg', aliase: [], reg: 'ohne',
+      { id: 'O-0005', typ: 'Organisation', land: 'DE', mission: 'STD', name: 'Oderland Transit GmbH', bild: 'bilder/o-9055.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Speditionsunternehmen für den Grenzverkehr nach Polen, Frankfurt (Oder).',
         eckdaten: ['Gegründet 2014', 'Sitz Frankfurt (Oder)', 'rund 40 Fahrzeuge'], bedrohung: { stufe: 3, begruendung: 'Fahrer wechseln häufig; Frachtpapiere lückenhaft.' }, nachtraege: [] },
-      { id: 'L-9051', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Büroetage Friedrichstraße, Berlin-Mitte', bild: 'bilder/l-9051.jpg', aliase: [], reg: 'ohne',
-        verteiler: 'Standard-Dossier', rolle: 'Geschäftsadresse von O-9051.',
+      { id: 'L-0001', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Büroetage Friedrichstraße, Berlin-Mitte', bild: 'bilder/l-9051.jpg', aliase: [], reg: 'ohne',
+        verteiler: 'Standard-Dossier', rolle: 'Geschäftsadresse von O-0001.',
         eckdaten: ['Friedrichstraße 131', 'Büroetage im vierten Obergeschoss', 'Zutritt über Empfang'], bedrohung: { stufe: 2, begruendung: 'Besucher werden erfasst.' }, nachtraege: [] },
-      { id: 'L-9052', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Kfz-Betrieb Sonnenallee, Berlin-Neukölln', bild: 'bilder/l-9052.jpg', aliase: [], reg: 'ohne',
-        verteiler: 'Standard-Dossier', rolle: 'Werkstatt und Lager im Hinterhof, genutzt von Händlern aus dem Umfeld von P-9054.',
+      { id: 'L-0002', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Kfz-Betrieb Sonnenallee, Berlin-Neukölln', bild: 'bilder/l-9052.jpg', aliase: [], reg: 'ohne',
+        verteiler: 'Standard-Dossier', rolle: 'Werkstatt und Lager im Hinterhof, genutzt von Händlern aus dem Umfeld von P-0007.',
         eckdaten: ['Sonnenallee 187', 'Zufahrt durch Tordurchfahrt', 'Nutzung überwiegend abends'], bedrohung: { stufe: 2, begruendung: 'Unübersichtlich, mehrere Nutzer.' }, nachtraege: [] },
-      { id: 'L-9053', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Lagerhalle Billbrookdeich, Hamburg', bild: 'bilder/l-9053.jpg', aliase: [], reg: 'ohne',
-        verteiler: 'Standard-Dossier', rolle: 'Umschlaglager von O-9052.',
+      { id: 'L-0003', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Lagerhalle Billbrookdeich, Hamburg', bild: 'bilder/l-9053.jpg', aliase: [], reg: 'ohne',
+        verteiler: 'Standard-Dossier', rolle: 'Umschlaglager von O-0002.',
         eckdaten: ['Billbrookdeich 187', 'Hallenkomplex mit Rampen', 'Zufahrt über Pforte, Kameraüberwachung'], bedrohung: { stufe: 3, begruendung: 'Pforte mit Besuchererfassung, Fahrzeuge werden registriert.' }, nachtraege: [] },
-      { id: 'L-9054', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Kontor Brooktorkai, Hamburg', bild: 'bilder/l-9054.jpg', aliase: [], reg: 'ohne',
-        verteiler: 'Standard-Dossier', rolle: 'Büro im Speicherviertel, genutzt von P-9055.',
+      { id: 'L-0004', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Kontor Brooktorkai, Hamburg', bild: 'bilder/l-9054.jpg', aliase: [], reg: 'ohne',
+        verteiler: 'Standard-Dossier', rolle: 'Büro im Speicherviertel, genutzt von P-0008.',
         eckdaten: ['Brooktorkai 9', 'Zugang über Treppenhaus', 'Gegensprechanlage'], bedrohung: { stufe: 2, begruendung: 'Wenig Publikumsverkehr, Anwesenheit fällt auf.' }, nachtraege: [] },
-      { id: 'L-9055', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Hafenspeicher Ruhrort, Duisburg', bild: 'bilder/l-9055.jpg', aliase: [], reg: 'ohne',
+      { id: 'L-0005', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Hafenspeicher Ruhrort, Duisburg', bild: 'bilder/l-9055.jpg', aliase: [], reg: 'ohne',
         verteiler: 'Standard-Dossier', rolle: 'Lager für Fahrzeuge und Container im Ruhrorter Hafen.',
         eckdaten: ['Hafenstraße 41', 'Freigelände mit Zaun', 'Verladung überwiegend nachts'], bedrohung: { stufe: 3, begruendung: 'Gelände eingezäunt; wechselnde Wachposten.' }, nachtraege: [] },
-      { id: 'L-9056', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Büro Speditionstraße, Düsseldorf', bild: 'bilder/l-9056.jpg', aliase: [], reg: 'ohne',
-        verteiler: 'Standard-Dossier', rolle: 'Büroadresse von O-9053 im Medienhafen.',
+      { id: 'L-0006', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Büro Speditionstraße, Düsseldorf', bild: 'bilder/l-9056.jpg', aliase: [], reg: 'ohne',
+        verteiler: 'Standard-Dossier', rolle: 'Büroadresse von O-0003 im Medienhafen.',
         eckdaten: ['Speditionstraße 22', 'Büroetage mit Empfang', 'Besprechungsräume für Mandanten'], bedrohung: { stufe: 2, begruendung: 'Empfang prüft Besucher.' }, nachtraege: [] },
-      { id: 'L-9057', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Gewerbehof Hörde, Dortmund', bild: 'bilder/l-9057.jpg', aliase: [], reg: 'ohne',
-        verteiler: 'Standard-Dossier', rolle: 'Standort von O-9054 mit Wachleuten und Fahrzeugen.',
+      { id: 'L-0007', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Gewerbehof Hörde, Dortmund', bild: 'bilder/l-9057.jpg', aliase: [], reg: 'ohne',
+        verteiler: 'Standard-Dossier', rolle: 'Standort von O-0004 mit Wachleuten und Fahrzeugen.',
         eckdaten: ['Hörder Burgstraße 18', 'Umzäuntes Gelände', 'Zutritt nur nach Anmeldung'], bedrohung: { stufe: 4, begruendung: 'Bewachtes Gelände mit eigener Kontrolle.' }, nachtraege: [] },
-      { id: 'L-9058', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Logistikpark Ludwigsfelde', bild: 'bilder/l-9058.jpg', aliase: [], reg: 'ohne',
-        verteiler: 'Standard-Dossier', rolle: 'Hallenflächen von P-9062 mit wechselnden Mietern.',
+      { id: 'L-0008', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Logistikpark Ludwigsfelde', bild: 'bilder/l-9058.jpg', aliase: [], reg: 'ohne',
+        verteiler: 'Standard-Dossier', rolle: 'Hallenflächen von P-0015 mit wechselnden Mietern.',
         eckdaten: ['Industriestraße 9', 'Mehrere Hallen mit Mietern', 'Zufahrt über Schranke'], bedrohung: { stufe: 3, begruendung: 'Viel Fahrzeugverkehr, Zufahrt kontrolliert.' }, nachtraege: [] },
-      { id: 'L-9059', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Gastronomie Oderpromenade, Frankfurt (Oder)', bild: 'bilder/l-9059.jpg', aliase: [], reg: 'ohne',
-        verteiler: 'Standard-Dossier', rolle: 'Wiederkehrender Treffpunkt im Umfeld von P-9063.',
+      { id: 'L-0009', typ: 'Ort', land: 'DE', mission: 'STD', name: 'Gastronomie Oderpromenade, Frankfurt (Oder)', bild: 'bilder/l-9059.jpg', aliase: [], reg: 'ohne',
+        verteiler: 'Standard-Dossier', rolle: 'Wiederkehrender Treffpunkt im Umfeld von P-0016.',
         eckdaten: ['Öffentlich zugänglich', 'Nähe zur Stadtbrücke', 'Abendliche Spitzenzeiten'], bedrohung: { stufe: 1, begruendung: 'Öffentlich, keine Kontrolle.' }, nachtraege: [] }
     ],
     verbindungen: [
-      { id: 'V-S1', mission: 'STD', von: 'P-9051', nach: 'O-9051', typ: 'Zugehörigkeit', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Beiratsmandat' },
-      { id: 'V-S2', mission: 'STD', von: 'O-9051', nach: 'L-9051', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
-      { id: 'V-S3', mission: 'STD', von: 'P-9052', nach: 'O-9051', typ: 'Zugehörigkeit', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Steuerberatungsmandat' },
-      { id: 'V-S4', mission: 'STD', von: 'O-9051', nach: 'O-9055', typ: 'Finanzierung', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Zahlungswege' },
-      { id: 'V-S5', mission: 'STD', von: 'P-9055', nach: 'O-9052', typ: 'Leitung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
-      { id: 'V-S6', mission: 'STD', von: 'O-9052', nach: 'L-9053', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
-      { id: 'V-S7', mission: 'STD', von: 'P-9055', nach: 'L-9054', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Standard-Dossier' },
-      { id: 'V-S8', mission: 'STD', von: 'P-9056', nach: 'O-9052', typ: 'Zugehörigkeit', richtung: 'gerichtet', bewertung: 'B3', quelle: 'Mandat' },
-      { id: 'V-S9', mission: 'STD', von: 'P-9057', nach: 'P-9055', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C3', quelle: 'Standard-Dossier' },
-      { id: 'V-S10', mission: 'STD', von: 'P-9058', nach: 'L-9055', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Standard-Dossier' },
-      { id: 'V-S11', mission: 'STD', von: 'P-9058', nach: 'P-9057', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'D4', quelle: 'unbestätigt' },
-      { id: 'V-S12', mission: 'STD', von: 'P-9060', nach: 'O-9054', typ: 'Leitung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
-      { id: 'V-S13', mission: 'STD', von: 'O-9054', nach: 'L-9057', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
-      { id: 'V-S14', mission: 'STD', von: 'O-9054', nach: 'O-9052', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Auftragsverhältnis' },
-      { id: 'V-S15', mission: 'STD', von: 'P-9059', nach: 'O-9053', typ: 'Zugehörigkeit', richtung: 'gerichtet', bewertung: 'B3', quelle: 'Treuhandmandat' },
-      { id: 'V-S16', mission: 'STD', von: 'O-9053', nach: 'L-9056', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
-      { id: 'V-S17', mission: 'STD', von: 'P-9061', nach: 'P-9059', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'D4', quelle: 'unbestätigt' },
-      { id: 'V-S18', mission: 'STD', von: 'P-9061', nach: 'O-9053', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Recherche' },
-      { id: 'V-S19', mission: 'STD', von: 'P-9062', nach: 'L-9058', typ: 'Leitung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
-      { id: 'V-S20', mission: 'STD', von: 'P-9063', nach: 'O-9055', typ: 'Leitung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
-      { id: 'V-S21', mission: 'STD', von: 'P-9063', nach: 'L-9059', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'D4', quelle: 'unbestätigt' },
-      { id: 'V-S22', mission: 'STD', von: 'P-9062', nach: 'P-9063', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C3', quelle: 'Standard-Dossier' },
-      { id: 'V-S23', mission: 'STD', von: 'P-9064', nach: 'P-9062', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'D5', quelle: 'unbestätigt' },
-      { id: 'V-S24', mission: 'STD', von: 'P-9053', nach: 'O-9051', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Netzbetrieb' },
-      { id: 'V-S25', mission: 'STD', von: 'P-9054', nach: 'L-9052', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Standard-Dossier' },
-      { id: 'V-S26', mission: 'STD', von: 'P-9054', nach: 'P-9053', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'D4', quelle: 'unbestätigt' },
-      { id: 'V-S27', mission: 'STD', von: 'P-9060', nach: 'P-9058', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C4', quelle: 'Standard-Dossier' }
+      { id: 'V-S1', mission: 'STD', von: 'P-0004', nach: 'O-0001', typ: 'Zugehörigkeit', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Beiratsmandat' },
+      { id: 'V-S2', mission: 'STD', von: 'O-0001', nach: 'L-0001', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
+      { id: 'V-S3', mission: 'STD', von: 'P-0005', nach: 'O-0001', typ: 'Zugehörigkeit', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Steuerberatungsmandat' },
+      { id: 'V-S4', mission: 'STD', von: 'O-0001', nach: 'O-0005', typ: 'Finanzierung', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Zahlungswege' },
+      { id: 'V-S5', mission: 'STD', von: 'P-0008', nach: 'O-0002', typ: 'Leitung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
+      { id: 'V-S6', mission: 'STD', von: 'O-0002', nach: 'L-0003', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
+      { id: 'V-S7', mission: 'STD', von: 'P-0008', nach: 'L-0004', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Standard-Dossier' },
+      { id: 'V-S8', mission: 'STD', von: 'P-0009', nach: 'O-0002', typ: 'Zugehörigkeit', richtung: 'gerichtet', bewertung: 'B3', quelle: 'Mandat' },
+      { id: 'V-S9', mission: 'STD', von: 'P-0010', nach: 'P-0008', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C3', quelle: 'Standard-Dossier' },
+      { id: 'V-S10', mission: 'STD', von: 'P-0011', nach: 'L-0005', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Standard-Dossier' },
+      { id: 'V-S11', mission: 'STD', von: 'P-0011', nach: 'P-0010', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'D4', quelle: 'unbestätigt' },
+      { id: 'V-S12', mission: 'STD', von: 'P-0013', nach: 'O-0004', typ: 'Leitung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
+      { id: 'V-S13', mission: 'STD', von: 'O-0004', nach: 'L-0007', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
+      { id: 'V-S14', mission: 'STD', von: 'O-0004', nach: 'O-0002', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Auftragsverhältnis' },
+      { id: 'V-S15', mission: 'STD', von: 'P-0012', nach: 'O-0003', typ: 'Zugehörigkeit', richtung: 'gerichtet', bewertung: 'B3', quelle: 'Treuhandmandat' },
+      { id: 'V-S16', mission: 'STD', von: 'O-0003', nach: 'L-0006', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
+      { id: 'V-S17', mission: 'STD', von: 'P-0014', nach: 'P-0012', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'D4', quelle: 'unbestätigt' },
+      { id: 'V-S18', mission: 'STD', von: 'P-0014', nach: 'O-0003', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Recherche' },
+      { id: 'V-S19', mission: 'STD', von: 'P-0015', nach: 'L-0008', typ: 'Leitung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
+      { id: 'V-S20', mission: 'STD', von: 'P-0016', nach: 'O-0005', typ: 'Leitung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Standard-Dossier' },
+      { id: 'V-S21', mission: 'STD', von: 'P-0016', nach: 'L-0009', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'D4', quelle: 'unbestätigt' },
+      { id: 'V-S22', mission: 'STD', von: 'P-0015', nach: 'P-0016', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C3', quelle: 'Standard-Dossier' },
+      { id: 'V-S23', mission: 'STD', von: 'P-0017', nach: 'P-0015', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'D5', quelle: 'unbestätigt' },
+      { id: 'V-S24', mission: 'STD', von: 'P-0006', nach: 'O-0001', typ: 'Nutzung', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Netzbetrieb' },
+      { id: 'V-S25', mission: 'STD', von: 'P-0007', nach: 'L-0002', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Standard-Dossier' },
+      { id: 'V-S26', mission: 'STD', von: 'P-0007', nach: 'P-0006', typ: 'Kontakt', richtung: 'gerichtet', bewertung: 'D4', quelle: 'unbestätigt' },
+      { id: 'V-S27', mission: 'STD', von: 'P-0013', nach: 'P-0011', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C4', quelle: 'Standard-Dossier' }
     ]
   },
   entitaeten: [
     {
       id: 'P-0001', typ: 'Person', land: 'DE', mission: 'M1', name: 'Emre Kaya', bild: null, aliase: ['KIEBITZ'],
-      rolle: 'Kontakt vor Ort. Kfz-Mechaniker im Kfz-Betrieb L-9052, sieht, wer abends kommt und was geladen wird.',
-      eckdaten: ['Jahrgang 1990', 'wohnhaft in Neukölln', 'Schulden bei einem Händler aus dem Umfeld von P-9054', 'zuverlässig, aber erpressbar'],
+      rolle: 'Kontakt vor Ort. Kfz-Mechaniker im Kfz-Betrieb L-0002, sieht, wer abends kommt und was geladen wird.',
+      eckdaten: ['Jahrgang 1990', 'wohnhaft in Neukölln', 'Schulden bei einem Händler aus dem Umfeld von P-0007', 'zuverlässig, aber erpressbar'],
       bedrohung: { stufe: 2, begruendung: 'Kein eigener Zugriff auf die Kette; seine Lage macht ihn verwundbar.' },
       reg: 'S9-Reg. 26-0201/0101', verteiler: 'Zugangskreis V-26/0201; keine Weitergabe', aktMin: -900
     },
     {
       id: 'P-0002', typ: 'Person', land: 'DE', mission: 'M1', name: 'Unbekannt (Deckname "Kutscher")', bild: null, aliase: ['Kutscher'],
-      rolle: 'Fahrer des Transporters. Identität nicht bekannt, mutmaßlich im Umfeld von P-9063.',
-      eckdaten: ['männlich, mittleres Alter', 'fährt abends zwischen L-9052 und L-9058', 'Kennzeichen wechselnd'],
+      rolle: 'Fahrer des Transporters. Identität nicht bekannt, mutmaßlich im Umfeld von P-0016.',
+      eckdaten: ['männlich, mittleres Alter', 'fährt abends zwischen L-0002 und L-0008', 'Kennzeichen wechselnd'],
       bedrohung: { stufe: 3, begruendung: 'Bewegt die Ladung selbst; Verhalten bei Annäherung unbekannt.' },
       reg: 'S9-Reg. 26-0201/0102', verteiler: 'Zugangskreis V-26/0201', aktMin: -600
     },
     {
       id: 'P-0003', typ: 'Person', land: 'DE', mission: 'M1', name: 'Unbekannt (Deckname "Händler")', bild: null, aliase: ['Händler'],
       rolle: 'Mutmaßlicher Auftraggeber der Kette. Tritt nicht selbst auf; Weisungen erreichen die Beteiligten über Mittelsleute.',
-      eckdaten: ['Identität nicht bekannt', 'Kontakt über verschlüsselte Kanäle', 'Zahlungsweg über O-9051 vermutet'],
+      eckdaten: ['Identität nicht bekannt', 'Kontakt über verschlüsselte Kanäle', 'Zahlungsweg über O-0001 vermutet'],
       bedrohung: { stufe: 4, begruendung: 'Verfügt über Mittel und Begleitschutz; Annäherung nur mit Freigabe des Ansprechpartners.' },
       reg: 'S9-Reg. 26-0201/0103', verteiler: 'Zugangskreis V-26/0201', aktMin: -600
     }
   ],
   verbindungen: [
-    { id: 'V-01', mission: 'M1', von: 'P-0001', nach: 'L-9052', typ: 'Beschäftigung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Eigenangabe Kontakt, belegt' },
-    { id: 'V-02', mission: 'M1', von: 'P-0001', nach: 'P-9054', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'B2', quelle: 'Kontakt KIEBITZ' },
-    { id: 'V-03', mission: 'M1', von: 'P-0002', nach: 'L-9052', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Kontakt KIEBITZ' },
-    { id: 'V-04', mission: 'M1', von: 'P-0002', nach: 'L-9058', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
-    { id: 'V-05', mission: 'M1', von: 'P-0002', nach: 'P-9063', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
-    { id: 'V-06', mission: 'M1', von: 'P-0003', nach: 'P-9053', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'D4', quelle: 'Support Element, unbestätigt' },
-    { id: 'V-07', mission: 'M1', von: 'P-0003', nach: 'O-9051', typ: 'Finanzierung', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Finanzauswertung Support Element' },
-    { id: 'V-08', mission: 'M1', von: 'L-9052', nach: 'L-9058', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
-    { id: 'V-09', mission: 'M1', von: 'L-9058', nach: 'O-9055', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
-    { id: 'V-10', mission: 'M1', von: 'O-9055', nach: 'L-9059', typ: 'Transport', richtung: 'gerichtet', bewertung: 'D4', quelle: 'Einschätzung Ansprechpartner, unbestätigt' }
+    { id: 'V-01', mission: 'M1', von: 'P-0001', nach: 'L-0002', typ: 'Beschäftigung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Eigenangabe Kontakt, belegt' },
+    { id: 'V-02', mission: 'M1', von: 'P-0001', nach: 'P-0007', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'B2', quelle: 'Kontakt KIEBITZ' },
+    { id: 'V-03', mission: 'M1', von: 'P-0002', nach: 'L-0002', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Kontakt KIEBITZ' },
+    { id: 'V-04', mission: 'M1', von: 'P-0002', nach: 'L-0008', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
+    { id: 'V-05', mission: 'M1', von: 'P-0002', nach: 'P-0016', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
+    { id: 'V-06', mission: 'M1', von: 'P-0003', nach: 'P-0006', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'D4', quelle: 'Support Element, unbestätigt' },
+    { id: 'V-07', mission: 'M1', von: 'P-0003', nach: 'O-0001', typ: 'Finanzierung', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Finanzauswertung Support Element' },
+    { id: 'V-08', mission: 'M1', von: 'L-0002', nach: 'L-0008', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
+    { id: 'V-09', mission: 'M1', von: 'L-0008', nach: 'O-0005', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
+    { id: 'V-10', mission: 'M1', von: 'O-0005', nach: 'L-0009', typ: 'Transport', richtung: 'gerichtet', bewertung: 'D4', quelle: 'Einschätzung Ansprechpartner, unbestätigt' }
   ],
   missionen: [
     {
       id: 'M1',
       /* Schlüsselfiguren der Phase 1: zu Missionsbeginn nur als Rudiment bekannt (Rolle, Bedrohungsbewertung). Vollzugriff nach Einreichung: Sichtung, Einschätzung, Prüfung durch den Ansprechpartner. */
-      schluessel: ['P-0002', 'P-0003', 'P-9054', 'P-9063'],
+      schluessel: ['P-0002', 'P-0003', 'P-0007', 'P-0016'],
       nummer: 'V-26/0201',
       name: 'Transportlinie Ost',
       art: 'Observation',
@@ -411,7 +411,7 @@ var SCENARIO = {
       auftragsnachricht: 'Auftrag V-26/0201 Transportlinie Ost zugewiesen. Zugang Stufe 2. Es geht um eine Ladung, Details brauchst du nicht. Du lieferst Gesichter, Belege und die Strecke. Meldefenster täglich 0600Z und 1800Z, Frist 30 Minuten. Der Termin steht fest.',
       kanalGegenstelle: { asset: 'KIEBITZ' },
       /* Zustandsmodell: Dossier des Kontakts und sein Umfeld (Orte, an denen eine Verstärkung ihn gefährdet) */
-      haltung: { asset: { dossier: 'P-0001', umfeld: ['P-0001', 'L-9052', 'S-01', 'S-02'] } },
+      haltung: { asset: { dossier: 'P-0001', umfeld: ['P-0001', 'L-0002', 'S-01', 'S-02'] } },
       zielpersonen: ['P-0002', 'P-0003'],
       legenden: [
         {
@@ -455,10 +455,10 @@ var SCENARIO = {
       legendeStart: 'haupt',
       standorte: [
         { id: 'S-01', name: 'Unterkunft Neukölln, Umfeld Reuterkiez', land: 'DE' },
-        { id: 'S-02', name: 'Sonnenallee, Umfeld Kfz-Betrieb (L-9052)', land: 'DE' },
-        { id: 'S-03', name: 'Ludwigsfelde, Umfeld Logistikpark (L-9058)', land: 'DE' },
+        { id: 'S-02', name: 'Sonnenallee, Umfeld Kfz-Betrieb (L-0002)', land: 'DE' },
+        { id: 'S-03', name: 'Ludwigsfelde, Umfeld Logistikpark (L-0008)', land: 'DE' },
         { id: 'S-04', name: 'Rastplatz am südlichen Berliner Ring', land: 'DE' },
-        { id: 'S-05', name: 'Frankfurt (Oder), Umfeld Oderpromenade (L-9059)', land: 'DE' },
+        { id: 'S-05', name: 'Frankfurt (Oder), Umfeld Oderpromenade (L-0009)', land: 'DE' },
         { id: 'S-06', name: 'Grenzübergang Frankfurt (Oder), Umfeld Stadtbrücke', land: 'DE' },
         { id: 'S-07', name: 'Ausweichunterkunft Potsdam', land: 'DE' }
       ],
@@ -478,17 +478,17 @@ var SCENARIO = {
         'Begegnungen mit Personen der Kette sind vorher mit dem Ansprechpartner abzustimmen und anschließend zu melden.',
         'Keine Offenlegung der Zugehörigkeit zur Dienststelle; es gibt keine Anzeige bei Behörden.',
         'Meldefenster 0600Z und 1800Z, Frist jeweils 30 Minuten. Erstes Versäumnis: Nachmeldung auf Anforderung. Nach zwei Versäumnissen in Folge leitet die Gegenstelle Option E ein.',
-        'Ab Bedrohungsstufe 4 Abstimmung mit dem Ansprechpartner vor jeder weiteren Maßnahme. Stufe 4 und 5 gelten für P-9060 und sein Umfeld.',
+        'Ab Bedrohungsstufe 4 Abstimmung mit dem Ansprechpartner vor jeder weiteren Maßnahme. Stufe 4 und 5 gelten für P-0013 und sein Umfeld.',
         'Dienstliche Unterlagen werden nicht in Papierform geführt.'
       ],
       zeitfenster: [
-        { id: 'W-01', titel: 'Verladung in L-9052 (angekündigt, abends); Transporttermin', vonMin: 9900, bisMin: 10080 },
+        { id: 'W-01', titel: 'Verladung in L-0002 (angekündigt, abends); Transporttermin', vonMin: 9900, bisMin: 10080 },
         { id: 'W-02', titel: 'Treffen mit KIEBITZ (P-0001) in der Werkstatt', vonMin: 600, bisMin: 660 },
-        { id: 'W-03', titel: 'Zwischenlagerung in L-9058 (Dauer unbekannt, vermutet)', vonMin: 10080, bisMin: 10500 },
-        { id: 'W-04', titel: 'Übergabe in der Nähe von L-9059 vor der Grenze (vermutet)', vonMin: 10500, bisMin: 11100 }
+        { id: 'W-03', titel: 'Zwischenlagerung in L-0008 (Dauer unbekannt, vermutet)', vonMin: 10080, bisMin: 10500 },
+        { id: 'W-04', titel: 'Übergabe in der Nähe von L-0009 vor der Grenze (vermutet)', vonMin: 10500, bisMin: 11100 }
       ],
       risiken: [
-        { id: 'R-01', risiko: 'P-9060 und sein Sicherheitsdienst erkennen die Beobachtung', wahrscheinlichkeit: 'mittel', auswirkung: 'hoch',
+        { id: 'R-01', risiko: 'P-0013 und sein Sicherheitsdienst erkennen die Beobachtung', wahrscheinlichkeit: 'mittel', auswirkung: 'hoch',
           gegenmassnahme: 'Keine Annäherung an Begleitfahrzeuge; Anmarschwege wechseln; Ausweichidentität bereithalten.' },
         { id: 'R-02', risiko: 'KIEBITZ wird in der Werkstatt enttarnt', wahrscheinlichkeit: 'mittel', auswirkung: 'sehr hoch',
           gegenmassnahme: 'Kontakt auf vereinbarte Fenster begrenzen; keine Nachfragen im Betrieb.' },
@@ -502,7 +502,7 @@ var SCENARIO = {
       assets: [
         { name: 'ARGUS', rolle: 'Ansprechpartner (Führung, Freigaben, Bewertung)', kontaktweg: 'Kanal Ansprechpartner' },
         { name: 'DISPO', rolle: 'Support Element (Auswertung, Dokumente, Logistik)', kontaktweg: 'Kanal Support Element' },
-        { name: 'KIEBITZ', rolle: 'Kontakt vor Ort (P-0001), Mechaniker und Zuträger in L-9052', kontaktweg: 'Kanal Kontakt vor Ort, Treffen gemäß W-02' },
+        { name: 'KIEBITZ', rolle: 'Kontakt vor Ort (P-0001), Mechaniker und Zuträger in L-0002', kontaktweg: 'Kanal Kontakt vor Ort, Treffen gemäß W-02' },
         { name: 'SPERBER', rolle: 'Ersatzkraft; übernimmt, wenn der Agent abbricht', kontaktweg: 'ausschließlich über ARGUS' },
         { name: 'ARCHIV', rolle: 'Dokumentenstelle (Ausweispapiere)', kontaktweg: 'ausschließlich über DISPO' }
       ],
@@ -538,15 +538,15 @@ var SCENARIO = {
         { kanal: 'asset', lagerelevant: true, text: 'Heute Abend standen zwei Transporter im Hof. Beim zweiten war die Plane neu. Die Kisten sind schwerer als normale Ersatzteile.', ausloeser: { typ: 'zeit', sek: 90 } },
         { kanal: 'handler', lagerelevant: false, text: 'Der Termin bleibt. Wenn du noch etwas brauchst, bitte jetzt melden und nicht erst am Vortag.', ausloeser: { typ: 'zeit', sek: 180 } },
         { kanal: 'support', lagerelevant: false, text: 'Hinweis: Dokumente und Chatverläufe können im Dossier eingereicht werden. DISPO wertet aus, sobald der Ansprechpartner den Eingang bestätigt hat.', ausloeser: { typ: 'zeit', sek: 240 } },
-        { kanal: 'asset', lagerelevant: true, text: 'Der Chef der Werkstatt hat heute jemanden aus Ludwigsfelde angerufen, ich habe nur den Namen {P-9062|nach} verstanden.', nennt: ['P-9062'], ausloeser: { typ: 'zeit', sek: 420 } },
-        { kanal: 'handler', lagerelevant: true, text: '{P-9062|nach} passt zum Zwischenlager. Bitte prüfen, wer sonst dort ein- und ausgeht.', nennt: ['P-9062'], ausloeser: { typ: 'checkin', sek: 15 } },
+        { kanal: 'asset', lagerelevant: true, text: 'Der Chef der Werkstatt hat heute jemanden aus Ludwigsfelde angerufen, ich habe nur den Namen {P-0015|nach} verstanden.', nennt: ['P-0015'], ausloeser: { typ: 'zeit', sek: 420 } },
+        { kanal: 'handler', lagerelevant: true, text: '{P-0015|nach} passt zum Zwischenlager. Bitte prüfen, wer sonst dort ein- und ausgeht.', nennt: ['P-0015'], ausloeser: { typ: 'checkin', sek: 15 } },
         { kanal: 'support', lagerelevant: false, text: 'Der Logistikpark in Ludwigsfelde wechselt auffällig oft den Mieter. Ob das hier Zufall ist, kann ich nicht belegen.', ausloeser: { typ: 'zeit', sek: 600 } },
         { kanal: 'asset', lagerelevant: true, text: 'Ein Mann mit Sicherheitsjacke war heute da. Er hat nichts gesagt, nur den Hof gesehen und fotografiert.', ausloeser: { typ: 'ziel', ziel: 'Z-P1', sek: 25 } },
         { kanal: 'handler', lagerelevant: true, text: 'Die Strecke zählt mehr als einzelne Namen. Wenn wir sie lesen können, müssen wir nicht jeder Person hinterher.', ausloeser: { typ: 'ziel', ziel: 'Z-P3', sek: 20 } }
       ],
       extraktion: {
         stufeStart: 2,
-        begruendungStart: 'Ausgangsbewertung des Ansprechpartners: Begleitschutz durch P-9060 vermutet, kein Hinweis auf Erfassung der Hauptidentität.',
+        begruendungStart: 'Ausgangsbewertung des Ansprechpartners: Begleitschutz durch P-0013 vermutet, kein Hinweis auf Erfassung der Hauptidentität.',
         optionen: [
           { id: 'A', titel: 'Geplanter Abzug', vorlauf: '24 bis 72 h', text: 'Geordnete Beendigung unter aktiver Identität, Abreise über reguläre Verkehrswege.' },
           { id: 'B', titel: 'Beschleunigter Abzug', vorlauf: 'unter 12 h', text: 'Verkürzte Beendigung, Abholung durch das Support Element am Übergabepunkt Potsdam.' },
@@ -569,15 +569,15 @@ var SCENARIO = {
       },
       /* Verdeckte Lage: wird dem Agenten nie angezeigt. Der Ansprechpartner gleicht Einschätzungen des Agenten damit ab. */
       wahrheit: {
-        'P-9051': 'wissentlich', 'P-9052': 'unbeteiligt', 'P-9053': 'wissentlich', 'P-9054': 'unwissentlich', 'P-9058': 'unwissentlich',
-        'P-9060': 'wissentlich', 'P-9062': 'wissentlich', 'P-9063': 'wissentlich', 'P-9064': 'unwissentlich'
+        'P-0004': 'wissentlich', 'P-0005': 'unbeteiligt', 'P-0006': 'wissentlich', 'P-0007': 'unwissentlich', 'P-0011': 'unwissentlich',
+        'P-0013': 'wissentlich', 'P-0015': 'wissentlich', 'P-0016': 'wissentlich', 'P-0017': 'unwissentlich'
       },
       /* Route der Analyse: Stationen der Strecke in Reihenfolge (Ortsdossiers) */
-      strecke: ['L-9052', 'L-9058', 'O-9055', 'L-9059'],
+      strecke: ['L-0002', 'L-0008', 'O-0005', 'L-0009'],
       route: {
         titel: 'Vermutete Transportroute',
         hinweis: 'Rekonstruiert aus Aussagen und Standorten. Reihenfolge der Stationen: belegt durch den Kontakt. Fahrweg und Zeiten: errechnet, nicht beobachtet.',
-        abschnitte: [{"id":"A1","von":"L-9052","nach":"L-9058","bewertung":"C3","titel":"Neukölln – Ludwigsfelde","text":"Übergabe der Ware im Kfz-Betrieb, danach Umschlag im Logistikpark. Die Reihenfolge der Stationen ist durch KIEBITZ belegt, der gefahrene Weg ist errechnet und nicht beobachtet.","km":32.1,"min":35,"haupt":[[52.4755,13.4528],[52.4768,13.4502],[52.4716,13.4605],[52.4643,13.4551],[52.4607,13.4171],[52.4635,13.4031],[52.4597,13.4109],[52.4517,13.4152],[52.4525,13.4078],[52.4402,13.3952],[52.4393,13.3816],[52.4258,13.3741],[52.406,13.3569],[52.385,13.3344],[52.3801,13.3144],[52.3697,13.2989],[52.3547,13.2923],[52.343,13.283],[52.3084,13.288],[52.2891,13.2809],[52.2964,13.2661],[52.3017,13.2609]],"alternative":{"km":44.5,"min":37,"pts":[[52.4755,13.4528],[52.4768,13.4502],[52.4716,13.4605],[52.4633,13.4534],[52.4506,13.4639],[52.4298,13.5061],[52.4253,13.5212],[52.4119,13.5236],[52.3974,13.5187],[52.3793,13.5418],[52.3722,13.5472],[52.3598,13.5482],[52.3454,13.5551],[52.3207,13.5536],[52.3189,13.5488],[52.3192,13.507],[52.3068,13.4454],[52.306,13.4288],[52.3079,13.35],[52.3057,13.3234],[52.3078,13.2921],[52.3115,13.2881],[52.3196,13.2889],[52.3197,13.2858],[52.304,13.2784],[52.3058,13.2686],[52.3017,13.2609]]}},{"id":"A2","von":"L-9058","nach":"L-9059","bewertung":"D4","titel":"Ludwigsfelde – Frankfurt (Oder)","text":"Fernstück nach Osten. Fahrweg vermutet; die Alternative über den östlichen Berliner Ring wäre bei Sperrung oder Kontrolle plausibel und ist länger.","km":95.4,"min":65,"haupt":[[52.3017,13.2609],[52.2941,13.2708],[52.2965,13.2766],[52.2959,13.284],[52.3054,13.2882],[52.3073,13.2932],[52.3055,13.3254],[52.3078,13.3503],[52.3061,13.441],[52.3193,13.5094],[52.3197,13.583],[52.3114,13.6078],[52.3108,13.6481],[52.3246,13.7153],[52.3228,13.7647],[52.3103,13.8239],[52.313,13.872],[52.3164,13.8969],[52.313,13.9227],[52.3116,13.959],[52.3156,13.9911],[52.3299,14.0418],[52.3343,14.0641],[52.3364,14.147],[52.3439,14.1797],[52.3372,14.2111],[52.3354,14.2486],[52.328,14.2717],[52.3241,14.2936],[52.3202,14.4025],[52.3199,14.5063],[52.318,14.5205],[52.3206,14.5206],[52.3227,14.5301],[52.3259,14.5346],[52.3332,14.5347],[52.34,14.5403],[52.3463,14.5393],[52.3473,14.5535],[52.3473,14.5506],[52.3491,14.5514],[52.3481,14.5536]],"alternative":{"km":135.6,"min":121,"pts":[[52.3017,13.2609],[52.2941,13.2708],[52.2965,13.2766],[52.2959,13.284],[52.3054,13.2882],[52.3073,13.2932],[52.3055,13.3254],[52.3078,13.3503],[52.3061,13.441],[52.3193,13.5094],[52.3197,13.583],[52.3114,13.6078],[52.3108,13.6481],[52.3144,13.6714],[52.3243,13.7123],[52.325,13.7457],[52.3299,13.751],[52.3665,13.7634],[52.3878,13.7863],[52.4204,13.7854],[52.4247,13.7887],[52.4258,13.8249],[52.4356,13.837],[52.4402,13.8517],[52.4476,13.8562],[52.4522,13.8667],[52.4833,13.8483],[52.4975,13.8433],[52.507,13.8461],[52.5102,13.8759],[52.5084,13.8956],[52.5223,13.899],[52.5171,13.8987],[52.5255,13.9211],[52.525,13.9284],[52.5225,13.9303],[52.5074,13.9302],[52.5003,13.922],[52.4807,13.9112],[52.4801,13.9627],[52.4773,13.9737],[52.4942,14.0224],[52.4943,14.0438],[52.497,14.0596],[52.4998,14.1037],[52.4907,14.1246],[52.4928,14.157],[52.463,14.2052],[52.4542,14.209],[52.4517,14.2203],[52.4278,14.243],[52.4248,14.2593],[52.4084,14.2941],[52.4048,14.328],[52.4011,14.3386],[52.3863,14.3373],[52.3755,14.3426],[52.3614,14.3432],[52.3528,14.3506],[52.3407,14.3545],[52.3212,14.3516],[52.3212,14.3495],[52.3205,14.4758],[52.318,14.5205],[52.3206,14.5206],[52.3227,14.5301],[52.3259,14.5346],[52.3332,14.5347],[52.34,14.5403],[52.3463,14.5393],[52.3473,14.5535],[52.3473,14.5506],[52.3491,14.5514],[52.3481,14.5536]]}},{"id":"A3","von":"L-9059","nach":"S-06","bewertung":"E5","titel":"Frankfurt (Oder) – Grenzübergang","text":"Letzter Abschnitt vor der Grenze. Nur als Annahme geführt; ob die Ladung hier tatsächlich übergeht, ist nicht belegt.","km":1.4,"min":3,"haupt":[[52.3481,14.5536],[52.3472,14.5506],[52.3479,14.5637]],"alternative":null}]
+        abschnitte: [{"id":"A1","von":"L-0002","nach":"L-0008","bewertung":"C3","titel":"Neukölln – Ludwigsfelde","text":"Übergabe der Ware im Kfz-Betrieb, danach Umschlag im Logistikpark. Die Reihenfolge der Stationen ist durch KIEBITZ belegt, der gefahrene Weg ist errechnet und nicht beobachtet.","km":32.1,"min":35,"haupt":[[52.4755,13.4528],[52.4768,13.4502],[52.4716,13.4605],[52.4643,13.4551],[52.4607,13.4171],[52.4635,13.4031],[52.4597,13.4109],[52.4517,13.4152],[52.4525,13.4078],[52.4402,13.3952],[52.4393,13.3816],[52.4258,13.3741],[52.406,13.3569],[52.385,13.3344],[52.3801,13.3144],[52.3697,13.2989],[52.3547,13.2923],[52.343,13.283],[52.3084,13.288],[52.2891,13.2809],[52.2964,13.2661],[52.3017,13.2609]],"alternative":{"km":44.5,"min":37,"pts":[[52.4755,13.4528],[52.4768,13.4502],[52.4716,13.4605],[52.4633,13.4534],[52.4506,13.4639],[52.4298,13.5061],[52.4253,13.5212],[52.4119,13.5236],[52.3974,13.5187],[52.3793,13.5418],[52.3722,13.5472],[52.3598,13.5482],[52.3454,13.5551],[52.3207,13.5536],[52.3189,13.5488],[52.3192,13.507],[52.3068,13.4454],[52.306,13.4288],[52.3079,13.35],[52.3057,13.3234],[52.3078,13.2921],[52.3115,13.2881],[52.3196,13.2889],[52.3197,13.2858],[52.304,13.2784],[52.3058,13.2686],[52.3017,13.2609]]}},{"id":"A2","von":"L-0008","nach":"L-0009","bewertung":"D4","titel":"Ludwigsfelde – Frankfurt (Oder)","text":"Fernstück nach Osten. Fahrweg vermutet; die Alternative über den östlichen Berliner Ring wäre bei Sperrung oder Kontrolle plausibel und ist länger.","km":95.4,"min":65,"haupt":[[52.3017,13.2609],[52.2941,13.2708],[52.2965,13.2766],[52.2959,13.284],[52.3054,13.2882],[52.3073,13.2932],[52.3055,13.3254],[52.3078,13.3503],[52.3061,13.441],[52.3193,13.5094],[52.3197,13.583],[52.3114,13.6078],[52.3108,13.6481],[52.3246,13.7153],[52.3228,13.7647],[52.3103,13.8239],[52.313,13.872],[52.3164,13.8969],[52.313,13.9227],[52.3116,13.959],[52.3156,13.9911],[52.3299,14.0418],[52.3343,14.0641],[52.3364,14.147],[52.3439,14.1797],[52.3372,14.2111],[52.3354,14.2486],[52.328,14.2717],[52.3241,14.2936],[52.3202,14.4025],[52.3199,14.5063],[52.318,14.5205],[52.3206,14.5206],[52.3227,14.5301],[52.3259,14.5346],[52.3332,14.5347],[52.34,14.5403],[52.3463,14.5393],[52.3473,14.5535],[52.3473,14.5506],[52.3491,14.5514],[52.3481,14.5536]],"alternative":{"km":135.6,"min":121,"pts":[[52.3017,13.2609],[52.2941,13.2708],[52.2965,13.2766],[52.2959,13.284],[52.3054,13.2882],[52.3073,13.2932],[52.3055,13.3254],[52.3078,13.3503],[52.3061,13.441],[52.3193,13.5094],[52.3197,13.583],[52.3114,13.6078],[52.3108,13.6481],[52.3144,13.6714],[52.3243,13.7123],[52.325,13.7457],[52.3299,13.751],[52.3665,13.7634],[52.3878,13.7863],[52.4204,13.7854],[52.4247,13.7887],[52.4258,13.8249],[52.4356,13.837],[52.4402,13.8517],[52.4476,13.8562],[52.4522,13.8667],[52.4833,13.8483],[52.4975,13.8433],[52.507,13.8461],[52.5102,13.8759],[52.5084,13.8956],[52.5223,13.899],[52.5171,13.8987],[52.5255,13.9211],[52.525,13.9284],[52.5225,13.9303],[52.5074,13.9302],[52.5003,13.922],[52.4807,13.9112],[52.4801,13.9627],[52.4773,13.9737],[52.4942,14.0224],[52.4943,14.0438],[52.497,14.0596],[52.4998,14.1037],[52.4907,14.1246],[52.4928,14.157],[52.463,14.2052],[52.4542,14.209],[52.4517,14.2203],[52.4278,14.243],[52.4248,14.2593],[52.4084,14.2941],[52.4048,14.328],[52.4011,14.3386],[52.3863,14.3373],[52.3755,14.3426],[52.3614,14.3432],[52.3528,14.3506],[52.3407,14.3545],[52.3212,14.3516],[52.3212,14.3495],[52.3205,14.4758],[52.318,14.5205],[52.3206,14.5206],[52.3227,14.5301],[52.3259,14.5346],[52.3332,14.5347],[52.34,14.5403],[52.3463,14.5393],[52.3473,14.5535],[52.3473,14.5506],[52.3491,14.5514],[52.3481,14.5536]]}},{"id":"A3","von":"L-0009","nach":"S-06","bewertung":"E5","titel":"Frankfurt (Oder) – Grenzübergang","text":"Letzter Abschnitt vor der Grenze. Nur als Annahme geführt; ob die Ladung hier tatsächlich übergeht, ist nicht belegt.","km":1.4,"min":3,"haupt":[[52.3481,14.5536],[52.3472,14.5506],[52.3479,14.5637]],"alternative":null}]
       },
       zugriffTypen: ['Zugriff', 'Eingriff', 'Eliminierung'],
       wissensOptionen: ['wissentlich', 'unwissentlich', 'unbeteiligt', 'unklar']
@@ -646,7 +646,7 @@ var SCENARIO = {
         ]] },
         { ueberschrift: '2 Veranlassung', absaetze: [[
           'Auslöser sind mehrere voneinander unabhängige Hinweise. Der Auftraggeber der Kette ist ',
-          { r: 'b', t: 'nicht bekannt; die Auswertung vermutet ein Netzwerk aus dem Umfeld von O-9051', stufe: 4, antrag: 'abgelehnt', antwort: 'Das liegt über deiner Zugangsstufe. Antrag abgelehnt.' },
+          { r: 'b', t: 'nicht bekannt; die Auswertung vermutet ein Netzwerk aus dem Umfeld von O-0001', stufe: 4, antrag: 'abgelehnt', antwort: 'Das liegt über deiner Zugangsstufe. Antrag abgelehnt.' },
           '. Die Dienststelle klärt auf, ohne dass die Tätigkeit einer Behörde zugeordnet werden kann.'
         ]] },
         { ueberschrift: '3 Folgephasen', absaetze: [[
@@ -663,7 +663,7 @@ var SCENARIO = {
       id: 'D-M1-02', mission: 'M1', titel: 'Lagevermerk Transportstrecke', reg: 'S9-Reg. 26-0201/LV-01', art: 'Lagevermerk', stand: 'zu Beginn des Auftrags', zugang: 2,
       abschnitte: [
         { ueberschrift: '1 Strecke', absaetze: [[
-          'Vermutete Strecke: Kfz-Betrieb Neukölln (L-9052), Logistikpark Ludwigsfelde (L-9058), Oderland Transit (O-9055), Umfeld Frankfurt (Oder) (L-9059), danach Grenze. Die Reihenfolge ist belegt, die Fahrwege dazwischen sind es nicht.'
+          'Vermutete Strecke: Kfz-Betrieb Neukölln (L-0002), Logistikpark Ludwigsfelde (L-0008), Oderland Transit (O-0005), Umfeld Frankfurt (Oder) (L-0009), danach Grenze. Die Reihenfolge ist belegt, die Fahrwege dazwischen sind es nicht.'
         ]] },
         { ueberschrift: '2 Offene Fragen', absaetze: [[
           'Unklar sind der genaue Termin des Starts am Abend, die Dauer der Zwischenlagerung und der Weg über den Berliner Ring. ',
@@ -696,9 +696,9 @@ var SCENARIO = {
       /* Akteure des Auftrags (ungefähr) */
       'P-0001': [52.4737, 13.4513], 'P-0002': [52.3012, 13.2612],
       /* Standard-Dossier (Deutschland): Personen auf Stadtteilebene, Firmen und Orte auf Straßenebene, ungefähr */
-      'P-9051': [52.5087, 13.3007], 'P-9052': [52.5214, 13.4041], 'P-9053': [52.4941, 13.4209], 'P-9054': [52.5392, 13.5074], 'P-9055': [53.5904, 9.9914], 'P-9056': [53.5427, 9.9364], 'P-9057': [53.5999, 10.0038], 'P-9058': [51.5011, 6.7718], 'P-9059': [50.9559, 6.9154], 'P-9060': [51.5291, 7.4731], 'P-9061': [51.2326, 6.7707], 'P-9062': [52.3051, 13.261], 'P-9063': [52.3377, 14.5611], 'P-9064': [52.3992, 13.1035], 'O-9051': [52.5157, 13.3907], 'O-9052': [53.5389, 10.0816], 'O-9053': [51.2162, 6.7514], 'O-9054': [51.4923, 7.5053], 'O-9055': [52.3424, 14.5536], 'L-9051': [52.5145, 13.3892], 'L-9052': [52.4755, 13.4528], 'L-9053': [53.5377, 10.0801], 'L-9054': [53.5452, 10.0014], 'L-9055': [51.4543, 6.7409], 'L-9056': [51.215, 6.7499], 'L-9057': [51.4911, 7.5038], 'L-9058': [52.3016, 13.261], 'L-9059': [52.3482, 14.554]
+      'P-0004': [52.5087, 13.3007], 'P-0005': [52.5214, 13.4041], 'P-0006': [52.4941, 13.4209], 'P-0007': [52.5392, 13.5074], 'P-0008': [53.5904, 9.9914], 'P-0009': [53.5427, 9.9364], 'P-0010': [53.5999, 10.0038], 'P-0011': [51.5011, 6.7718], 'P-0012': [50.9559, 6.9154], 'P-0013': [51.5291, 7.4731], 'P-0014': [51.2326, 6.7707], 'P-0015': [52.3051, 13.261], 'P-0016': [52.3377, 14.5611], 'P-0017': [52.3992, 13.1035], 'O-0001': [52.5157, 13.3907], 'O-0002': [53.5389, 10.0816], 'O-0003': [51.2162, 6.7514], 'O-0004': [51.4923, 7.5053], 'O-0005': [52.3424, 14.5536], 'L-0001': [52.5145, 13.3892], 'L-0002': [52.4755, 13.4528], 'L-0003': [53.5377, 10.0801], 'L-0004': [53.5452, 10.0014], 'L-0005': [51.4543, 6.7409], 'L-0006': [51.215, 6.7499], 'L-0007': [51.4911, 7.5038], 'L-0008': [52.3016, 13.261], 'L-0009': [52.3482, 14.554]
     },
-    fensterOrt: { 'W-01': 'L-9052', 'W-02': 'S-02', 'W-03': 'L-9058', 'W-04': 'L-9059' },
+    fensterOrt: { 'W-01': 'L-0002', 'W-02': 'S-02', 'W-03': 'L-0008', 'W-04': 'L-0009' },
     herkunft: { M1: { name: 'Hannover', koord: [52.376, 9.738] } },
     zonen: { 'S-01': { r: 350 }, 'S-02': { r: 300 }, 'S-03': { r: 450 }, 'S-04': { r: 250 }, 'S-05': { r: 350 }, 'S-06': { r: 300 }, 'S-07': { r: 350 } }
   },
@@ -764,7 +764,7 @@ var SCENARIO = {
 
 /* Mission M1: Nachträge am Standard-Dossier (Rolle und Eckdaten im Zusammenhang mit der Transportlinie). */
 (function () {
-  var N = { "P-9051": [ "Mutmaßlicher Geldgeber hinter der Transportkette; über O-9051 fließen Zahlungen an O-9055.", "Zahlungsweg in Tranchen", "Wissensstand ungeklärt" ], "P-9052": [ "Führt die Bücher von O-9051; Beteiligung an der Kette nicht erkennbar.", "Wissensstand ungeklärt" ], "P-9053": [ "Richtet verschlüsselte Absprachekanäle der Kette ein; mutmaßlich Terminkoordination.", "Wissensstand ungeklärt" ], "P-9054": [ "Ihre Händler nutzen L-9052 als Verladeort; die Ware wird in Warenkisten getarnt. Kenntnis vom Inhalt ungeklärt.", "Wissensstand ungeklärt" ], "P-9058": [ "Beschafft mutmaßlich die Fahrzeuge für den Transport; Kontakt zu P-9060 belegt.", "Wissensstand ungeklärt" ], "P-9060": [ "Sein Sicherheitsdienst stellt mutmaßlich den Begleitschutz auf der Strecke Ludwigsfelde bis Frankfurt (Oder).", "Annäherung nur mit Freigabe" ], "P-9062": [ "Stellt die Zwischenlagerung in L-9058; Termin und Dauer unbekannt.", "Wissensstand ungeklärt" ], "P-9063": [ "Organisiert den Weitertransport über O-9055 bis zur Grenze; Übergabe in der Nähe von L-9059 vermutet.", "Wissensstand ungeklärt" ], "P-9064": [ "Mutmaßlich Zugang zu Genehmigungen (Durchfahrt, Ausnahmen); Kenntnis ungeklärt.", "Wissensstand ungeklärt" ], "O-9051": [ "Mutmaßliche Zahlungsstelle der Kette.", "Zahlungsweg zu O-9055" ], "O-9055": [ "Frachtführer für den Weitertransport bis zur Grenze nach Polen.", "Fahrzeuge mit wechselnden Kennzeichen" ], "L-9052": [ "Startpunkt der Strecke: Verladung abends, Zufahrt durch die Tordurchfahrt.", "Beobachtung aus dem Umfeld nötig" ], "L-9058": [ "Zwischenlager; mutmaßlich Umschlag auf ein anderes Fahrzeug.", "Dauer der Lagerung unbekannt" ], "L-9059": [ "Mutmaßlicher Übergabepunkt vor der Grenze.", "Nutzung durch O-9055 vermutet" ] };
+  var N = { "P-0004": [ "Mutmaßlicher Geldgeber hinter der Transportkette; über O-0001 fließen Zahlungen an O-0005.", "Zahlungsweg in Tranchen", "Wissensstand ungeklärt" ], "P-0005": [ "Führt die Bücher von O-0001; Beteiligung an der Kette nicht erkennbar.", "Wissensstand ungeklärt" ], "P-0006": [ "Richtet verschlüsselte Absprachekanäle der Kette ein; mutmaßlich Terminkoordination.", "Wissensstand ungeklärt" ], "P-0007": [ "Ihre Händler nutzen L-0002 als Verladeort; die Ware wird in Warenkisten getarnt. Kenntnis vom Inhalt ungeklärt.", "Wissensstand ungeklärt" ], "P-0011": [ "Beschafft mutmaßlich die Fahrzeuge für den Transport; Kontakt zu P-0013 belegt.", "Wissensstand ungeklärt" ], "P-0013": [ "Sein Sicherheitsdienst stellt mutmaßlich den Begleitschutz auf der Strecke Ludwigsfelde bis Frankfurt (Oder).", "Annäherung nur mit Freigabe" ], "P-0015": [ "Stellt die Zwischenlagerung in L-0008; Termin und Dauer unbekannt.", "Wissensstand ungeklärt" ], "P-0016": [ "Organisiert den Weitertransport über O-0005 bis zur Grenze; Übergabe in der Nähe von L-0009 vermutet.", "Wissensstand ungeklärt" ], "P-0017": [ "Mutmaßlich Zugang zu Genehmigungen (Durchfahrt, Ausnahmen); Kenntnis ungeklärt.", "Wissensstand ungeklärt" ], "O-0001": [ "Mutmaßliche Zahlungsstelle der Kette.", "Zahlungsweg zu O-0005" ], "O-0005": [ "Frachtführer für den Weitertransport bis zur Grenze nach Polen.", "Fahrzeuge mit wechselnden Kennzeichen" ], "L-0002": [ "Startpunkt der Strecke: Verladung abends, Zufahrt durch die Tordurchfahrt.", "Beobachtung aus dem Umfeld nötig" ], "L-0008": [ "Zwischenlager; mutmaßlich Umschlag auf ein anderes Fahrzeug.", "Dauer der Lagerung unbekannt" ], "L-0009": [ "Mutmaßlicher Übergabepunkt vor der Grenze.", "Nutzung durch O-0005 vermutet" ] };
   SCENARIO.standard.dossiers.forEach(function (e) {
     if (N[e.id]) e.nachtraege.push({ mission: 'M1', rolle: N[e.id][0], eckdaten: N[e.id].slice(1) });
   });

@@ -28,14 +28,14 @@ if(await p.evaluate(()=>!!LM())){
  const r2=await p.evaluate(()=>{dispatch({type:'PACE_EINGEREICHT',p:'Kanal Ansprechpartner',a:'Kanal Support',c:'Rückruf über Festnetz (einmal klingeln lassen)',e:'Persönliches Signal am Sammelpunkt',pin:'',abbruch:'Wenn ich zweimal dasselbe Fahrzeug sehe'});return MS(LM().id).pace.stand});
  ok(r2==='angenommen','sauberer Plan angenommen');
  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'mission'}));await p.waitForTimeout(400);
- ok(await p.evaluate(()=>!!document.getElementById('btn-pace')&&!!document.getElementById('btn-zp-karte')&&!document.getElementById('wi-g-P-9102')),'Panels: PACE und Karten-Button da, Wissensstände weg');
+ ok(await p.evaluate(()=>!!document.getElementById('btn-pace')&&!!document.getElementById('btn-zp-karte')&&!document.getElementById('wi-g-P-0019')),'Panels: PACE und Karten-Button da, Wissensstände weg');
  await p.screenshot({path:'auftrag.png',fullPage:true});
 }
 if(await p.evaluate(()=>!!LM())){
- await p.evaluate(()=>dispatch({type:'ZUGRIFF_ANGELEGT',typ:'Zugriff',bezug:'L-9052',text:'',r:'100'}));
+ await p.evaluate(()=>dispatch({type:'ZUGRIFF_ANGELEGT',typ:'Zugriff',bezug:'L-0002',text:'',r:'100'}));
  ok(await p.evaluate(()=>MS('M1').zugriff.length===1&&MS('M1').zugriff[0].r===100),'Zugriffspunkt ohne Begründungspflicht, Radius');
- await p.evaluate(()=>dispatch({type:'ZUGRIFF_GEAENDERT',id:'ZP-01',typ:'Eingriff',r:250,bezug:'L-9058',text:'Tor'}));
- const z=await p.evaluate(()=>MS('M1').zugriff[0]);ok(z.typ==='Eingriff'&&z.r===250&&z.bezug==='L-9058'&&z.text==='Tor','Zugriffspunkt änderbar');
+ await p.evaluate(()=>dispatch({type:'ZUGRIFF_GEAENDERT',id:'ZP-01',typ:'Eingriff',r:250,bezug:'L-0008',text:'Tor'}));
+ const z=await p.evaluate(()=>MS('M1').zugriff[0]);ok(z.typ==='Eingriff'&&z.r===250&&z.bezug==='L-0008'&&z.text==='Tor','Zugriffspunkt änderbar');
  await p.evaluate(()=>dispatch({type:'ZUGRIFF_ORT',id:'ZP-01',ll:[52.4,13.3]}));
  ok(await p.evaluate(()=>MS('M1').zugriff[0].ll[0]===52.4),'Zugriffspunkt verschiebbar');
  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await p.evaluate(()=>{VIEW.karte.auswahl='ZP-01';karteAuswahlAnzeige()});await p.waitForTimeout(300);

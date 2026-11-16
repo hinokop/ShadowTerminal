@@ -6,12 +6,12 @@ await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{ti
 await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});});
 await p.waitForTimeout(400);
 const fg=(m,z,t)=>p.evaluate(([m,z,t])=>{dispatch({type:'FREIGABE_BEANTRAGT',massnahme:m,ziel:z,begruendung:t,dringlichkeit:'Routine'});const f=FGL();return f[f.length-1].urteil+'|'+(f[f.length-1].grund||f[f.length-1].auflage)},[m,z,t]);
-const T='P-9062 wurde gestern am Zwischenlager Ludwigsfelde gesehen, ich habe Fotos und das Kennzeichen, um die Mitwisserschaft und den Zugang zur Ladung zu belegen.';
-console.log(await fg('eliminierung','P-9062',T));
+const T='P-0015 wurde gestern am Zwischenlager Ludwigsfelde gesehen, ich habe Fotos und das Kennzeichen, um die Mitwisserschaft und den Zugang zur Ladung zu belegen.';
+console.log(await fg('eliminierung','P-0015',T));
 console.log(await fg('eliminierung','P-0001',T));
-console.log(await fg('observation','P-9062','kurz'));
-console.log(await fg('observation','P-9062',T));
-console.log(await fg('abfangen','L-9058',T));
+console.log(await fg('observation','P-0015','kurz'));
+console.log(await fg('observation','P-0015',T));
+console.log(await fg('abfangen','L-0008',T));
 await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'freigabe'}));await p.waitForTimeout(400);
 ok(await p.evaluate(()=>document.body.innerText.includes('FG-04')),'Liste');
 await p.keyboard.press('9');await p.waitForTimeout(300);

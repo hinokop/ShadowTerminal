@@ -5,9 +5,9 @@ await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.fil
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});alleEntitaeten().forEach(e=>{IZ()[e.id]={status:'frei'}});
  const ms=MS('M1');ms.beginn=new Date(Date.now()-120000).toISOString();
- ms.dokumente=[{id:'D1',entitaet:'P-9062',art:'Frachtbrief',t:nowIso(),name:'a',groesse:1,notiz:''},{id:'D2',entitaet:'P-9063',art:'Chatverlauf',t:nowIso(),name:'b',groesse:1,notiz:''}];
+ ms.dokumente=[{id:'D1',entitaet:'P-0015',art:'Frachtbrief',t:nowIso(),name:'a',groesse:1,notiz:''},{id:'D2',entitaet:'P-0016',art:'Chatverlauf',t:nowIso(),name:'b',groesse:1,notiz:''}];
  ms.zugriffUrteil={ok:true,n:3,mangel:[],t:nowIso()};ms.wissen={a:{stand:'bestaetigt'},b:{stand:'bestaetigt'},c:{stand:'bestaetigt'}};ms.treffen=1;
- ['P-9062','P-9063','P-9053','P-9060'].forEach(id=>PROFIL.bilder[id]='data:image/png;base64,AAAA');
+ ['P-0015','P-0016','P-0006','P-0013'].forEach(id=>PROFIL.bilder[id]='data:image/png;base64,AAAA');
  dispatch({type:'DOSSIER_ANGELEGT',typ:'Person',name:'Testperson',land:'DE',rolle:'Fahrer',stufe:2});
  render();});
 await p.keyboard.press('2');await p.waitForTimeout(300);

@@ -8,14 +8,14 @@ const W=await p.evaluate(()=>alleEntitaeten().filter(e=>e.typ!=='Ort').map(e=>e.
 console.log(W);
 const st=await p.evaluate(()=>({frei:pool().filter(e=>wissen(e)==='frei').map(e=>e.id),bek:pool().filter(e=>wissen(e)==='bekannt').map(e=>e.id),unb:alleEntitaeten().filter(e=>wissen(e)==='unbekannt').length}));
 console.log(JSON.stringify(st));
-chk(st.bek.sort().join()==='P-0002,P-0003,P-9054,P-9063','Schlüsselfiguren bekannt');
+chk(st.bek.sort().join()==='P-0002,P-0003,P-0007,P-0016','Schlüsselfiguren bekannt');
 chk(st.frei.includes('P-0001'),'P-0001 frei');
 // Dossier-Ansicht Liste und Rudiment
 await p.evaluate(()=>{STATE.ui.modul='dossier';render()});
 await p.evaluate(()=>{dispatch({type:'DOSSIER_GEOEFFNET',id:'P-0002',navigieren:true})});await p.waitForTimeout(300);
 let txt=await p.evaluate(()=>document.body.innerText);
 console.log(txt.slice(0,1200));
-chk(!/P-9051|P-9052|P-9055|P-9058|P-9061|O-9052/.test(txt),'keine unbekannten Kennungen in der Dossieransicht');
+chk(!/P-0004|P-0005|P-0008|P-0011|P-0014|O-0002/.test(txt),'keine unbekannten Kennungen in der Dossieransicht');
 chk(!/P-0002/.test(txt.split('\n').filter(l=>!/dl-/.test(l)).join('\n')),'keine P-0002 im sichtbaren Text');
 chk(/Rudiment/.test(txt),'Rudiment-Ansicht');
 // Dropdown Dokumente / Freigabe
@@ -40,17 +40,17 @@ chk(pl.length===2&&pl.some(x=>x.f==='P-0002'),'Ack und Freigabe geplant');
 chk(await p.evaluate(()=>wissen(entitaet('P-0002')))==='bekannt','vor Prüfung noch bekannt');
 for(let i=0;i<10;i++){await p.evaluate(()=>{STATE.plan.filter(x=>x.typ==='antwort').forEach(x=>{x.faelligAm=new Date(Date.now()-1000).toISOString()});});await p.waitForTimeout(600);if(await p.evaluate(()=>wissen(entitaet('P-0002')))==='frei')break;}
 chk(await p.evaluate(()=>wissen(entitaet('P-0002')))==='frei','P-0002 frei nach Prüfung');
-const kette=await p.evaluate(()=>['P-9063','L-9058'].concat(['P-9053','O-9051']).map(i=>i+':'+wissen(entitaet(i))));console.log(kette.join(' '));
+const kette=await p.evaluate(()=>['P-0016','L-0008'].concat(['P-0006','O-0001']).map(i=>i+':'+wissen(entitaet(i))));console.log(kette.join(' '));
 const msgs=await p.evaluate(()=>STATE.komm.kanaele.handler.nachrichten.filter(m=>m.von==='gegenstelle').slice(-3).map(m=>m.text));console.log(msgs);
-// Kette Freigabe P-0003 -> P-9053, O-9051 bekannt
+// Kette Freigabe P-0003 -> P-0006, O-0001 bekannt
 await p.evaluate(()=>{dispatch({type:'SICHTUNG_HINZU',id:'P-0003',ort:'Hof',text:'Tritt nicht selbst auf, Mittelsmann',guete:'plausibel'});dispatch({type:'EINSCHAETZUNG_GESETZT',id:'P-0003',quelle:'C',info:'3'});dispatch({type:'INFO_EINGEREICHT',id:'P-0003'})});
 for(let i=0;i<10;i++){await p.evaluate(()=>{STATE.plan.filter(x=>x.typ==='antwort').forEach(x=>{x.faelligAm=new Date(Date.now()-1000).toISOString()});});await p.waitForTimeout(600);if(await p.evaluate(()=>wissen(entitaet('P-0003')))==='frei')break;}
-console.log(await p.evaluate(()=>['P-0003','P-9053','O-9051','P-9051'].map(i=>i+':'+wissen(entitaet(i))).join(' ')));
-chk(await p.evaluate(()=>wissen(entitaet('P-9053')))==='bekannt'&&await p.evaluate(()=>wissen(entitaet('O-9051')))==='bekannt','Kette: Umfeld wird bekannt');
+console.log(await p.evaluate(()=>['P-0003','P-0006','O-0001','P-0004'].map(i=>i+':'+wissen(entitaet(i))).join(' ')));
+chk(await p.evaluate(()=>wissen(entitaet('P-0006')))==='bekannt'&&await p.evaluate(()=>wissen(entitaet('O-0001')))==='bekannt','Kette: Umfeld wird bekannt');
 // freies Dossier zeigt Verbindungen, bekannte nur mit Namen
 await p.evaluate(()=>oeffneDossier('P-0003'));await p.waitForTimeout(300);
 txt=await p.evaluate(()=>document.body.innerText);
-chk(/Petrenko|Havelstahl/.test(txt)&&!/P-9053|O-9051/.test(txt.replace(/dl-/g,'')),'Verbindungen zu Bekannten nur mit Namen');
+chk(/Petrenko|Havelstahl/.test(txt)&&!/P-0006|O-0001/.test(txt.replace(/dl-/g,'')),'Verbindungen zu Bekannten nur mit Namen');
 // Chat-Pfad
 await p.evaluate(()=>{dispatch({type:'NACHRICHT_GESENDET',kanal:'handler',text:'Reiche meine Einschätzung zu Petrenko ein',dringlichkeit:'Routine'})});
 console.log('Fehler:',e.join()||'keine','| Fehlschläge:',fail);await b.close()})();

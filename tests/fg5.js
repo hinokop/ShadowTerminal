@@ -6,9 +6,9 @@ await p.evaluate(()=>{dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatc
 let fail=0;const chk=(ok,t)=>{if(!ok)fail++;console.log((ok?'OK  ':'FAIL')+' '+t)};
 chk(await p.evaluate(()=>[...document.querySelectorAll('#fg-art option')].map(o=>o.textContent).includes('Eliminierung')),'Eliminierung wählbar');
 const due=async()=>{await p.evaluate(()=>{STATE.plan.forEach(x=>{x.faelligAm=new Date(Date.now()-1000).toISOString()})});await p.waitForTimeout(2200)};
-await p.evaluate(()=>{const o=[];nachrichtSenden(kanalDef('handler'),'Ich brauche die Freigabe zur Eliminierung von P-9054','Routine',o)});await due();
+await p.evaluate(()=>{const o=[];nachrichtSenden(kanalDef('handler'),'Ich brauche die Freigabe zur Eliminierung von P-0007','Routine',o)});await due();
 console.log(await p.evaluate(()=>STATE.komm.kanaele.handler.nachrichten.slice(-1)[0].text));
-await p.evaluate(()=>{const o=[];nachrichtSenden(kanalDef('handler'),'Freigabe für Festsetzung bei P-9054','Routine',o)});await due();
+await p.evaluate(()=>{const o=[];nachrichtSenden(kanalDef('handler'),'Freigabe für Festsetzung bei P-0007','Routine',o)});await due();
 console.log(await p.evaluate(()=>STATE.komm.kanaele.handler.nachrichten.slice(-1)[0].text));
 // Regler
 await p.evaluate(()=>{window.__r=1});
