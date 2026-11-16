@@ -6077,39 +6077,20 @@ function tick() {
   renderClock();
 }
 
-const NAV_BADGES = {
-  mission: function () {
-    const z = zugewiesene(), n = offeneZiele();
-    if (STATE.nachbereitung) return { txt: '!', an: true, titel: 'Nachbereitung offen' };
-    if (STATE.vorlauf && !z) return { txt: '0', an: false, titel: 'kein Auftrag' };
-    return z ? { txt: 'Auftrag', an: true, titel: 'Neuer Auftrag zugewiesen: ' + z.name } : { txt: String(n), an: n > 0, titel: n + ' offene Ziele' };
-  },
-  verstaerkung: function () { const n = STATE.verstaerkung ? STATE.verstaerkung.filter(function (v) { return ['unterwegs', 'vor Ort'].indexOf(vkStatus(v)) >= 0; }).length : 0; return { txt: String(n), an: n > 0, titel: n + ' Kräfte unterwegs oder vor Ort' }; },
-  freigabe: function () { const n = STATE.freigaben ? STATE.freigaben.filter(function (f) { return fgStatus(f) === 'in Prüfung'; }).length : 0; return { txt: String(n), an: n > 0, titel: n + ' Freigabeanfragen in Prüfung' }; },
-  komm: function () { const n = ungelesenGesamt(); return { txt: String(n), an: n > 0, titel: n + ' ungelesene Nachrichten' }; }
-};
 function buildNav() {
   const list = $('nav-list');
   ARBEITSMODULE.forEach(function (m) {
-    const b = NAV_BADGES[m.id];
     list.appendChild(h('li', null,
       h('button', { type: 'button', id: 'nav-' + m.id, 'aria-keyshortcuts': m.key,
                     onclick: function () { dispatch({ type: 'NAVIGATION', modul: m.id }); } },
         h('span', { class: 'key', 'aria-hidden': 'true' }, m.key),
-        h('span', { class: 'ttl' }, m.titel),
-        b ? h('span', { class: 'badge', id: 'badge-' + m.id }) : null)));
+        h('span', { class: 'ttl' }, m.titel))));
   });
 }
 function renderNav() {
   ARBEITSMODULE.forEach(function (m) {
     const btn = $('nav-' + m.id);
     if (STATE.ui.modul === m.id) btn.setAttribute('aria-current', 'page'); else btn.removeAttribute('aria-current');
-    if (NAV_BADGES[m.id]) {
-      const b = NAV_BADGES[m.id](), el = $('badge-' + m.id);
-      el.className = 'badge' + (b.an ? ' on' : '');
-      el.replaceChildren(b.txt, h('span', { class: 'vh' }, ' (' + b.titel + ')'));
-      el.title = b.titel;
-    }
   });
 }
 
