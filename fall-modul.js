@@ -13,9 +13,10 @@ function xAnlegen(daten, dossier) {
   const R = PROFIL.recherche;
   const titel = String(daten.titel || '').trim().slice(0, 120);
   if (!titel) return null;
+  /* Nur vorhandene Fälle belegen Nummern. Der Import verwendet weiterhin seine eigene Reservierung. */
   R.seq.fall = R.faelle.reduce(function (max, f) {
     return /^F-\d+$/.test(f.id) ? Math.max(max, Number(f.id.slice(2))) : max;
-  }, R.seq.fall || 0);
+  }, 0);
   const f = { id: rchNr('fall'), titel: titel, frage: String(daten.frage || '').trim().slice(0, 300), zustand: 'sammlung', erfasst: nowIso() };
   if (dossier) f.dossiers = [dossier];
   R.faelle.push(f);
