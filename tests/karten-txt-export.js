@@ -157,9 +157,9 @@ const PF = require('./_pfad');
       await input.press('Tab');
       await p.waitForFunction(value => document.querySelector('#profil-terminal-eingabe').value === value, arg + name);
       await input.press('Enter');
-      await p.waitForFunction(name => document.querySelector('#profil-terminal-ausgabe').textContent.includes('»' + name + '«'), name);
-      assert.match(await out.textContent(), /Lokale Archivbrücke … 200 OK/);
       await p.waitForFunction(() => document.querySelector('#profil-terminal-prompt').textContent === 'you >');
+      assert.ok((await out.textContent()).split('\n').some(zeile => zeile.startsWith(name + ' ') && zeile.includes('100%')));
+      assert.match(await out.textContent(), /ACK received from peer/);
     }
 
     const offline = await open('');
