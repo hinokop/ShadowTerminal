@@ -334,8 +334,10 @@ function xEintragZeile(f, e) {
         const text = ed.wert();
         if (!xTextPlain(text)) { meldung('Der Text des Eintrags darf nicht leer sein.'); return; }
         if (xTextPlain(text).length > X_EINTRAG_MAX) { meldung('Höchstens ' + X_EINTRAG_MAX + ' Zeichen je Eintrag.'); return; }
-        delete VIEW.draft['x-bf-bearb-' + f.id]; delete VIEW.draft['x-bf-bearb-text-' + f.id];
-        if (text !== e.text) xEintragAendern(f.id, function (akt) { const z = xEintraege(akt).find(function (x) { return x.uid === e.uid; }); if (!z) return false; z.text = text; z.geaendert = nowIso(); return true; }, 'Eintrag gespeichert.');
+        let ok = true;
+        if (text !== e.text) ok = xEintragAendern(f.id, function (akt) { const z = xEintraege(akt).find(function (x) { return x.uid === e.uid; }); if (!z) return false; z.text = text; z.geaendert = nowIso(); return true; }, 'Eintrag gespeichert.');
+        if (ok) { delete VIEW.draft['x-bf-bearb-' + f.id]; delete VIEW.draft['x-bf-bearb-text-' + f.id]; }
+        else VIEW.draft['x-bf-bearb-text-' + f.id] = text;
         renderModule();
       }),
       xBtn('x-bf-bearb-abbr-' + e.uid, 'Abbrechen', function () { delete VIEW.draft['x-bf-bearb-' + f.id]; delete VIEW.draft['x-bf-bearb-text-' + f.id]; renderModule(); }))));

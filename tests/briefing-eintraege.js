@@ -60,6 +60,18 @@ const { APP } = require('./_pfad');
     assert.equal((await lies(f.a)).find(e => e.uid === u).geaendert, e0.geaendert, 'ohne Änderung kein neuer Zeitpunkt');
     await p.click('#x-bf-bearb-' + u); await p.fill('#x-bf-bearb-text-' + u, 'verworfen'); await p.click('#x-bf-bearb-abbr-' + u);
     assert.equal((await lies(f.a)).find(e => e.uid === u).text, e0.text, 'Abbrechen verwirft');
+    /* Speicherfehler beim Bearbeiten: neuer Text bleibt im Editor erhalten */
+    await p.click('#x-bf-bearb-' + u); await p.fill('#x-bf-bearb-text-' + u, 'Neuer Text bei Speicherfehler');
+    await p.evaluate(() => { window.__ps2 = profilSpeichern; profilSpeichern = () => false; });
+    await p.click('#x-bf-bearb-ok-' + u);
+    await p.evaluate(() => { profilSpeichern = window.__ps2; });
+    assert.equal(await p.locator('#x-bf-bearb-text-' + u).count(), 1, 'Editor bleibt nach Speicherfehler offen');
+    assert.equal(await p.locator('#x-bf-bearb-text-' + u).innerText(), 'Neuer Text bei Speicherfehler', 'getippter Text bleibt erhalten');
+    assert.equal((await lies(f.a)).find(e => e.uid === u).text, e0.text, 'gespeicherter Eintrag unverändert');
+    await p.click('#x-bf-bearb-ok-' + u);
+    assert.equal((await lies(f.a)).find(e => e.uid === u).text, 'Neuer Text bei Speicherfehler', 'zweiter Versuch speichert');
+    assert.equal(await p.locator('#x-bf-bearb-text-' + u).count(), 0, 'Editor nach Erfolg geschlossen');
+    e0 = (await lies(f.a)).find(e => e.uid === u);
     /* Speicherfehler: Rücknahme */
     await p.selectOption('#x-bf-art', 'lage'); await p.fill('#x-bf-text', 'wird nicht gespeichert');
     await p.evaluate(() => { window.__ps = profilSpeichern; profilSpeichern = () => false; });
