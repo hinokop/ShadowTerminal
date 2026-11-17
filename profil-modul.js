@@ -281,6 +281,7 @@ function terminalSitzungTrennen() {
 }
 function terminalPrompt() {
   if (TERMINAL_ZUSTAND.orbitLive) return 'predict -f · Ctrl+C';
+  if (terminalPppWaehltVorne()) return '';
   const kanal = TERMINAL_ZUSTAND.kanal;
   if (kanal?.ui === 'xmpp') return '>';
   if (kanal) return kanal.phase === 'eingabe' ? 'you >' : '…';
@@ -768,8 +769,10 @@ function terminalPppModemAus(grund) {
     clearTimeout(modem.timer);
     terminalPppLog('pppd[1401]: ' + grund);
     terminalPppLog(TERMINAL_PPP_ENDE);
+    if (modem.vordergrund && !modem.bereit) terminalAusgabe(['pppd[1401]: ' + grund, TERMINAL_PPP_ENDE]);
   }
   t.modem = null;
+  terminalKanalPromptSync();
   if (t.wgSat) t.wgSat.handshake = null;
   const chat = t.kanal;
   if (chat?.ui !== 'xmpp' || chat.phase === 'offline') return;
@@ -785,6 +788,41 @@ function terminalPppModemAus(grund) {
     if (transfer) terminalPppChatLog(chat, 'Error uploading file: Network unreachable');
     terminalPppChatLog(chat, 'Disconnected from ' + chat.account);
   }, 750);
+}
+function terminalPppWaehltVorne() {
+  const modem = TERMINAL_ZUSTAND.modem;
+  return !!modem?.vordergrund && !modem.bereit;
+}
+function terminalPppEinwahl(link, vordergrund, syslogZeilen) {
+  const t = TERMINAL_ZUSTAND, modem = { bereit: false, vordergrund, timer: null };
+  t.modem = modem;
+  terminalKanalPromptSync();
+  const schritte = [
+    [0, ['chat[1402]: abort on (BUSY)', 'chat[1402]: abort on (NO CARRIER)']],
+    [450, ['chat[1402]: send (AT+CSQ^M)']],
+    [650, ['chat[1402]: +CSQ:4^M']],
+    [450, ['chat[1402]: send (ATD*99***1#^M)']],
+    [2400, ['chat[1402]: CONNECT 2400']],
+    [900, ['pppd[1401]: Serial connection established.']],
+    [750, ['pppd[1401]: Using interface ppp0']],
+    [1900, ['pppd[1401]: local IP address 10.184.12.94']]
+  ];
+  const schritt = function (i) {
+    if (t.modem !== modem || !terminalSatLinkAktiv(link)) return;
+    const zeilen = schritte[i][1];
+    zeilen.forEach(terminalPppLog);
+    if (vordergrund) terminalAusgabe(zeilen);
+    if (i + 1 < schritte.length) {
+      modem.timer = setTimeout(() => schritt(i + 1), schritte[i + 1][0]);
+      return;
+    }
+    modem.bereit = true;
+    modem.timer = null;
+    terminalKanalPromptSync();
+    if (vordergrund && syslogZeilen) terminalSyslog(syslogZeilen);
+  };
+  schritt(0);
+  if (!vordergrund && syslogZeilen) terminalSyslog(syslogZeilen);
 }
 function terminalPppShell(befehl, arg) {
   const t = TERMINAL_ZUSTAND, link = t.satLink;
@@ -811,24 +849,11 @@ function terminalPppShell(befehl, arg) {
     return true;
   }
   if (befehl === 'pppd') {
-    const m = /^call iridium(?: && tail -n (?:6|12) \/var\/log\/syslog)?$/.exec(arg);
-    if (!m) { terminalAusgabe('usage: pppd call iridium'); return true; }
+    const m = /^call iridium( updetach)?(?: && tail -n (6|12) \/var\/log\/syslog)?$/.exec(arg);
+    if (!m) { terminalAusgabe('usage: pppd call iridium [updetach]'); return true; }
     if (link?.modus !== 'ppp' || !terminalSatLinkAktiv(link)) { terminalAusgabe('pppd: NO CARRIER'); return true; }
     if (t.modem) { terminalAusgabe('pppd: iridium already running'); return true; }
-    const modem = { bereit: false, timer: null };
-    t.modem = modem;
-    terminalPppLog('chat[1402]: abort on (NO CARRIER)');
-    terminalPppLog('chat[1402]: send (AT+CSQ^M)');
-    if (arg.includes('&&')) terminalSyslog(Number(arg.match(/tail -n (\d+)/)[1]));
-    const bereit = function () {
-      if (t.modem !== modem || !terminalSatLinkAktiv(link)) return;
-      modem.bereit = true;
-      terminalPppLog('chat[1402]: CONNECT 2400');
-      terminalPppLog('pppd[1401]: Serial connection established.');
-      terminalPppLog('pppd[1401]: Using interface ppp0');
-      terminalPppLog('pppd[1401]: local IP address 10.184.12.94');
-    };
-    modem.timer = setTimeout(bereit, 4000);
+    terminalPppEinwahl(link, !!m[1], Number(m[2] || 0));
     return true;
   }
   if (befehl === 'tail' && /^-n \d{1,2} \/var\/log\/syslog$/.test(arg)) {
@@ -994,7 +1019,7 @@ function terminalBefehl(zeile) {
     return;
   }
   if (t.satLink) terminalSatLinkAktiv(t.satLink);
-  if (t.orbitLive) return;
+  if (t.orbitLive || terminalPppWaehltVorne()) return;
   if (t.kanal) {
     if (t.kanal.ui === 'xmpp') void terminalPppChatMeldung(zeile, t.kanal);
     else void terminalKanalMeldung(zeile, t.kanal);
@@ -1003,9 +1028,8 @@ function terminalBefehl(zeile) {
   if (befehl === 'clear' && !arg) { t.version++; terminalTransferStop(); t.ausgabe = []; terminalAusgabe([]); return; }
   terminalAusgabe(terminalPrompt() + ' ' + zeile);
   if (terminalPppShell(befehl, arg)) return;
-  if (befehl === 'help' && !arg) terminalAusgabe(['ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · send <datei> (im Kanal) · whoami · uname -a · date · ping relay · clear · exit',
-    'predict · pppd · poff · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
-    TERMINAL_SAT_TX_BEFEHL, 'secure-channel ' + TERMINAL_SAT_KANAL_ARG]);
+  if (befehl === 'help' && !arg) terminalAusgabe(['ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · whoami · uname -a · date · ping relay · clear · exit',
+    'predict · pppd call iridium updetach · poff iridium · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)']);
   else if (befehl === 'pwd' && !arg) terminalAusgabe(terminalArbeitsverzeichnis());
   else if (befehl === 'whoami' && !arg) terminalAusgabe('root');
   else if (befehl === 'uname' && arg === '-a') terminalAusgabe(TERMINAL_UBUNTU);
@@ -1034,7 +1058,7 @@ const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 
   'predict', 'pppd', 'poff', 'wg-quick', 'wg', 'profanity', 'satcon-tx', 'secure-channel', 'send']);
 const TERMINAL_PPP_TAB = new Map([
   ['predict', []],
-  ['pppd', ['call iridium']], ['poff', ['iridium']], ['wg-quick', ['up wg-sat', 'down wg-sat']], ['wg', ['show wg-sat']]
+  ['pppd', ['call iridium updetach']], ['poff', ['iridium']], ['wg-quick', ['up wg-sat', 'down wg-sat']], ['wg', ['show wg-sat']]
 ]);
 let terminalTabLauf = null, terminalTabAuswahl = null;
 function terminalTabReset() {
@@ -1233,7 +1257,7 @@ function terminalTabTaste(ev) {
   if (ev.shiftKey) return;
   const t = TERMINAL_ZUSTAND;
   const m = /^(\S+)(?:\s+(.*))?$/.exec(bisher);
-  if (t.orbitLive) return;
+  if (t.orbitLive || terminalPppWaehltVorne()) return;
   if (t.kanal ? t.kanal.phase !== 'eingabe' || (t.kanal.ui === 'xmpp' ?
       !(/^\/(?:sendfile|msg|omemo)\s/.test(bisher) || (bisher.startsWith('/') && !/\s/.test(bisher))) : !/^send\s/.test(bisher)) :
       t.dateiLaeuft || !m || (m[2] === undefined ? !TERMINAL_BEFEHLE.some(x => x.startsWith(m[1])) :
@@ -1406,6 +1430,8 @@ function terminalKonsoleEscape() {
     t.orbitLive = false;
     terminalPppAnzeige();
     terminalKanalPromptSync();
+  } else if (terminalPppWaehltVorne()) {
+    terminalPppModemAus('Terminating on signal 2');
   } else if (t.satAufbau) {
     terminalSatAbbruch(); terminalAusgabe('[!] Verbindungsaufbau abgebrochen');
   } else if (t.kanal?.ui === 'xmpp') {
@@ -1420,7 +1446,7 @@ function terminalKonsoleEscape() {
 }
 document.addEventListener('keydown', function (ev) {
   if (document.body.classList.contains('locked') || terminalKonsoleDialogOffen() || ev.isComposing) return;
-  const trackingStop = TERMINAL_ZUSTAND.orbitLive && ev.ctrlKey && !ev.altKey && !ev.metaKey &&
+  const trackingStop = (TERMINAL_ZUSTAND.orbitLive || terminalPppWaehltVorne()) && ev.ctrlKey && !ev.altKey && !ev.metaKey &&
     ev.key.toLowerCase() === 'c' && $('profil-terminal')?.contains(ev.target);
   if ((ev.key === 'Escape' || trackingStop) && TERMINAL_ZUSTAND.offen) {
     ev.preventDefault();
