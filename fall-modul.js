@@ -1,9 +1,11 @@
 /* Modul X: Arbeitsansicht auf PROFIL.recherche, ohne eigenen Fallbestand. */
 const X_STATUS = [['sammlung', 'Informationsgewinnung'], ['laufend', 'Laufend'], ['on-hold', 'On hold'], ['abgeschlossen', 'Abgeschlossen']];
 const X_BEWERTUNG = [['unbewertet', 'Unbewertet'], ['duenn', 'Dünne Grundlage'], ['vorlaeufig', 'Vorläufig belastbar'], ['belastbar', 'Belastbar']];
-const X_VIEW = { id: null, vorschau: null };
+const X_VIEW = { id: null, vorschau: null, keine: false };   /* keine: nach übersprungenem Arbeitsstand kein automatischer erster Fall */
 function xStatus(wert) { return xAuswahl(X_STATUS, wert === 'ruhend' ? 'on-hold' : wert); }
 function xAuswahl(liste, wert) { return liste.find(function (x) { return x[0] === wert; }) || liste[0]; }
+/* Der in X angezeigte Fall: gewählter Fall, sonst der erste (außer nach übersprungenem Arbeitsstand). Anzeige und Arbeitsstand nutzen dieselbe Auswahl. */
+function xAngezeigt() { return xFall(X_VIEW.id) || (X_VIEW.keine ? null : PROFIL.recherche.faelle[0]) || null; }
 function xFall(id) { return PROFIL.recherche.faelle.find(function (f) { return f.id === id; }); }
 function xDossierLesbar(e) { return !!(e && dossierOffen(e.mission) && wissen(e) !== 'unbekannt' && !dossierGesperrt(e) && !infoGesperrt(e)); }
 function xPins(f) { return Array.isArray(f.pins) ? f.pins : []; }
@@ -35,7 +37,7 @@ function xSchreiben(aenderung) {
 }
 function xOeffnen(id) {
   if (X_VIEW.id !== id) X_VIEW.vorschau = null;
-  X_VIEW.id = id;
+  X_VIEW.id = id; X_VIEW.keine = false;
   if (STATE.ui.modul === 'x') renderModule();
   else dispatch({ type: 'NAVIGATION', modul: 'x' });
 }
@@ -71,7 +73,7 @@ async function xLoeschen(id) {
   bIds.forEach(function (b) { delete VIEW.draft['rch-n-' + b]; });
   VIEW.recherche.sprungziel.forEach(function (b, d) { if (bIds.has(b)) VIEW.recherche.sprungziel.delete(d); });
   delete VIEW.draft['x-form-' + id];
-  X_VIEW.id = null; X_VIEW.vorschau = null;
+  X_VIEW.id = null; X_VIEW.vorschau = null; X_VIEW.keine = false;
   if (STATE.ui.modul === 'x') renderModule();
   try {
     for (const k of keys) {
@@ -241,7 +243,7 @@ function xUnterlagen(f) {
 function renderX(m) {
   akVorschauFreigeben();
   const L = PROFIL.recherche.faelle;
-  const f = xFall(X_VIEW.id) || L[0];
+  const f = xAngezeigt();
   const liste = panel('Fälle', null, h('div', { class: 'pad' },
     xBtn('x-neu', 'Neuer Fall', function () { xNeu(null); }),
     L.length ? h('ul', { class: 'x-faelle', 'aria-label': 'Fälle' }, L.map(function (x) {

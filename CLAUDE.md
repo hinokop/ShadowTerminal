@@ -15,6 +15,7 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 - karte.js / karte2.js: Kartendaten; kartenschluessel.js: lokal, NIE committen (.gitignore)
 - tests/: Playwright-Skripte (Passwort 'pw-test-123'); Standardauswahl mit `node tests/runall.js` (einzelne Skripte: `node tests/runall.js zev zp`); bekannt rot oder unstabil: abd (unzuverlässig), m1flow (Missionsablauf, auch auf main rot), wk3, dp; missionstrennung zuweilen unter Last rot (Ursache offen). Ausgemusterte Tests: docs/r5-bereinigung.md
 - recherche-modul.js: Recherche-Kern (kein eigener sichtbarer Reiter; Bedienung über Dossiers und X), Unterlagen zum Fall (Fall, Quelle, Fassung, Beobachtung am Dossier ohne Auftrag; PROFIL.recherche, Dateien in eigener IndexedDB); nach dem Hauptskript geladen, Fallpaket (Export/Import mit Manifest und Prüfsummen; frühere Aussagen nur als Altdaten); Vertrag in docs/datenvertrag.md
+- arbeitsstand-modul.js: Arbeitsstand (Stand sichern/laden in der Navigation; PROFIL.arbeitsstand: Bereich, Dossier, Fall, Kartenmitte, Zoom, Ebenen, Kartenobjekt); nach dem Hauptskript geladen, nur auf Klick, kein Autosprung, nicht Teil des Fallpakets; prüft beim Laden die Identität von Fall (Nummer und Erfassungszeitpunkt) und eigenem Dossier (Registernummer), setzt Platziermodi der Karte zurück
 - karte3d.html: MapLibre-3D-Ansicht (eingebettet in die Karte; eigenständig nutzt sie szenario.js)
 
 ## Arbeitsweise
