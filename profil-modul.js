@@ -461,7 +461,7 @@ function terminalKanalAbbruch() {
   if (kanal.pauseBeenden) kanal.pauseBeenden();
   terminalTransferStop();
   const eingabe = $('profil-terminal-eingabe');
-  if (eingabe) eingabe.value = '';
+  if (eingabe) terminalEingabeSetzen(eingabe, '');
   terminalKanalPromptSync();
   terminalAusgabe([]);
 }
@@ -635,11 +635,11 @@ function terminalTabKandidaten(input, bisher, version, kopf, prefix, kandidaten,
   if (!input.isConnected || input.value !== bisher || TERMINAL_ZUSTAND.version !== version ||
       document.activeElement !== input || input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
   const treffer = kandidaten.filter(function (x) { return x.toLowerCase().startsWith(prefix.toLowerCase()); });
-  if (treffer.length === 1) { input.value = kopf + format(treffer[0]); return; }
+  if (treffer.length === 1) { terminalEingabeSetzen(input, kopf + format(treffer[0])); return; }
   if (treffer.length < 2) return;
   let gemeinsam = treffer[0];
   while (!treffer.every(function (x) { return x.startsWith(gemeinsam); })) gemeinsam = gemeinsam.slice(0, -1);
-  if (gemeinsam.length > prefix.length) input.value = kopf + gemeinsam;
+  if (gemeinsam.length > prefix.length) terminalEingabeSetzen(input, kopf + gemeinsam);
   else terminalAusgabe(treffer.join('  '));
 }
 async function terminalTab(input, bisher, m) {
@@ -735,13 +735,18 @@ function terminalVerlaufTaste(ev) {
   ev.preventDefault();
   if (ev.key === 'ArrowUp') {
     if (t.vpos === -1) { t.entwurf = input.value; t.vpos = n - 1; } else if (t.vpos > 0) t.vpos--;
-    input.value = t.verlauf[t.vpos];
-  } else if (t.vpos < n - 1) { t.vpos++; input.value = t.verlauf[t.vpos]; }
-  else { t.vpos = -1; input.value = t.entwurf; }
-  input.setSelectionRange(input.value.length, input.value.length);
+    terminalEingabeSetzen(input, t.verlauf[t.vpos]);
+  } else if (t.vpos < n - 1) { t.vpos++; terminalEingabeSetzen(input, t.verlauf[t.vpos]); }
+  else { t.vpos = -1; terminalEingabeSetzen(input, t.entwurf); }
   return true;
 }
 function terminalTabTaste(ev) {
+  if (ev.key === 'Enter') {
+    if (ev.isComposing || ev.keyCode === 229) return;
+    ev.preventDefault();
+    if (!ev.repeat) ev.currentTarget.form.requestSubmit();
+    return;
+  }
   if (terminalVerlaufTaste(ev)) return;
   if (TERMINAL_ZUSTAND.kanal) {
     const kanal = TERMINAL_ZUSTAND.kanal, input = ev.currentTarget, wert = input.value;
@@ -762,29 +767,124 @@ function terminalTabTaste(ev) {
   terminalTab(input, bisher, m).catch(function () {});
 }
 
+function terminalEingabeHoehe(input) {
+  if (!input.clientWidth) return;
+  const scroll = input.scrollTop;
+  input.style.height = '0px';
+  input.style.height = (input.scrollHeight + input.offsetHeight - input.clientHeight) + 'px';
+  input.scrollTop = document.activeElement === input && input.selectionStart === input.value.length ? input.scrollHeight : scroll;
+}
+function terminalEingabeSetzen(input, wert) {
+  input.value = wert;
+  input.setSelectionRange(input.value.length, input.value.length);
+  terminalEingabeHoehe(input);
+}
 function terminalKonsoleBauen() {
   const t = TERMINAL_ZUSTAND;
-  const input = h('input', { id: 'profil-terminal-eingabe', type: 'text', 'aria-label': 'Terminalbefehl',
-    maxlength: 1024, autocomplete: 'off', spellcheck: 'false', onkeydown: terminalTabTaste });
-  return h('section', { id: 'profil-terminal', class: 'panel profil-terminal', 'aria-label': 'Terminal', hidden: true },
-    h('div', { class: 'profil-terminal-kopf' }, h('span', null, 'Terminal'),
-      h('button', { type: 'button', id: 'profil-terminal-schliessen', onclick: function () {
-        terminalKonsoleSchliessen();
-      } }, 'Ausblenden')),
-    h('div', { class: 'profil-terminal-kern' },
+  const input = h('textarea', { id: 'profil-terminal-eingabe', rows: 1, 'aria-label': 'Terminalbefehl',
+    maxlength: 1024, autocomplete: 'off', spellcheck: 'false', onkeydown: terminalTabTaste,
+    oninput: function (ev) {
+      if (ev.isComposing) return;
+      if (input.value.includes('\n')) {
+        const von = input.selectionStart, bis = input.selectionEnd;
+        input.value = input.value.replace(/\n/g, ' ');
+        input.setSelectionRange(von, bis);
+      }
+      terminalEingabeHoehe(input);
+    } });
+  const titel = h('div', { class: 'profil-terminal-titel', 'aria-hidden': 'true' }, 'Shadow Terminal');
+  const minimieren = h('button', { type: 'button', id: 'profil-terminal-minimieren',
+    'aria-controls': 'profil-terminal-kern', 'aria-expanded': 'true', 'aria-label': 'Minimieren', title: 'Minimieren' }, '−');
+  const griff = h('span', { class: 'profil-terminal-groesse', 'aria-hidden': 'true' });
+  const kern = h('div', { id: 'profil-terminal-kern', class: 'profil-terminal-kern' },
       h('pre', { id: 'profil-terminal-ausgabe', class: 'mono', role: 'log', 'aria-label': 'Terminalausgabe' }, t.ausgabe.join('\n')),
       h('pre', { id: 'profil-terminal-transfer', class: 'mono', hidden: !t.fortschritt }, t.fortschritt),
       h('form', { onsubmit: function (ev) {
         ev.preventDefault();
-        const zeile = input.value.trim();
-        input.value = '';
+        const zeile = input.value.replace(/\n/g, ' ').trim();
+        terminalEingabeSetzen(input, '');
         if (zeile) { terminalVerlaufNehmen(zeile); terminalBefehl(zeile); }
       } }, h('label', { id: 'profil-terminal-prompt', for: input.id, class: 'mono' }, terminalPrompt()), input,
-        h('button', { type: 'submit' }, 'Ausführen'))));
+        h('button', { type: 'submit' }, 'Ausführen')));
+  const fenster = h('section', { id: 'profil-terminal', class: 'panel profil-terminal', 'aria-label': 'Shadow Terminal', tabindex: '-1', hidden: true },
+    h('div', { class: 'profil-terminal-kopf' }, titel, minimieren,
+      h('button', { type: 'button', id: 'profil-terminal-schliessen', 'aria-label': 'Schließen', title: 'Schließen',
+        onclick: function () { terminalKonsoleSchliessen(); } }, '×')), kern, griff);
+  function minimierenSetzen(klein) {
+    fenster.classList.toggle('minimiert', klein);
+    kern.hidden = griff.hidden = klein;
+    const name = klein ? 'Wiederherstellen' : 'Minimieren';
+    minimieren.setAttribute('aria-label', name);
+    minimieren.setAttribute('aria-expanded', String(!klein));
+    minimieren.title = name;
+    minimieren.textContent = klein ? '□' : '−';
+    terminalKonsoleLayout();
+    if (!klein) {
+      terminalEingabeHoehe(input);
+      const ausgabe = $('profil-terminal-ausgabe');
+      ausgabe.scrollTop = ausgabe.scrollHeight;
+    }
+  }
+  minimieren.addEventListener('click', function () { minimierenSetzen(!kern.hidden); });
+  titel.addEventListener('dblclick', function () { minimierenSetzen(!kern.hidden); });
+  terminalKonsoleZeiger(titel, fenster, false);
+  terminalKonsoleZeiger(griff, fenster, true);
+  let breite = 0;
+  new ResizeObserver(function () {
+    if (input.clientWidth === breite) return;
+    breite = input.clientWidth;
+    terminalEingabeHoehe(input);
+  }).observe(fenster);
+  return fenster;
 }
 
 /* Genau eine Ansicht und Sitzung, außerhalb der beim Modulwechsel ersetzten Oberfläche. */
 let terminalKonsoleFokus = null;
+let terminalKonsoleGeometrie = null;
+const TERMINAL_FENSTERRAND = 8;
+function terminalKonsoleLayout() {
+  const fenster = $('profil-terminal');
+  if (!fenster || fenster.hidden) return;
+  const rand = TERMINAL_FENSTERRAND, w = document.documentElement.clientWidth - 2 * rand;
+  const h = document.documentElement.clientHeight - 2 * rand;
+  const begrenze = function (x, min, max) { return Math.min(max, Math.max(min, x)); };
+  if (!terminalKonsoleGeometrie) {
+    const breite = Math.min(760, w), hoehe = Math.min(400, h);
+    terminalKonsoleGeometrie = { x: rand + (w - breite) / 2, y: rand + Math.max(0, (h - hoehe) * 0.65), breite, hoehe };
+  }
+  const g = terminalKonsoleGeometrie;
+  const breite = begrenze(g.breite, Math.min(300, w), w);
+  const hoehe = begrenze(g.hoehe, Math.min(185, h), h);
+  fenster.style.width = breite + 'px';
+  fenster.style.height = fenster.classList.contains('minimiert') ? '' : hoehe + 'px';
+  const aktuell = fenster.offsetHeight;
+  fenster.style.left = begrenze(g.x, rand, rand + w - breite) + 'px';
+  fenster.style.top = begrenze(g.y, rand, rand + Math.max(0, h - aktuell)) + 'px';
+}
+function terminalKonsoleZeiger(griff, fenster, groesse) {
+  let start = null;
+  griff.addEventListener('pointerdown', function (ev) {
+    if (ev.button !== 0 || !ev.isPrimary) return;
+    const box = fenster.getBoundingClientRect();
+    start = { id: ev.pointerId, px: ev.clientX, py: ev.clientY, x: box.left, y: box.top, breite: box.width, hoehe: box.height };
+    griff.setPointerCapture(ev.pointerId);
+    ev.preventDefault();
+    fenster.focus({ preventScroll: true });
+  });
+  griff.addEventListener('pointermove', function (ev) {
+    if (!start || start.id !== ev.pointerId) return;
+    const dx = ev.clientX - start.px, dy = ev.clientY - start.py;
+    const g = terminalKonsoleGeometrie;
+    if (groesse) {
+      g.x = start.x; g.y = start.y;
+      g.breite = Math.min(start.breite + dx, document.documentElement.clientWidth - start.x - TERMINAL_FENSTERRAND);
+      g.hoehe = Math.min(start.hoehe + dy, document.documentElement.clientHeight - start.y - TERMINAL_FENSTERRAND);
+    } else { g.x = start.x + dx; g.y = start.y + dy; }
+    terminalKonsoleLayout();
+  });
+  griff.addEventListener('lostpointercapture', function () { start = null; });
+}
+window.addEventListener('resize', terminalKonsoleLayout);
 function terminalKonsoleDialogOffen() { return !!($('dlg')?.open || $('regie')?.open); }
 function terminalKonsoleOeffnen() {
   if (typeof APP_BEREIT === 'undefined' || !APP_BEREIT || document.body.classList.contains('locked') || terminalKonsoleDialogOffen()) return;
@@ -796,9 +896,12 @@ function terminalKonsoleOeffnen() {
   if (!TERMINAL_ZUSTAND.offen) terminalKonsoleFokus = document.activeElement;
   TERMINAL_ZUSTAND.offen = true;
   konsole.hidden = false;
+  if (konsole.classList.contains('minimiert')) $('profil-terminal-minimieren').click();
+  terminalKonsoleLayout();
+  terminalEingabeHoehe($('profil-terminal-eingabe'));
   const ausgabe = $('profil-terminal-ausgabe');
   ausgabe.scrollTop = ausgabe.scrollHeight;
-  $('profil-terminal-eingabe').focus();
+  konsole.focus({ preventScroll: true });
 }
 function terminalKonsoleSchliessen(fokus = true) {
   if (!TERMINAL_ZUSTAND.offen) return;
@@ -820,8 +923,7 @@ function terminalKonsoleEscape() {
   } else if (t.vpos !== -1) {
     t.vpos = -1;
     const input = $('profil-terminal-eingabe');
-    input.value = t.entwurf;
-    input.setSelectionRange(input.value.length, input.value.length);
+    terminalEingabeSetzen(input, t.entwurf);
   } else terminalKonsoleSchliessen();
 }
 document.addEventListener('keydown', function (ev) {
@@ -836,7 +938,8 @@ document.addEventListener('keydown', function (ev) {
   const ziel = ev.target;
   if (ziel.isContentEditable || ziel.closest?.('input, textarea, select, [role="textbox"]')) return;
   ev.preventDefault();
-  terminalKonsoleOeffnen();
+  if (TERMINAL_ZUSTAND.offen) terminalKonsoleSchliessen();
+  else terminalKonsoleOeffnen();
 }, true);
 
 // Locking the app drops the temporary dialogue even when the window stays open.
@@ -844,7 +947,7 @@ new MutationObserver(function () {
   if (!document.body.classList.contains('locked')) return;
   terminalKanalAbbruch(); terminalVerlaufLeeren();
   const input = $('profil-terminal-eingabe');
-  if (input) input.value = '';
+  if (input) terminalEingabeSetzen(input, '');
   terminalKonsoleSchliessen(false);
 }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 

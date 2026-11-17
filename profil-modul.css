@@ -7,13 +7,22 @@
 .profil-psycho meter::-webkit-meter-optimum-value{background:var(--accent)}
 .profil-psycho meter::-moz-meter-bar{background:var(--accent)}
 .profil-alt-notizen > summary{padding:6px 8px;background:var(--panel-raised);color:var(--text-dim);cursor:pointer}
-.profil-terminal{position:fixed;z-index:80;inset:auto 12px 12px;width:auto;max-width:56rem;max-height:calc(100vh - 42px);margin:0 auto;overflow:auto;box-shadow:0 8px 32px #000a}
-.locked .profil-terminal{display:none}
-.profil-terminal-kopf{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;background:var(--panel-raised);color:var(--text-dim)}
-.profil-terminal-kern{background:#0b1211;color:#a7c8b4;border-top:1px solid var(--border);padding:8px 10px}
-.profil-terminal-kern pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-y:auto;min-height:2em;max-height:16em;line-height:1.5;margin:0 0 6px}
-.profil-terminal-kern form{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0}
-.profil-terminal-kern input{flex:1 1 150px;min-width:0;background:#0b1211;color:inherit;font-family:var(--mono)}
+.profil-terminal{position:fixed;z-index:80;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;margin:0;background:#141921;border:1px solid #384250;border-radius:7px;box-shadow:0 12px 36px #000b}
+.profil-terminal:focus{outline:1px solid #73869b;outline-offset:0}
+.profil-terminal[hidden],.profil-terminal [hidden],.locked .profil-terminal{display:none}
+.profil-terminal-kopf{display:flex;align-items:center;gap:4px;min-height:32px;flex:none;padding:0 5px 0 0;background:#202631;color:#d5dae1}
+.profil-terminal-titel{flex:1;min-width:0;padding:8px 10px;line-height:1.1;cursor:move;touch-action:none;user-select:none;font-weight:600}
+.profil-terminal-kopf button{display:grid;place-items:center;padding:0;width:25px;height:24px;border:0;border-radius:3px;background:transparent;color:inherit;font-size:17px;line-height:1}
+.profil-terminal-kopf button:hover{background:#394452}
+.profil-terminal-kopf button:last-child:hover{background:#a83e49;color:#fff}
+.profil-terminal-kern{display:flex;flex-direction:column;flex:1;min-height:0;background:#101217;color:#d7dce5;border-top:1px solid #363f49;padding:8px 12px 12px}
+.profil-terminal-kern pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-y:auto;min-height:0;line-height:1.5;margin:0 0 6px}
+#profil-terminal-ausgabe{flex:1}
+#profil-terminal-transfer{max-height:25%;flex-shrink:0}
+.profil-terminal-kern form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:end;margin:0;flex:none}
+#profil-terminal-prompt{grid-column:1/-1;color:#a8d293;overflow-wrap:anywhere}
+.profil-terminal-kern textarea{box-sizing:border-box;width:100%;min-width:0;min-height:28px;max-height:min(8em,28vh);resize:none;white-space:pre-wrap;overflow-wrap:anywhere;background:#101217;color:inherit;font-family:var(--mono)}
+.profil-terminal-groesse{position:absolute;right:0;bottom:0;width:13px;height:13px;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 57%,#707b8c 58% 64%,transparent 65% 76%,#707b8c 77% 83%,transparent 84%)}
 
 .profil-zyklus-daten{grid-template-columns:repeat(2,minmax(0,1fr))}
 .profil-zyklus{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;list-style:none;margin:0}
