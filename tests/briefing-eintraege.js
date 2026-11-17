@@ -1,0 +1,113 @@
+/* Datierte Einträge im Lagebriefing (X): Lage, Nächster Schritt, Offene Frage; anlegen, bearbeiten, löschen, abhaken.
+   Speichern über xSchreiben mit Rücknahme; Fallpaket-Rundtest. Exit-Code 1 bei Fehlschlag. */
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const { chromium } = require('playwright');
+const { APP } = require('./_pfad');
+(async () => {
+  const browser = await chromium.launch();
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1500, height: 1100 }, reducedMotion: 'reduce', acceptDownloads: true });
+    const p = await ctx.newPage();
+    const fehler = []; p.on('pageerror', e => fehler.push(e.message));
+    await p.route(/^https?:/, r => r.abort());
+    const start = async () => {
+      await p.goto(APP); await p.fill('#gate-pw', 'pw-test-123'); if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123'); await p.click('#gate-go');
+      await p.waitForFunction(() => !document.body.classList.contains('locked'));
+    };
+    await start();
+    const f = await p.evaluate(() => { PROFIL.recherche.faelle = []; const a = xAnlegen({ titel: 'Eintragsfall' }), b = xAnlegen({ titel: 'Anderer Fall' }); profilSpeichern(); xOeffnen(a.id); return { a: a.id, b: b.id }; });
+    const lies = id => p.evaluate(i => (JSON.parse(localStorage.getItem(PROFIL_KEY)).recherche.faelle.find(x => x.id === i).eintraege || []), id);
+    const neu = async (art, text) => { await p.selectOption('#x-bf-art', art); await p.fill('#x-bf-text', text); await p.click('#x-bf-neu'); };
+    assert.equal(await p.locator('#x-schritt').count(), 0, 'kein Einzelfeld mehr');
+    assert.ok((await p.locator('#x-briefing').innerText()).includes('Noch keine Einträge'), 'Leeranzeige');
+    /* leerer Text wird abgelehnt */
+    await p.selectOption('#x-bf-art', 'lage'); await p.fill('#x-bf-text', '   '); await p.click('#x-bf-neu');
+    assert.equal((await lies(f.a)).length, 0); assert.ok((await p.locator('#sys-msg').innerText()).includes('Text'), 'Meldung bei leerem Text');
+    /* anlegen */
+    await neu('lage', 'Beschluss liegt vor');
+    await p.waitForTimeout(20); await neu('schritt', 'Pressestelle anrufen');
+    await p.waitForTimeout(20); await neu('frage', 'Wer hat unterschrieben?');
+    const E = await lies(f.a);
+    assert.equal(E.length, 3);
+    assert.deepEqual(E.map(e => e.art), ['lage', 'schritt', 'frage']);
+    assert.ok(E.every(e => /^[0-9a-f]{12}$/.test(e.uid) && /^\d{4}-\d\d-\d\dT/.test(e.erfasst)), 'uid und Erfassungszeitpunkt');
+    assert.equal(new Set(E.map(e => e.uid)).size, 3, 'uid eindeutig');
+    assert.equal(await p.inputValue('#x-bf-text'), '', 'Eingabefeld nach dem Anlegen leer');
+    const reihe = await p.locator('#x-briefing [data-eintrag]').evaluateAll(l => l.map(e => e.getAttribute('data-eintrag')));
+    assert.deepEqual(reihe, [E[2].uid, E[1].uid, E[0].uid], 'jüngster zuerst');
+    assert.deepEqual(Object.keys(await p.evaluate(i => xFall(i), f.a)).sort(), ['eintraege', 'erfasst', 'frage', 'id', 'titel', 'zustand']);
+    assert.equal((await lies(f.b)).length, 0, 'anderer Fall unberührt');
+    /* Frage abhaken und wieder öffnen */
+    const q = E[2].uid;
+    assert.equal(await p.locator('#x-bf-erledigt-' + q).count(), 1, 'nur Fragen haben einen Haken');
+    assert.equal(await p.locator('#x-bf-erledigt-' + E[0].uid).count(), 0);
+    await p.check('#x-bf-erledigt-' + q);
+    assert.equal((await lies(f.a)).find(e => e.uid === q).erledigt, true);
+    await p.uncheck('#x-bf-erledigt-' + q);
+    assert.ok(!(await lies(f.a)).find(e => e.uid === q).erledigt, 'wieder geöffnet');
+    /* bearbeiten */
+    const u = E[0].uid; await p.waitForTimeout(20);
+    await p.click('#x-bf-bearb-' + u);
+    assert.equal(await p.inputValue('#x-bf-bearb-text-' + u), 'Beschluss liegt vor');
+    await p.fill('#x-bf-bearb-text-' + u, 'Beschluss liegt vor und wurde veröffentlicht'); await p.click('#x-bf-bearb-ok-' + u);
+    let e0 = (await lies(f.a)).find(e => e.uid === u);
+    assert.equal(e0.text, 'Beschluss liegt vor und wurde veröffentlicht'); assert.equal(e0.erfasst, E[0].erfasst, 'Erfassungszeitpunkt bleibt'); assert.ok(e0.geaendert, 'Änderungszeitpunkt gesetzt');
+    assert.equal((await lies(f.a)).length, 3, 'Bearbeiten legt keinen neuen Eintrag an');
+    /* bearbeiten ohne Änderung und Abbrechen */
+    await p.click('#x-bf-bearb-' + u); await p.click('#x-bf-bearb-ok-' + u);
+    assert.equal((await lies(f.a)).find(e => e.uid === u).geaendert, e0.geaendert, 'ohne Änderung kein neuer Zeitpunkt');
+    await p.click('#x-bf-bearb-' + u); await p.fill('#x-bf-bearb-text-' + u, 'verworfen'); await p.click('#x-bf-bearb-abbr-' + u);
+    assert.equal((await lies(f.a)).find(e => e.uid === u).text, e0.text, 'Abbrechen verwirft');
+    /* Speicherfehler: Rücknahme */
+    await p.selectOption('#x-bf-art', 'lage'); await p.fill('#x-bf-text', 'wird nicht gespeichert');
+    await p.evaluate(() => { window.__ps = profilSpeichern; profilSpeichern = () => false; });
+    await p.click('#x-bf-neu');
+    await p.evaluate(() => { profilSpeichern = window.__ps; });
+    assert.equal(await p.evaluate(i => xFall(i).eintraege.length, f.a), 3, 'Speicherfehler: zurückgenommen');
+    assert.ok((await p.locator('#sys-msg').innerText()).includes('nicht gespeichert'));
+    /* löschen: Abbrechen behält, Bestätigen entfernt genau diesen Eintrag */
+    await p.fill('#x-bf-text', '');
+    await p.click('#x-bf-loesch-' + E[1].uid); await p.click('#dlg-cancel');
+    assert.equal((await lies(f.a)).length, 3, 'Abbrechen löscht nicht');
+    await p.click('#x-bf-loesch-' + E[1].uid); await p.click('#dlg-ok');
+    const rest = await lies(f.a);
+    assert.deepEqual(rest.map(e => e.uid).sort(), [E[0].uid, E[2].uid].sort(), 'nur der gewählte Eintrag gelöscht');
+    /* Neustart: Einträge sichtbar */
+    await start(); await p.evaluate(i => xOeffnen(i), f.a);
+    assert.equal(await p.locator('#x-briefing [data-eintrag]').count(), 2, 'nach Neustart vorhanden');
+    /* Entwurf überlebt das Löschen des Falls nicht (gleiche Nummer) */
+    const g = await p.evaluate(() => { PROFIL.recherche.faelle = []; const x = xAnlegen({ titel: 'Entwurfsfall' }); profilSpeichern(); xOeffnen(x.id); return x.id; });
+    await p.fill('#x-bf-text', 'nie gespeichert');
+    await p.evaluate(async i => { await xLoeschen(i); }, g);
+    const g2 = await p.evaluate(() => { const x = xAnlegen({ titel: 'Ersatz' }); profilSpeichern(); xOeffnen(x.id); return x.id; });
+    assert.equal(g2, g, 'Voraussetzung: Nummer wiedervergeben');
+    assert.equal(await p.inputValue('#x-bf-text'), '', 'Eingabefeld des neuen Falls leer');
+    /* Fallpaket-Rundtest */
+    await p.evaluate(() => { PROFIL.recherche.faelle = []; const x = xAnlegen({ titel: 'Paketfall' }); xSchreiben(() => { x.eintraege = [{ uid: 'aaaaaaaaaaaa', art: 'frage', text: 'Offen?', erfasst: '2026-11-01T10:00:00.000Z', erledigt: true }, { uid: 'bbbbbbbbbbbb', art: 'lage', text: 'Lage 1', erfasst: '2026-11-02T10:00:00.000Z', geaendert: '2026-11-03T10:00:00.000Z' }]; return true; }); profilSpeichern(); xOeffnen(x.id); });
+    const paket = await p.evaluate(async () => (await rchPaketBauen(PROFIL.recherche.faelle[0].id)).text);
+    assert.equal(JSON.parse(paket).inhalt.fall.eintraege.length, 2, 'Export enthält die Einträge');
+    const lade = (t, n) => p.evaluate(async ([t, n]) => { rchPaketLaden(new File([t], n, { type: 'application/json' })); await new Promise(r => setTimeout(r, 1800)); return 1; }, [t, n]);
+    await p.evaluate(() => { PROFIL.recherche.faelle = []; profilSpeichern(); });
+    await lade(paket, 'p.json');
+    const imp = await p.evaluate(() => PROFIL.recherche.faelle.find(x => x.titel === 'Paketfall'));
+    assert.ok(imp, 'Fall importiert'); assert.deepEqual(imp.eintraege.map(e => [e.uid, e.art, e.text, !!e.erledigt, e.geaendert || null]), [['aaaaaaaaaaaa', 'frage', 'Offen?', true, null], ['bbbbbbbbbbbb', 'lage', 'Lage 1', false, '2026-11-03T10:00:00.000Z']], 'Einträge nach Wiederimport erhalten');
+    const P = JSON.parse(paket); P.inhalt.fall.eintraege[1].text = 'verfälscht';
+    await p.evaluate(() => { PROFIL.recherche.faelle = []; profilSpeichern(); });
+    await lade(JSON.stringify(P), 'm.json');
+    assert.equal(await p.evaluate(() => PROFIL.recherche.faelle.length), 0, 'manipuliertes Paket abgelehnt');
+    const alt = await p.evaluate(async () => { const x = xAnlegen({ titel: 'Altfall' }); profilSpeichern(); const t = (await rchPaketBauen(x.id)).text; PROFIL.recherche.faelle = []; profilSpeichern(); return t; });
+    assert.equal('eintraege' in JSON.parse(alt).inhalt.fall, false);
+    await lade(alt, 'alt.json');
+    const a2 = await p.evaluate(() => PROFIL.recherche.faelle.find(x => x.titel === 'Altfall'));
+    assert.ok(a2 && !('eintraege' in a2), 'altes Paket ohne Feld importiert');
+    await p.evaluate(i => xOeffnen(i), a2.id);
+    assert.ok((await p.locator('#x-briefing').innerText()).includes('Noch keine Einträge'));
+    /* beschädigte Einträge (Import, Altdaten) stören die Ansicht nicht */
+    await p.evaluate(() => { const x = xAnlegen({ titel: 'Beschädigt' }); x.eintraege = [null, 5, { uid: 'x' }, { uid: 'cccccccccccc', art: 'unbekannt', text: 'a', erfasst: 'e' }, { uid: 'dddddddddddd', art: 'lage', text: 'gültig', erfasst: '2026-01-01T00:00:00.000Z' }, { uid: 'dddddddddddd', art: 'lage', text: 'doppelt', erfasst: '2026-01-02T00:00:00.000Z' }]; profilSpeichern(); xOeffnen(x.id); });
+    assert.equal(await p.locator('#x-briefing [data-eintrag]').count(), 1, 'nur der gültige Eintrag erscheint');
+    assert.ok((await p.locator('#x-briefing').innerText()).includes('gültig'));
+    assert.deepEqual(fehler, []);
+    console.log('OK: datierte Einträge im Lagebriefing');
+  } finally { await browser.close(); }
+})().catch(e => { console.error(e); process.exitCode = 1; });

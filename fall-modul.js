@@ -72,7 +72,7 @@ async function xLoeschen(id) {
   ['rch-fall', 'rch-fp-fall'].forEach(function (k) { if (VIEW.draft[k] === id) delete VIEW.draft[k]; });
   bIds.forEach(function (b) { delete VIEW.draft['rch-n-' + b]; });
   VIEW.recherche.sprungziel.forEach(function (b, d) { if (bIds.has(b)) VIEW.recherche.sprungziel.delete(d); });
-  delete VIEW.draft['x-form-' + id];
+  delete VIEW.draft['x-form-' + id]; ['x-bf-text-', 'x-bf-art-', 'x-bf-bearb-', 'x-bf-bearb-text-'].forEach(function (k) { delete VIEW.draft[k + id]; });
   X_VIEW.id = null; X_VIEW.vorschau = null; X_VIEW.keine = false;
   if (STATE.ui.modul === 'x') renderModule();
   try {
@@ -240,6 +240,73 @@ function xUnterlagen(f) {
         dos.map(function (id) { return xBtn('x-unterlage-' + b.id + '-' + id, id, function () { xDossierOeffnen(id, b.id); }); }), vorschau);
     })) : h('p', { class: 'note' }, 'Noch keine Unterlagen für diesen Fall. Dateien können aus dem Eingang oder am Dossier zugeordnet werden.')));
 }
+/* Datierte Einträge je Fall: Lage, Nächster Schritt, Offene Frage. Manuell gepflegt, mit fester uid; ohne frühere Fassungen und ohne Verweise. */
+const X_EINTRAG_ARTEN = { lage: 'Lage', schritt: 'Nächster Schritt', frage: 'Offene Frage' };
+const X_EINTRAG_MAX = 500, X_EINTRAEGE_MAX = 200;
+/* Nur wohlgeformte Einträge (Importe und Altdaten können Beliebiges enthalten); doppelte uid zählen einmal. */
+function xEintraege(f) {
+  if (!Array.isArray(f.eintraege)) return [];
+  const gesehen = {};
+  return f.eintraege.filter(function (e) {
+    const ok = e && typeof e === 'object' && typeof e.uid === 'string' && e.uid && !gesehen[e.uid] && X_EINTRAG_ARTEN[e.art] && typeof e.text === 'string' && typeof e.erfasst === 'string';
+    if (ok) gesehen[e.uid] = 1; return ok;
+  });
+}
+function xEintragAendern(fallId, aenderung, okText) {
+  const akt = xFall(fallId); if (!akt) return false;
+  const ok = xSchreiben(function () { return aenderung(akt); });
+  if (ok && okText) meldung(okText);
+  return ok;
+}
+function xEintragZeile(f, e) {
+  const bearb = VIEW.draft['x-bf-bearb-' + f.id] === e.uid, dr = VIEW.draft['x-bf-bearb-text-' + f.id];
+  const kopf = h('span', { class: 'dim' }, X_EINTRAG_ARTEN[e.art] + ' · ' + fmtZ(e.erfasst) + (e.geaendert ? ' · geändert ' + fmtZ(e.geaendert) : ''));
+  if (bearb) {
+    const feld = h('textarea', { id: 'x-bf-bearb-text-' + e.uid, rows: 3, maxlength: X_EINTRAG_MAX, 'aria-label': 'Eintrag bearbeiten', value: dr !== undefined ? dr : e.text, oninput: function (ev) { VIEW.draft['x-bf-bearb-text-' + f.id] = ev.target.value; } });
+    return h('li', { id: 'x-bf-' + e.uid, 'data-eintrag': e.uid }, h('div', { class: 'x-bf-inhalt' }, kopf, feld, h('div', { class: 'row' },
+      xBtn('x-bf-bearb-ok-' + e.uid, 'Speichern', function () {
+        const text = feld.value.trim().slice(0, X_EINTRAG_MAX);
+        if (!text) { meldung('Der Text des Eintrags darf nicht leer sein.'); return; }
+        delete VIEW.draft['x-bf-bearb-' + f.id]; delete VIEW.draft['x-bf-bearb-text-' + f.id];
+        if (text !== e.text) xEintragAendern(f.id, function (akt) { const z = xEintraege(akt).find(function (x) { return x.uid === e.uid; }); if (!z) return false; z.text = text; z.geaendert = nowIso(); return true; }, 'Eintrag gespeichert.');
+        renderModule();
+      }),
+      xBtn('x-bf-bearb-abbr-' + e.uid, 'Abbrechen', function () { delete VIEW.draft['x-bf-bearb-' + f.id]; delete VIEW.draft['x-bf-bearb-text-' + f.id]; renderModule(); }))));
+  }
+  return h('li', { id: 'x-bf-' + e.uid, 'data-eintrag': e.uid, class: e.erledigt ? 'x-erledigt' : '' }, h('div', { class: 'x-bf-inhalt' }, kopf,
+    h('p', { class: 'x-kurztext' }, e.erledigt ? h('s', null, e.text) : e.text),
+    h('div', { class: 'row' },
+      e.art === 'frage' ? h('label', null, h('input', { type: 'checkbox', id: 'x-bf-erledigt-' + e.uid, checked: !!e.erledigt, onchange: function (ev) {
+        const wert = ev.target.checked;
+        xEintragAendern(f.id, function (akt) { const z = xEintraege(akt).find(function (x) { return x.uid === e.uid; }); if (!z) return false; if (wert) z.erledigt = true; else delete z.erledigt; return true; });
+        renderModule();
+      } }), ' erledigt') : null,
+      xBtn('x-bf-bearb-' + e.uid, 'Bearbeiten', function () { VIEW.draft['x-bf-bearb-' + f.id] = e.uid; delete VIEW.draft['x-bf-bearb-text-' + f.id]; renderModule(); }),
+      xBtn('x-bf-loesch-' + e.uid, 'Löschen', function () {
+        bestaetigen('Eintrag löschen?', '„' + e.text.slice(0, 120) + (e.text.length > 120 ? ' …' : '') + '“ wird gelöscht.', 'Eintrag löschen', function () {
+          xEintragAendern(f.id, function (akt) { const n = xEintraege(akt).filter(function (x) { return x.uid !== e.uid; }); if (n.length === xEintraege(akt).length) return false; if (n.length) akt.eintraege = n; else delete akt.eintraege; return true; }, 'Eintrag gelöscht.');
+          renderModule();
+        });
+      }))));
+}
+function xEintraegeBlock(f) {
+  const E = xEintraege(f).map(function (e, i) { return { e: e, i: i }; }).sort(function (a, c) { return String(c.e.erfasst).localeCompare(String(a.e.erfasst)) || c.i - a.i; });
+  const art = h('select', { id: 'x-bf-art', 'aria-label': 'Art des Eintrags', onchange: function (ev) { VIEW.draft['x-bf-art-' + f.id] = ev.target.value; } },
+    Object.keys(X_EINTRAG_ARTEN).map(function (k) { return h('option', { value: k, selected: (VIEW.draft['x-bf-art-' + f.id] || 'lage') === k }, X_EINTRAG_ARTEN[k]); }));
+  const text = h('textarea', { id: 'x-bf-text', rows: 2, maxlength: X_EINTRAG_MAX, 'aria-label': 'Text des Eintrags', value: VIEW.draft['x-bf-text-' + f.id] || '', oninput: function (ev) { VIEW.draft['x-bf-text-' + f.id] = ev.target.value; } });
+  return h('div', null,
+    h('p', { class: 'dim' }, 'Einträge'),
+    h('div', { class: 'row' }, art), text,
+    h('div', { class: 'row' }, xBtn('x-bf-neu', 'Eintrag hinzufügen', function () {
+      const t = text.value.trim().slice(0, X_EINTRAG_MAX);
+      if (!t) { meldung('Bitte einen Text für den Eintrag eingeben.'); return; }
+      if (xEintraege(xFall(f.id) || f).length >= X_EINTRAEGE_MAX) { meldung('Höchstens ' + X_EINTRAEGE_MAX + ' Einträge je Fall.'); return; }
+      const wahl = art.value in X_EINTRAG_ARTEN ? art.value : 'lage';
+      if (xEintragAendern(f.id, function (akt) { akt.eintraege = xEintraege(akt).concat([{ uid: sichtungKennung(), art: wahl, text: t, erfasst: nowIso() }]); return true; }, 'Eintrag gespeichert.')) delete VIEW.draft['x-bf-text-' + f.id];
+      renderModule();
+    })),
+    E.length ? h('ul', { class: 'x-items' }, E.map(function (x) { return xEintragZeile(f, x.e); })) : h('p', { class: 'note' }, 'Noch keine Einträge.'));
+}
 /* Lagebriefing (Anzeige): vorhandene Kurzlage und bis zu fünf zuletzt erfasste, zugängliche Unterlagen. Keine eigenen Daten. */
 function xBriefing(f) {
   const L = xFallMaterial(f).unterlagen.map(function (b, i) { return { b: b, i: i }; }).filter(function (x) {
@@ -249,6 +316,7 @@ function xBriefing(f) {
     h('div', { class: 'pad' },
       h('h3', null, 'Lagebriefing'),
       h('p', { class: 'dim' }, 'Kurzlage'), h('p', { class: 'x-kurztext' }, f.frage ? f.frage : 'Keine Kurzlage erfasst.'),
+      xEintraegeBlock(f),
       h('p', { class: 'dim' }, 'Zuletzt hinzugefügt'),
       L.length ? h('ul', { class: 'x-items' }, L.map(function (x) {
         const b = x.b, z = rchZuBeobachtung(b.id);
