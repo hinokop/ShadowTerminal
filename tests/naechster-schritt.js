@@ -80,6 +80,14 @@ const { APP } = require('./_pfad');
     await p.evaluate(i => xOeffnen(i), imp.id);
     await p.fill('#x-schritt', '   '); await p.click('#x-schritt-speichern');
     assert.equal(await lies(imp.id), null, 'Leeren entfernt den Eintrag');
+    /* ungespeicherter Entwurf überlebt das Löschen des Falls nicht: gleiche Nummer, neuer Fall, leeres Feld */
+    const dn = await p.evaluate(() => { const g = xAnlegen({ titel: 'Entwurfsfall' }); profilSpeichern(); xOeffnen(g.id); return g.id; });
+    await p.fill('#x-schritt', 'nie gespeichert');
+    await p.evaluate(async i => { await xLoeschen(i); }, dn);
+    assert.equal(await p.evaluate(i => !!xFall(i), dn), false, 'Voraussetzung: Fall gelöscht');
+    const dn2 = await p.evaluate(() => { const g = xAnlegen({ titel: 'Ersatz Entwurf' }); profilSpeichern(); xOeffnen(g.id); return g.id; });
+    assert.equal(dn2, dn, 'Voraussetzung: Nummer wiedervergeben');
+    assert.equal(await p.inputValue('#x-schritt'), '', 'Schrittfeld des neuen Falls ist leer');
     assert.deepEqual(fehler, []);
     console.log('OK: Nächster Schritt im Lagebriefing, Fallpaket-Rundtest');
   } finally { await browser.close(); }

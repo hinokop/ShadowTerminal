@@ -72,7 +72,7 @@ async function xLoeschen(id) {
   ['rch-fall', 'rch-fp-fall'].forEach(function (k) { if (VIEW.draft[k] === id) delete VIEW.draft[k]; });
   bIds.forEach(function (b) { delete VIEW.draft['rch-n-' + b]; });
   VIEW.recherche.sprungziel.forEach(function (b, d) { if (bIds.has(b)) VIEW.recherche.sprungziel.delete(d); });
-  delete VIEW.draft['x-form-' + id];
+  delete VIEW.draft['x-form-' + id]; delete VIEW.draft['x-schritt-' + id];
   X_VIEW.id = null; X_VIEW.vorschau = null; X_VIEW.keine = false;
   if (STATE.ui.modul === 'x') renderModule();
   try {
