@@ -28,7 +28,7 @@ const { APP } = require('./_pfad');
     await p.keyboard.press('F1');
     assert.equal(await p.evaluate(() => window.__n.s), 1, 'F1 sichert');
     assert.equal(await p.evaluate(() => window.__prevented.F1), true, 'F1 unterdrückt die Browserhilfe');
-    assert.equal(await p.inputValue('#x-kurzlage'), 'Entwurf', 'Texteingabe unberührt');
+    assert.equal(await p.innerText('#x-kurzlage'), 'Entwurf', 'Texteingabe unberührt');
     const t1 = await p.evaluate(() => PROFIL.arbeitsstand.modul); assert.equal(t1, 'x');
     assert.equal(await p.locator('#as-wieder').isDisabled(), false, 'Stand laden danach wählbar');
     /* F2 lädt */

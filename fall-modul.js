@@ -72,7 +72,7 @@ async function xLoeschen(id) {
   ['rch-fall', 'rch-fp-fall'].forEach(function (k) { if (VIEW.draft[k] === id) delete VIEW.draft[k]; });
   bIds.forEach(function (b) { delete VIEW.draft['rch-n-' + b]; });
   VIEW.recherche.sprungziel.forEach(function (b, d) { if (bIds.has(b)) VIEW.recherche.sprungziel.delete(d); });
-  delete VIEW.draft['x-form-' + id];
+  delete VIEW.draft['x-form-' + id]; ['x-bf-text-', 'x-bf-art-', 'x-bf-bearb-', 'x-bf-bearb-text-'].forEach(function (k) { delete VIEW.draft[k + id]; });
   X_VIEW.id = null; X_VIEW.vorschau = null; X_VIEW.keine = false;
   if (STATE.ui.modul === 'x') renderModule();
   try {
@@ -185,7 +185,7 @@ function xForm(f) {
     (VIEW.draft[key] = VIEW.draft[key] || {})[k] = ev.target.value;
   }; };
   const titel = h('input', { id: 'x-titel', required: true, maxlength: 120, value: d.titel ?? f.titel, oninput: merken('titel') });
-  const lage = h('textarea', { id: 'x-kurzlage', rows: 4, maxlength: 300, value: d.frage ?? f.frage ?? '', oninput: merken('frage') });
+  const lage = xTextEditor('x-kurzlage', d.frage !== undefined ? d.frage : (xFrageHtml(f) || xTextAusKlartext(f.frage)), function (html) { (VIEW.draft[key] = VIEW.draft[key] || {}).frage = html; }, 'Kurzlage / Leitfrage');
   const status = xSelect('x-status', X_STATUS, d.zustand ?? xStatus(f.zustand)[0], { onchange: merken('zustand') });
   const bewertung = xSelect('x-bewertung', X_BEWERTUNG, d.bewertung ?? xAuswahl(X_BEWERTUNG, f.bewertung)[0], { onchange: merken('bewertung') });
   const begruendung = h('textarea', { id: 'x-begruendung', rows: 2, maxlength: 500, value: d.begruendung ?? f.begruendung ?? '', oninput: merken('begruendung') });
@@ -193,12 +193,15 @@ function xForm(f) {
     ev.preventDefault();
     const akt = xFall(f.id), name = titel.value.trim();
     if (!akt || !name) { meldung('Bitte einen Falltitel eingeben.'); return; }
+    const html = lage.wert(), klar = xTextPlain(html);
+    if (klar.length > 300) { meldung('Höchstens 300 Zeichen für die Kurzlage.'); return; }
     if (xSchreiben(function () {
-      Object.assign(akt, { titel: name, frage: lage.value.trim(), zustand: status.value, bewertung: bewertung.value, begruendung: begruendung.value.trim() });
+      Object.assign(akt, { titel: name, frage: klar, zustand: status.value, bewertung: bewertung.value, begruendung: begruendung.value.trim() });
+      if (klar && html !== xTextAusKlartext(klar)) akt.frageFormat = html; else delete akt.frageFormat;
       return true;
     })) { delete VIEW.draft[key]; meldung(f.id + ' gespeichert.'); renderModule(); }
   } },
-  feldZeile('Titel', titel.id, titel), feldZeile('Kurzlage / Leitfrage', lage.id, lage),
+  feldZeile('Titel', titel.id, titel), feldZeile('Kurzlage / Leitfrage', 'x-kurzlage', lage.knoten),
   feldZeile('Zustand', status.id, status), feldZeile('Bewertung der Informationslage', bewertung.id, bewertung), feldZeile('Begründung (optional)', begruendung.id, begruendung),
   h('button', { id: 'x-speichern', type: 'submit' }, 'Fall speichern'));
 }
@@ -240,6 +243,140 @@ function xUnterlagen(f) {
         dos.map(function (id) { return xBtn('x-unterlage-' + b.id + '-' + id, id, function () { xDossierOeffnen(id, b.id); }); }), vorschau);
     })) : h('p', { class: 'note' }, 'Noch keine Unterlagen für diesen Fall. Dateien können aus dem Eingang oder am Dossier zugeordnet werden.')));
 }
+/* Einfacher Texteditor für Einträge: Fett, Kursiv, Unterstrichen, Liste. Eingefügt wird nur Text; Inhalt wird mit der Bereinigung der Dossier-Kurzlage
+   (kurzlageInhalt) beim Speichern und bei jeder Anzeige aus erlaubten Elementen neu aufgebaut. Unterlagen-Verweise der Kurzlage gibt es hier nicht. */
+function xTextOhneVerweise(html) {
+  /* In einem eigenen, inerten Dokument parsen: Knoten dürfen nie in das aktive Dokument wandern (sonst laden Bilder und onerror feuert). */
+  const doc = document.implementation.createHTMLDocument('');
+  doc.body.innerHTML = typeof html === 'string' ? html.slice(0, 24000) : '';
+  doc.body.querySelectorAll('[data-unterlage]').forEach(function (n) { n.remove(); });
+  return doc.body.innerHTML;
+}
+function xTextKanon(html) { return kurzlageKanon(xTextOhneVerweise(html)); }
+function xTextAnzeige(html) { return h('div', { class: 'kl-text' }, kurzlageInhalt(xTextOhneVerweise(html), new Map(), true)); }
+/* Klartext mit Zeilenumbrüchen aus bereinigtem Inhalt; dient Längenprüfung, Leerprüfung und dem Klartextfeld des Falls. */
+function xTextPlain(html) {
+  const wurzel = h('div', null, kurzlageInhalt(xTextOhneVerweise(html), new Map(), false)), block = { DIV: 1, P: 1, UL: 1, LI: 1 };
+  let aus = '';
+  const gehe = function (n) {
+    if (n.nodeType === 3) { aus += n.data; return; }
+    if (n.nodeType !== 1) return;
+    if (n.tagName === 'BR') { aus += '\n'; return; }
+    const b = block[n.tagName] === 1;
+    if (b && aus && !/\n$/.test(aus)) aus += '\n';
+    Array.from(n.childNodes).forEach(gehe);
+    if (b && aus && !/\n$/.test(aus)) aus += '\n';
+  };
+  Array.from(wurzel.childNodes).forEach(gehe);
+  return aus.replace(/\u00a0/g, ' ').trim();
+}
+/* Klartext als Editorinhalt (maskiert, Zeilenumbrüche als <br>). */
+function xTextAusKlartext(t) {
+  const d = h('div'); String(t || '').split('\n').forEach(function (z, i) { if (i) d.appendChild(document.createElement('br')); d.appendChild(document.createTextNode(z)); });
+  return d.innerHTML;
+}
+/* Formatierte Kurzlage gilt nur, wenn ihr Klartext zum Klartextfeld des Falls passt. */
+function xFrageHtml(f) { return typeof f.frageFormat === 'string' && f.frage && xTextPlain(f.frageFormat) === f.frage ? f.frageFormat : null; }
+function xTextEditor(id, start, beiAenderung, beschriftung) {
+  const eingabe = h('div', { id: id, class: 'kl-text kl-eingabe', contenteditable: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': beschriftung || 'Text des Eintrags', spellcheck: 'true' },
+    kurzlageInhalt(xTextOhneVerweise(start || ''), new Map(), false));
+  let position = null;
+  const merken = function () {
+    const sel = window.getSelection(), r = sel.rangeCount ? sel.getRangeAt(0) : null;
+    if (r && eingabe.contains(r.commonAncestorContainer)) position = r.cloneRange();
+  };
+  const wieder = function () {
+    eingabe.focus();
+    const sel = window.getSelection(); let r = position;
+    if (!r || !eingabe.contains(r.commonAncestorContainer)) { r = document.createRange(); r.selectNodeContents(eingabe); r.collapse(false); }
+    sel.removeAllRanges(); sel.addRange(r);
+  };
+  ['input', 'keyup', 'mouseup', 'blur'].forEach(function (a) { eingabe.addEventListener(a, merken); });
+  eingabe.addEventListener('input', function () { if (beiAenderung) beiAenderung(eingabe.innerHTML); });
+  eingabe.addEventListener('paste', function (ev) {
+    ev.preventDefault(); document.execCommand('insertText', false, (ev.clipboardData || window.clipboardData).getData('text/plain')); merken();
+  });
+  eingabe.addEventListener('drop', function (ev) { ev.preventDefault(); });
+  const format = function (befehl, titel, text) {
+    return h('button', { type: 'button', 'data-format': befehl, 'aria-label': titel, title: titel,
+      onmousedown: function (ev) { merken(); ev.preventDefault(); },
+      onclick: function () { wieder(); document.execCommand('styleWithCSS', false, false); document.execCommand(befehl, false, null); merken(); if (beiAenderung) beiAenderung(eingabe.innerHTML); } }, text);
+  };
+  const leiste = h('div', { id: id + '-leiste', class: 'kl-werkzeuge', role: 'group', 'aria-label': 'Text formatieren' },
+    format('bold', 'Fett', h('b', null, 'B')), format('italic', 'Kursiv', h('i', null, 'I')), format('underline', 'Unterstrichen', h('u', null, 'U')), format('insertUnorderedList', 'Aufzählung', '• Liste'));
+  return { knoten: h('div', { class: 'x-editor' }, leiste, eingabe), wert: function () { return xTextKanon(eingabe.innerHTML); }, roh: function () { return eingabe.innerHTML; } };
+}
+/* Datierte Einträge je Fall: Lage, Nächster Schritt, Offene Frage. Manuell gepflegt, mit fester uid; ohne frühere Fassungen und ohne Verweise. */
+const X_EINTRAG_ARTEN = { lage: 'Lage', schritt: 'Nächster Schritt', frage: 'Offene Frage' };
+const X_EINTRAG_MAX = 500, X_EINTRAEGE_MAX = 200;
+/* Nur wohlgeformte Einträge (Importe und Altdaten können Beliebiges enthalten); doppelte uid zählen einmal. */
+function xEintraege(f) {
+  if (!Array.isArray(f.eintraege)) return [];
+  const gesehen = {};
+  return f.eintraege.filter(function (e) {
+    const ok = e && typeof e === 'object' && typeof e.uid === 'string' && e.uid && !gesehen[e.uid] && X_EINTRAG_ARTEN[e.art] && typeof e.text === 'string' && typeof e.erfasst === 'string';
+    if (ok) gesehen[e.uid] = 1; return ok;
+  });
+}
+function xEintragAendern(fallId, aenderung, okText) {
+  const akt = xFall(fallId); if (!akt) return false;
+  const ok = xSchreiben(function () { return aenderung(akt); });
+  if (ok && okText) meldung(okText);
+  return ok;
+}
+function xEintragZeile(f, e) {
+  const bearb = VIEW.draft['x-bf-bearb-' + f.id] === e.uid, dr = VIEW.draft['x-bf-bearb-text-' + f.id];
+  const kopf = h('span', { class: 'dim' }, X_EINTRAG_ARTEN[e.art] + ' · ' + fmtZ(e.erfasst) + (e.geaendert ? ' · geändert ' + fmtZ(e.geaendert) : ''));
+  if (bearb) {
+    const ed = xTextEditor('x-bf-bearb-text-' + e.uid, dr !== undefined ? dr : e.text, function (html) { VIEW.draft['x-bf-bearb-text-' + f.id] = html; });
+    return h('li', { id: 'x-bf-' + e.uid, 'data-eintrag': e.uid }, h('div', { class: 'x-bf-inhalt' }, kopf, ed.knoten, h('div', { class: 'row' },
+      xBtn('x-bf-bearb-ok-' + e.uid, 'Speichern', function () {
+        const text = ed.wert();
+        if (!xTextPlain(text)) { meldung('Der Text des Eintrags darf nicht leer sein.'); return; }
+        if (xTextPlain(text).length > X_EINTRAG_MAX) { meldung('Höchstens ' + X_EINTRAG_MAX + ' Zeichen je Eintrag.'); return; }
+        let ok = true;
+        if (text !== e.text) ok = xEintragAendern(f.id, function (akt) { const z = xEintraege(akt).find(function (x) { return x.uid === e.uid; }); if (!z) return false; z.text = text; z.geaendert = nowIso(); return true; }, 'Eintrag gespeichert.');
+        if (ok) { delete VIEW.draft['x-bf-bearb-' + f.id]; delete VIEW.draft['x-bf-bearb-text-' + f.id]; }
+        else VIEW.draft['x-bf-bearb-text-' + f.id] = text;
+        renderModule();
+      }),
+      xBtn('x-bf-bearb-abbr-' + e.uid, 'Abbrechen', function () { delete VIEW.draft['x-bf-bearb-' + f.id]; delete VIEW.draft['x-bf-bearb-text-' + f.id]; renderModule(); }))));
+  }
+  return h('li', { id: 'x-bf-' + e.uid, 'data-eintrag': e.uid, class: e.erledigt ? 'x-erledigt' : '' }, h('div', { class: 'x-bf-inhalt' }, kopf,
+    h('div', { class: e.erledigt ? 'x-bf-text x-erledigt-text' : 'x-bf-text' }, xTextAnzeige(e.text)),
+    h('div', { class: 'row' },
+      e.art === 'frage' ? h('label', null, h('input', { type: 'checkbox', id: 'x-bf-erledigt-' + e.uid, checked: !!e.erledigt, onchange: function (ev) {
+        const wert = ev.target.checked;
+        xEintragAendern(f.id, function (akt) { const z = xEintraege(akt).find(function (x) { return x.uid === e.uid; }); if (!z) return false; if (wert) z.erledigt = true; else delete z.erledigt; return true; });
+        renderModule();
+      } }), ' erledigt') : null,
+      xBtn('x-bf-bearb-' + e.uid, 'Bearbeiten', function () { VIEW.draft['x-bf-bearb-' + f.id] = e.uid; delete VIEW.draft['x-bf-bearb-text-' + f.id]; renderModule(); }),
+      xBtn('x-bf-loesch-' + e.uid, 'Löschen', function () {
+        bestaetigen('Eintrag löschen?', '„' + xTextPlain(e.text).slice(0, 120) + (xTextPlain(e.text).length > 120 ? ' …' : '') + '“ wird gelöscht.', 'Eintrag löschen', function () {
+          xEintragAendern(f.id, function (akt) { const n = xEintraege(akt).filter(function (x) { return x.uid !== e.uid; }); if (n.length === xEintraege(akt).length) return false; if (n.length) akt.eintraege = n; else delete akt.eintraege; return true; }, 'Eintrag gelöscht.');
+          renderModule();
+        });
+      }))));
+}
+function xEintraegeBlock(f) {
+  const E = xEintraege(f).map(function (e, i) { return { e: e, i: i }; }).sort(function (a, c) { return String(c.e.erfasst).localeCompare(String(a.e.erfasst)) || c.i - a.i; });
+  const art = h('select', { id: 'x-bf-art', 'aria-label': 'Art des Eintrags', onchange: function (ev) { VIEW.draft['x-bf-art-' + f.id] = ev.target.value; } },
+    Object.keys(X_EINTRAG_ARTEN).map(function (k) { return h('option', { value: k, selected: (VIEW.draft['x-bf-art-' + f.id] || 'lage') === k }, X_EINTRAG_ARTEN[k]); }));
+  const ed = xTextEditor('x-bf-text', VIEW.draft['x-bf-text-' + f.id] || '', function (html) { VIEW.draft['x-bf-text-' + f.id] = html; });
+  return h('div', null,
+    h('p', { class: 'dim' }, 'Einträge'),
+    h('div', { class: 'row' }, art), ed.knoten,
+    h('div', { class: 'row' }, xBtn('x-bf-neu', 'Eintrag hinzufügen', function () {
+      const t = ed.wert();
+      if (!xTextPlain(t)) { meldung('Bitte einen Text für den Eintrag eingeben.'); return; }
+      if (xTextPlain(t).length > X_EINTRAG_MAX) { meldung('Höchstens ' + X_EINTRAG_MAX + ' Zeichen je Eintrag.'); return; }
+      if (xEintraege(xFall(f.id) || f).length >= X_EINTRAEGE_MAX) { meldung('Höchstens ' + X_EINTRAEGE_MAX + ' Einträge je Fall.'); return; }
+      const wahl = art.value in X_EINTRAG_ARTEN ? art.value : 'lage';
+      if (xEintragAendern(f.id, function (akt) { akt.eintraege = xEintraege(akt).concat([{ uid: sichtungKennung(), art: wahl, text: t, erfasst: nowIso() }]); return true; }, 'Eintrag gespeichert.')) delete VIEW.draft['x-bf-text-' + f.id];
+      renderModule();
+    })),
+    E.length ? h('ul', { class: 'x-items' }, E.map(function (x) { return xEintragZeile(f, x.e); })) : h('p', { class: 'note' }, 'Noch keine Einträge.'));
+}
 /* Lagebriefing (Anzeige): vorhandene Kurzlage und bis zu fünf zuletzt erfasste, zugängliche Unterlagen. Keine eigenen Daten. */
 function xBriefing(f) {
   const L = xFallMaterial(f).unterlagen.map(function (b, i) { return { b: b, i: i }; }).filter(function (x) {
@@ -248,7 +385,8 @@ function xBriefing(f) {
   return h('section', { id: 'x-briefing', class: 'panel', 'aria-label': 'Lagebriefing' },
     h('div', { class: 'pad' },
       h('h3', null, 'Lagebriefing'),
-      h('p', { class: 'dim' }, 'Kurzlage'), h('p', { class: 'x-kurztext' }, f.frage ? f.frage : 'Keine Kurzlage erfasst.'),
+      h('p', { class: 'dim' }, 'Kurzlage'), f.frage ? (xFrageHtml(f) ? h('div', { class: 'x-kurztext' }, xTextAnzeige(xFrageHtml(f))) : h('p', { class: 'x-kurztext x-klartext' }, f.frage)) : h('p', { class: 'x-kurztext' }, 'Keine Kurzlage erfasst.'),
+      xEintraegeBlock(f),
       h('p', { class: 'dim' }, 'Zuletzt hinzugefügt'),
       L.length ? h('ul', { class: 'x-items' }, L.map(function (x) {
         const b = x.b, z = rchZuBeobachtung(b.id);
@@ -268,8 +406,35 @@ function xPaketPanel(f) {
       const fl = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (fl) rchPaketLaden(fl);
     } }))));
 }
+/* Einmalige Übernahme des früheren Einzelfelds "Nächster Schritt" (Testpaket mit PR #50) als datierter Eintrag.
+   Feste Kennung: erneutes Laden erzeugt keine Dublette; Zeitstempel bleibt der bisherige. */
+const X_ALT_SCHRITT_UID = 'altschritt';
+let X_ALT_SCHRITT_FEHLER = false;
+function xAltSchrittKandidaten() {
+  return PROFIL.recherche.faelle.filter(function (f) { return f && f.naechsterSchritt && typeof f.naechsterSchritt === 'object' && typeof f.naechsterSchritt.text === 'string'; });
+}
+function xAltSchrittUebernehmen() {
+  const K = xAltSchrittKandidaten();
+  if (!K.length) { X_ALT_SCHRITT_FEHLER = false; return; }
+  if (X_ALT_SCHRITT_FEHLER) return;
+  const ok = xSchreiben(function () {
+    K.forEach(function (f) {
+      const s = f.naechsterSchritt, klar = s.text.trim().slice(0, X_EINTRAG_MAX);
+      const vorhanden = xEintraege(f).some(function (e) { return e.uid === X_ALT_SCHRITT_UID; });
+      if (klar && !vorhanden) {
+        if (xEintraege(f).length >= X_EINTRAEGE_MAX) return;
+        const am = typeof s.am === 'string' && s.am ? s.am : (typeof f.erfasst === 'string' && f.erfasst ? f.erfasst : nowIso());
+        f.eintraege = xEintraege(f).concat([{ uid: X_ALT_SCHRITT_UID, art: 'schritt', text: xTextKanon(xTextAusKlartext(klar)), erfasst: am }]);
+      }
+      delete f.naechsterSchritt;
+    });
+    return true;
+  });
+  if (!ok) X_ALT_SCHRITT_FEHLER = true;
+}
 function renderX(m) {
   akVorschauFreigeben();
+  xAltSchrittUebernehmen();
   const L = PROFIL.recherche.faelle;
   const f = xAngezeigt();
   const liste = panel('Fälle', null, h('div', { class: 'pad' },
