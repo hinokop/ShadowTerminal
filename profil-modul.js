@@ -241,7 +241,8 @@ function terminalShellPfad(arg) {
   }
   return out;
 }
-const TERMINAL_TLE_DIRS = new Map([['/var', ['cache/']], ['/var/cache', ['tle/']], ['/var/cache/tle', ['leo.txt']]]);
+const TERMINAL_TLE_DIRS = new Map([['/var', ['cache/', 'log/']], ['/var/cache', ['tle/']],
+  ['/var/cache/tle', ['leo.txt', 'iridium.tle']], ['/var/log', ['syslog']]]);
 const TERMINAL_TLE_DATEI = '/var/cache/tle/leo.txt';
 function terminalArbeitsverzeichnis() {
   const t = TERMINAL_ZUSTAND;
@@ -279,7 +280,10 @@ function terminalSitzungTrennen() {
   return terminalBruecke('disconnect');
 }
 function terminalPrompt() {
+  if (TERMINAL_ZUSTAND.orbitLive) return 'predict -f · Ctrl+C';
+  if (terminalPppWaehltVorne()) return '';
   const kanal = TERMINAL_ZUSTAND.kanal;
+  if (kanal?.ui === 'xmpp') return '>';
   if (kanal) return kanal.phase === 'eingabe' ? 'you >' : '…';
   return 'root@terminal:' + terminalArbeitsverzeichnis() + '#';
 }
@@ -319,10 +323,10 @@ function terminalTransferStop() {
   TERMINAL_ZUSTAND.fortschritt = '';
   terminalTransferAktualisieren();
 }
-async function terminalTransfer(name, bytes, weiter, simMs) {
+async function terminalTransfer(name, bytes, weiter, simMs, zeitErhalten = false) {
   const t = TERMINAL_ZUSTAND, start = performance.now();
   // Animation for a local copy, not a measurement of a remote network.
-  const dauer = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 :
+  const dauer = !zeitErhalten && matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 :
     (simMs ?? Math.min(6500, 550 + bytes / (1.5 * 1024)));
   do {
     if (!weiter()) return null;
@@ -364,10 +368,12 @@ async function terminalDateiBefehl(befehl, arg, version) {
     else terminalAusgabe(befehl + ': ' + name + ': Is a directory');
     return;
   }
-  if (voll === TERMINAL_TLE_DATEI) {
+  if (voll === '/var/log/syslog' || voll === TERMINAL_TLE_DATEI || voll === TERMINAL_PPP_DATEI) {
     if (befehl === 'cd') terminalAusgabe('cd: ' + name + ': Not a directory');
     else if (befehl === 'wget') terminalAusgabe('wget: ' + name + ': unsupported source');
-    else if (befehl === 'ls') terminalAusgabe('leo.txt');
+    else if (befehl === 'ls') terminalAusgabe(virtuell.at(-1));
+    else if (voll === '/var/log/syslog') terminalSyslog(befehl === 'cat' ? 60 : 10);
+    else if (voll === TERMINAL_PPP_DATEI) terminalAusgabe('IRIDIUM 142');
     else terminalAusgabe('IRIDIUM-142\nProfile: demo LEO pass\nAzimuth: 142°\nElevation: 48°');
     return;
   }
@@ -402,10 +408,11 @@ async function terminalDateiBefehl(befehl, arg, version) {
   } else terminalAusgabe(antwort.text);
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satAufbau: null, satLink: null };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satAufbau: null, satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [] };
 function terminalAusgabe(zeile) {
   const t = TERMINAL_ZUSTAND;
   t.ausgabe = t.ausgabe.concat(zeile).slice(-45);
+  terminalPppAnzeige();
   const el = $('profil-terminal-ausgabe');
   if (!el) return;
   el.textContent = t.ausgabe.join('\n');
@@ -447,11 +454,21 @@ function terminalSatAnzeige() {
   if (!feld) return;
   const link = TERMINAL_ZUSTAND.satLink;
   feld.hidden = !link;
-  feld.textContent = link ? 'sat0 · LOS ' + terminalSatRest(link) : '';
+  feld.textContent = link ? (link.modus === 'ppp' ? 'IRIDIUM 142' : 'sat0') + ' · LOS ' + terminalSatRest(link) : '';
+  terminalPppAnzeige();
 }
 function terminalSatLinkAktiv(link) {
   if (TERMINAL_ZUSTAND.satLink !== link) return false;
   if (Date.now() < link.bis) return true;
+  if (link.modus === 'ppp') {
+    if (!link.abgelaufen) {
+      link.abgelaufen = true;
+      clearInterval(link.timer);
+      terminalPppModemAus('Modem hangup (NO CARRIER)');
+      terminalSatAnzeige();
+    }
+    return false;
+  }
   const transfer = TERMINAL_ZUSTAND.kanal?.phase === 'transfer';
   terminalKanalAbbruch();
   terminalAusgabe(transfer ? ['[!] Loss of signal · sat0 down.', 'send: transfer interrupted'] : '[!] Loss of signal · sat0 down.');
@@ -461,7 +478,12 @@ function terminalSatAbbruch() {
   const t = TERMINAL_ZUSTAND, alt = t.satAufbau;
   if (t.satLink) clearInterval(t.satLink.timer);
   t.satLink = null;
+  t.orbitLive = false;
+  if (t.wgSat) clearTimeout(t.wgSat.timer);
+  if (t.modem) clearTimeout(t.modem.timer);
+  t.modem = t.wgSat = null;
   terminalSatAnzeige();
+  terminalKanalPromptSync();
   t.satAufbau = null;
   if (alt) alt.abbrechen();
 }
@@ -469,6 +491,7 @@ async function terminalSatTxStart(arg) {
   const t = TERMINAL_ZUSTAND;
   if (arg.split(/\s+/).join(' ') !== TERMINAL_SAT_TX_TEILE.join(' ')) { terminalAusgabe('usage: ' + TERMINAL_SAT_TX_BEFEHL); return; }
   if (t.satAufbau || t.dateiLaeuft || t.prueft) { terminalAusgabe('satcon-tx: operation in progress'); return; }
+  if (t.modem || t.wgSat) { terminalAusgabe('satcon-tx: ppp0 or wg-sat is in use'); return; }
   terminalSatAbbruch();
   const aufbau = { abbrechen: function () {} };
   t.satAufbau = aufbau;
@@ -513,6 +536,7 @@ function terminalKanalAbbruch() {
   terminalSatAbbruch();
   if (!t.kanal) return;
   const kanal = t.kanal;
+  if (kanal.ui === 'xmpp') { terminalPppChatAus(); return; }
   t.ausgabe = kanal.vorher;
   t.kanal = null;
   if (kanal.pauseBeenden) kanal.pauseBeenden();
@@ -558,7 +582,7 @@ function terminalIdentitaetZeilen(ident) {
 }
 async function terminalSatKanalStart() {
   const t = TERMINAL_ZUSTAND, link = t.satLink;
-  if (!link || !terminalSatLinkAktiv(link)) { terminalAusgabe('secure-channel: sat0: Link is down'); return; }
+  if (!link || link.modus === 'ppp' || !terminalSatLinkAktiv(link)) { terminalAusgabe('secure-channel: sat0: Link is down'); return; }
   if (t.dateiLaeuft || t.prueft) { terminalAusgabe('Eine Anfrage läuft bereits'); return; }
   const ident = terminalKanalIdentitaet(), kanal = { phase: 'start', vorher: t.ausgabe.slice(), link,
     knoten: ident.knoten, sitzung: ident.sitzung, kontakt: ident.kontakt };
@@ -672,6 +696,318 @@ async function terminalSatKanalEnde(kanal, bestaetigt) {
   terminalAusgabe((bestaetigt ? ['> Verstanden.', TERMINAL_KANAL_LINIE] : []).concat(protokoll));
 }
 
+/* Fixed command grammar and in-memory state. No host processes, sockets or network configuration. */
+const TERMINAL_PPP_DATEI = '/var/cache/tle/iridium.tle';
+const TERMINAL_PPP_SAT = 'IRIDIUM 142';
+const TERMINAL_PPP_ENDE = 'pppd[1401]: Connection terminated.';
+function terminalPppZeit(ms) {
+  return new Date(ms).toISOString().slice(11, 19);
+}
+function terminalPppZeile(link, ms) {
+  const zeit = Math.max(link.von, Math.min(ms, link.bis));
+  const datum = new Date(zeit);
+  const tag = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }).format(datum);
+  const mon = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(datum);
+  const iso = datum.toISOString();
+  const faktor = (zeit - link.von) / (link.bis - link.von);
+  const hoehe = Math.round(48 * Math.sin(Math.PI * faktor));
+  const azimut = Math.round(112 + 203 * faktor);
+  return [Math.floor(zeit / 1000), tag, iso.slice(8, 10) + mon + iso.slice(2, 4),
+    terminalPppZeit(zeit), hoehe, azimut, Math.floor(192 + 42 * faktor) % 256,
+    Math.round(51 + 4 * faktor), Math.round(7 + 9 * faktor),
+    Math.round(2410 - 1498 * Math.sin(Math.PI * faktor)), link.orbit, '*'].join('  ');
+}
+function terminalPppAnzeige() {
+  const t = TERMINAL_ZUSTAND, chat = t.kanal?.ui === 'xmpp' ? t.kanal : null;
+  const oben = $('profil-terminal-orbit'), unten = $('profil-terminal-chat'), shell = $('profil-terminal-ausgabe');
+  if (!oben || !unten || !shell) return;
+  const live = t.orbitLive && !!t.satLink;
+  oben.hidden = !chat && !live;
+  oben.classList.toggle('orbit-live', live);
+  unten.hidden = !chat;
+  if (!chat && !live) { shell.hidden = false; return; }
+  shell.hidden = !!chat;
+  const link = chat ? chat.link : t.satLink;
+  const daten = TERMINAL_PPP_SAT + '  [LOS ' + terminalSatRest(link) + ']\n' +
+    terminalPppZeile(link, Date.now()) + (link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '');
+  if (oben.textContent !== daten) oben.textContent = daten;
+  if (!chat) return;
+  const text = chat.log.join('\n');
+  if (unten.textContent !== text) {
+    unten.textContent = text;
+    unten.scrollTop = unten.scrollHeight;
+  }
+}
+function terminalPppChatLog(chat, text) {
+  if (TERMINAL_ZUSTAND.kanal !== chat) return;
+  chat.log = chat.log.concat(terminalPppZeit(Date.now()) + ' - ' + text).slice(-70);
+  terminalPppAnzeige();
+}
+function terminalPppLog(text) {
+  const t = TERMINAL_ZUSTAND, jetzt = new Date();
+  const tag = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(jetzt);
+  t.syslog = t.syslog.concat(tag + ' ' + terminalPppZeit(+jetzt) + ' terminal ' + text).slice(-60);
+}
+function terminalPppChatAus() {
+  const t = TERMINAL_ZUSTAND, chat = t.kanal;
+  if (chat?.ui !== 'xmpp') return;
+  clearTimeout(chat.antwort);
+  clearTimeout(chat.abbruch);
+  clearTimeout(chat.anmeldung);
+  clearTimeout(chat.omemoAufbau);
+  t.kanal = null;
+  terminalTabReset();
+  terminalTransferStop();
+  const input = $('profil-terminal-eingabe');
+  if (input) terminalEingabeSetzen(input, '');
+  terminalKanalPromptSync();
+  terminalPppAnzeige();
+}
+function terminalPppModemAus(grund) {
+  const t = TERMINAL_ZUSTAND, modem = t.modem;
+  if (modem) {
+    clearTimeout(modem.timer);
+    terminalPppLog('pppd[1401]: ' + grund);
+    terminalPppLog(TERMINAL_PPP_ENDE);
+    if (modem.vordergrund && !modem.bereit) terminalAusgabe(['pppd[1401]: ' + grund, TERMINAL_PPP_ENDE]);
+  }
+  t.modem = null;
+  terminalKanalPromptSync();
+  if (t.wgSat) t.wgSat.handshake = null;
+  const chat = t.kanal;
+  if (chat?.ui !== 'xmpp' || chat.phase === 'offline') return;
+  const transfer = chat.phase === 'transfer';
+  chat.phase = 'offline';
+  clearTimeout(chat.antwort);
+  clearTimeout(chat.anmeldung);
+  clearTimeout(chat.omemoAufbau);
+  terminalTabReset();
+  terminalTransferStop();
+  terminalPppChatLog(chat, 'pppd: ' + grund);
+  chat.abbruch = setTimeout(function () {
+    if (transfer) terminalPppChatLog(chat, 'Error uploading file: Network unreachable');
+    terminalPppChatLog(chat, 'Disconnected from ' + chat.account);
+  }, 750);
+}
+function terminalPppWaehltVorne() {
+  const modem = TERMINAL_ZUSTAND.modem;
+  return !!modem?.vordergrund && !modem.bereit;
+}
+function terminalPppEinwahl(link, vordergrund, syslogZeilen) {
+  const t = TERMINAL_ZUSTAND, modem = { bereit: false, vordergrund, timer: null };
+  t.modem = modem;
+  terminalKanalPromptSync();
+  const schritte = [
+    [0, ['chat[1402]: abort on (BUSY)', 'chat[1402]: abort on (NO CARRIER)']],
+    [450, ['chat[1402]: send (AT+CSQ^M)']],
+    [650, ['chat[1402]: +CSQ:4^M']],
+    [450, ['chat[1402]: send (ATD*99***1#^M)']],
+    [2400, ['chat[1402]: CONNECT 2400']],
+    [900, ['pppd[1401]: Serial connection established.']],
+    [750, ['pppd[1401]: Using interface ppp0']],
+    [1900, ['pppd[1401]: local IP address 10.184.12.94']]
+  ];
+  const schritt = function (i) {
+    if (t.modem !== modem || !terminalSatLinkAktiv(link)) return;
+    const zeilen = schritte[i][1];
+    zeilen.forEach(terminalPppLog);
+    if (vordergrund) terminalAusgabe(zeilen);
+    if (i + 1 < schritte.length) {
+      modem.timer = setTimeout(() => schritt(i + 1), schritte[i + 1][0]);
+      return;
+    }
+    modem.bereit = true;
+    modem.timer = null;
+    terminalKanalPromptSync();
+    if (vordergrund && syslogZeilen) terminalSyslog(syslogZeilen);
+  };
+  schritt(0);
+  if (!vordergrund && syslogZeilen) terminalSyslog(syslogZeilen);
+}
+function terminalPppShell(befehl, arg) {
+  const t = TERMINAL_ZUSTAND, link = t.satLink;
+  if (befehl === 'predict') {
+    const m = /^-t\s+\/var\/cache\/tle\/iridium\.tle\s+-([pf])\s+"IRIDIUM 142"$/.exec(arg);
+    if (!m) { terminalAusgabe('usage: predict -t ' + TERMINAL_PPP_DATEI + ' -p "' + TERMINAL_PPP_SAT + '"'); return true; }
+    if (link && link.modus !== 'ppp') { terminalAusgabe('predict: sat0 is still in use'); return true; }
+    if (!link || link.abgelaufen) {
+      const jetzt = Math.floor(Date.now() / 1000) * 1000;
+      const pass = { modus: 'ppp', von: jetzt - 180000, bis: jetzt + (300 + terminalKanalZufall(601)) * 1000,
+        orbit: 25000 + terminalKanalZufall(70000), abgelaufen: false };
+      t.satLink = pass;
+      pass.timer = setInterval(function () { if (terminalSatLinkAktiv(pass)) terminalSatAnzeige(); }, 250);
+      terminalSatAnzeige();
+    }
+    const pass = t.satLink;
+    if (m[1] === 'f') {
+      t.orbitLive = true;
+      terminalPppAnzeige();
+      terminalKanalPromptSync();
+      return true;
+    }
+    terminalAusgabe([pass.von, (pass.von + pass.bis) / 2, pass.bis].map(ms => terminalPppZeile(pass, ms)));
+    return true;
+  }
+  if (befehl === 'pppd') {
+    const m = /^call iridium( updetach)?(?: && tail -n (6|12) \/var\/log\/syslog)?$/.exec(arg);
+    if (!m) { terminalAusgabe('usage: pppd call iridium [updetach]'); return true; }
+    if (link?.modus !== 'ppp' || !terminalSatLinkAktiv(link)) { terminalAusgabe('pppd: NO CARRIER'); return true; }
+    if (t.modem) { terminalAusgabe('pppd: iridium already running'); return true; }
+    terminalPppEinwahl(link, !!m[1], Number(m[2] || 0));
+    return true;
+  }
+  if (befehl === 'tail' && /^-n \d{1,2} \/var\/log\/syslog$/.test(arg)) {
+    terminalSyslog(Number(arg.split(' ')[1]));
+    return true;
+  }
+  if (befehl === 'poff') {
+    if (arg !== 'iridium' && !/^iridium && tail -n (?:6|12) \/var\/log\/syslog$/.test(arg)) terminalAusgabe('usage: poff iridium');
+    else {
+      if (t.modem) terminalPppModemAus('Terminating on signal 15');
+      else terminalAusgabe('poff: iridium is not running');
+      if (arg.includes('&&')) terminalSyslog(Number(arg.match(/tail -n (\d+)/)[1]));
+    }
+    return true;
+  }
+  if (befehl === 'wg-quick') {
+    if (arg === 'up wg-sat') {
+      if (t.wgSat) terminalAusgabe('wg-quick: wg-sat already exists');
+      else if (!t.modem?.bereit || link?.modus !== 'ppp' || !terminalSatLinkAktiv(link)) terminalAusgabe('wg-quick: ppp0 is not ready');
+      else {
+        const kennung = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
+        const interfaceSat = { bereit: false, handshake: null, lokal: kennung(), peer: kennung(), timer: null };
+        t.wgSat = interfaceSat;
+        terminalAusgabe('[#] ip link add wg-sat type wireguard');
+        interfaceSat.timer = setTimeout(function () {
+          if (t.wgSat !== interfaceSat) return;
+          if (!t.modem?.bereit || !terminalSatLinkAktiv(link)) {
+            t.wgSat = null;
+            terminalAusgabe(['wg-quick: ppp0: Network unreachable', '[#] ip link delete dev wg-sat']);
+            return;
+          }
+          interfaceSat.bereit = true;
+          terminalAusgabe(['[#] wg setconf wg-sat /dev/fd/63', '[#] ip -4 address add 10.200.200.2/24 dev wg-sat',
+            '[#] ip link set mtu 1280 up dev wg-sat']);
+        }, 650);
+      }
+    } else if (arg === 'down wg-sat') {
+      if (!t.wgSat) terminalAusgabe('wg-quick: wg-sat is not a WireGuard interface');
+      else { clearTimeout(t.wgSat.timer); t.wgSat = null; terminalAusgabe('[#] ip link delete dev wg-sat'); }
+    } else terminalAusgabe('usage: wg-quick [ up | down ] wg-sat');
+    return true;
+  }
+  if (befehl === 'wg') {
+    if (arg !== 'show wg-sat') terminalAusgabe('usage: wg show wg-sat');
+    else if (!t.wgSat) terminalAusgabe('Unable to access interface: No such device');
+    else if (!t.wgSat.bereit) terminalAusgabe('wg-sat: configuring');
+    else {
+      const zeilen = ['interface: wg-sat', '  public key: ' + t.wgSat.lokal, '  private key: (hidden)', '  listening port: 51820',
+        '', 'peer: ' + t.wgSat.peer, '  endpoint: 192.0.2.42:51820', '  allowed ips: 10.200.200.0/24'];
+      if (t.wgSat.handshake !== null) zeilen.push('  latest handshake: ' + Math.floor((Date.now() - t.wgSat.handshake) / 1000) + ' seconds ago');
+      terminalAusgabe(zeilen);
+    }
+    return true;
+  }
+  if (befehl === 'profanity') {
+    if (arg) terminalAusgabe('usage: profanity');
+    else if (!t.modem?.bereit || !t.wgSat?.bereit || link?.modus !== 'ppp' || !terminalSatLinkAktiv(link)) terminalAusgabe('profanity: Network unreachable');
+    else {
+      const domain = 'node-5966-q.onion';
+      const chat = { ui: 'xmpp', phase: 'anmeldung', link, log: [], domain, account: 'ghost@' + domain,
+        vorschlag: terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14) + '@' + domain,
+        kontakt: null, omemo: false, antwort: null, fingerprint: terminalPppFingerprint(), fingerprints: new Map() };
+      t.kanal = chat;
+      terminalPppChatLog(chat, 'Connecting to ' + chat.account);
+      chat.anmeldung = setTimeout(function () {
+        if (t.kanal !== chat || chat.phase !== 'anmeldung' || !terminalSatLinkAktiv(link)) return;
+        chat.phase = 'eingabe';
+        t.wgSat.handshake = Date.now();
+        terminalPppChatLog(chat, chat.account + ' logged in successfully, online.');
+      }, 6000);
+      terminalKanalPromptSync();
+    }
+    return true;
+  }
+  return false;
+}
+function terminalSyslog(n) {
+  const log = TERMINAL_ZUSTAND.syslog;
+  terminalAusgabe(n ? log.slice(-n) : '');
+}
+function terminalPppFingerprint() {
+  return terminalKanalZeichen('0123456789ABCDEF', 64).match(/.{8}/g).join(' ');
+}
+async function terminalPppChatMeldung(zeile, chat) {
+  const t = TERMINAL_ZUSTAND;
+  if (zeile === '/quit') { terminalPppChatAus(); return; }
+  if (chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) {
+    terminalPppChatLog(chat, 'Not connected. Use /quit to return to the terminal.');
+    return;
+  }
+  if (chat.phase === 'anmeldung') { terminalPppChatLog(chat, 'Not logged in yet.'); return; }
+  if (zeile.startsWith('/')) terminalPppChatLog(chat, zeile);
+  if (/^\/msg\s+[a-z0-9][a-z0-9_.-]*(?:@[a-z0-9.-]+)?$/i.test(zeile)) {
+    const ziel = zeile.slice(5).trim();
+    chat.kontakt = ziel.endsWith('.onion') && !ziel.includes('@') ? chat.vorschlag.split('@')[0] + '@' + ziel : ziel;
+    chat.omemo = false;
+    clearTimeout(chat.antwort);
+    clearTimeout(chat.omemoAufbau);
+    chat.omemoAufbau = null;
+    return;
+  }
+  if (zeile === '/omemo start' || zeile === '/omemo fingerprint') {
+    if (!chat.kontakt) terminalPppChatLog(chat, 'No active conversation. Use /msg <contact>.');
+    else if (zeile.endsWith('start')) {
+      if (chat.omemo || chat.omemoAufbau) return;
+      chat.omemoAufbau = setTimeout(function () {
+        chat.omemoAufbau = null;
+        if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
+        chat.omemo = true;
+        terminalPppChatLog(chat, 'OMEMO session started.');
+      }, 3000);
+    }
+    else {
+      if (!chat.fingerprints.has(chat.kontakt)) chat.fingerprints.set(chat.kontakt, terminalPppFingerprint());
+      terminalPppChatLog(chat, 'Your OMEMO fingerprint: ' + chat.fingerprint);
+      terminalPppChatLog(chat, chat.kontakt.split('@')[0] + "'s OMEMO fingerprint: " + chat.fingerprints.get(chat.kontakt));
+    }
+    return;
+  }
+  if (!chat.kontakt) { terminalPppChatLog(chat, 'No active conversation. Use /msg <contact>.'); return; }
+  if (/^\/sendfile(?:\s|$)/.test(zeile)) {
+    if (chat.phase === 'transfer') { terminalPppChatLog(chat, 'An upload is already in progress.'); return; }
+    const pfad = terminalArchivDateipfad(zeile.slice(9).trim());
+    if (!pfad?.length) { terminalPppChatLog(chat, 'Usage: /sendfile /' + TERMINAL_DB + '/<file>'); return; }
+    chat.phase = 'transfer';
+    const aktiv = () => t.kanal === chat && chat.phase === 'transfer' && terminalSatLinkAktiv(chat.link);
+    try {
+      const antwort = await terminalBruecke('send', pfad);
+      if (!aktiv()) return;
+      if (antwort.error) terminalPppChatLog(chat, 'Error uploading file: ' + antwort.error);
+      else {
+        terminalPppChatLog(chat, 'Sending file: /' + [TERMINAL_DB].concat(pfad).join('/') + ' (' + terminalDateigroesse(antwort.bytes) + ')');
+        const dauer = Math.min(TERMINAL_SAT_CAP_MS, Math.max(64, antwort.bytes) * 8000 / TERMINAL_SAT_RATE);
+        const fertig = await terminalTransfer(antwort.name, antwort.bytes, aktiv, dauer, true);
+        if (!aktiv()) return;
+        terminalPppChatLog(chat, fertig);
+        terminalPppChatLog(chat, 'File sent successfully.');
+      }
+    } catch (e) { if (aktiv()) terminalPppChatLog(chat, 'Error uploading file.'); }
+    if (aktiv()) { terminalTransferStop(); chat.phase = 'eingabe'; }
+    return;
+  }
+  if (zeile.startsWith('/')) { terminalPppChatLog(chat, 'Unknown command: ' + zeile.split(/\s/)[0]); return; }
+  terminalPppChatLog(chat, 'me: ' + zeile);
+  if (/^auftrag (erledigt|gescheitert)\.?$/i.test(zeile)) {
+    const kontakt = chat.kontakt;
+    clearTimeout(chat.antwort);
+    chat.antwort = setTimeout(function () {
+      if (t.kanal === chat && chat.phase !== 'offline' && terminalSatLinkAktiv(chat.link))
+        terminalPppChatLog(chat, kontakt + ': Verstanden.');
+    }, 7000);
+  }
+}
+
 function terminalBefehl(zeile) {
   const m = /^(\S+)(?:\s+(.*))?$/.exec(zeile);
   const befehl = m[1], arg = m[2] || '', t = TERMINAL_ZUSTAND;
@@ -683,11 +1019,17 @@ function terminalBefehl(zeile) {
     return;
   }
   if (t.satLink) terminalSatLinkAktiv(t.satLink);
-  if (t.kanal) { void terminalKanalMeldung(zeile, t.kanal); return; }
+  if (t.orbitLive || terminalPppWaehltVorne()) return;
+  if (t.kanal) {
+    if (t.kanal.ui === 'xmpp') void terminalPppChatMeldung(zeile, t.kanal);
+    else void terminalKanalMeldung(zeile, t.kanal);
+    return;
+  }
   if (befehl === 'clear' && !arg) { t.version++; terminalTransferStop(); t.ausgabe = []; terminalAusgabe([]); return; }
   terminalAusgabe(terminalPrompt() + ' ' + zeile);
-  if (befehl === 'help' && !arg) terminalAusgabe(['ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · send <datei> (im Kanal) · whoami · uname -a · date · ping relay · clear · exit',
-    TERMINAL_SAT_TX_BEFEHL, 'secure-channel ' + TERMINAL_SAT_KANAL_ARG]);
+  if (terminalPppShell(befehl, arg)) return;
+  if (befehl === 'help' && !arg) terminalAusgabe(['ls [-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · whoami · uname -a · date · ping relay · clear · exit',
+    'predict · pppd call iridium updetach · poff iridium · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)']);
   else if (befehl === 'pwd' && !arg) terminalAusgabe(terminalArbeitsverzeichnis());
   else if (befehl === 'whoami' && !arg) terminalAusgabe('root');
   else if (befehl === 'uname' && arg === '-a') terminalAusgabe(TERMINAL_UBUNTU);
@@ -712,7 +1054,12 @@ function terminalBefehl(zeile) {
   } else terminalAusgabe(befehl + ': command not found');
 }
 const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
-const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit', 'satcon-tx', 'secure-channel', 'send']);
+const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit',
+  'predict', 'pppd', 'poff', 'wg-quick', 'wg', 'profanity', 'satcon-tx', 'secure-channel', 'send']);
+const TERMINAL_PPP_TAB = new Map([
+  ['predict', []],
+  ['pppd', ['call iridium updetach']], ['poff', ['iridium']], ['wg-quick', ['up wg-sat', 'down wg-sat']], ['wg', ['show wg-sat']]
+]);
 let terminalTabLauf = null, terminalTabAuswahl = null;
 function terminalTabReset() {
   terminalTabLauf = terminalTabAuswahl = null;
@@ -761,6 +1108,33 @@ async function terminalTab(lauf, m) {
     }
     return;
   }
+  if (befehl === 'predict') {
+    let rest = arg, kopf = 'predict ';
+    const vorgabe = ['-t', TERMINAL_PPP_DATEI, '-p', '"' + TERMINAL_PPP_SAT + '"'];
+    for (let i = 0; i < vorgabe.length; i++) {
+      const wort = i === 2 && /^-f(?:\s|$)/.test(rest) ? '-f' : vorgabe[i];
+      const trennung = rest.startsWith(wort) && /^\s+/.exec(rest.slice(wort.length));
+      if (!trennung) { fertig(kopf, rest, [wort], x => x + ' '); return; }
+      kopf += wort + trennung[0];
+      rest = rest.slice(wort.length + trennung[0].length);
+    }
+    return;
+  }
+  if (TERMINAL_PPP_TAB.has(befehl)) {
+    if ((befehl === 'pppd' || befehl === 'poff') && arg.includes('&&')) {
+      const befehlsanfang = befehl === 'pppd' ? 'call iridium' : 'iridium';
+      fertig(befehl + ' ', arg, [befehlsanfang + ' && tail -n ' + (befehl === 'pppd' ? '12' : '6') + ' /var/log/syslog'], x => x);
+      return;
+    }
+    fertig(befehl + ' ', arg, TERMINAL_PPP_TAB.get(befehl), x => x);
+    return;
+  }
+  if (befehl === 'tail' && /^-n(?:\s|$)/.test(arg)) {
+    const m = /^(-n\s+\d{1,2}\s+)(.*)$/.exec(arg);
+    if (m) fertig('tail ' + m[1], m[2], ['/var/log/syslog'], x => x);
+    else fertig('tail ', arg, ['-n 12 /var/log/syslog'], x => x);
+    return;
+  }
   if (befehl === 'ping' || befehl === 'uname' || (befehl === 'ls' && arg.startsWith('-'))) {
     fertig(befehl + ' ', arg, befehl === 'ping' ? ['relay'] : befehl === 'uname' ? ['-a'] : ['-a', '-l', '-la'], function (x) { return x; });
     return;
@@ -774,7 +1148,7 @@ async function terminalTab(lauf, m) {
   if (!teile) return;
   const listing = !teile.length ? ['var/', TERMINAL_DB + (basis ? '/' : '')] : TERMINAL_TLE_DIRS.get('/' + teile.join('/'));
   if (listing) {
-    const namen = listing.filter(x => befehl !== 'cd' || x !== 'leo.txt').map(x => basis + x);
+    const namen = listing.filter(x => befehl !== 'cd' || x.endsWith('/') || x === TERMINAL_DB).map(x => basis + x);
     fertig(befehl + ' ' + anfang, pfad, namen, function (x) { return x + anfang; });
     return;
   }
@@ -791,12 +1165,32 @@ async function terminalTab(lauf, m) {
   });
 }
 async function terminalKanalTab(lauf) {
-  const m = /^send\s+(.*)$/.exec(lauf.wert);
+  const kommando = lauf.kanal.ui === 'xmpp' ? '/sendfile' : 'send';
+  if (lauf.kanal.ui === 'xmpp') {
+    if (!/\s/.test(lauf.wert)) {
+      terminalTabKandidaten(lauf, '', lauf.wert, ['/msg', '/omemo', '/sendfile', '/quit'], x => x + ' ');
+      return;
+    }
+    const kontakt = /^\/msg\s+(.*)$/.exec(lauf.wert);
+    if (kontakt) {
+      const chat = lauf.kanal, teil = kontakt[1];
+      if (teil && chat.domain.startsWith(teil.toLowerCase())) {
+        terminalTabKandidaten(lauf, '/msg ', teil, [chat.domain], () => chat.vorschlag);
+      } else terminalTabKandidaten(lauf, '/msg ', teil, [chat.vorschlag], x => x);
+      return;
+    }
+    const omemo = /^\/omemo\s+(.*)$/.exec(lauf.wert);
+    if (omemo) {
+      terminalTabKandidaten(lauf, '/omemo ', omemo[1], ['start', 'fingerprint'], x => x);
+      return;
+    }
+  }
+  const m = /^(?:send|\/sendfile)\s+(.*)$/.exec(lauf.wert);
   if (!m) return;
   const anfang = m[1][0] === '"' || m[1][0] === "'" ? m[1][0] : '';
   const pfad = anfang ? m[1].slice(1, m[1].length > 1 && m[1].endsWith(anfang) ? -1 : undefined) : m[1];
   if (anfang && pfad.includes(anfang)) return;
-  const kopf = 'send ' + anfang;
+  const kopf = kommando + ' ' + anfang;
   const format = function (x) {
     const quote = anfang || (/\s|^'/.test(x) ? '"' : '');
     return (quote && !anfang ? quote : '') + x + quote;
@@ -863,9 +1257,11 @@ function terminalTabTaste(ev) {
   if (ev.shiftKey) return;
   const t = TERMINAL_ZUSTAND;
   const m = /^(\S+)(?:\s+(.*))?$/.exec(bisher);
-  if (t.kanal ? t.kanal.phase !== 'eingabe' || !/^send\s/.test(bisher) :
+  if (t.orbitLive || terminalPppWaehltVorne()) return;
+  if (t.kanal ? t.kanal.phase !== 'eingabe' || (t.kanal.ui === 'xmpp' ?
+      !(/^\/(?:sendfile|msg|omemo)\s/.test(bisher) || (bisher.startsWith('/') && !/\s/.test(bisher))) : !/^send\s/.test(bisher)) :
       t.dateiLaeuft || !m || (m[2] === undefined ? !TERMINAL_BEFEHLE.some(x => x.startsWith(m[1])) :
-      !['cd', 'cat', 'head', 'tail', 'wget', 'ping', 'uname', 'ls', 'satcon-tx', 'secure-channel'].includes(m[1]))) return;
+      !TERMINAL_PPP_TAB.has(m[1]) && !['cd', 'cat', 'head', 'tail', 'wget', 'ping', 'uname', 'ls', 'satcon-tx', 'secure-channel'].includes(m[1]))) return;
   ev.preventDefault();
   if (terminalTabLauf?.wert === bisher && terminalTabGueltig(terminalTabLauf)) return;
   terminalTabAuswahl = null;
@@ -909,6 +1305,8 @@ function terminalKonsoleBauen() {
   const griff = h('span', { class: 'profil-terminal-groesse', 'aria-hidden': 'true' });
   const kern = h('div', { id: 'profil-terminal-kern', class: 'profil-terminal-kern' },
       h('pre', { id: 'profil-terminal-ausgabe', class: 'mono', role: 'log', 'aria-label': 'Terminalausgabe' }, t.ausgabe.join('\n')),
+      h('pre', { id: 'profil-terminal-orbit', class: 'mono', 'aria-label': 'Überflug', hidden: true }),
+      h('pre', { id: 'profil-terminal-chat', class: 'mono', role: 'log', 'aria-label': 'Chatverlauf', hidden: true }),
       h('pre', { id: 'profil-terminal-transfer', class: 'mono', hidden: !t.fortschritt }, t.fortschritt),
       h('form', { onsubmit: function (ev) {
         ev.preventDefault();
@@ -1028,8 +1426,16 @@ function terminalKonsoleSchliessen(fokus = true) {
 }
 function terminalKonsoleEscape() {
   const t = TERMINAL_ZUSTAND;
-  if (t.satAufbau) {
+  if (t.orbitLive) {
+    t.orbitLive = false;
+    terminalPppAnzeige();
+    terminalKanalPromptSync();
+  } else if (terminalPppWaehltVorne()) {
+    terminalPppModemAus('Terminating on signal 2');
+  } else if (t.satAufbau) {
     terminalSatAbbruch(); terminalAusgabe('[!] Verbindungsaufbau abgebrochen');
+  } else if (t.kanal?.ui === 'xmpp') {
+    terminalPppChatAus();
   } else if (t.kanal) {
     terminalKanalAbbruch();
   } else if (t.vpos !== -1) {
@@ -1040,7 +1446,9 @@ function terminalKonsoleEscape() {
 }
 document.addEventListener('keydown', function (ev) {
   if (document.body.classList.contains('locked') || terminalKonsoleDialogOffen() || ev.isComposing) return;
-  if (ev.key === 'Escape' && TERMINAL_ZUSTAND.offen) {
+  const trackingStop = (TERMINAL_ZUSTAND.orbitLive || terminalPppWaehltVorne()) && ev.ctrlKey && !ev.altKey && !ev.metaKey &&
+    ev.key.toLowerCase() === 'c' && $('profil-terminal')?.contains(ev.target);
+  if ((ev.key === 'Escape' || trackingStop) && TERMINAL_ZUSTAND.offen) {
     ev.preventDefault();
     ev.stopImmediatePropagation(); // Escape darf nie zugleich ein Kartenwerkzeug abbrechen.
     if (!ev.repeat) terminalKonsoleEscape();
