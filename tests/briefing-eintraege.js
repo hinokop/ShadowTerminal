@@ -18,6 +18,7 @@ const { APP } = require('./_pfad');
     await start();
     const f = await p.evaluate(() => { PROFIL.recherche.faelle = []; const a = xAnlegen({ titel: 'Eintragsfall' }), b = xAnlegen({ titel: 'Anderer Fall' }); profilSpeichern(); xOeffnen(a.id); return { a: a.id, b: b.id }; });
     const lies = id => p.evaluate(i => (JSON.parse(localStorage.getItem(PROFIL_KEY)).recherche.faelle.find(x => x.id === i).eintraege || []), id);
+    const wert = sel => p.evaluate(x => document.querySelector(x).innerText.trim(), sel);
     const neu = async (art, text) => { await p.selectOption('#x-bf-art', art); await p.fill('#x-bf-text', text); await p.click('#x-bf-neu'); };
     assert.equal(await p.locator('#x-schritt').count(), 0, 'kein Einzelfeld mehr');
     assert.ok((await p.locator('#x-briefing').innerText()).includes('Noch keine Einträge'), 'Leeranzeige');
@@ -33,7 +34,7 @@ const { APP } = require('./_pfad');
     assert.deepEqual(E.map(e => e.art), ['lage', 'schritt', 'frage']);
     assert.ok(E.every(e => /^[0-9a-f]{12}$/.test(e.uid) && /^\d{4}-\d\d-\d\dT/.test(e.erfasst)), 'uid und Erfassungszeitpunkt');
     assert.equal(new Set(E.map(e => e.uid)).size, 3, 'uid eindeutig');
-    assert.equal(await p.inputValue('#x-bf-text'), '', 'Eingabefeld nach dem Anlegen leer');
+    assert.equal(await wert('#x-bf-text'), '', 'Eingabefeld nach dem Anlegen leer');
     const reihe = await p.locator('#x-briefing [data-eintrag]').evaluateAll(l => l.map(e => e.getAttribute('data-eintrag')));
     assert.deepEqual(reihe, [E[2].uid, E[1].uid, E[0].uid], 'jüngster zuerst');
     assert.deepEqual(Object.keys(await p.evaluate(i => xFall(i), f.a)).sort(), ['eintraege', 'erfasst', 'frage', 'id', 'titel', 'zustand']);
@@ -49,7 +50,7 @@ const { APP } = require('./_pfad');
     /* bearbeiten */
     const u = E[0].uid; await p.waitForTimeout(20);
     await p.click('#x-bf-bearb-' + u);
-    assert.equal(await p.inputValue('#x-bf-bearb-text-' + u), 'Beschluss liegt vor');
+    assert.equal(await wert('#x-bf-bearb-text-' + u), 'Beschluss liegt vor');
     await p.fill('#x-bf-bearb-text-' + u, 'Beschluss liegt vor und wurde veröffentlicht'); await p.click('#x-bf-bearb-ok-' + u);
     let e0 = (await lies(f.a)).find(e => e.uid === u);
     assert.equal(e0.text, 'Beschluss liegt vor und wurde veröffentlicht'); assert.equal(e0.erfasst, E[0].erfasst, 'Erfassungszeitpunkt bleibt'); assert.ok(e0.geaendert, 'Änderungszeitpunkt gesetzt');
@@ -73,16 +74,42 @@ const { APP } = require('./_pfad');
     await p.click('#x-bf-loesch-' + E[1].uid); await p.click('#dlg-ok');
     const rest = await lies(f.a);
     assert.deepEqual(rest.map(e => e.uid).sort(), [E[0].uid, E[2].uid].sort(), 'nur der gewählte Eintrag gelöscht');
+    /* Formatierung: Fett, Kursiv, Unterstrichen, Liste über die Schaltflächen */
+    await p.selectOption('#x-bf-art', 'lage'); await p.click('#x-bf-text'); await p.keyboard.type('Formatiert');
+    await p.keyboard.press('Control+A'); await p.click('#x-bf-text-leiste [data-format="bold"]'); await p.click('#x-bf-text-leiste [data-format="italic"]'); await p.click('#x-bf-text-leiste [data-format="underline"]');
+    await p.click('#x-bf-neu');
+    const fm = (await lies(f.a)).find(e => e.text.includes('Formatiert'));
+    assert.ok(fm && /<b>|<strong>/.test(fm.text) && /<i>|<em>/.test(fm.text) && /<u>/.test(fm.text), 'Fett, Kursiv, Unterstrichen gespeichert: ' + (fm && fm.text));
+    assert.equal(await p.locator('#x-bf-' + fm.uid + ' b, #x-bf-' + fm.uid + ' strong').count() > 0, true, 'Anzeige formatiert');
+    await p.click('#x-bf-text'); await p.keyboard.type('Eins'); await p.click('#x-bf-text-leiste [data-format="insertUnorderedList"]'); await p.keyboard.type('Zwei');
+    await p.selectOption('#x-bf-art', 'schritt'); await p.click('#x-bf-neu');
+    assert.ok((await lies(f.a)).some(e => /<ul>/.test(e.text) && /<li>/.test(e.text)), 'Liste gespeichert');
+    /* eingeschleustes Markup wird beim Speichern entfernt */
+    await p.evaluate(() => { const el = document.getElementById('x-bf-text'); el.innerHTML = '<img src=x onerror="window.__x=1"><b>sicher</b><script>window.__x=2<\/script><span data-unterlage="B-1">[B-1]</span><a href="javascript:window.__x=3">Link</a>'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    await p.click('#x-bf-neu');
+    const sauber = (await lies(f.a)).find(e => e.text.includes('sicher'));
+    assert.ok(sauber && !/img|script|onerror|<a |data-unterlage|javascript/i.test(sauber.text), 'Markup entfernt: ' + (sauber && sauber.text));
+    assert.ok(/<b>sicher<\/b>/.test(sauber.text), 'erlaubte Formatierung bleibt');
+    /* beschädigter Inhalt aus Import/Altdaten wird nur bereinigt angezeigt */
+    await p.evaluate(() => { const x = xAnlegen({ titel: 'Präpariert' }); x.eintraege = [{ uid: 'eeeeeeeeeeee', art: 'lage', text: '<img src=x onerror="window.__y=1"><b>ok</b><script>window.__y=2<\/script>', erfasst: '2026-01-01T00:00:00.000Z' }]; profilSpeichern(); xOeffnen(x.id); });
+    assert.equal(await p.evaluate(() => window.__y), undefined, 'kein Skript aus präpariertem Eintrag');
+    assert.equal(await p.locator('#x-bf-eeeeeeeeeeee img, #x-bf-eeeeeeeeeeee script').count(), 0);
+    assert.equal(await p.locator('#x-bf-eeeeeeeeeeee b').count(), 1, 'erlaubte Formatierung wird angezeigt');
+    /* Länge zählt den sichtbaren Text */
+    await p.evaluate(i => xOeffnen(i), f.a);
+    await p.fill('#x-bf-text', 'y'.repeat(501)); const vor = (await lies(f.a)).length; await p.click('#x-bf-neu');
+    assert.equal((await lies(f.a)).length, vor, 'über 500 Zeichen wird abgelehnt'); assert.ok((await p.locator('#sys-msg').innerText()).includes('500'));
+    await p.fill('#x-bf-text', '');
     /* Neustart: Einträge sichtbar */
     await start(); await p.evaluate(i => xOeffnen(i), f.a);
-    assert.equal(await p.locator('#x-briefing [data-eintrag]').count(), 2, 'nach Neustart vorhanden');
+    assert.equal(await p.locator('#x-briefing [data-eintrag]').count(), (await lies(f.a)).length, 'nach Neustart vorhanden');
     /* Entwurf überlebt das Löschen des Falls nicht (gleiche Nummer) */
     const g = await p.evaluate(() => { PROFIL.recherche.faelle = []; const x = xAnlegen({ titel: 'Entwurfsfall' }); profilSpeichern(); xOeffnen(x.id); return x.id; });
     await p.fill('#x-bf-text', 'nie gespeichert');
     await p.evaluate(async i => { await xLoeschen(i); }, g);
     const g2 = await p.evaluate(() => { const x = xAnlegen({ titel: 'Ersatz' }); profilSpeichern(); xOeffnen(x.id); return x.id; });
     assert.equal(g2, g, 'Voraussetzung: Nummer wiedervergeben');
-    assert.equal(await p.inputValue('#x-bf-text'), '', 'Eingabefeld des neuen Falls leer');
+    assert.equal(await wert('#x-bf-text'), '', 'Eingabefeld des neuen Falls leer');
     /* Fallpaket-Rundtest */
     await p.evaluate(() => { PROFIL.recherche.faelle = []; const x = xAnlegen({ titel: 'Paketfall' }); xSchreiben(() => { x.eintraege = [{ uid: 'aaaaaaaaaaaa', art: 'frage', text: 'Offen?', erfasst: '2026-11-01T10:00:00.000Z', erledigt: true }, { uid: 'bbbbbbbbbbbb', art: 'lage', text: 'Lage 1', erfasst: '2026-11-02T10:00:00.000Z', geaendert: '2026-11-03T10:00:00.000Z' }]; return true; }); profilSpeichern(); xOeffnen(x.id); });
     const paket = await p.evaluate(async () => (await rchPaketBauen(PROFIL.recherche.faelle[0].id)).text);

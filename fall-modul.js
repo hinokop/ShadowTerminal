@@ -240,6 +240,45 @@ function xUnterlagen(f) {
         dos.map(function (id) { return xBtn('x-unterlage-' + b.id + '-' + id, id, function () { xDossierOeffnen(id, b.id); }); }), vorschau);
     })) : h('p', { class: 'note' }, 'Noch keine Unterlagen für diesen Fall. Dateien können aus dem Eingang oder am Dossier zugeordnet werden.')));
 }
+/* Einfacher Texteditor für Einträge: Fett, Kursiv, Unterstrichen, Liste. Eingefügt wird nur Text; Inhalt wird mit der Bereinigung der Dossier-Kurzlage
+   (kurzlageInhalt) beim Speichern und bei jeder Anzeige aus erlaubten Elementen neu aufgebaut. Unterlagen-Verweise der Kurzlage gibt es hier nicht. */
+function xTextOhneVerweise(html) {
+  const v = document.createElement('template'); v.innerHTML = typeof html === 'string' ? html.slice(0, 24000) : '';
+  v.content.querySelectorAll('[data-unterlage]').forEach(function (n) { n.remove(); });
+  const d = document.createElement('div'); d.appendChild(v.content); return d.innerHTML;
+}
+function xTextKanon(html) { return kurzlageKanon(xTextOhneVerweise(html)); }
+function xTextAnzeige(html) { return h('div', { class: 'kl-text' }, kurzlageInhalt(xTextOhneVerweise(html), new Map(), true)); }
+function xTextPlain(html) { return h('div', null, kurzlageInhalt(xTextOhneVerweise(html), new Map(), false)).textContent.trim(); }
+function xTextEditor(id, start, beiAenderung) {
+  const eingabe = h('div', { id: id, class: 'kl-text kl-eingabe', contenteditable: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Text des Eintrags', spellcheck: 'true' },
+    kurzlageInhalt(xTextOhneVerweise(start || ''), new Map(), false));
+  let position = null;
+  const merken = function () {
+    const sel = window.getSelection(), r = sel.rangeCount ? sel.getRangeAt(0) : null;
+    if (r && eingabe.contains(r.commonAncestorContainer)) position = r.cloneRange();
+  };
+  const wieder = function () {
+    eingabe.focus();
+    const sel = window.getSelection(); let r = position;
+    if (!r || !eingabe.contains(r.commonAncestorContainer)) { r = document.createRange(); r.selectNodeContents(eingabe); r.collapse(false); }
+    sel.removeAllRanges(); sel.addRange(r);
+  };
+  ['input', 'keyup', 'mouseup', 'blur'].forEach(function (a) { eingabe.addEventListener(a, merken); });
+  eingabe.addEventListener('input', function () { if (beiAenderung) beiAenderung(eingabe.innerHTML); });
+  eingabe.addEventListener('paste', function (ev) {
+    ev.preventDefault(); document.execCommand('insertText', false, (ev.clipboardData || window.clipboardData).getData('text/plain')); merken();
+  });
+  eingabe.addEventListener('drop', function (ev) { ev.preventDefault(); });
+  const format = function (befehl, titel, text) {
+    return h('button', { type: 'button', 'data-format': befehl, 'aria-label': titel, title: titel,
+      onmousedown: function (ev) { merken(); ev.preventDefault(); },
+      onclick: function () { wieder(); document.execCommand('styleWithCSS', false, false); document.execCommand(befehl, false, null); merken(); if (beiAenderung) beiAenderung(eingabe.innerHTML); } }, text);
+  };
+  const leiste = h('div', { id: id + '-leiste', class: 'kl-werkzeuge', role: 'group', 'aria-label': 'Text formatieren' },
+    format('bold', 'Fett', h('b', null, 'B')), format('italic', 'Kursiv', h('i', null, 'I')), format('underline', 'Unterstrichen', h('u', null, 'U')), format('insertUnorderedList', 'Aufzählung', '• Liste'));
+  return { knoten: h('div', { class: 'x-editor' }, leiste, eingabe), wert: function () { return xTextKanon(eingabe.innerHTML); }, roh: function () { return eingabe.innerHTML; } };
+}
 /* Datierte Einträge je Fall: Lage, Nächster Schritt, Offene Frage. Manuell gepflegt, mit fester uid; ohne frühere Fassungen und ohne Verweise. */
 const X_EINTRAG_ARTEN = { lage: 'Lage', schritt: 'Nächster Schritt', frage: 'Offene Frage' };
 const X_EINTRAG_MAX = 500, X_EINTRAEGE_MAX = 200;
@@ -262,11 +301,12 @@ function xEintragZeile(f, e) {
   const bearb = VIEW.draft['x-bf-bearb-' + f.id] === e.uid, dr = VIEW.draft['x-bf-bearb-text-' + f.id];
   const kopf = h('span', { class: 'dim' }, X_EINTRAG_ARTEN[e.art] + ' · ' + fmtZ(e.erfasst) + (e.geaendert ? ' · geändert ' + fmtZ(e.geaendert) : ''));
   if (bearb) {
-    const feld = h('textarea', { id: 'x-bf-bearb-text-' + e.uid, rows: 3, maxlength: X_EINTRAG_MAX, 'aria-label': 'Eintrag bearbeiten', value: dr !== undefined ? dr : e.text, oninput: function (ev) { VIEW.draft['x-bf-bearb-text-' + f.id] = ev.target.value; } });
-    return h('li', { id: 'x-bf-' + e.uid, 'data-eintrag': e.uid }, h('div', { class: 'x-bf-inhalt' }, kopf, feld, h('div', { class: 'row' },
+    const ed = xTextEditor('x-bf-bearb-text-' + e.uid, dr !== undefined ? dr : e.text, function (html) { VIEW.draft['x-bf-bearb-text-' + f.id] = html; });
+    return h('li', { id: 'x-bf-' + e.uid, 'data-eintrag': e.uid }, h('div', { class: 'x-bf-inhalt' }, kopf, ed.knoten, h('div', { class: 'row' },
       xBtn('x-bf-bearb-ok-' + e.uid, 'Speichern', function () {
-        const text = feld.value.trim().slice(0, X_EINTRAG_MAX);
-        if (!text) { meldung('Der Text des Eintrags darf nicht leer sein.'); return; }
+        const text = ed.wert();
+        if (!xTextPlain(text)) { meldung('Der Text des Eintrags darf nicht leer sein.'); return; }
+        if (xTextPlain(text).length > X_EINTRAG_MAX) { meldung('Höchstens ' + X_EINTRAG_MAX + ' Zeichen je Eintrag.'); return; }
         delete VIEW.draft['x-bf-bearb-' + f.id]; delete VIEW.draft['x-bf-bearb-text-' + f.id];
         if (text !== e.text) xEintragAendern(f.id, function (akt) { const z = xEintraege(akt).find(function (x) { return x.uid === e.uid; }); if (!z) return false; z.text = text; z.geaendert = nowIso(); return true; }, 'Eintrag gespeichert.');
         renderModule();
@@ -274,7 +314,7 @@ function xEintragZeile(f, e) {
       xBtn('x-bf-bearb-abbr-' + e.uid, 'Abbrechen', function () { delete VIEW.draft['x-bf-bearb-' + f.id]; delete VIEW.draft['x-bf-bearb-text-' + f.id]; renderModule(); }))));
   }
   return h('li', { id: 'x-bf-' + e.uid, 'data-eintrag': e.uid, class: e.erledigt ? 'x-erledigt' : '' }, h('div', { class: 'x-bf-inhalt' }, kopf,
-    h('p', { class: 'x-kurztext' }, e.erledigt ? h('s', null, e.text) : e.text),
+    h('div', { class: e.erledigt ? 'x-bf-text x-erledigt-text' : 'x-bf-text' }, xTextAnzeige(e.text)),
     h('div', { class: 'row' },
       e.art === 'frage' ? h('label', null, h('input', { type: 'checkbox', id: 'x-bf-erledigt-' + e.uid, checked: !!e.erledigt, onchange: function (ev) {
         const wert = ev.target.checked;
@@ -283,7 +323,7 @@ function xEintragZeile(f, e) {
       } }), ' erledigt') : null,
       xBtn('x-bf-bearb-' + e.uid, 'Bearbeiten', function () { VIEW.draft['x-bf-bearb-' + f.id] = e.uid; delete VIEW.draft['x-bf-bearb-text-' + f.id]; renderModule(); }),
       xBtn('x-bf-loesch-' + e.uid, 'Löschen', function () {
-        bestaetigen('Eintrag löschen?', '„' + e.text.slice(0, 120) + (e.text.length > 120 ? ' …' : '') + '“ wird gelöscht.', 'Eintrag löschen', function () {
+        bestaetigen('Eintrag löschen?', '„' + xTextPlain(e.text).slice(0, 120) + (xTextPlain(e.text).length > 120 ? ' …' : '') + '“ wird gelöscht.', 'Eintrag löschen', function () {
           xEintragAendern(f.id, function (akt) { const n = xEintraege(akt).filter(function (x) { return x.uid !== e.uid; }); if (n.length === xEintraege(akt).length) return false; if (n.length) akt.eintraege = n; else delete akt.eintraege; return true; }, 'Eintrag gelöscht.');
           renderModule();
         });
@@ -293,13 +333,14 @@ function xEintraegeBlock(f) {
   const E = xEintraege(f).map(function (e, i) { return { e: e, i: i }; }).sort(function (a, c) { return String(c.e.erfasst).localeCompare(String(a.e.erfasst)) || c.i - a.i; });
   const art = h('select', { id: 'x-bf-art', 'aria-label': 'Art des Eintrags', onchange: function (ev) { VIEW.draft['x-bf-art-' + f.id] = ev.target.value; } },
     Object.keys(X_EINTRAG_ARTEN).map(function (k) { return h('option', { value: k, selected: (VIEW.draft['x-bf-art-' + f.id] || 'lage') === k }, X_EINTRAG_ARTEN[k]); }));
-  const text = h('textarea', { id: 'x-bf-text', rows: 2, maxlength: X_EINTRAG_MAX, 'aria-label': 'Text des Eintrags', value: VIEW.draft['x-bf-text-' + f.id] || '', oninput: function (ev) { VIEW.draft['x-bf-text-' + f.id] = ev.target.value; } });
+  const ed = xTextEditor('x-bf-text', VIEW.draft['x-bf-text-' + f.id] || '', function (html) { VIEW.draft['x-bf-text-' + f.id] = html; });
   return h('div', null,
     h('p', { class: 'dim' }, 'Einträge'),
-    h('div', { class: 'row' }, art), text,
+    h('div', { class: 'row' }, art), ed.knoten,
     h('div', { class: 'row' }, xBtn('x-bf-neu', 'Eintrag hinzufügen', function () {
-      const t = text.value.trim().slice(0, X_EINTRAG_MAX);
-      if (!t) { meldung('Bitte einen Text für den Eintrag eingeben.'); return; }
+      const t = ed.wert();
+      if (!xTextPlain(t)) { meldung('Bitte einen Text für den Eintrag eingeben.'); return; }
+      if (xTextPlain(t).length > X_EINTRAG_MAX) { meldung('Höchstens ' + X_EINTRAG_MAX + ' Zeichen je Eintrag.'); return; }
       if (xEintraege(xFall(f.id) || f).length >= X_EINTRAEGE_MAX) { meldung('Höchstens ' + X_EINTRAEGE_MAX + ' Einträge je Fall.'); return; }
       const wahl = art.value in X_EINTRAG_ARTEN ? art.value : 'lage';
       if (xEintragAendern(f.id, function (akt) { akt.eintraege = xEintraege(akt).concat([{ uid: sichtungKennung(), art: wahl, text: t, erfasst: nowIso() }]); return true; }, 'Eintrag gespeichert.')) delete VIEW.draft['x-bf-text-' + f.id];
