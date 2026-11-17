@@ -4,6 +4,8 @@ const X_BEWERTUNG = [['unbewertet', 'Unbewertet'], ['duenn', 'Dünne Grundlage']
 const X_VIEW = { id: null, vorschau: null, keine: false };   /* keine: nach übersprungenem Arbeitsstand kein automatischer erster Fall */
 function xStatus(wert) { return xAuswahl(X_STATUS, wert === 'ruhend' ? 'on-hold' : wert); }
 function xAuswahl(liste, wert) { return liste.find(function (x) { return x[0] === wert; }) || liste[0]; }
+/* Der in X angezeigte Fall: gewählter Fall, sonst der erste (außer nach übersprungenem Arbeitsstand). Anzeige und Arbeitsstand nutzen dieselbe Auswahl. */
+function xAngezeigt() { return xFall(X_VIEW.id) || (X_VIEW.keine ? null : PROFIL.recherche.faelle[0]) || null; }
 function xFall(id) { return PROFIL.recherche.faelle.find(function (f) { return f.id === id; }); }
 function xDossierLesbar(e) { return !!(e && dossierOffen(e.mission) && wissen(e) !== 'unbekannt' && !dossierGesperrt(e) && !infoGesperrt(e)); }
 function xPins(f) { return Array.isArray(f.pins) ? f.pins : []; }
@@ -241,7 +243,7 @@ function xUnterlagen(f) {
 function renderX(m) {
   akVorschauFreigeben();
   const L = PROFIL.recherche.faelle;
-  const f = xFall(X_VIEW.id) || (X_VIEW.keine ? null : L[0]);
+  const f = xAngezeigt();
   const liste = panel('Fälle', null, h('div', { class: 'pad' },
     xBtn('x-neu', 'Neuer Fall', function () { xNeu(null); }),
     L.length ? h('ul', { class: 'x-faelle', 'aria-label': 'Fälle' }, L.map(function (x) {

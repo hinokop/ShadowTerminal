@@ -10,7 +10,7 @@ function asErfassen() {
   const K = VIEW.karte, ebenen = {};
   Object.keys(K.ebenen).forEach(function (k) { ebenen[k] = !!K.ebenen[k]; });
   return {
-    t: nowIso(), modul: STATE.ui.modul, dossier: STATE.dossiers.auswahl || null, dtab: VIEW.dtab || null, dossierReg: asDossierReg(STATE.dossiers.auswahl), fall: X_VIEW.id || null, fallErfasst: (X_VIEW.id && xFall(X_VIEW.id) && xFall(X_VIEW.id).erfasst) || null,
+    t: nowIso(), modul: STATE.ui.modul, dossier: STATE.dossiers.auswahl || null, dtab: VIEW.dtab || null, dossierReg: asDossierReg(STATE.dossiers.auswahl), fall: (xAngezeigt() || {}).id || null, fallErfasst: (xAngezeigt() || {}).erfasst || null,
     karte: { lat: K.lat, lon: K.lon, zoom: K.zoom, ebenen: ebenen, auswahl: K.auswahl || null }
   };
 }

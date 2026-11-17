@@ -129,6 +129,21 @@ const { APP } = require('./_pfad');
     await p.click('#as-wieder');
     assert.equal(await p.evaluate(() => STATE.dossiers.auswahl), null, 'Ersatzdossier mit gleicher Kennung wird nicht gewählt');
     assert.ok((await p.evaluate(() => document.querySelector('#sys-msg').innerText)).includes('Dossier ' + dz));
+    /* normaler Einstieg in X: erster Fall wird ohne Klick angezeigt und so gesichert */
+    await p.evaluate(() => { PROFIL.recherche.faelle = []; xAnlegen({ titel: 'Erster Fall' }); xAnlegen({ titel: 'Zweiter Fall' }); profilSpeichern(); X_VIEW.id = null; X_VIEW.keine = false; dispatch({ type: 'NAVIGATION', modul: 'karte' }); });
+    await p.evaluate(() => dispatch({ type: 'NAVIGATION', modul: 'x' }));
+    assert.equal(await p.inputValue('#x-titel'), 'Erster Fall', 'Voraussetzung: erster Fall ohne Klick sichtbar');
+    assert.equal(await p.evaluate(() => X_VIEW.id), null, 'Voraussetzung: keine ausdrückliche Wahl');
+    await p.click('#as-speichern');
+    await p.evaluate(() => xOeffnen(PROFIL.recherche.faelle[1].id));
+    assert.equal(await p.inputValue('#x-titel'), 'Zweiter Fall');
+    await p.click('#as-wieder');
+    assert.equal(await p.inputValue('#x-titel'), 'Erster Fall', 'Stand laden zeigt den ursprünglich sichtbaren Fall');
+    /* bewusst leeres X (übersprungener Verweis) speichert keinen Fall */
+    await p.evaluate(() => { X_VIEW.id = null; X_VIEW.keine = true; renderModule(); });
+    assert.equal(await p.locator('#x-titel').count(), 0);
+    await p.click('#as-speichern');
+    assert.equal(await p.evaluate(() => PROFIL.arbeitsstand.fall), null, 'kein Fall gespeichert');
     assert.deepEqual(fehler, []);
     console.log('OK: Arbeitsstand sichern und wiederherstellen, kein Autosprung, Überspringen');
   } finally { await browser.close(); }
