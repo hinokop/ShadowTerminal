@@ -26,7 +26,7 @@ const assert = require('node:assert/strict'); const { chromium } = require('play
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.join(',')), 'pwd,whoami,date');
     /* Kanal: nichts wird aufgenommen, Pfeiltasten blättern dort nicht */
     await vorbereiten(p);
-    await lauf('secure-channel --connect --onion --ephemeral');
+    await lauf('secure-channel --connect --iface sat0 --route mixnet --ephemeral');
     await p.waitForFunction(() => document.querySelector('#profil-terminal-prompt').textContent === 'you >', null, { timeout: 40000 });
     const vorher = await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.join(','));
     await input.fill('hallo'); await input.press('ArrowUp'); assert.equal(await wert(), 'hallo');

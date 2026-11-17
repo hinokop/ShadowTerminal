@@ -18,8 +18,10 @@ const SEND = 'send /pgcl-eu3.arch07/dossiers/beleg.txt';
       if (!req.url().startsWith('http://127.0.0.1:45678/db')) { netz.push(req.url()); await r.abort(); return; }
       const d = req.postDataJSON();
       netz.push(d.op);
-      assert.ok(['cd', 'send'].includes(d.op));
-      await r.fulfill({ json: d.op === 'cd' ? { ok: true } : { name: 'beleg.txt', bytes } });
+      assert.ok(['cd', 'send', 'ls'].includes(d.op));
+      const exports = ['lageblatt-PIN-001.txt', 'lageblatt-PIN-014.txt', 'lageblatt-PIN-017 final.txt'];
+      await r.fulfill({ json: d.op === 'ls' ? { entries: exports.map(name => ({ name, dir: false })) } :
+        d.op === 'cd' ? { ok: true } : { name: 'beleg.txt', bytes } });
     });
     await p.goto(APP + '#db=45678.' + 'a'.repeat(43));
     await p.fill('#gate-pw', 'pw-satcon-tx-123');
@@ -39,8 +41,11 @@ const SEND = 'send /pgcl-eu3.arch07/dossiers/beleg.txt';
     await p.clock.install();
     await p.clock.pauseAt(new Date(Date.now() + 1000));
     const vorher = netz.length;
+    await cmd('satcon live'); assert.match(await out.textContent(), /satcon: command not found$/);
+    await cmd('secure-channel --connect --onion --ephemeral');
+    assert.match(await out.textContent(), /usage: secure-channel --connect --iface sat0/);
     await cmd(KANAL); assert.match(await out.textContent(), /sat0: Link is down/);
-    await input.fill('satcon-t'); await input.press('Tab');
+    await input.fill('sat'); await input.press('Tab');
     assert.equal(await input.inputValue(), 'satcon-tx ');
     for (const wort of TX.split(' ').slice(1)) {
       await input.press('Tab');
@@ -57,11 +62,27 @@ const SEND = 'send /pgcl-eu3.arch07/dossiers/beleg.txt';
     await p.clock.runFor(2000);
     assert.notEqual(await badge.textContent(), startBadge);
     await min.click();
-    await input.fill('secure-channel '); await input.press('Tab'); assert.equal(await input.inputValue(), KANAL);
+    await input.fill('secure-channel ');
+    let zug = 'secure-channel ';
+    for (const wort of KANAL.split(' ').slice(1)) {
+      await input.press('Tab'); zug += wort + ' '; assert.equal(await input.inputValue(), zug);
+    }
+    assert.equal(zug.trim(), KANAL);
     await input.press('Enter');
     await p.clock.runFor(5799); assert.equal(await prompt.textContent(), '…');
     await p.clock.runFor(1); assert.equal(await prompt.textContent(), 'you >');
     assert.equal(netz.length, vorher);
+    const basis = 'send /pgcl-eu3.arch07/ops/lageblatt-PIN-0';
+    const logVorTab = await out.textContent();
+    await input.fill(basis); await input.press('Tab');
+    for (let i = 0; i < 100 && !(await input.inputValue()).endsWith('001.txt'); i++)
+      await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(await input.inputValue(), basis + '01.txt');
+    await input.press('Tab'); assert.equal(await input.inputValue(), basis + '14.txt');
+    await input.press('Tab'); assert.equal(await input.inputValue(), 'send "/pgcl-eu3.arch07/ops/lageblatt-PIN-017 final.txt"');
+    await input.press('Shift+Tab'); assert.equal(await input.inputValue(), basis + '14.txt');
+    assert.equal(await out.textContent(), logVorTab);
+    assert.deepEqual(netz.slice(vorher), ['ls']);
     await cmd(SEND); await progress.waitFor({ state: 'visible' });
     assert.match(await out.textContent(), /Encrypting 9 chunks for sat0/);
     await p.clock.runFor(14000); assert.doesNotMatch(await out.textContent(), /ACK received/);
@@ -71,7 +92,7 @@ const SEND = 'send /pgcl-eu3.arch07/dossiers/beleg.txt';
     await p.clock.fastForward(rest2 - 8000);
     bytes = 20_000_000;
     await cmd(SEND); await progress.waitFor({ state: 'visible' });
-    assert.match(await out.textContent(), /Accelerated transfer simulation \(60 s cap\)/);
+    assert.doesNotMatch(await out.textContent(), /Accelerated transfer simulation/);
     await min.click();
     await p.clock.runFor(8000);
     assert.equal(await badge.isVisible(), false);
@@ -90,7 +111,7 @@ const SEND = 'send /pgcl-eu3.arch07/dossiers/beleg.txt';
     assert.equal(await prompt.textContent(), cwd);
     assert.equal(await badge.isVisible(), false);
     await cmd(KANAL); assert.match(await out.textContent(), /sat0: Link is down$/);
-    assert.deepEqual(netz.slice(vorher), ['send', 'send']);
+    assert.deepEqual(netz.slice(vorher), ['ls', 'send', 'send']);
     assert.deepEqual(errors, []);
     console.log('Satcon-TX: Aufbauzeiten, TLE, Countdown, SEND, LOS und Abbau grün');
   } finally { await b.close(); }

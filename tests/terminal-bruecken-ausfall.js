@@ -29,7 +29,7 @@ const PF = require('./_pfad');
     const erwartet = async wert => p.waitForFunction(wert => $('profil-terminal-eingabe').value === wert, wert);
     const ausgabe = async wert => p.waitForFunction(wert => $('profil-terminal-ausgabe').textContent.includes(wert), wert);
     await vorbereiten(p);
-    await taste('secure-channel --connect --onion --ephemeral', 'Enter');
+    await taste('secure-channel --connect --iface sat0 --route mixnet --ephemeral', 'Enter');
     await p.waitForFunction(() => $('profil-terminal-prompt').textContent === 'you >');
     const prefix = 'send /pgcl-eu3.arch07/';
     await taste('send pg', 'Tab');
@@ -48,7 +48,7 @@ const PF = require('./_pfad');
     await taste(prefix + 'dokumente/Ab', 'Tab');
     await erwartet(datei);
     await inp.press('Enter');
-    await ausgabe('Kanalpuffer vollständig [13/13]');
+    await ausgabe('ACK received from peer');
     /* Wenn das App-Fenster nach der Abmeldung nicht geschlossen werden darf, keinen alten Port neu laden. */
     await p.evaluate(() => { window.close = function () {}; Zugang.beenden(); });
     await p.locator('#gate-end-fertig').waitFor({state:'visible'});
