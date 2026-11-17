@@ -408,7 +408,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   } else terminalAusgabe(antwort.text);
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satAufbau: null, satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [] };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satAufbau: null, satLink: null, orbitLive: false, modem: null, modemEnde: null, wgSat: null, syslog: [] };
 function terminalAusgabe(zeile) {
   const t = TERMINAL_ZUSTAND;
   t.ausgabe = t.ausgabe.concat(zeile).slice(-45);
@@ -482,6 +482,7 @@ function terminalSatAbbruch() {
   if (t.wgSat) clearTimeout(t.wgSat.timer);
   if (t.modem) clearTimeout(t.modem.timer);
   t.modem = t.wgSat = null;
+  t.modemEnde = null;
   terminalSatAnzeige();
   terminalKanalPromptSync();
   t.satAufbau = null;
@@ -763,13 +764,14 @@ function terminalPppChatAus() {
   terminalKanalPromptSync();
   terminalPppAnzeige();
 }
-function terminalPppModemAus(grund) {
+function terminalPppModemAus(grund, inShell = true) {
   const t = TERMINAL_ZUSTAND, modem = t.modem;
   if (modem) {
     clearTimeout(modem.timer);
-    terminalPppLog('pppd[1401]: ' + grund);
-    terminalPppLog(TERMINAL_PPP_ENDE);
-    if (modem.vordergrund && !modem.bereit) terminalAusgabe(['pppd[1401]: ' + grund, TERMINAL_PPP_ENDE]);
+    const zeilen = ['pppd[1401]: ' + grund, TERMINAL_PPP_ENDE];
+    t.modemEnde = grund;
+    zeilen.forEach(terminalPppLog);
+    if (inShell) terminalAusgabe(zeilen);
   }
   t.modem = null;
   terminalKanalPromptSync();
@@ -796,6 +798,7 @@ function terminalPppWaehltVorne() {
 function terminalPppEinwahl(link, vordergrund, syslogZeilen) {
   const t = TERMINAL_ZUSTAND, modem = { bereit: false, vordergrund, timer: null };
   t.modem = modem;
+  t.modemEnde = null;
   terminalKanalPromptSync();
   const schritte = [
     [0, ['chat[1402]: abort on (BUSY)', 'chat[1402]: abort on (NO CARRIER)']],
@@ -861,11 +864,14 @@ function terminalPppShell(befehl, arg) {
     return true;
   }
   if (befehl === 'poff') {
-    if (arg !== 'iridium' && !/^iridium && tail -n (?:6|12) \/var\/log\/syslog$/.test(arg)) terminalAusgabe('usage: poff iridium');
-    else {
-      if (t.modem) terminalPppModemAus('Terminating on signal 15');
-      else terminalAusgabe('poff: iridium is not running');
-      if (arg.includes('&&')) terminalSyslog(Number(arg.match(/tail -n (\d+)/)[1]));
+    const m = /^iridium(?:\s*&&\s*tail\s+-n\s+(\d{1,2})\s+\/var\/log\/syslog)?$/.exec(arg);
+    if (!m) terminalAusgabe('usage: poff iridium [&& tail -n 6 /var/log/syslog]');
+    else if (!t.modem) {
+      const letzterAbbruch = t.modemEnde?.includes('NO CARRIER');
+      terminalAusgabe('poff: iridium is not running' + (letzterAbbruch ? ' (NO CARRIER)' : ''));
+    } else {
+      terminalPppModemAus('Terminating on signal 15', m[1] === undefined);
+      if (m[1] !== undefined) terminalSyslog(Number(m[1]));
     }
     return true;
   }
