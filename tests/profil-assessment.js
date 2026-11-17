@@ -66,7 +66,7 @@ const { chromium } = require('playwright');
     await p.evaluate(() => tickModule(Date.now()));
     assert.equal(await p.locator('meter[aria-label="Entscheidungsfähigkeit unter Druck"]').getAttribute('value'), '99');
     assert.equal(await p.locator('#btn-karte-bereinigen').isVisible(), true);
-    await p.locator('#profil-terminal > summary').click();
+    await p.locator('#profil-terminal-oeffnen').click();
     const ausgabe = p.locator('#profil-terminal-ausgabe');
     const cmd = async zeile => { await p.locator('#profil-terminal-eingabe').fill(zeile); await p.locator('#profil-terminal-eingabe').press('Enter'); };
     const netz0 = netz.length;

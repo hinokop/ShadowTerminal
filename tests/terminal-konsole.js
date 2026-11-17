@@ -1,0 +1,66 @@
+const assert = require('node:assert/strict');
+const { chromium } = require('playwright');
+const PF = require('./_pfad'), { vorbereiten } = require('./_satcon');
+
+(async () => {
+  const b = await chromium.launch();
+  try {
+    const p = await b.newPage({ reducedMotion: 'reduce', viewport: { width: 700, height: 700 } });
+    const errors = [];
+    p.on('pageerror', e => errors.push(e.message));
+    await p.route(/^https?:/, r => r.abort());
+    await p.goto(PF.APP);
+    const panel = p.locator('#profil-terminal'), input = p.locator('#profil-terminal-eingabe');
+    const prompt = p.locator('#profil-terminal-prompt');
+    await p.keyboard.press('t'); assert.equal(await panel.count(), 0);
+    await p.locator('#gate-pw').fill('pw-test-123');
+    if (await p.locator('#gate-pw2').isVisible()) await p.locator('#gate-pw2').fill('pw-test-123');
+    await p.locator('#gate-go').click();
+    await p.waitForFunction(() => APP_BEREIT && !document.body.classList.contains('locked'));
+    await p.keyboard.press('1');
+    await p.locator('#profil-terminal-oeffnen').click();
+    await p.waitForFunction(() => document.activeElement === $('profil-terminal-eingabe'));
+    await p.evaluate(() => { window.konsoleImTest = $('profil-terminal'); });
+    const befehl = async text => { await input.fill(text); await input.press('Enter'); };
+    await befehl('pwd');
+    await input.press('t'); assert.equal(await input.inputValue(), 't');
+    await input.press('Escape'); assert.equal(await panel.isVisible(), false);
+    assert.equal(await p.locator(':focus').getAttribute('id'), 'profil-terminal-oeffnen');
+    await p.keyboard.press('F1');
+    await p.keyboard.press('3'); await p.locator('#k-pin-neu').click();
+    await p.locator('#k-svg').focus();
+    await p.evaluate(() => $('dlg').showModal()); await p.keyboard.press('t');
+    assert.equal(await panel.isVisible(), false);
+    await p.evaluate(() => $('dlg').close());
+    await p.locator('#k-svg').focus();
+    await p.keyboard.press('t');
+    await p.waitForFunction(() => document.activeElement === $('profil-terminal-eingabe'));
+    assert.equal(await panel.count(), 1);
+    assert.equal(await input.inputValue(), 't');
+    assert.match(await p.locator('#profil-terminal-ausgabe').textContent(), /# pwd/);
+    await input.press('ArrowUp'); assert.equal(await input.inputValue(), 'pwd');
+    await input.press('Escape'); assert.equal(await input.inputValue(), 't');
+    await vorbereiten(p);
+    await befehl('secure-channel --connect --onion --ephemeral');
+    await p.waitForFunction(() => $('profil-terminal-prompt').textContent === 'you >', null, { timeout: 40000 });
+    await p.locator('#profil-terminal-schliessen').click(); assert.equal(await panel.isVisible(), false);
+    await p.keyboard.press('t'); assert.equal(await prompt.textContent(), 'you >');
+    // Focus the underlying SVG deliberately. Escape must still only reach the terminal.
+    await p.locator('#k-svg').focus(); await p.keyboard.press('Escape');
+    assert.equal(await panel.isVisible(), true);
+    assert.notEqual(await prompt.textContent(), 'you >');
+    await p.keyboard.press('Escape'); assert.equal(await panel.isVisible(), false);
+    assert.equal(await p.locator('#k-pin-neu').getAttribute('aria-pressed'), 'true');
+    await p.keyboard.press('t'); await p.keyboard.press('F2');
+    await p.waitForFunction(() => !!$('profil-terminal-oeffnen'));
+    assert.equal(await panel.isVisible(), true);
+    assert.equal(await p.evaluate(() => window.konsoleImTest === $('profil-terminal')), true);
+    await input.fill('nicht behalten');
+    await p.evaluate(() => document.body.classList.add('locked'));
+    await panel.waitFor({ state: 'hidden' });
+    assert.equal(await input.inputValue(), '');
+    await p.keyboard.press('t'); assert.equal(await panel.isVisible(), false);
+    assert.deepEqual(errors, []);
+    console.log('Terminal-Konsole: grün');
+  } finally { await b.close(); }
+})().catch(e => { console.error(e); process.exitCode = 1; });

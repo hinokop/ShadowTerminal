@@ -59,7 +59,7 @@ const PF = require('./_pfad');
     await p.locator('#gate-pw').fill(passwort);
     if (await p.locator('#gate-pw2').isVisible()) await p.locator('#gate-pw2').fill(passwort);
     await p.click('#gate-go');
-    await p.locator('#profil-terminal > summary').click();
+    await p.locator('#profil-terminal-oeffnen').click();
     const out = p.locator('#profil-terminal-ausgabe');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.dateiLaeuft);
     async function cmd(zeile) {

@@ -23,7 +23,7 @@ const PF = require('./_pfad');
     await p.locator('#gate-pw').fill('pw-test-123');
     if (await p.locator('#gate-pw2').isVisible()) await p.locator('#gate-pw2').fill('pw-test-123');
     await p.locator('#gate-go').click();
-    await p.locator('#profil-terminal > summary').click();
+    await p.locator('#profil-terminal-oeffnen').click();
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     async function taste(wert, key) { await inp.fill(wert); await inp.press(key); }
     const erwartet = async wert => p.waitForFunction(wert => $('profil-terminal-eingabe').value === wert, wert);

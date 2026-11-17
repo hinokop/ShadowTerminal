@@ -6,7 +6,10 @@
 .profil-psycho meter::-webkit-meter-bar{background:var(--bg);border-color:var(--border);border-radius:2px}
 .profil-psycho meter::-webkit-meter-optimum-value{background:var(--accent)}
 .profil-psycho meter::-moz-meter-bar{background:var(--accent)}
-.profil-terminal > summary,.profil-alt-notizen > summary{padding:6px 8px;background:var(--panel-raised);color:var(--text-dim);cursor:pointer}
+.profil-alt-notizen > summary{padding:6px 8px;background:var(--panel-raised);color:var(--text-dim);cursor:pointer}
+.profil-terminal{position:fixed;z-index:80;inset:auto 12px 12px;width:auto;max-width:56rem;max-height:calc(100vh - 42px);margin:0 auto;overflow:auto;box-shadow:0 8px 32px #000a}
+.locked .profil-terminal{display:none}
+.profil-terminal-kopf{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;background:var(--panel-raised);color:var(--text-dim)}
 .profil-terminal-kern{background:#0b1211;color:#a7c8b4;border-top:1px solid var(--border);padding:8px 10px}
 .profil-terminal-kern pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow-y:auto;min-height:2em;max-height:16em;line-height:1.5;margin:0 0 6px}
 .profil-terminal-kern form{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0}
