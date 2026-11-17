@@ -92,6 +92,7 @@ const { APP } = require('./_pfad');
     assert.ok(/<b>sicher<\/b>/.test(sauber.text), 'erlaubte Formatierung bleibt');
     /* beschädigter Inhalt aus Import/Altdaten wird nur bereinigt angezeigt */
     await p.evaluate(() => { const x = xAnlegen({ titel: 'Präpariert' }); x.eintraege = [{ uid: 'eeeeeeeeeeee', art: 'lage', text: '<img src=x onerror="window.__y=1"><b>ok</b><script>window.__y=2<\/script>', erfasst: '2026-01-01T00:00:00.000Z' }]; profilSpeichern(); xOeffnen(x.id); });
+    await p.waitForTimeout(400);                                       /* onerror eines geladenen Bildes feuert asynchron */
     assert.equal(await p.evaluate(() => window.__y), undefined, 'kein Skript aus präpariertem Eintrag');
     assert.equal(await p.locator('#x-bf-eeeeeeeeeeee img, #x-bf-eeeeeeeeeeee script').count(), 0);
     assert.equal(await p.locator('#x-bf-eeeeeeeeeeee b').count(), 1, 'erlaubte Formatierung wird angezeigt');
@@ -134,6 +135,36 @@ const { APP } = require('./_pfad');
     await p.evaluate(() => { const x = xAnlegen({ titel: 'Beschädigt' }); x.eintraege = [null, 5, { uid: 'x' }, { uid: 'cccccccccccc', art: 'unbekannt', text: 'a', erfasst: 'e' }, { uid: 'dddddddddddd', art: 'lage', text: 'gültig', erfasst: '2026-01-01T00:00:00.000Z' }, { uid: 'dddddddddddd', art: 'lage', text: 'doppelt', erfasst: '2026-01-02T00:00:00.000Z' }]; profilSpeichern(); xOeffnen(x.id); });
     assert.equal(await p.locator('#x-briefing [data-eintrag]').count(), 1, 'nur der gültige Eintrag erscheint');
     assert.ok((await p.locator('#x-briefing').innerText()).includes('gültig'));
+    /* Kurzlage / Leitfrage mit Editor: Formatierung, Klartext im Fallobjekt, Bereinigung */
+    const kf = await p.evaluate(() => { const x = xAnlegen({ titel: 'Kurzlagefall', frage: 'Alt, mit <spitzen> & Zeichen' }); profilSpeichern(); xOeffnen(x.id); return x.id; });
+    assert.equal(await p.evaluate(() => document.getElementById('x-kurzlage').innerText.trim()), 'Alt, mit <spitzen> & Zeichen', 'Altwert als Text, nicht als Markup');
+    await p.click('#x-kurzlage'); await p.keyboard.press('Control+A'); await p.keyboard.type('Leitfrage fett'); await p.keyboard.press('Control+A');
+    await p.click('#x-kurzlage-leiste [data-format="bold"]');
+    await p.click('#x-speichern');
+    const kz = await p.evaluate(i => { const x = xFall(i); return { frage: x.frage, fmt: x.frageFormat }; }, kf);
+    assert.equal(kz.frage, 'Leitfrage fett', 'Klartext für andere Stellen'); assert.ok(/<b>|<strong>/.test(kz.fmt), 'Formatierung gespeichert: ' + kz.fmt);
+    assert.ok(await p.locator('#x-briefing b, #x-briefing strong').count() > 0, 'Lagebriefing zeigt die formatierte Kurzlage');
+    assert.equal(await p.evaluate(() => document.querySelector('#x-kurzlage b, #x-kurzlage strong') !== null), true, 'Formular zeigt die Formatierung wieder');
+    /* mehrzeilig: Zeilenumbrüche im Klartext */
+    await p.click('#x-kurzlage'); await p.keyboard.press('Control+A'); await p.keyboard.type('Zeile eins'); await p.keyboard.press('Enter'); await p.keyboard.type('Zeile zwei');
+    await p.click('#x-speichern');
+    assert.equal(await p.evaluate(i => xFall(i).frage, kf), 'Zeile eins\nZeile zwei', 'Klartext mit Zeilenumbruch');
+    assert.equal(await p.evaluate(i => xFall(i).frageFormat === undefined || xFall(i).frageFormat.indexOf('Zeile') >= 0, kf), true);
+    /* ohne Formatierung kein zweites Feld */
+    await p.evaluate(() => { document.getElementById('x-kurzlage').innerHTML = ''; }); await p.click('#x-kurzlage'); await p.keyboard.type('Nur Text'); await p.click('#x-speichern');
+    assert.equal(await p.evaluate(i => 'frageFormat' in xFall(i), kf), false, 'ohne Formatierung kein frageFormat');
+    /* über 300 Zeichen: abgelehnt, nichts verändert */
+    await p.fill('#x-kurzlage', 'z'.repeat(301)); await p.click('#x-speichern');
+    assert.equal(await p.evaluate(i => xFall(i).frage, kf), 'Nur Text'); assert.ok((await p.locator('#sys-msg').innerText()).includes('300'));
+    /* eingeschleustes Markup und uneinheitliches frageFormat: bereinigt bzw. ignoriert angezeigt */
+    await p.evaluate(i => { const x = xFall(i); x.frage = 'echt'; x.frageFormat = '<img src=x onerror="window.__k=1"><b>falsch</b>'; profilSpeichern(); xOeffnen(i); renderModule(); }, kf);
+    assert.equal(await p.evaluate(() => window.__k), undefined); assert.ok((await p.locator('#x-briefing').innerText()).includes('echt'), 'uneinheitliches frageFormat wird ignoriert');
+    /* Fallpaket erhält frageFormat */
+    await p.evaluate(i => { const x = xFall(i); x.frage = 'Fett'; x.frageFormat = '<b>Fett</b>'; profilSpeichern(); }, kf);
+    const pk = await p.evaluate(async i => (await rchPaketBauen(i)).text, kf);
+    await p.evaluate(i => { PROFIL.recherche.faelle = PROFIL.recherche.faelle.filter(x => x.id !== i); profilSpeichern(); }, kf);
+    await lade(pk, 'k.json');
+    assert.equal(await p.evaluate(() => (PROFIL.recherche.faelle.find(x => x.titel === 'Kurzlagefall') || {}).frageFormat), '<b>Fett</b>', 'frageFormat nach Wiederimport erhalten');
     assert.deepEqual(fehler, []);
     console.log('OK: datierte Einträge im Lagebriefing');
   } finally { await browser.close(); }

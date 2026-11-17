@@ -185,7 +185,7 @@ function xForm(f) {
     (VIEW.draft[key] = VIEW.draft[key] || {})[k] = ev.target.value;
   }; };
   const titel = h('input', { id: 'x-titel', required: true, maxlength: 120, value: d.titel ?? f.titel, oninput: merken('titel') });
-  const lage = h('textarea', { id: 'x-kurzlage', rows: 4, maxlength: 300, value: d.frage ?? f.frage ?? '', oninput: merken('frage') });
+  const lage = xTextEditor('x-kurzlage', d.frage !== undefined ? d.frage : (xFrageHtml(f) || xTextAusKlartext(f.frage)), function (html) { (VIEW.draft[key] = VIEW.draft[key] || {}).frage = html; }, 'Kurzlage / Leitfrage');
   const status = xSelect('x-status', X_STATUS, d.zustand ?? xStatus(f.zustand)[0], { onchange: merken('zustand') });
   const bewertung = xSelect('x-bewertung', X_BEWERTUNG, d.bewertung ?? xAuswahl(X_BEWERTUNG, f.bewertung)[0], { onchange: merken('bewertung') });
   const begruendung = h('textarea', { id: 'x-begruendung', rows: 2, maxlength: 500, value: d.begruendung ?? f.begruendung ?? '', oninput: merken('begruendung') });
@@ -193,12 +193,15 @@ function xForm(f) {
     ev.preventDefault();
     const akt = xFall(f.id), name = titel.value.trim();
     if (!akt || !name) { meldung('Bitte einen Falltitel eingeben.'); return; }
+    const html = lage.wert(), klar = xTextPlain(html);
+    if (klar.length > 300) { meldung('Höchstens 300 Zeichen für die Kurzlage.'); return; }
     if (xSchreiben(function () {
-      Object.assign(akt, { titel: name, frage: lage.value.trim(), zustand: status.value, bewertung: bewertung.value, begruendung: begruendung.value.trim() });
+      Object.assign(akt, { titel: name, frage: klar, zustand: status.value, bewertung: bewertung.value, begruendung: begruendung.value.trim() });
+      if (klar && html !== xTextAusKlartext(klar)) akt.frageFormat = html; else delete akt.frageFormat;
       return true;
     })) { delete VIEW.draft[key]; meldung(f.id + ' gespeichert.'); renderModule(); }
   } },
-  feldZeile('Titel', titel.id, titel), feldZeile('Kurzlage / Leitfrage', lage.id, lage),
+  feldZeile('Titel', titel.id, titel), feldZeile('Kurzlage / Leitfrage', 'x-kurzlage', lage.knoten),
   feldZeile('Zustand', status.id, status), feldZeile('Bewertung der Informationslage', bewertung.id, bewertung), feldZeile('Begründung (optional)', begruendung.id, begruendung),
   h('button', { id: 'x-speichern', type: 'submit' }, 'Fall speichern'));
 }
@@ -243,15 +246,39 @@ function xUnterlagen(f) {
 /* Einfacher Texteditor für Einträge: Fett, Kursiv, Unterstrichen, Liste. Eingefügt wird nur Text; Inhalt wird mit der Bereinigung der Dossier-Kurzlage
    (kurzlageInhalt) beim Speichern und bei jeder Anzeige aus erlaubten Elementen neu aufgebaut. Unterlagen-Verweise der Kurzlage gibt es hier nicht. */
 function xTextOhneVerweise(html) {
-  const v = document.createElement('template'); v.innerHTML = typeof html === 'string' ? html.slice(0, 24000) : '';
-  v.content.querySelectorAll('[data-unterlage]').forEach(function (n) { n.remove(); });
-  const d = document.createElement('div'); d.appendChild(v.content); return d.innerHTML;
+  /* In einem eigenen, inerten Dokument parsen: Knoten dürfen nie in das aktive Dokument wandern (sonst laden Bilder und onerror feuert). */
+  const doc = document.implementation.createHTMLDocument('');
+  doc.body.innerHTML = typeof html === 'string' ? html.slice(0, 24000) : '';
+  doc.body.querySelectorAll('[data-unterlage]').forEach(function (n) { n.remove(); });
+  return doc.body.innerHTML;
 }
 function xTextKanon(html) { return kurzlageKanon(xTextOhneVerweise(html)); }
 function xTextAnzeige(html) { return h('div', { class: 'kl-text' }, kurzlageInhalt(xTextOhneVerweise(html), new Map(), true)); }
-function xTextPlain(html) { return h('div', null, kurzlageInhalt(xTextOhneVerweise(html), new Map(), false)).textContent.trim(); }
-function xTextEditor(id, start, beiAenderung) {
-  const eingabe = h('div', { id: id, class: 'kl-text kl-eingabe', contenteditable: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Text des Eintrags', spellcheck: 'true' },
+/* Klartext mit Zeilenumbrüchen aus bereinigtem Inhalt; dient Längenprüfung, Leerprüfung und dem Klartextfeld des Falls. */
+function xTextPlain(html) {
+  const wurzel = h('div', null, kurzlageInhalt(xTextOhneVerweise(html), new Map(), false)), block = { DIV: 1, P: 1, UL: 1, LI: 1 };
+  let aus = '';
+  const gehe = function (n) {
+    if (n.nodeType === 3) { aus += n.data; return; }
+    if (n.nodeType !== 1) return;
+    if (n.tagName === 'BR') { aus += '\n'; return; }
+    const b = block[n.tagName] === 1;
+    if (b && aus && !/\n$/.test(aus)) aus += '\n';
+    Array.from(n.childNodes).forEach(gehe);
+    if (b && aus && !/\n$/.test(aus)) aus += '\n';
+  };
+  Array.from(wurzel.childNodes).forEach(gehe);
+  return aus.replace(/\u00a0/g, ' ').trim();
+}
+/* Klartext als Editorinhalt (maskiert, Zeilenumbrüche als <br>). */
+function xTextAusKlartext(t) {
+  const d = h('div'); String(t || '').split('\n').forEach(function (z, i) { if (i) d.appendChild(document.createElement('br')); d.appendChild(document.createTextNode(z)); });
+  return d.innerHTML;
+}
+/* Formatierte Kurzlage gilt nur, wenn ihr Klartext zum Klartextfeld des Falls passt. */
+function xFrageHtml(f) { return typeof f.frageFormat === 'string' && f.frage && xTextPlain(f.frageFormat) === f.frage ? f.frageFormat : null; }
+function xTextEditor(id, start, beiAenderung, beschriftung) {
+  const eingabe = h('div', { id: id, class: 'kl-text kl-eingabe', contenteditable: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': beschriftung || 'Text des Eintrags', spellcheck: 'true' },
     kurzlageInhalt(xTextOhneVerweise(start || ''), new Map(), false));
   let position = null;
   const merken = function () {
@@ -356,7 +383,7 @@ function xBriefing(f) {
   return h('section', { id: 'x-briefing', class: 'panel', 'aria-label': 'Lagebriefing' },
     h('div', { class: 'pad' },
       h('h3', null, 'Lagebriefing'),
-      h('p', { class: 'dim' }, 'Kurzlage'), h('p', { class: 'x-kurztext' }, f.frage ? f.frage : 'Keine Kurzlage erfasst.'),
+      h('p', { class: 'dim' }, 'Kurzlage'), f.frage ? (xFrageHtml(f) ? h('div', { class: 'x-kurztext' }, xTextAnzeige(xFrageHtml(f))) : h('p', { class: 'x-kurztext x-klartext' }, f.frage)) : h('p', { class: 'x-kurztext' }, 'Keine Kurzlage erfasst.'),
       xEintraegeBlock(f),
       h('p', { class: 'dim' }, 'Zuletzt hinzugefügt'),
       L.length ? h('ul', { class: 'x-items' }, L.map(function (x) {
