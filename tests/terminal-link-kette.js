@@ -31,7 +31,7 @@ const { APP } = require('./_pfad');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
     const vor = netz.length;
     await cmd('help');
-    assert.match(await out.textContent(), /pppd call iridium updetach/);
+    assert.match(await out.textContent(), /pppd call iridium \[updetach\]/);
     assert.doesNotMatch(await out.textContent(), /satcon-tx|secure-channel|send <datei>/);
     await cmd('pppd call iridium'); assert.match(await out.textContent(), /pppd: NO CARRIER$/);
     await inp.fill('pre'); await inp.press('Tab');
@@ -94,8 +94,9 @@ const { APP } = require('./_pfad');
         await p.clock.runFor(7500);
       }
       await cmd('tail -n 12 /var/log/syslog'); assert.match(await out.textContent(), /Using interface ppp0/);
-      await cmd('wg-quick up wg-sat');
+      // wg-quick läuft im Vordergrund; profanity vorher scheitert ohne Tunnel.
       await cmd('profanity'); assert.match(await out.textContent(), /profanity: Network unreachable$/);
+      await cmd('wg-quick up wg-sat');
       await p.clock.runFor(650);
       await cmd('profanity');
       assert.equal(await chat.isVisible(), true); assert.equal(await out.isVisible(), false);
@@ -130,8 +131,9 @@ const { APP } = require('./_pfad');
     assert.equal(await p.evaluate(() => !!(TERMINAL_ZUSTAND.modem.bereit && TERMINAL_ZUSTAND.wgSat)), true);
     await cmd('wg show wg-sat'); assert.match(await out.textContent(), /latest handshake/);
     await cmd('wg-quick down wg-sat');
-    await cmd('poff iridium && tail n -6 /var/log/syslog');
-    assert.match(await out.textContent(), /usage: poff iridium \[&& tail -n 6 \/var\/log\/syslog\]/);
+    // poff kennt nur seine eigenen Argumente; && und tail gehören der Shell.
+    await cmd('poff iridium extra');
+    assert.match(await out.textContent(), /usage: poff iridium$/);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem.bereit), true);
     await cmd('poff iridium');
     assert.match(await out.textContent(), /Terminating on signal 15\npppd\[1401\]: Connection terminated\.$/);
