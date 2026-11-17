@@ -41,6 +41,8 @@ fehler() {
 [ -f "$DIR/akten-modul.js" ] || fehler "index.html, szenario.js, karte-modul.js, akten-modul.js oder recherche-modul.js fehlt neben dieser Datei."
 [ -f "$DIR/recherche-modul.js" ] || fehler "index.html, szenario.js, karte-modul.js, akten-modul.js oder recherche-modul.js fehlt neben dieser Datei."
 
+[ -f "$DIR/fall-modul.js" ] || fehler "fall-modul.js fehlt neben dieser Datei."
+
 # Browser suchen: erst der ausdrueckliche Wunsch, dann gaengige Chromium-Varianten
 BROWSER=""
 if [ -n "${BROWSER_BIN:-}" ]; then

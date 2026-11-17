@@ -108,6 +108,14 @@ function karteAssetId(e) {
 function karteOhneMission() { return STATE.vorlauf || !missionsbetrieb(); }
 /* Darstellung getrennt von zDef() für den historischen Ablauf. Kein Wiederaufleben des Karten-UI aus Altdaten. */
 function karteAuftragsansicht() { return VIEW.missionsansicht === STATE && !PROFIL.karteBlanko ? zDef() : null; }
+/* Pin und Sichtung gehören nur zusammen, wenn beide Seiten dieselbe Paarung nennen: Pin im selben Dossier, pin.sichtung = Sichtungs-Nr., Sichtung.pin = Pin-Kennung.
+   Eine bloße Nummer genügt nicht (Nummern werden nach dem Löschen wieder vergeben). */
+function pinSichtung(x) {
+  if (!x || !x.sichtung || !x.dossier) return null;
+  const d = STATE.dossiers.entitaeten[x.dossier], l = d && d.sichtungen;
+  return (l && l.find(function (y) { return y.id === x.sichtung && y.pin === x.id; })) || null;
+}
+function sichtungPin(si, entId) { return (PROFIL.pins || []).find(function (y) { return y.dossier === entId && y.sichtung === si.id && si.pin === y.id; }) || null; }
 function karteMarker() {
   const Z = VIEW.karte.ebenen, def = karteAuftragsansicht(), out = [];
   if (Z.ausgang) PROFIL.ausgang.forEach(function (x) { if (x.ll) out.push({ id: x.id, kat: 'ausgang', name: x.name, ll: x.ll, art: x.art }); });
@@ -122,12 +130,15 @@ function karteMarker() {
   if (Z.sichtungen !== false || fokus) pool().forEach(function (e) {
     if (infoGesperrt(e) || dossierGesperrt(e)) return;
     const d = STATE.dossiers.entitaeten[e.id], alle = (d && d.sichtungen) || [], sicht = Z.sichtungen !== false ? alle.slice(-3) : [];
+    if (Z.sichtungen !== false) alle.forEach(function (si) { if (si.pin && sicht.indexOf(si) < 0 && sichtungPin(si, e.id)) sicht.push(si); });          /* Sichtung mit Ursprungspin wird immer gezeichnet, sonst fehlte beides */
     if (fokus) { const f = alle.find(function (x) { return x.id === fokus; }); if (f && sicht.indexOf(f) < 0) sicht.push(f); }
     sicht.forEach(function (si) {
       const k = sichtungKoord(si);
-      if (k) out.push({ id: si.id, kat: 'sichtung', typ: 'Sichtung', name: e.id + ' ' + e.name + (si.ort ? ' · ' + si.ort : ''), ll: k.ll, genau: k.genau, bez: k.bez, entId: e.id, si: si, guete: sichtungGuete(e, si), unM: sichtungRadiusM(si, k.genau) });
+      if (k) out.push({ id: si.id, kat: 'sichtung', typ: 'Sichtung', name: e.id + ' ' + e.name + (si.ort ? ' · ' + si.ort : ''), ll: k.ll, genau: k.genau, bez: k.bez, entId: e.id, si: si, guete: sichtungGuete(si), unM: sichtungRadiusM(si, k.genau) });
     });
   });
+  const gez = {}; out.forEach(function (m) { if (m.kat === 'sichtung') gez[m.entId + '|' + m.id] = true; });
+  for (let i = out.length - 1; i >= 0; i--) { const m = out[i]; if (m.kat !== 'pin') continue; const px = (PROFIL.pins || []).find(function (y) { return y.id === m.id; }); if (px && px.sichtung && px.dossier && pinSichtung(px) && gez[px.dossier + '|' + px.sichtung]) out.splice(i, 1); }   /* Pin nur ausblenden, wenn seine Sichtung tatsächlich gezeichnet wird */
   const zusatzIds = {};
   if (def) (MS(def.id).zusatz || []).forEach(function (x) { if (x.urteil !== 'abgelehnt') zusatzIds[x.id] = true; });
   pool().forEach(function (e) {
@@ -680,21 +691,39 @@ function eigeneZoneText(x) {
     'Radius: ' + x.r + ' m', 'Notiz: ' + (x.notiz || '–'), 'Stand: ' + fmtZ(x.stand || x.t),
     'Bemerkung zur Prüfung: ' + (x.standBemerkung || '–')].join('\n');
 }
-function kartenTxtExport(art, id) {
-  const objekt = function () { return ((art === 'pin' ? PROFIL.pins : PROFIL.zonen) || []).find(function (x) { return x.id === id; }); };
-  const muster = art === 'pin' ? /^PIN-[0-9]{3,15}$/ : /^ZO-[0-9]{3,15}$/;
+/* Bestätigte Sichtung als Textblatt: Sichtungsdaten und, falls vorhanden, die Daten des Entwurfs-Pins, aus dem sie entstand */
+function sichtungText(e, si) {
+  const k = sichtungKoord(si), pin = sichtungPin(si, e.id);
+  const z = [si.id + ' · Dossier ' + e.id + ' ' + e.name, 'Zeit: ' + fmtZ(si.t), 'Ort laut Meldung: ' + (si.ort || '–'),
+    'Position: ' + (k ? k.ll[0].toFixed(5) + ', ' + k.ll[1].toFixed(5) + ' (ungefähr, aus ' + k.genau + ')' : '–'),
+    'Güte: ' + gueteLabel(sichtungGuete(e, si)), 'Beobachtung: ' + (si.text || '–')];
+  if (pin) z.push('', 'Entwurf: ' + pinText(pin));
+  return z.join('\n');
+}
+function kartenTxtExport(art, id, entId) {
+  const objekt = function () {
+    if (art === 'sichtung') {
+      const d = STATE.dossiers.entitaeten[entId], si = d && (d.sichtungen || []).find(function (y) { return y.id === id; });
+      return si ? Object.assign({}, si, { dossier: entId }) : null;
+    }
+    return ((art === 'pin' ? PROFIL.pins : PROFIL.zonen) || []).find(function (x) { return x.id === id; });
+  };
+  const muster = art === 'pin' ? /^PIN-[0-9]{3,15}$/ : art === 'sichtung' ? /^SI-[0-9]{3,15}$/ : /^ZO-[0-9]{3,15}$/;
   const pruefen = function () {
     const x = objekt();
     if (!x || !muster.test(x.id)) { meldung('TXT-Export nicht möglich. Kartenobjekt nicht vorhanden.'); return null; }
     if (x.dossier && (PROFIL.gesperrt || []).includes(x.dossier)) {
       meldung('TXT-Export blockiert. Das verknüpfte Dossier ist gesperrt.'); return null;
     }
+    if (art === 'sichtung' && (!entitaet(x.dossier) || infoGesperrt(entitaet(x.dossier)) || dossierGesperrt(entitaet(x.dossier)))) {
+      meldung('TXT-Export blockiert. Das Dossier ist gesperrt.'); return null;
+    }
     return x;
   };
   const x = pruefen();
   if (!x) return;
-  const dateiname = (art === 'pin' ? 'lageblatt-' : 'zone-') + id + '.txt';
-  const textVon = function (y) { return (art === 'pin' ? pinText(y) : eigeneZoneText(y)) + '\n'; };
+  const dateiname = (art === 'pin' ? 'lageblatt-' : art === 'sichtung' ? 'sichtung-' + entId + '-' : 'zone-') + id + '.txt';   /* Sichtungsnummern gelten je Dossier, der Dateiname trägt deshalb das Dossier */
+  const textVon = function (y) { return (art === 'pin' ? pinText(y) : art === 'sichtung' ? sichtungText(entitaet(entId), y) : eigeneZoneText(y)) + '\n'; };
   if (!terminalBrueckenAdresse()) {
     const a = h('a', { download: dateiname }), u = URL.createObjectURL(new Blob([textVon(x)], { type: 'text/plain;charset=utf-8' }));
     a.href = u; document.body.appendChild(a); a.click(); a.remove();
@@ -707,32 +736,36 @@ function kartenTxtExport(art, id) {
   bestaetigen('Als TXT exportieren', [h('p', { class: 'note' }, dateiname),
     h('div', { class: 'row' }, h('label', { for: 'k-txt-ordner' }, 'Archivordner'), ordner)],
     'TXT speichern', async function () {
+      if (art === 'sichtung') dispatch({ type: 'SICHTUNG_KENNUNG', id: entId, sid: id });          /* Altbestand: Kennung einmalig vergeben; ein vorhandener Vermerk ohne Kennung kann nie passen */
       const aktuell = pruefen();
       if (!aktuell) return;
-      const schluessel = art + ':' + id + ':' + ordner.value, gemerkt = (PROFIL.exporte || {})[schluessel];
-      const antwort = await terminalBruecke('export-txt', null, false, { art: art, id: id, ordner: ordner.value, text: textVon(aktuell), last: gemerkt && gemerkt.name && gemerkt.sha ? { name: gemerkt.name, sha: gemerkt.sha } : null });
+      const si = art === 'sichtung' ? aktuell : null, schluessel = art === 'sichtung' ? 'sichtung:' + (si.uid || '') + ':' + ordner.value : art + ':' + id + ':' + ordner.value, gemerkt = si && !si.uid ? null : (PROFIL.exporte || {})[schluessel];   /* Sichtung: Ersetzen nur über die dauerhafte Kennung; ohne Kennung stets neue Version */
+      const antwort = await terminalBruecke('export-txt', null, false, { art: art, id: art === 'sichtung' ? entId + '-' + id : id, ordner: ordner.value, text: textVon(aktuell), last: gemerkt && gemerkt.name && gemerkt.sha ? { name: gemerkt.name, sha: gemerkt.sha } : null });
       if (antwort.error) { meldung('TXT-Export nicht gespeichert. ' + antwort.error); return; }
-      if (antwort.sha256 && antwort.mode !== 'unveraendert') dispatch({ type: 'EXPORT_VERMERKT', schluessel: schluessel, name: antwort.name, sha: antwort.sha256 });
+      if (antwort.sha256 && antwort.mode !== 'unveraendert' && (!si || si.uid)) dispatch({ type: 'EXPORT_VERMERKT', schluessel: schluessel, name: antwort.name, sha: antwort.sha256 });
       const ziel = '/' + TERMINAL_DB + '/' + antwort.folder + '/' + antwort.name;
       meldung(antwort.mode === 'ersetzt' ? 'TXT ersetzt · ' + ziel : antwort.mode === 'unveraendert' ? 'TXT unverändert, keine neue Datei · ' + ziel
         : antwort.mode === 'version' ? 'Vorhandene Datei wurde nicht ersetzt, da sie verändert wurde. Neue Version gespeichert · ' + ziel : 'TXT gespeichert · ' + ziel);
     });
 }
-function pinPopup(x, fertig) {
-  const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: x.id }, patch)); karteNeuZeichnen(); };
-  const n = pinNaehe(x, 1000);
-  fertig(x.name, [   /* die interne Kennung PIN-nnn bleibt verborgen; sie dient nur den Verweisen */
-    h('p', { class: 'k-pop-sub' }, x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5)),
-    h('div', { class: 'pin-form' }, h('label', { for: 'pin-name' }, 'Name'), h('input', { type: 'text', id: 'pin-name', maxlength: '60', value: x.name, onchange: function (ev) { ab({ name: ev.target.value }); } }),
+function pinFormular(x, ab, mitDossier) {
+  return h('div', { class: 'pin-form' }, h('label', { for: 'pin-name' }, 'Name'), h('input', { type: 'text', id: 'pin-name', maxlength: '60', value: x.name, onchange: function (ev) { ab({ name: ev.target.value }); } }),
       h('span', { class: 'pin-kopf' }, 'Zweck (mehrere möglich)'),
       h('div', { class: 'pin-zwecke' }, PIN_ZWECKE.map(function (z) {
         const hat = (x.zwecke || []).indexOf(z) >= 0;
         return h('label', { class: 'pin-chip' + (hat ? ' an' : '') }, h('input', { type: 'checkbox', 'data-pin-zweck': z, checked: hat, onchange: function () { ab({ zwecke: PIN_ZWECKE.filter(function (y) { return y === z ? !hat : (x.zwecke || []).indexOf(y) >= 0; }) }); } }), h('span', null, z));
       })),
       PIN_UMGEBUNG.map(function (u) { return [h('label', { for: 'pin-u-' + u[0] }, u[1]), h('input', { type: 'text', id: 'pin-u-' + u[0], maxlength: '300', value: (x.umgebung && x.umgebung[u[0]]) || '', onchange: function (ev) { const o = {}; o[u[0]] = ev.target.value; ab({ umgebung: o }); } })]; }),
-      h('label', { for: 'pin-dossier' }, 'Dossier'), h('select', { id: 'pin-dossier', 'aria-label': 'Dossier zum Pin', onchange: function (ev) { ab({ dossier: ev.target.value || null }); karteNeuZeichnen(); } },
-        [h('option', { value: '' }, 'keines')].concat(dossierOptionen(x.dossier))),
-      h('label', { for: 'pin-notiz' }, 'Notiz'), h('textarea', { id: 'pin-notiz', rows: '3', maxlength: '1500', onchange: function (ev) { ab({ notiz: ev.target.value }); } }, x.notiz || '')),
+      mitDossier ? [h('label', { for: 'pin-dossier' }, 'Dossier'), h('select', { id: 'pin-dossier', 'aria-label': 'Dossier zum Pin', onchange: function (ev) { ab({ dossier: ev.target.value || null }); karteNeuZeichnen(); } },
+        [h('option', { value: '' }, 'keines')].concat(dossierOptionen(x.dossier)))] : null,
+      h('label', { for: 'pin-notiz' }, 'Notiz'), h('textarea', { id: 'pin-notiz', rows: '3', maxlength: '1500', onchange: function (ev) { ab({ notiz: ev.target.value }); } }, x.notiz || ''));
+}
+function pinPopup(x, fertig) {
+  const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: x.id }, patch)); karteNeuZeichnen(); };
+  const n = pinNaehe(x, 1000);
+  fertig(x.name, [   /* die interne Kennung PIN-nnn bleibt verborgen; sie dient nur den Verweisen */
+    h('p', { class: 'k-pop-sub' }, x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5)),
+    pinFormular(x, ab, true),
     h('p', { class: 'k-pop-meta' }, n.length ? 'In der Nähe: ' + n.map(function (q) { return q.id + ' ' + kuerzen(q.name, 24) + ' (' + Math.round(q.d) + ' m)'; }).join('; ') : 'Keine bekannten Punkte im Umkreis von 1 km.'),
     h('div', { class: 'k-pop-akt' },
       h('button', { type: 'button', class: 'link', id: 'pin-zentrum', onclick: function () { karteFlug(x.ll[0], x.ll[1], Math.max(K.zoom, 16.5), karteAuswahlAnzeige, x.id); } }, 'Zentrieren'),
@@ -1006,10 +1039,14 @@ function karteAuswahlAnzeige() {
   const m = karteMarker().find(function (x) { return x.id === id; });
   if (!m) { box.hidden = true; box.replaceChildren(); return; }
   if (m.kat === 'sichtung') {
-    const e0 = entitaet(m.entId);
+    const e0 = entitaet(m.entId), pinX = sichtungPin(m.si, m.entId);
     fertig('Sichtung ' + m.id, [h('dl', { class: 'fields' }, feld('Dossier', e0 ? dossierLink(e0, 'Karte', 'k-dl-' + e0.id) : m.entId), feld('Zeit', fmtZ(m.si.t)), feld('Ort laut Meldung', m.si.ort || '–'),
       feld('Güte', gueteLabel(m.guete)), feld('Lage', 'Position ungefähr, abgeleitet aus ' + m.genau + (m.bez ? ' (' + m.bez + ')' : '') + '. Der gestrichelte Ring zeigt die Unschärfe: derzeit etwa ' + m.unM.m + ' m Radius, wachsend mit dem Alter der Sichtung (' + (m.unM.alter.text || 'jetzt') + ').', 'full'),
-      feld('Beobachtung', m.si.text || '–', 'full'))]);
+      feld('Beobachtung', m.si.text || '–', 'full')),
+      h('div', { class: 'pin-form' }, h('label', { for: 'si-bewerten' }, 'Bewertung'), h('select', { id: 'si-bewerten', 'aria-label': 'Güte der Sichtung', onchange: function (ev) { dispatch({ type: 'SICHTUNG_BEWERTET', id: m.entId, sid: m.si.id, guete: ev.target.value }); karteNeuZeichnen(); } },
+        SICHTUNG_BEWERTUNGEN.map(function (g) { return h('option', { value: g, selected: (m.si.guete || 'unbewertet') === g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); }))),
+      h('div', { class: 'k-pop-akt' }, h('button', { type: 'button', class: 'link', id: 'si-export', title: 'Sichtung als Textdatei speichern', onclick: function () { kartenTxtExport('sichtung', m.id, m.entId); } }, 'Als TXT exportieren')),
+      pinX ? [h('h3', null, 'Aus Entwurf ' + pinX.name), pinFormular(pinX, function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: pinX.id }, patch)); karteNeuZeichnen(); }, false)] : null]);
     return;
   }
   const e = m.entitaet ? entitaet(m.id) : null, w = karteFenster().filter(function (x) { return x.ort === m.id; });
@@ -1397,9 +1434,15 @@ function karteSteuerung(svg) {
       const c = koordUm(ev), P = karteProj(), eid = K.pick.slice(3), de = entitaet(eid);
       K.pick = null;
       if (de) {
-        dispatch({ type: 'PIN_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])], name: sichtungsPinName(), dossier: de.id, notiz: 'Sichtungsentwurf zu ' + de.id + ' ' + de.name + ' (Punkt auf der Karte gesetzt)' });
+        dispatch({ type: 'PIN_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])], name: sichtungsPinName(), dossier: de.id, notiz: '' });
       }
       renderModule();
+      return;
+    }
+    if (typeof K.pick === 'string' && K.pick.startsWith('X:')) {
+      const c = koordUm(ev), P = karteProj(), id = K.pick.slice(2);
+      K.pick = null;
+      xPinSetzen(id, [P.lat(c[1]), P.lon(c[0])]);
       return;
     }
     if (K.pick) {                                                      /* Position für ein Dossier festlegen */
@@ -1503,7 +1546,7 @@ const KP_ARTEN = ['Sichtung', 'Zone', 'Pin', 'Zugriffspunkt', 'Position', 'Ausga
 /* Ausdrücklich gekennzeichnete Aktionen: nur Eingaben und Änderungen der Person, nie simulierte Meldungen (Handler, Zonenereignisse),
    nie Missionsvorgänge. Entscheidend ist der Aktionstyp, nicht der Anzeigetext; "leicht" markierte Änderungen zählen mit. */
 const KP_AKTIONEN = {
-  SICHTUNG_HINZU: 'Sichtung', SICHTUNG_ENTFERNT: 'Sichtung',
+  SICHTUNG_HINZU: 'Sichtung', SICHTUNG_ENTFERNT: 'Sichtung', SICHTUNG_BEWERTET: 'Sichtung',
   PIN_ANGELEGT: 'Pin', PIN_GEAENDERT: 'Pin', PIN_ENTFERNT: 'Pin',
   ZONE_ANGELEGT: 'Zone', ZONE_GEAENDERT: 'Zone', ZONEN_MEHRFACH: 'Zone', ZONE_URTEIL: 'Zone', ZONE_ENTFERNT: 'Zone',
   OZONE_ANGELEGT: 'Zone', OZONE_GEAENDERT: 'Zone', OZONE_STAND: 'Zone', OZONE_UNTERLAGE: 'Zone', OZONE_ENTFERNT: 'Zone',
@@ -1633,7 +1676,8 @@ function renderKarte(m) {
       h('input', { type: 'checkbox', id: 'ke-' + keys[0], checked: keys.some(function (k) { return K.ebenen[k]; }), onchange: function (ev) { keys.forEach(function (k) { K.ebenen[k] = ev.target.checked; }); karteWahlSichern(); st.neu(); karteAuswahlAnzeige(); karteFensterListe(); if (keys[0] === 'kacheln') renderModule(); } }),
       ikon || h('span', { class: 'k-ik leer' }), h('span', null, text));
   };
-  const pickE = K.pick ? (K.pick.indexOf('SI:') === 0 ? (entitaet(K.pick.slice(3)) ? { id: 'Sichtung zu ' + K.pick.slice(3), name: entitaet(K.pick.slice(3)).name } : null) : K.pick === 'CI-AUS' ? { id: 'Check-in', name: 'Ausweichort' } : K.pick.indexOf('AO-') === 0 ? (PROFIL.ausgang.find(function (x) { return x.id === K.pick; }) || null) : K.pick.indexOf('ZP-') === 0 ? { id: K.pick, name: 'Zugriffspunkt' } : entitaet(K.pick)) : null;
+  const fallPick = K.pick && K.pick.startsWith('X:') ? xFall(K.pick.slice(2)) : null;
+  const pickE = K.pick ? (fallPick ? { id: fallPick.id, name: fallPick.titel } : K.pick.indexOf('SI:') === 0 ? (entitaet(K.pick.slice(3)) ? { id: 'Sichtung zu ' + K.pick.slice(3), name: entitaet(K.pick.slice(3)).name } : null) : K.pick === 'CI-AUS' ? { id: 'Check-in', name: 'Ausweichort' } : K.pick.indexOf('AO-') === 0 ? (PROFIL.ausgang.find(function (x) { return x.id === K.pick; }) || null) : K.pick.indexOf('ZP-') === 0 ? { id: K.pick, name: 'Zugriffspunkt' } : entitaet(K.pick)) : null;
   const kopf = [knopf('k-raum', 'Region', function () { const a = { lat: K.lat, lon: K.lon, zoom: K.zoom }; karteGrundansicht(); const z = { lat: K.lat, lon: K.lon, zoom: K.zoom }; K.lat = a.lat; K.lon = a.lon; K.zoom = a.zoom; karteFlug(z.lat, z.lon, z.zoom); }),
     knopf('k-eu', 'Europa', function () { karteFlug(50, 10, 4.4); }),
     knopf('k-welt', 'Welt', function () { karteFlug(25, 20, 1.9); }),
@@ -1706,7 +1750,7 @@ function renderKarte(m) {
     modKopf(m),
     kartenReiter('karte'),
     panel('Lagekarte', null,
-      pickE ? h('div', { class: 'row k-pickbar' }, h('span', null, K.pick.indexOf('SI:') === 0 ? 'Klick auf die Karte setzt einen Sichtungsentwurf zu ' + K.pick.slice(3) + ' ' + pickE.name + '.' : 'Klick auf die Karte setzt die Position von ' + pickE.id + ' ' + pickE.name + '.'),
+      pickE ? h('div', { class: 'row k-pickbar' }, h('span', null, fallPick ? 'Klick auf die Karte setzt einen Pin für ' + fallPick.id + ' · ' + fallPick.titel + '.' : K.pick.indexOf('SI:') === 0 ? 'Klick auf die Karte setzt einen Sichtungsentwurf zu ' + K.pick.slice(3) + ' ' + pickE.name + '.' : 'Klick auf die Karte setzt die Position von ' + pickE.id + ' ' + pickE.name + '.'),
         knopf('k-pick-x', 'Abbrechen', function () { K.pick = null; renderModule(); })) : null,
       h('div', { class: 'row' }, kopf),
       h('div', { class: 'karte-wrap' + (K.ansicht3d ? ' ist3d' : '') }, svg, K.ansicht3d ? karte3dRahmen() : null, leiste,

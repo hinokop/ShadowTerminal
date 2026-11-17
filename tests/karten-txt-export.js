@@ -1,3 +1,4 @@
+const { vorbereiten } = require('./_satcon');
 /* Kartenobjekt → neue Archiv-TXT → Tab im offenen Kanal → send. */
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -146,6 +147,7 @@ const PF = require('./_pfad');
     await p.evaluate(() => dispatch({ type: 'NAVIGATION', modul: 'profil' }));
     await p.locator('#profil-terminal > summary').click();
     const input = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
+    await vorbereiten(p);
     await input.fill('secure-channel --connect --onion --ephemeral');
     await input.press('Enter');
     await p.waitForFunction(() => document.querySelector('#profil-terminal-prompt').textContent === 'you >');

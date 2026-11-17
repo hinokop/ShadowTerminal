@@ -21,7 +21,7 @@ TOKEN_HEADER = "X-Shadow-Token"
 MAX_DOWNLOAD = 20 * 1024 * 1024
 MAX_TEXT = 64 * 1024
 MAX_EXPORT_REQUEST = 2 * MAX_TEXT + 1024
-EXPORT_IDS = {"pin": re.compile(r"PIN-[0-9]{3,15}"), "zone": re.compile(r"ZO-[0-9]{3,15}")}
+EXPORT_IDS = {"pin": re.compile(r"PIN-[0-9]{3,15}"), "zone": re.compile(r"ZO-[0-9]{3,15}"), "sichtung": re.compile(r"[POL]-[0-9]{4,15}-SI-[0-9]{3,15}")}
 PROJECT = Path(__file__).resolve().parent
 DEVICE = re.compile(r"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)", re.I)
 
@@ -267,7 +267,7 @@ def terminal_export_txt(root, request):
     if not {"op", "folder", "kind", "id", "text"} <= keys or not keys <= {"op", "folder", "kind", "id", "text", "last"}:
         raise Refused
     folder, kind, ident, text = (request[k] for k in ("folder", "kind", "id", "text"))
-    if folder not in ("dokumente", "ops") or kind not in ("pin", "zone"):
+    if folder not in ("dokumente", "ops") or kind not in ("pin", "zone", "sichtung"):
         raise Refused
     if not isinstance(ident, str) or not EXPORT_IDS[kind].fullmatch(ident) or not isinstance(text, str):
         raise Refused
@@ -283,7 +283,7 @@ def terminal_export_txt(root, request):
         if not isinstance(last, dict) or set(last) != {"name", "sha"} or not isinstance(last["name"], str) or not isinstance(last["sha"], str) \
                 or not re.fullmatch(r"[0-9a-f]{64}", last["sha"]) or len(last["name"]) > 64:
             raise Refused
-    base = ("lageblatt-" if kind == "pin" else "zone-") + ident + ".txt"
+    base = {"pin": "lageblatt-", "zone": "zone-", "sichtung": "sichtung-"}[kind] + ident + ".txt"
     try:
         if os.name == "nt":
             with export_directory_windows(root), export_directory_windows(root / folder):
