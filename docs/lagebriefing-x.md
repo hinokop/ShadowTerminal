@@ -1,43 +1,27 @@
-# Lagebriefing in X (Skizze, kein Code)
+# Lagebriefing in X (Skizze, Stand nach Prüfung)
 
-Stand: Entwurf zur Prüfung. Ziel: Beim Öffnen eines Falls steht oben in einem Block, was gilt, was offen ist und was als Nächstes zu tun ist. Der Block ersetzt keine Eingaben und erzeugt keine Inhalte; er zeigt vorhandene Angaben und nimmt zwei neue, manuell gepflegte Angaben auf.
+Ziel: Beim Öffnen eines Falls steht oben in X ein Block mit dem, was bereits erfasst ist, und später mit zwei manuell gepflegten Angaben. Der Block erzeugt keine Inhalte und führt keine zweite Kurzlage.
 
-## 1. Inhalt des Blocks
+## 1. Festgelegte Richtung (Freigabe Shadow und ChatGPT)
 
-1. **Kurzlage:** das bestehende Feld `frage` (Kurzlage / Leitfrage, höchstens 300 Zeichen). Keine neue Eingabe.
-2. **Offene Punkte (abgeleitet, nur Anzeige):** Zahlen aus dem Bestand des Falls, wie in `docs/datenvertrag.md` Abschnitt 5 vorgesehen: offene Aussagen, Aussagen mit Widerspruch, Aussagen ohne Fundstelle. Jede Zahl führt per Klick zur betreffenden Liste im Fall. Zahl 0 wird als „keine“ angezeigt, nicht ausgeblendet.
-3. **Offene Fragen (manuell):** kurze Liste je Fall, jede Frage mit Text und Erledigt-Haken. Erledigte bleiben sichtbar (durchgestrichen), bis sie entfernt werden.
-4. **Nächster Schritt (manuell):** ein Freitextfeld (höchstens 200 Zeichen) mit Zeitpunkt der letzten Änderung. Genau ein Eintrag je Fall.
-5. **Zuletzt hinzugefügt:** die jüngsten Unterlagen des Falls (Quelle oder Fassung, nach `erfasst`), höchstens fünf. Der Titel lautet bewusst nicht „Letzte Änderungen“, weil dort keine Änderungen verfolgt werden.
+- Block oben in X: ja.
+- Offene Fragen: zunächst rein manuell, ohne Verweis auf Aussagen.
+- Keine Zähler zu Aussagen (offen, widersprüchlich, ohne Fundstelle). Das Aussagenregister hat keine Oberfläche mehr, die Aussagen liegen nur als Altdaten vor; ein Zähler hätte kein Sprungziel. Eine Aussagenansicht wird für das Briefing nicht wieder eingeführt.
+- Kein Verlaufsprotokoll. Ablösung von `START_3D.bat` und Verwerfen von Altdaten sind getrennte Vorhaben.
 
-## 2. Datenmodell (Erweiterung des Falls)
+## 2. Reihenfolge (je Schritt eigener Branch und PR)
 
-- `naechsterSchritt: { text, am }` (optional)
-- `fragen: [{ id, text, erledigt: bool, erfasst }]` (optional); Kennung `Q-nnn` je Fall, aus dem Bestand des Falls vergeben, nicht aus einem Zähler (siehe Wiedervergabe unten).
-- Beides optional. Fälle ohne diese Felder bleiben gültig und zeigen leere Felder.
+1. **Anzeige.** Vorhandene Kurzlage (Feld `frage`, nur Anzeige) und bis zu fünf zuletzt erfasste, zugängliche Unterlagen des Falls, jüngste zuerst nach `erfasst`. Jede führt zum bestehenden Eintrag in der Unterlagenliste. Unterlagen, deren Dossier gesperrt oder nicht lesbar ist, erscheinen nicht. Überschrift „Zuletzt hinzugefügt“, nicht „Letzte Änderungen“. Keine neuen Datenfelder.
+2. **Nächster Schritt.** Ein manuell gepflegter Eintrag je Fall (höchstens 200 Zeichen) mit Änderungszeitpunkt: `naechsterSchritt: { text, am }`, optional. Speichern über `xSchreiben` mit Rücknahme bei Speicherfehlern.
+3. **Manuelle Fragen.** Anlegen, abhaken, wieder öffnen, entfernen: `fragen: [{ text, erledigt, erfasst }]`, optional. Keine sichtbaren fortlaufenden Nummern; intern ein Schlüssel, der keine Wiedervergabe braucht, solange nichts auf eine Frage verweist.
 
-## 3. Festlegungen, die ich vorschlage
+## 3. Fallpaket
 
-- Kein Verlaufsprotokoll. Geändert wird ersetzend; frühere Fassungen werden nicht aufbewahrt.
-- Keine automatisch erzeugten Fragen oder Schritte, kein Text aus Heuristiken.
-- Fallpaket: Die neuen Felder gehören in Export und Import, Manifestversion entsprechend anheben. Ein Import ohne die Felder bleibt gültig. Ein Paket mit höherer Version als bekannt wird abgelehnt, wie bisher.
-- Arbeitsstand: unverändert; der Block ist reine Ansicht des geöffneten Falls.
-- Speichern atomar wie bisher (`xSichern`-Weg mit Rücknahme bei Fehlschlag), damit „Änderung nicht gespeichert“ nicht zu stillem Verlust führt.
+Der Export übernimmt das Fallobjekt und prüft es per Prüfsumme. Neue optionale Felder können so ohne Änderung im Paket landen. Mit Schritt 2 wird ein Test ergänzt: Export mit anschließendem Import erhält den Eintrag; ein altes Paket ohne die Felder bleibt importierbar; ein neues Paket in der alten Fassung zeigt, was passiert (Ablehnung, Ignorieren oder Erhalt). Ob die Manifestversion angehoben wird, entscheidet dieses Testergebnis, nicht eine Vorannahme.
 
-## 4. Schwächen und Risiken des Entwurfs
+## 4. Schwächen und Risiken
 
-- **Wiedervergabe von Kennungen:** Wie bei Fall-Nummern und eigenen Dossiers würden `Q-nnn` bei Löschung der letzten Frage wiedervergeben. Für Fragen ohne Verweise von außen unkritisch; sobald etwas auf eine Frage verweist (z. B. eine Aussage), braucht es dieselbe Identitätsprüfung wie beim Arbeitsstand.
-- **Doppelte Wahrheit:** „Offene Fragen“ (manuell) und „offene Aussagen“ (abgeleitet) können sich überschneiden. Der Entwurf hält sie getrennt, damit nichts stillschweigend verknüpft wird; ob eine Frage auf eine Aussage verweisen darf, ist offen.
-- **Länge:** 300 Zeichen für die Kurzlage sind knapp. Eine Erhöhung betrifft Import-Grenzen und Tests und gehört, wenn gewünscht, in einen eigenen Schritt.
-- **Aktualität:** Der Block zeigt nur, was eingetragen ist. Ein veralteter „Nächster Schritt“ wird nicht erkannt; die Anzeige des Änderungszeitpunkts ist die einzige Gegenmaßnahme.
-
-## 5. Umsetzungsschritte (jeweils eigener Branch und PR)
-
-1. Block mit Kurzlage, abgeleiteten Zahlen und „Zuletzt hinzugefügt“ (nur Anzeige, keine neuen Daten).
-2. „Nächster Schritt“ mit Speichern, Rücknahme und Test.
-3. „Offene Fragen“ mit Kennung, Speichern und Test.
-4. Fallpaket: Export, Import, Manifestversion, Test mit altem und neuem Paket.
-
-## 6. Entscheidung für Shadow
-
-Ob „Offene Fragen“ rein manuell bleiben (Entwurf) oder optional auf eine Aussage verweisen dürfen. Empfehlung: zunächst manuell, Verweis später und nur mit Identitätsprüfung.
+- Ein veralteter „Nächster Schritt“ wird nicht erkannt; die Anzeige des Änderungszeitpunkts ist die einzige Gegenmaßnahme.
+- „Zuletzt hinzugefügt“ nach `erfasst`: Unterlagen aus Importen tragen ihren Erfassungszeitpunkt aus dem Paket, nicht den Importzeitpunkt (nicht geprüft; vor Schritt 1 im Test belegt oder streichen). Die Reihenfolge entspricht dann ggf. der Erfassung am Ursprungsort.
+- Die Kurzlage ist auf 300 Zeichen begrenzt; eine Erhöhung betrifft Import-Grenzen und Tests und gehört, wenn gewünscht, in einen eigenen Schritt.
+- Die Begrenzung auf fünf Einträge ist eine Anzeigeentscheidung; die vollständige Liste bleibt darunter im Panel „Unterlagen“.
