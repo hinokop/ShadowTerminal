@@ -100,6 +100,35 @@ const { APP } = require('./_pfad');
     assert.deepEqual(await p.evaluate(() => ({ p: VIEW.karte.pinSetzen, z: VIEW.karte.zoneSetzen, g: VIEW.karte.zugriffSetzen })), { p: false, z: false, g: false });
     assert.equal(await p.locator('#k-svg').getAttribute('class').then(c => c.includes('pick')), false, 'Karte zeigt kein Fadenkreuz');
     assert.equal(await p.locator('#k-pin-neu').getAttribute('aria-pressed'), 'false');
+    /* Ersatzfall als einziger Fall: "Stand laden" zeigt ihn nicht im Formular */
+    await p.evaluate(() => { PROFIL.recherche.faelle = []; const a = xAnlegen({ titel: 'Einzelfall' }); profilSpeichern(); dispatch({ type: 'NAVIGATION', modul: 'x' }); xOeffnen(a.id); });
+    await p.click('#as-speichern');
+    const ein = await p.evaluate(() => {
+      const a = PROFIL.recherche.faelle[0].id;
+      PROFIL.recherche.faelle = [];
+      const e = xAnlegen({ titel: 'Einziger Ersatz' }); profilSpeichern(); X_VIEW.id = null; renderModule(); return { a, e: e.id };
+    });
+    assert.equal(ein.a, ein.e, 'Voraussetzung: gleiche Nummer');
+    await p.click('#as-wieder');
+    assert.equal(await p.locator('#x-titel').count(), 0, 'Ersatzfall steht nicht im Formular');
+    assert.ok((await p.evaluate(() => document.querySelector('#sys-msg').innerText)).includes('Fall ' + ein.a));
+    await p.evaluate(id => xOeffnen(id), ein.e);
+    assert.equal(await p.inputValue('#x-titel'), 'Einziger Ersatz', 'ausdrückliches Öffnen funktioniert weiterhin');
+    /* eigene Dossiers: wiedervergebene Kennung, andere Registernummer */
+    const dz = await p.evaluate(() => {
+      dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Altperson', land: 'DE' }); const alt = STATE.dossiers.auswahl;
+      dispatch({ type: 'NAVIGATION', modul: 'dossier' }); VIEW.dtab = 'info'; return alt;
+    });
+    await p.click('#as-speichern');
+    const dn = await p.evaluate(alt => {
+      dispatch({ type: 'DOSSIER_GELOESCHT', id: alt });
+      dispatch({ type: 'DOSSIER_ANGELEGT', typ: 'Person', name: 'Neuperson', land: 'DE' }); const neu = STATE.dossiers.auswahl;
+      STATE.dossiers.auswahl = null; renderModule(); return neu;
+    }, dz);
+    assert.equal(dn, dz, 'Voraussetzung: Kennung wird wiedervergeben');
+    await p.click('#as-wieder');
+    assert.equal(await p.evaluate(() => STATE.dossiers.auswahl), null, 'Ersatzdossier mit gleicher Kennung wird nicht gewählt');
+    assert.ok((await p.evaluate(() => document.querySelector('#sys-msg').innerText)).includes('Dossier ' + dz));
     assert.deepEqual(fehler, []);
     console.log('OK: Arbeitsstand sichern und wiederherstellen, kein Autosprung, Überspringen');
   } finally { await browser.close(); }

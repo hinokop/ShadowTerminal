@@ -1,11 +1,16 @@
 /* Arbeitsstand: ein bewusst gespeicherter Ansichtsstand (Arbeitsbereich, Dossier, Fall in X, Kartenmitte, Zoom, Ebenen, gewähltes Kartenobjekt).
    Gespeichert wird nur auf ausdrücklichen Klick, wiederhergestellt ebenso. Kein Sprung beim Start, keine Änderung am Fallpaket.
    Beim Wiederherstellen werden nicht mehr vorhandene, gesperrte oder nicht lesbare Objekte übersprungen. Klassisches Skript, wird nach dem Hauptskript geladen. */
+/* Eigene Dossiers erhalten ihre Kennung wieder, wenn das zuletzt angelegte gelöscht wird: zusätzlich die Registernummer als Identität. */
+function asDossierReg(id) {
+  const e = id && entitaet(id);
+  return e && e.eigen ? dossierRegisternummer(e, STATE.dossiers.entitaeten[e.id]) || null : null;
+}
 function asErfassen() {
   const K = VIEW.karte, ebenen = {};
   Object.keys(K.ebenen).forEach(function (k) { ebenen[k] = !!K.ebenen[k]; });
   return {
-    t: nowIso(), modul: STATE.ui.modul, dossier: STATE.dossiers.auswahl || null, dtab: VIEW.dtab || null, fall: X_VIEW.id || null, fallErfasst: (X_VIEW.id && xFall(X_VIEW.id) && xFall(X_VIEW.id).erfasst) || null,
+    t: nowIso(), modul: STATE.ui.modul, dossier: STATE.dossiers.auswahl || null, dtab: VIEW.dtab || null, dossierReg: asDossierReg(STATE.dossiers.auswahl), fall: X_VIEW.id || null, fallErfasst: (X_VIEW.id && xFall(X_VIEW.id) && xFall(X_VIEW.id).erfasst) || null,
     karte: { lat: K.lat, lon: K.lon, zoom: K.zoom, ebenen: ebenen, auswahl: K.auswahl || null }
   };
 }
@@ -21,7 +26,8 @@ function asAnwenden(s) {
   if (!s || typeof s !== 'object') return { ok: false, uebersprungen: uebersprungen };
   if (typeof s.dossier === 'string' && s.dossier) {
     const e = entitaet(s.dossier);
-    if (e && dossierOffen(e.mission) && wissen(e) !== 'unbekannt' && !dossierGesperrt(e) && !infoGesperrt(e)) {
+    const regOk = !e || !e.eigen || (!!s.dossierReg && asDossierReg(e.id) === s.dossierReg);   /* eigene Dossiers ohne belastbare Registernummer: überspringen */
+    if (e && regOk && dossierOffen(e.mission) && wissen(e) !== 'unbekannt' && !dossierGesperrt(e) && !infoGesperrt(e)) {
       STATE.dossiers.auswahl = e.id;
       if (s.dtab === 'info' || s.dtab === 'sichtungen' || s.dtab === 'chronik') VIEW.dtab = s.dtab;
     } else uebersprungen.push('Dossier ' + s.dossier);
@@ -29,7 +35,7 @@ function asAnwenden(s) {
   if (typeof s.fall === 'string' && s.fall) {
     const f = xFall(s.fall);
     /* Nummern werden wiedervergeben: der Fall gilt nur bei gleicher Nummer und gleichem Erfassungszeitpunkt */
-    if (f && s.fallErfasst && f.erfasst === s.fallErfasst) X_VIEW.id = s.fall; else uebersprungen.push('Fall ' + s.fall);
+    if (f && s.fallErfasst && f.erfasst === s.fallErfasst) { X_VIEW.id = s.fall; X_VIEW.keine = false; } else { uebersprungen.push('Fall ' + s.fall); if (!xFall(X_VIEW.id)) X_VIEW.keine = true; }
   }
   const k = s.karte, K = VIEW.karte;
   if (k && typeof k === 'object') {
