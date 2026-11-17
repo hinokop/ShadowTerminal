@@ -9,7 +9,7 @@ const assert = require('node:assert/strict'); const { chromium } = require('play
     await p.goto(PF.APP); await p.locator('#gate-pw').fill('pw-test-123'); if (await p.locator('#gate-pw2').isVisible()) await p.locator('#gate-pw2').fill('pw-test-123');
     await p.locator('#gate-go').click(); await p.waitForFunction(() => !document.body.classList.contains('locked'));
     await p.evaluate(() => dispatch({ type: 'NAVIGATION', modul: 'profil' }));
-    await p.locator('#profil-terminal > summary').click();
+    await p.locator('#profil-terminal-oeffnen').click();
     const input = p.locator('#profil-terminal-eingabe'), wert = () => input.inputValue();
     const lauf = async z => { await input.fill(z); await input.press('Enter'); await p.waitForTimeout(150); };
     await input.focus(); await input.press('ArrowUp'); assert.equal(await wert(), '');                       /* leerer Verlauf: nichts */

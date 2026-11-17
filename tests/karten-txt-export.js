@@ -145,7 +145,7 @@ const PF = require('./_pfad');
     assert.equal(exporte.length, davor);
 
     await p.evaluate(() => dispatch({ type: 'NAVIGATION', modul: 'profil' }));
-    await p.locator('#profil-terminal > summary').click();
+    await p.locator('#profil-terminal-oeffnen').click();
     const input = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     await vorbereiten(p);
     await input.fill('secure-channel --connect --onion --ephemeral');
