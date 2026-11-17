@@ -77,7 +77,7 @@ const PF = require('./_pfad'), { vorbereiten } = require('./_satcon');
     await input.press('ArrowUp'); assert.equal(await input.inputValue(), 'pwd');
     await input.press('Escape'); assert.equal(await input.inputValue(), 't');
     await vorbereiten(p);
-    await befehl('secure-channel --connect --onion --ephemeral');
+    await befehl('secure-channel --connect --iface sat0 --route mixnet --ephemeral');
     await p.waitForFunction(() => $('profil-terminal-prompt').textContent === 'you >', null, { timeout: 40000 });
     await p.locator('#profil-terminal-schliessen').click(); assert.equal(await panel.isVisible(), false);
     await p.keyboard.press('t'); assert.equal(await prompt.textContent(), 'you >');

@@ -148,7 +148,7 @@ const PF = require('./_pfad');
     await p.locator('#profil-terminal-oeffnen').click();
     const input = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     await vorbereiten(p);
-    await input.fill('secure-channel --connect --onion --ephemeral');
+    await input.fill('secure-channel --connect --iface sat0 --route mixnet --ephemeral');
     await input.press('Enter');
     await p.waitForFunction(() => document.querySelector('#profil-terminal-prompt').textContent === 'you >');
     for (const [folder, short, name] of [['dokumente', 'lageblatt-PIN-001.', 'lageblatt-PIN-001.txt'], ['ops', 'zone', 'zone-ZO-001.txt']]) {
@@ -157,9 +157,9 @@ const PF = require('./_pfad');
       await input.press('Tab');
       await p.waitForFunction(value => document.querySelector('#profil-terminal-eingabe').value === value, arg + name);
       await input.press('Enter');
-      await p.waitForFunction(name => document.querySelector('#profil-terminal-ausgabe').textContent.includes('»' + name + '«'), name);
-      assert.match(await out.textContent(), /Lokale Archivbrücke … 200 OK/);
       await p.waitForFunction(() => document.querySelector('#profil-terminal-prompt').textContent === 'you >');
+      assert.ok((await out.textContent()).split('\n').some(zeile => zeile.startsWith(name + ' ') && zeile.includes('100%')));
+      assert.match(await out.textContent(), /ACK received from peer/);
     }
 
     const offline = await open('');
