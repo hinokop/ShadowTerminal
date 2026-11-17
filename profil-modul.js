@@ -452,9 +452,11 @@ function terminalSatRest(link) {
 function terminalSatAnzeige() {
   const feld = $('profil-terminal-sat');
   if (!feld) return;
-  const link = TERMINAL_ZUSTAND.satLink;
-  feld.hidden = !link;
-  feld.textContent = link ? (link.modus === 'ppp' ? 'IRIDIUM 142' : 'sat0') + ' · LOS ' + terminalSatRest(link) : '';
+  const t = TERMINAL_ZUSTAND, link = t.satLink;
+  // Ein berechneter Überflug allein belegt keine Verbindung; der Countdown gilt nur, solange die Einwahl steht.
+  const sichtbar = !!link && (link.modus !== 'ppp' || (!link.abgelaufen && !!(t.modem || t.wgSat || t.kanal?.ui === 'xmpp')));
+  feld.hidden = !sichtbar;
+  feld.textContent = sichtbar ? (link.modus === 'ppp' ? 'IRIDIUM 142' : 'sat0') + ' · LOS ' + terminalSatRest(link) : '';
   terminalPppAnzeige();
 }
 function terminalSatLinkAktiv(link) {
@@ -762,7 +764,7 @@ function terminalPppChatAus() {
   const input = $('profil-terminal-eingabe');
   if (input) terminalEingabeSetzen(input, '');
   terminalKanalPromptSync();
-  terminalPppAnzeige();
+  terminalSatAnzeige();
 }
 function terminalPppModemAus(grund, inShell = true) {
   const t = TERMINAL_ZUSTAND, modem = t.modem;
@@ -775,6 +777,7 @@ function terminalPppModemAus(grund, inShell = true) {
   }
   t.modem = null;
   terminalKanalPromptSync();
+  terminalSatAnzeige();
   if (t.wgSat) t.wgSat.handshake = null;
   const chat = t.kanal;
   if (chat?.ui !== 'xmpp' || chat.phase === 'offline') return;
@@ -800,6 +803,7 @@ function terminalPppEinwahl(link, vordergrund, syslogZeilen) {
   t.modem = modem;
   t.modemEnde = null;
   terminalKanalPromptSync();
+  terminalSatAnzeige();
   const schritte = [
     [0, ['chat[1402]: abort on (BUSY)', 'chat[1402]: abort on (NO CARRIER)']],
     [450, ['chat[1402]: send (AT+CSQ^M)']],
@@ -838,6 +842,7 @@ function terminalPppShell(befehl, arg) {
       const pass = { modus: 'ppp', von: jetzt - 180000, bis: jetzt + (300 + terminalKanalZufall(601)) * 1000,
         orbit: 25000 + terminalKanalZufall(70000), abgelaufen: false };
       t.satLink = pass;
+      t.modemEnde = null;
       pass.timer = setInterval(function () { if (terminalSatLinkAktiv(pass)) terminalSatAnzeige(); }, 250);
       terminalSatAnzeige();
     }
@@ -898,7 +903,7 @@ function terminalPppShell(befehl, arg) {
       }
     } else if (arg === 'down wg-sat') {
       if (!t.wgSat) terminalAusgabe('wg-quick: wg-sat is not a WireGuard interface');
-      else { clearTimeout(t.wgSat.timer); t.wgSat = null; terminalAusgabe('[#] ip link delete dev wg-sat'); }
+      else { clearTimeout(t.wgSat.timer); t.wgSat = null; terminalAusgabe('[#] ip link delete dev wg-sat'); terminalSatAnzeige(); }
     } else terminalAusgabe('usage: wg-quick [ up | down ] wg-sat');
     return true;
   }
