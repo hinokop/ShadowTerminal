@@ -55,12 +55,12 @@ function asWiederherstellen() { dispatch({ type: 'ARBEITSSTAND_WIEDERHERGESTELLT
 function asNavigation() {
   const s = PROFIL.arbeitsstand, vorhanden = !!(s && s.t);
   return [
-    h('button', { type: 'button', id: 'as-speichern', title: 'Aktuelle Ansicht als Arbeitsstand speichern', onclick: asSpeichern }, 'Stand sichern'),
-    h('button', { type: 'button', id: 'as-wieder', disabled: !vorhanden, title: vorhanden ? 'Gespeicherter Arbeitsstand vom ' + fmtZ(s.t) : 'Kein Arbeitsstand gespeichert', onclick: asWiederherstellen }, 'Stand laden')
+    h('button', { type: 'button', id: 'as-speichern', title: 'Aktuelle Ansicht als Arbeitsstand speichern (F1)', onclick: asSpeichern }, 'Stand sichern'),
+    h('button', { type: 'button', id: 'as-wieder', disabled: !vorhanden, title: vorhanden ? 'Gespeicherter Arbeitsstand vom ' + fmtZ(s.t) + ' (F2)' : 'Kein Arbeitsstand gespeichert', onclick: asWiederherstellen }, 'Stand laden')
   ];
 }
 function asNavigationAktualisieren() {
   const b = document.getElementById('as-wieder'), st = PROFIL.arbeitsstand, vorhanden = !!(st && st.t);
   if (!b) return;
-  b.disabled = !vorhanden; b.title = vorhanden ? 'Gespeicherter Arbeitsstand vom ' + fmtZ(st.t) : 'Kein Arbeitsstand gespeichert';
+  b.disabled = !vorhanden; b.title = vorhanden ? 'Gespeicherter Arbeitsstand vom ' + fmtZ(st.t) + ' (F2)' : 'Kein Arbeitsstand gespeichert';
 }

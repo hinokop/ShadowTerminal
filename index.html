@@ -9000,10 +9000,19 @@ function init() {
   });
   window.addEventListener('pagehide', autosaveAlle);
 
-  /* Tastaturkürzel: 1–4 Modulwechsel, P Protokoll, L Sperren, X Beenden. */
+  /* Tastaturkürzel: 1–5 Modulwechsel, P Protokoll, L Sperren, X Beenden, F1 Arbeitsstand sichern, F2 laden. */
   document.addEventListener('keydown', function (ev) {
     if (document.body.classList.contains('locked')) return;                 /* Zugangsschirm aktiv: keine Kürzel */
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if ((ev.key === 'F1' || ev.key === 'F2') && !ev.shiftKey) {            /* Arbeitsstand: F1 sichern, F2 laden; auch beim Schreiben, nicht bei offenem Dialog */
+      if ($('dlg').open || ($('regie') && $('regie').open)) return;
+      ev.preventDefault();                                                   /* F1 öffnet sonst die Browserhilfe */
+      if (ev.repeat) return;
+      if (ev.key === 'F1') asSpeichern();
+      else if (PROFIL.arbeitsstand && PROFIL.arbeitsstand.t) asWiederherstellen();
+      else meldung('Kein Arbeitsstand gespeichert.');
+      return;
+    }
     const t = ev.target, tag = t && t.tagName;
     const texteingabe = tag === 'INPUT' && ['checkbox', 'radio', 'button', 'submit'].indexOf(t.type) < 0;   /* Kontrollkästchen und Optionsfelder sperren die Kürzel nicht */
     if (texteingabe || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
