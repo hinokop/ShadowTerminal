@@ -406,8 +406,35 @@ function xPaketPanel(f) {
       const fl = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (fl) rchPaketLaden(fl);
     } }))));
 }
+/* Einmalige Übernahme des früheren Einzelfelds "Nächster Schritt" (Testpaket mit PR #50) als datierter Eintrag.
+   Feste Kennung: erneutes Laden erzeugt keine Dublette; Zeitstempel bleibt der bisherige. */
+const X_ALT_SCHRITT_UID = 'altschritt';
+let X_ALT_SCHRITT_FEHLER = false;
+function xAltSchrittKandidaten() {
+  return PROFIL.recherche.faelle.filter(function (f) { return f && f.naechsterSchritt && typeof f.naechsterSchritt === 'object' && typeof f.naechsterSchritt.text === 'string'; });
+}
+function xAltSchrittUebernehmen() {
+  const K = xAltSchrittKandidaten();
+  if (!K.length) { X_ALT_SCHRITT_FEHLER = false; return; }
+  if (X_ALT_SCHRITT_FEHLER) return;
+  const ok = xSchreiben(function () {
+    K.forEach(function (f) {
+      const s = f.naechsterSchritt, klar = s.text.trim().slice(0, X_EINTRAG_MAX);
+      const vorhanden = xEintraege(f).some(function (e) { return e.uid === X_ALT_SCHRITT_UID; });
+      if (klar && !vorhanden) {
+        if (xEintraege(f).length >= X_EINTRAEGE_MAX) return;
+        const am = typeof s.am === 'string' && s.am ? s.am : (typeof f.erfasst === 'string' && f.erfasst ? f.erfasst : nowIso());
+        f.eintraege = xEintraege(f).concat([{ uid: X_ALT_SCHRITT_UID, art: 'schritt', text: xTextKanon(xTextAusKlartext(klar)), erfasst: am }]);
+      }
+      delete f.naechsterSchritt;
+    });
+    return true;
+  });
+  if (!ok) X_ALT_SCHRITT_FEHLER = true;
+}
 function renderX(m) {
   akVorschauFreigeben();
+  xAltSchrittUebernehmen();
   const L = PROFIL.recherche.faelle;
   const f = xAngezeigt();
   const liste = panel('Fälle', null, h('div', { class: 'pad' },

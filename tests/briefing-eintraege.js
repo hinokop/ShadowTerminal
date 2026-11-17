@@ -177,6 +177,22 @@ const { APP } = require('./_pfad');
     await p.evaluate(i => { PROFIL.recherche.faelle = PROFIL.recherche.faelle.filter(x => x.id !== i); profilSpeichern(); }, kf);
     await lade(pk, 'k.json');
     assert.equal(await p.evaluate(() => (PROFIL.recherche.faelle.find(x => x.titel === 'Kurzlagefall') || {}).frageFormat), '<b>Fett</b>', 'frageFormat nach Wiederimport erhalten');
+    /* Altdaten aus Testpaket #50: einzelner Schritt wird einmalig zum datierten Eintrag */
+    const ids = await p.evaluate(() => { PROFIL.recherche.faelle = []; const a = xAnlegen({ titel: 'Altschritt' }); const b = xAnlegen({ titel: 'Ohne Schritt' });
+      a.naechsterSchritt = { text: 'Gutachten anfordern', am: '2026-01-02T03:04:05.000Z' }; profilSpeichern(); return { a: a.id, b: b.id }; });
+    await p.reload(); await p.fill('#gate-pw', 'pw-test-123'); await p.click('#gate-go');
+    await p.waitForFunction(() => !document.body.classList.contains('locked'));
+    await p.evaluate(i => xOeffnen(i), ids.a);
+    let altF = await p.evaluate(i => JSON.parse(localStorage.getItem(PROFIL_KEY)).recherche.faelle.find(x => x.id === i), ids.a);
+    assert.equal(altF.naechsterSchritt, undefined, 'Einzelfeld entfernt');
+    assert.equal((altF.eintraege || []).length, 1, 'genau ein Eintrag');
+    assert.deepEqual([altF.eintraege[0].art, altF.eintraege[0].erfasst, altF.eintraege[0].text], ['schritt', '2026-01-02T03:04:05.000Z', 'Gutachten anfordern'], 'Art, bisheriger Zeitstempel, Text');
+    assert.ok((await p.locator('#x-briefing').innerText()).includes('Gutachten anfordern'), 'Eintrag sichtbar');
+    /* erneutes Laden desselben Altstands erzeugt keine Dublette */
+    await p.evaluate(i => { const x = xFall(i); x.naechsterSchritt = { text: 'Gutachten anfordern', am: '2026-01-02T03:04:05.000Z' }; profilSpeichern(); renderModule(); }, ids.a);
+    altF = await p.evaluate(i => JSON.parse(localStorage.getItem(PROFIL_KEY)).recherche.faelle.find(x => x.id === i), ids.a);
+    assert.equal(altF.eintraege.length, 1, 'keine Dublette'); assert.equal(altF.naechsterSchritt, undefined);
+    assert.equal(await p.evaluate(i => (xFall(i).eintraege || []).length, ids.b), 0, 'Fall ohne Altschritt bleibt unberührt');
     assert.deepEqual(fehler, []);
     console.log('OK: datierte Einträge im Lagebriefing');
   } finally { await browser.close(); }
