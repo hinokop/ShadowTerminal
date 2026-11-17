@@ -232,13 +232,31 @@ function xUnterlagen(f) {
       const auswahl = X_VIEW.vorschau === b.id;
       const vorschau = auswahl && z.f.anhang ? h('div', { class: 'x-vorschau', id: 'x-vorschau', 'aria-live': 'polite' }, 'Vorschau wird geladen …') : null;
       if (vorschau) setTimeout(function () { if (vorschau.isConnected) void akDateivorschau(z.f, vorschau); }, 0);
-      return h('li', null, h('div', { class: 'x-unterlage' }, h('strong', null, zeige),
+      return h('li', { id: 'x-eintrag-' + b.id, tabindex: '-1' }, h('div', { class: 'x-unterlage' }, h('strong', null, zeige),
         h('span', { class: 'dim' }, b.id + ' · ' + rchFundstelleText(b.fundstelle) + ' · ' + (b.pruefung && b.pruefung.nuetzlich ? 'geprüft und nützlich' : 'nicht als geprüft markiert')),
         b.zitat ? h('p', { class: 'x-kurztext' }, b.zitat) : null),
         z.f.anhang ? xBtn('x-vorschau-' + b.id, auswahl ? 'Vorschau schließen' : 'Vorschau', function () { X_VIEW.vorschau = auswahl ? null : b.id; renderModule(); }) : null,
         z.f.anhang ? xBtn('x-datei-' + b.id, 'Datei öffnen', function () { rchOeffnen(z); }) : null,
         dos.map(function (id) { return xBtn('x-unterlage-' + b.id + '-' + id, id, function () { xDossierOeffnen(id, b.id); }); }), vorschau);
     })) : h('p', { class: 'note' }, 'Noch keine Unterlagen für diesen Fall. Dateien können aus dem Eingang oder am Dossier zugeordnet werden.')));
+}
+/* Lagebriefing (Anzeige): vorhandene Kurzlage und bis zu fünf zuletzt erfasste, zugängliche Unterlagen. Keine eigenen Daten. */
+function xBriefing(f) {
+  const L = xFallMaterial(f).unterlagen.map(function (b, i) { return { b: b, i: i }; }).filter(function (x) {
+    return (x.b.dossiers || []).every(function (id) { return xDossierLesbar(entitaet(id)); });          /* nicht lesbare Unterlagen erscheinen hier nicht */
+  }).sort(function (a, c) { return String(c.b.erfasst || '').localeCompare(String(a.b.erfasst || '')) || c.i - a.i; }).slice(0, 5);
+  return h('section', { id: 'x-briefing', class: 'panel', 'aria-label': 'Lagebriefing' },
+    h('div', { class: 'pad' },
+      h('h3', null, 'Lagebriefing'),
+      h('p', { class: 'dim' }, 'Kurzlage'), h('p', { class: 'x-kurztext' }, f.frage ? f.frage : 'Keine Kurzlage erfasst.'),
+      h('p', { class: 'dim' }, 'Zuletzt hinzugefügt'),
+      L.length ? h('ul', { class: 'x-items' }, L.map(function (x) {
+        const b = x.b, z = rchZuBeobachtung(b.id);
+        return h('li', { 'data-unterlage': b.id }, xBtn('x-brief-' + b.id, z.f.dateiname || z.q.herkunft || 'Textunterlage', function () {
+          const e = document.getElementById('x-eintrag-' + b.id);
+          if (e) { e.scrollIntoView({ block: 'center' }); e.focus(); }
+        }), h('span', { class: 'dim' }, ' ' + b.id + ' · ' + fmtZ(b.erfasst)));
+      })) : h('p', { class: 'note' }, 'Noch keine Unterlagen.')));
 }
 function renderX(m) {
   akVorschauFreigeben();
@@ -252,6 +270,7 @@ function renderX(m) {
     })) : h('p', { class: 'note' }, 'Noch keine Fälle.')));
   if (!f) return [modKopf(m), liste];
   return [modKopf(m), h('div', { class: 'split x-layout' }, liste, h('div', null,
+    xBriefing(f),
     panel(f.id + ' · ' + f.titel, null, h('div', { class: 'pad' }, xForm(f))),
     xBezugPanel(f, false), xBezugPanel(f, true), xUnterlagen(f),
     panel('Fall löschen', null, h('div', { class: 'pad' },
