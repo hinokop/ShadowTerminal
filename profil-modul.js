@@ -229,6 +229,19 @@ function terminalPfad(arg) {
   }
   return out;
 }
+// Pfade der Oberfläche beginnen an einer virtuellen Wurzel. Nur der Archivzweig geht an die Brücke.
+function terminalShellPfad(arg) {
+  if (/[:\\]|[\u0000-\u001f\u007f]/.test(arg)) return null;
+  const ort = TERMINAL_ZUSTAND.ort;
+  const absolut = arg.startsWith('/') || arg === '~' || arg.startsWith('~/');
+  const out = !absolut && ort ? [TERMINAL_DB].concat(ort) : [];
+  for (const name of (arg === '~' || arg.startsWith('~/') ? arg.slice(1) : arg).split('/')) {
+    if (!name || name === '.') continue;
+    if (name === '..') out.pop();
+    else out.push(name);
+  }
+  return out;
+}
 async function terminalBruecke(op, parts, hidden, exportDaten) {
   const bruecke = terminalBrueckenAdresse();
   if (!bruecke) return { error: TERMINAL_BRUECKE_FEHLT };
@@ -263,7 +276,7 @@ function terminalPrompt() {
   const kanal = TERMINAL_ZUSTAND.kanal;
   if (kanal) return kanal.phase === 'eingabe' ? 'you >' : '…';
   const ort = TERMINAL_ZUSTAND.ort;
-  return 'root@terminal:' + (ort ? '/' + [TERMINAL_DB].concat(ort).join('/') : '~') + '#';
+  return 'root@terminal:/' + (ort ? [TERMINAL_DB].concat(ort).join('/') : '') + '#';
 }
 function terminalName(arg) {
   if (!arg) return '';
@@ -328,24 +341,34 @@ function terminalWgetProtokoll(antwort, pfad, von, bytes) {
 async function terminalDateiBefehl(befehl, arg, version) {
   const t = TERMINAL_ZUSTAND;
   const lsLang = befehl === 'ls' && ['-l', '-la', '-al'].includes(arg);
-  if (befehl === 'ls' && arg && !lsLang) { terminalAusgabe('ls: unterstützt werden ls, ls -l und ls -la'); return; }
+  const lsAlle = befehl === 'ls' && ['-a', '-la', '-al'].includes(arg);
   const name = terminalName(arg);
-  if (name === null) { terminalAusgabe('Ungültiger Dateiname'); return; }
-  if (!t.ort) {
-    if (befehl === 'ls') { terminalAusgabe(TERMINAL_DB + '/'); return; }
-    if (befehl !== 'cd' || name !== TERMINAL_DB) { terminalAusgabe('Zuerst: cd "' + TERMINAL_DB + '"'); return; }
+  if (name === null) { terminalAusgabe(befehl + ': unterminated quote'); return; }
+  if (befehl === 'ls' && arg.startsWith('-') && !lsLang && !lsAlle) {
+    terminalAusgabe("ls: unrecognized option '" + arg + "'"); return;
   }
-  if (!name && ['cat', 'head', 'tail', 'wget'].includes(befehl)) { terminalAusgabe('Dateiname fehlt'); return; }
-  const pfad = t.ort ? terminalPfad(befehl === 'ls' ? '' : name) : [];
-  if (!pfad) { terminalAusgabe('Permission denied'); return; }
+  if (!name && ['cat', 'head', 'tail', 'wget'].includes(befehl)) { terminalAusgabe(befehl + ': missing file operand'); return; }
+  const virtuell = terminalShellPfad(befehl === 'cd' && !name ? '/' : lsLang || lsAlle ? '' : name);
+  const nichtGefunden = befehl + ': ' + name + ': No such file or directory';
+  if (!virtuell) { terminalAusgabe(befehl + ': ' + name + ': Permission denied'); return; }
+  if (!virtuell.length) {
+    if (befehl === 'cd') { t.ort = null; terminalKanalPromptSync(); }
+    else if (befehl === 'ls') terminalAusgabe(TERMINAL_DB + '/');
+    else terminalAusgabe(befehl + ': ' + name + ': Is a directory');
+    return;
+  }
+  if (virtuell[0] !== TERMINAL_DB) { terminalAusgabe(nichtGefunden); return; }
+  const pfad = virtuell.slice(1);
   const wgetStart = befehl === 'wget' ? new Date() : null;
-  const antwort = await terminalBruecke(befehl, pfad, arg === '-la' || arg === '-al');
+  const antwort = await terminalBruecke(befehl, pfad, lsAlle);
   if (t.version !== version) return;
-  if (antwort.error) { terminalAusgabe(antwort.error); return; }
+  if (antwort.error) {
+    terminalAusgabe(antwort.error === 'Datei oder Ordner nicht gefunden' ? nichtGefunden : befehl + ': ' + antwort.error);
+    return;
+  }
   if (befehl === 'cd') {
     t.ort = pfad;
-    const label = $('profil-terminal-prompt');
-    if (label) label.textContent = terminalPrompt();
+    terminalKanalPromptSync();
   } else if (befehl === 'ls') {
     const zeilen = antwort.entries.map(function (x) {
       return lsLang ? (x.dir ? 'dr-x' : '-r--') + '  ' + String(x.bytes).padStart(8) + '  ' + fmtZ(x.mtime * 1000) + '  ' + x.name + (x.dir ? '/' : '') :
@@ -614,8 +637,8 @@ function terminalBefehl(zeile) {
   else if (befehl === 'date' && !arg) terminalAusgabe(fmtZ(new Date()));
   else if (befehl === 'ping') {
     if (arg === 'relay') terminalPing();
-    else terminalAusgabe('ping: verfügbares Ziel ist relay');
-  } else if (befehl === 'send') terminalAusgabe('send ist im geöffneten Secure Channel verfügbar.');
+    else terminalAusgabe(arg ? 'ping: ' + arg + ': Name or service not known' : 'ping: usage: ping <destination>');
+  } else if (befehl === 'send') terminalAusgabe('send: channel not connected');
   else if (befehl === 'satcon') void terminalSatStart(arg);
   else if (befehl === 'secure-channel') {
     if (arg === '--connect --onion --ephemeral') void terminalKanalStart();
@@ -627,7 +650,9 @@ function terminalBefehl(zeile) {
     terminalDateiBefehl(befehl, arg, version).catch(function () {
       if (t.version === version) terminalAusgabe('Dateioperation fehlgeschlagen');
     }).finally(function () { t.dateiLaeuft = false; });
-  } else terminalAusgabe('command not found');
+  } else if (['help', 'exit', 'clear', 'pwd', 'whoami', 'uname', 'date'].includes(befehl)) {
+    terminalAusgabe('usage: ' + befehl + (befehl === 'uname' ? ' -a' : ''));
+  } else terminalAusgabe(befehl + ': command not found');
 }
 const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
 const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit', 'satcon', 'secure-channel', 'send']);
@@ -663,22 +688,22 @@ async function terminalTab(input, bisher, m) {
     fertig('secure-channel ', arg, ['--connect --onion --ephemeral'], function (x) { return x; });
     return;
   }
-  if (befehl === 'ping' || befehl === 'uname' || befehl === 'ls') {
-    fertig(befehl + ' ', arg, befehl === 'ping' ? ['relay'] : befehl === 'uname' ? ['-a'] : ['-l', '-la'], function (x) { return x; });
+  if (befehl === 'ping' || befehl === 'uname' || (befehl === 'ls' && arg.startsWith('-'))) {
+    fertig(befehl + ' ', arg, befehl === 'ping' ? ['relay'] : befehl === 'uname' ? ['-a'] : ['-a', '-l', '-la'], function (x) { return x; });
     return;
   }
   const anfang = arg[0] === '"' || arg[0] === "'" ? arg[0] : '';
   const pfad = anfang ? arg.slice(1, arg.endsWith('/' + anfang) ? -1 : undefined) : arg;
-  if ((anfang && pfad.includes(anfang)) || /^[\\/]|[:\\]|[\u0000-\u001f\u007f]/.test(pfad)) return;
-  if (!t.ort) {
-    if (befehl === 'cd') fertig('cd ' + anfang, pfad, [TERMINAL_DB], function (x) { return x + anfang; });
-    return;
-  }
+  if ((anfang && pfad.includes(anfang)) || /[:\\]|[\u0000-\u001f\u007f]/.test(pfad)) return;
   const ort = t.ort, slash = pfad.lastIndexOf('/') + 1;
   const basis = pfad.slice(0, slash), prefix = pfad.slice(slash);
-  const teile = terminalPfad(basis);
-  if (!teile) return;
-  const antwort = await terminalBruecke('ls', teile, prefix.startsWith('.'));
+  const teile = terminalShellPfad(basis);
+  if (!teile || (teile.length && teile[0] !== TERMINAL_DB)) return;
+  if (!teile.length) {
+    fertig(befehl + ' ' + anfang, pfad, [basis + TERMINAL_DB + (basis ? '/' : '')], function (x) { return x + anfang; });
+    return;
+  }
+  const antwort = await terminalBruecke('ls', teile.slice(1), prefix.startsWith('.'));
   if (t.ort !== ort) return;
   if (!antwort.entries) { terminalTabFehler(input, bisher, version, antwort); return; }
   terminalTabFehlerZuletzt = '';

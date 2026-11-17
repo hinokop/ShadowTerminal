@@ -73,7 +73,7 @@ const { chromium } = require('playwright');
     await cmd('ls'); await cmd('pwd'); await cmd('whoami'); await cmd('ping https://example.org'); await cmd('echo test');
     assert.match(await ausgabe.textContent(), /pgcl-eu3\.arch07\//);
     assert.match(await ausgabe.textContent(), /\nroot\n/);
-    assert.match(await ausgabe.textContent(), /verfügbares Ziel ist relay/);
+    assert.match(await ausgabe.textContent(), /Name or service not known/);
     assert.match(await ausgabe.textContent(), /command not found/);
     assert.equal(netz.length, netz0);
     await cmd('ping relay');
