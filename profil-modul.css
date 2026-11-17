@@ -37,3 +37,4 @@
 .profil-spark svg{width:136px;max-width:100%;height:auto}
 .profil-verlauf-raster{stroke:var(--border-strong)}
 .profil-verlauf-linie{fill:none;stroke:var(--accent);stroke-width:2}
+#profil-terminal-sat{color:#a8d293;font-size:11px;white-space:nowrap;margin-right:6px}
