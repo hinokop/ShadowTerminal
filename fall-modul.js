@@ -258,6 +258,16 @@ function xBriefing(f) {
         }), h('span', { class: 'dim' }, ' ' + b.id + ' · ' + fmtZ(b.erfasst)));
       })) : h('p', { class: 'note' }, 'Noch keine Unterlagen.')));
 }
+/* Fallpaket in X: "sichern" gilt dem geöffneten Fall, "importieren" ist auch ohne Fall verfügbar. Beides nutzt die Paketlogik der Recherche. */
+function xPaketPanel(f) {
+  return panel('Fallpaket', null, h('div', { class: 'pad' },
+    h('p', { class: 'note' }, 'Ein einzelner Fall mit Quellen, Unterlagen, Dateien und den benötigten Dossierangaben als eine Datei. Das Profil insgesamt sichert die Schaltfläche „Export“ in der Leiste.'),
+    f ? h('div', { class: 'row' }, xBtn('x-paket-sichern', 'Fallpaket sichern (' + f.id + ')', function () { rchPaketSichern(f.id); })) : null,
+    h('div', { class: 'row top' }, h('label', { for: 'x-paket-laden' }, 'Fallpaket importieren')),
+    h('div', { class: 'row' }, h('input', { type: 'file', id: 'x-paket-laden', accept: 'application/json,.json', onchange: function (ev) {
+      const fl = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (fl) rchPaketLaden(fl);
+    } }))));
+}
 function renderX(m) {
   akVorschauFreigeben();
   const L = PROFIL.recherche.faelle;
@@ -268,8 +278,8 @@ function renderX(m) {
       return h('li', null, h('button', { type: 'button', id: 'x-fall-' + x.id, 'aria-current': f === x ? 'true' : null, onclick: function () { xOeffnen(x.id); } },
         h('span', { class: 'dim' }, x.id + ' · ' + xStatus(x.zustand)[1]), h('strong', null, x.titel)));
     })) : h('p', { class: 'note' }, 'Noch keine Fälle.')));
-  if (!f) return [modKopf(m), liste];
-  return [modKopf(m), h('div', { class: 'split x-layout' }, liste, h('div', null,
+  if (!f) return [modKopf(m), h('div', null, liste, xPaketPanel(null))];
+  return [modKopf(m), h('div', { class: 'split x-layout' }, h('div', null, liste, xPaketPanel(f)), h('div', null,
     xBriefing(f),
     panel(f.id + ' · ' + f.titel, null, h('div', { class: 'pad' }, xForm(f))),
     xBezugPanel(f, false), xBezugPanel(f, true), xUnterlagen(f),
