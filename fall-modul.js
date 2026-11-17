@@ -240,6 +240,26 @@ function xUnterlagen(f) {
         dos.map(function (id) { return xBtn('x-unterlage-' + b.id + '-' + id, id, function () { xDossierOeffnen(id, b.id); }); }), vorschau);
     })) : h('p', { class: 'note' }, 'Noch keine Unterlagen für diesen Fall. Dateien können aus dem Eingang oder am Dossier zugeordnet werden.')));
 }
+/* Nächster Schritt: ein manuell gepflegter Eintrag je Fall (höchstens 200 Zeichen) mit Änderungszeitpunkt. Leeres Speichern entfernt ihn. */
+function xSchrittForm(f) {
+  const key = 'x-schritt-' + f.id, s = f.naechsterSchritt, d = VIEW.draft[key];
+  const feld = h('textarea', { id: 'x-schritt', rows: 2, maxlength: 200, 'aria-label': 'Nächster Schritt', value: d !== undefined ? d : (s && s.text) || '',
+    oninput: function (ev) { VIEW.draft[key] = ev.target.value; } });
+  return h('form', { class: 'x-schritt', onsubmit: function (ev) {
+    ev.preventDefault();
+    const akt = xFall(f.id), text = feld.value.trim().slice(0, 200), alt = akt && akt.naechsterSchritt ? akt.naechsterSchritt.text : '';
+    if (!akt) return;
+    if (text === alt) { delete VIEW.draft[key]; meldung('Nächster Schritt unverändert.'); renderModule(); return; }
+    if (xSchreiben(function () {
+      if (text) akt.naechsterSchritt = { text: text, am: nowIso() }; else delete akt.naechsterSchritt;
+      return true;
+    })) { delete VIEW.draft[key]; meldung(text ? 'Nächster Schritt gespeichert.' : 'Nächster Schritt entfernt.'); renderModule(); }
+    else renderModule();
+  } },
+    h('p', { class: 'dim' }, 'Nächster Schritt'), feld,
+    h('div', { class: 'row' }, h('button', { id: 'x-schritt-speichern', type: 'submit' }, 'Schritt speichern'),
+      h('span', { class: 'dim' }, s && s.text ? ' Zuletzt geändert: ' + fmtZ(s.am) : ' Kein nächster Schritt eingetragen.')));
+}
 /* Lagebriefing (Anzeige): vorhandene Kurzlage und bis zu fünf zuletzt erfasste, zugängliche Unterlagen. Keine eigenen Daten. */
 function xBriefing(f) {
   const L = xFallMaterial(f).unterlagen.map(function (b, i) { return { b: b, i: i }; }).filter(function (x) {
@@ -249,6 +269,7 @@ function xBriefing(f) {
     h('div', { class: 'pad' },
       h('h3', null, 'Lagebriefing'),
       h('p', { class: 'dim' }, 'Kurzlage'), h('p', { class: 'x-kurztext' }, f.frage ? f.frage : 'Keine Kurzlage erfasst.'),
+      xSchrittForm(f),
       h('p', { class: 'dim' }, 'Zuletzt hinzugefügt'),
       L.length ? h('ul', { class: 'x-items' }, L.map(function (x) {
         const b = x.b, z = rchZuBeobachtung(b.id);
