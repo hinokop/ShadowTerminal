@@ -5,7 +5,7 @@ function asErfassen() {
   const K = VIEW.karte, ebenen = {};
   Object.keys(K.ebenen).forEach(function (k) { ebenen[k] = !!K.ebenen[k]; });
   return {
-    t: nowIso(), modul: STATE.ui.modul, dossier: STATE.dossiers.auswahl || null, dtab: VIEW.dtab || null, fall: X_VIEW.id || null,
+    t: nowIso(), modul: STATE.ui.modul, dossier: STATE.dossiers.auswahl || null, dtab: VIEW.dtab || null, fall: X_VIEW.id || null, fallErfasst: (X_VIEW.id && xFall(X_VIEW.id) && xFall(X_VIEW.id).erfasst) || null,
     karte: { lat: K.lat, lon: K.lon, zoom: K.zoom, ebenen: ebenen, auswahl: K.auswahl || null }
   };
 }
@@ -27,7 +27,9 @@ function asAnwenden(s) {
     } else uebersprungen.push('Dossier ' + s.dossier);
   }
   if (typeof s.fall === 'string' && s.fall) {
-    if (xFall(s.fall)) X_VIEW.id = s.fall; else uebersprungen.push('Fall ' + s.fall);
+    const f = xFall(s.fall);
+    /* Nummern werden wiedervergeben: der Fall gilt nur bei gleicher Nummer und gleichem Erfassungszeitpunkt */
+    if (f && s.fallErfasst && f.erfasst === s.fallErfasst) X_VIEW.id = s.fall; else uebersprungen.push('Fall ' + s.fall);
   }
   const k = s.karte, K = VIEW.karte;
   if (k && typeof k === 'object') {
@@ -35,6 +37,7 @@ function asAnwenden(s) {
     if (k.ebenen && typeof k.ebenen === 'object') Object.keys(K.ebenen).forEach(function (n) { if (typeof k.ebenen[n] === 'boolean') K.ebenen[n] = k.ebenen[n]; });
     if (typeof karteWahlSichern === 'function') karteWahlSichern();
     K.pick = null; K.messen = false; K.messPts = [];
+    K.pinSetzen = false; K.zoneSetzen = false; K.zugriffSetzen = false;   /* kein Platziermodus aus der vorherigen Ansicht */
     if (k.auswahl) { if (asAuswahlGueltig(k.auswahl)) K.auswahl = k.auswahl; else { K.auswahl = null; uebersprungen.push('Kartenobjekt ' + k.auswahl); } } else K.auswahl = null;
   }
   const ziel = ARBEITSMODULE.some(function (m) { return m.id === s.modul; }) ? s.modul : 'profil';

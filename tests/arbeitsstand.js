@@ -65,6 +65,41 @@ const { APP } = require('./_pfad');
     await p.click('#as-wieder');
     assert.equal(await p.locator('#mod-title').textContent(), 'Dossiers');
     assert.ok((await p.locator('#main, main, body').first().innerText()).includes(ziele.name), 'gewähltes Dossier sichtbar');
+    /* X sichtbar: Fall A sichern, Fall B öffnen, Stand laden, Fall A steht im Formular */
+    await p.evaluate(() => { PROFIL.gesperrt = []; });
+    const xf = await p.evaluate(() => {
+      const b = xAnlegen({ titel: 'Fall Beta sichtbar' }), a = xAnlegen({ titel: 'Fall Alpha sichtbar' }); profilSpeichern();
+      X_VIEW.id = a.id; dispatch({ type: 'NAVIGATION', modul: 'x' }); return { a: a.id, b: b.id };
+    });
+    assert.equal(await p.inputValue('#x-titel'), 'Fall Alpha sichtbar');
+    await p.click('#as-speichern');
+    await p.evaluate(b => xOeffnen(b), xf.b);
+    assert.equal(await p.inputValue('#x-titel'), 'Fall Beta sichtbar');
+    await p.click('#as-wieder');
+    assert.equal(await p.inputValue('#x-titel'), 'Fall Alpha sichtbar', 'Stand laden zeigt Fall A tatsächlich im Formular');
+    /* Fall A löschen, Nummer neu vergeben: der alte Stand öffnet den Ersatzfall nicht */
+    const ers = await p.evaluate(a => {
+      PROFIL.recherche.faelle = PROFIL.recherche.faelle.filter(f => f.id !== a);
+      const e = xAnlegen({ titel: 'Ersatzfall' }); profilSpeichern();
+      X_VIEW.id = null; renderModule(); return e.id;
+    }, xf.a);
+    assert.equal(ers, xf.a, 'Voraussetzung: Nummer wird wiedervergeben');
+    await p.evaluate(() => new Promise(r => setTimeout(r, 50)));
+    await p.click('#as-wieder');
+    const ue = await p.evaluate(() => ({ fall: X_VIEW.id, msg: document.querySelector('#sys-msg').innerText }));
+    assert.notEqual(ue.fall, ers, 'Ersatzfall mit gleicher Nummer wird nicht geöffnet');
+    assert.ok(ue.msg.includes('Fall ' + xf.a), 'Meldung nennt den übersprungenen Fall');
+    /* Karte: nach dem Laden kein Platziermodus */
+    await p.evaluate(() => dispatch({ type: 'NAVIGATION', modul: 'karte' }));
+    await p.waitForTimeout(600);
+    await p.click('#as-speichern');
+    await p.click('#k-pin-neu');
+    assert.equal(await p.evaluate(() => !!VIEW.karte.pinSetzen), true, 'Voraussetzung: Pin-Modus aktiv');
+    await p.evaluate(() => { VIEW.karte.zoneSetzen = 'eigen'; VIEW.karte.zugriffSetzen = true; });
+    await p.click('#as-wieder');
+    assert.deepEqual(await p.evaluate(() => ({ p: VIEW.karte.pinSetzen, z: VIEW.karte.zoneSetzen, g: VIEW.karte.zugriffSetzen })), { p: false, z: false, g: false });
+    assert.equal(await p.locator('#k-svg').getAttribute('class').then(c => c.includes('pick')), false, 'Karte zeigt kein Fadenkreuz');
+    assert.equal(await p.locator('#k-pin-neu').getAttribute('aria-pressed'), 'false');
     assert.deepEqual(fehler, []);
     console.log('OK: Arbeitsstand sichern und wiederherstellen, kein Autosprung, Überspringen');
   } finally { await browser.close(); }
