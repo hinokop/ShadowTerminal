@@ -410,7 +410,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   return 0;
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satAufbau: null, satLink: null, orbitLive: false, modem: null, modemEnde: null, wgSat: null, syslog: [], kette: null, status: 0 };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satAufbau: null, satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0 };
 function terminalAusgabe(zeile) {
   const t = TERMINAL_ZUSTAND;
   t.ausgabe = t.ausgabe.concat(zeile).slice(-45);
@@ -489,7 +489,6 @@ function terminalSatAbbruch() {
   if (t.modem) { clearTimeout(t.modem.timer); terminalVordergrundEnde(t.modem, 1); }
   if (t.wgSat) terminalVordergrundEnde(t.wgSat, 1);
   t.modem = t.wgSat = null;
-  t.modemEnde = null;
   terminalSatAnzeige();
   terminalKanalPromptSync();
   t.satAufbau = null;
@@ -726,17 +725,48 @@ const TERMINAL_PPP_ENDE = 'pppd[1401]: Connection terminated.';
 function terminalPppZeit(ms) {
   return new Date(ms).toISOString().slice(11, 19);
 }
+const TERMINAL_PREDICT_USAGE = 'usage: predict -t <tlefile> [-p <satellite> [start] | -f <satellite> [start [end|+n[m]]]]';
+const TERMINAL_PREDICT_MAX = 600;
+function terminalPredictOptionen(args) {
+  const o = { modus: 'live' };
+  let datei = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '-t') { datei = args[++i]; if (datei === undefined) return { fehler: 'usage' }; continue; }
+    if (a === '-p' || a === '-f') {
+      if (o.modus !== 'live' || args[i + 1] === undefined) return { fehler: 'usage' };
+      o.modus = a[1]; o.sat = args[++i];
+      const rest = [];
+      while (args[i + 1] !== undefined && !/^-[a-z]/.test(args[i + 1])) rest.push(args[++i]);
+      if (rest.length > (a === '-p' ? 1 : 2)) return { fehler: 'usage' };
+      if (rest[0] !== undefined) { if (!/^\d{9,11}$/.test(rest[0])) return { fehler: 'usage' }; o.start = Number(rest[0]); }
+      if (rest[1] !== undefined) {
+        const m = /^(\+)?(\d{1,11})(m)?$/.exec(rest[1]);
+        if (!m) return { fehler: 'usage' };
+        o.ende = { relativ: !!m[1], wert: Number(m[2]), minuten: !!m[3] };
+      }
+      continue;
+    }
+    return { fehler: 'usage' };
+  }
+  if (datei === null) return { fehler: 'usage' };
+  if (datei !== TERMINAL_PPP_DATEI) return { fehler: datei + ': No such file or directory' };
+  if (o.modus !== 'live' && o.sat !== TERMINAL_PPP_SAT) return { fehler: '"' + o.sat + '" not found in ' + TERMINAL_PPP_DATEI };
+  return o;
+}
 function terminalPppZeile(link, ms) {
-  const zeit = Math.max(link.von, Math.min(ms, link.bis));
+  const zeit = ms;
   const datum = new Date(zeit);
   const tag = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }).format(datum);
   const mon = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(datum);
   const iso = datum.toISOString();
   const faktor = (zeit - link.von) / (link.bis - link.von);
-  const hoehe = Math.round(48 * Math.sin(Math.PI * faktor));
-  const azimut = Math.round(112 + 203 * faktor);
+  // Außerhalb des Überflugs steht der Satellit unter dem Horizont (negative Elevation).
+  const abstand = faktor < 0 ? -faktor : faktor > 1 ? faktor - 1 : 0;
+  const hoehe = abstand ? -Math.min(80, Math.round(2 + 60 * abstand)) : Math.round(48 * Math.sin(Math.PI * faktor));
+  const azimut = ((Math.round(112 + 203 * faktor) % 360) + 360) % 360;
   return [Math.floor(zeit / 1000), tag, iso.slice(8, 10) + mon + iso.slice(2, 4),
-    terminalPppZeit(zeit), hoehe, azimut, Math.floor(192 + 42 * faktor) % 256,
+    terminalPppZeit(zeit), hoehe, azimut, ((Math.floor(192 + 42 * faktor) % 256) + 256) % 256,
     Math.round(51 + 4 * faktor), Math.round(7 + 9 * faktor),
     Math.round(2410 - 1498 * Math.sin(Math.PI * faktor)), link.orbit, '*'].join('  ');
 }
@@ -792,7 +822,6 @@ function terminalPppModemAus(grund, inShell = true) {
   if (modem) {
     clearTimeout(modem.timer);
     const zeilen = ['pppd[1401]: ' + grund, TERMINAL_PPP_ENDE];
-    t.modemEnde = grund;
     zeilen.forEach(terminalPppLog);
     if (inShell) terminalAusgabe(zeilen);
     terminalVordergrundEnde(modem, grund.includes('signal 2') ? 5 : 1);
@@ -823,18 +852,19 @@ function terminalPppWaehltVorne() {
 function terminalPppEinwahl(link, vordergrund) {
   const t = TERMINAL_ZUSTAND, modem = { bereit: false, vordergrund, timer: null };
   t.modem = modem;
-  t.modemEnde = null;
   terminalKanalPromptSync();
   terminalSatAnzeige();
   const schritte = [
-    [0, ['chat[1402]: abort on (BUSY)', 'chat[1402]: abort on (NO CARRIER)']],
-    [450, ['chat[1402]: send (AT+CSQ^M)']],
-    [650, ['chat[1402]: +CSQ:4^M']],
-    [450, ['chat[1402]: send (ATD*99***1#^M)']],
-    [2400, ['chat[1402]: CONNECT 2400']],
+    // Iridium-Datenruf (Circuit Switched Data): Bearer AT+CBST=71,0,1, Einwahl 008816000025.
+    [0, ['chat[1402]: abort on (BUSY)', 'chat[1402]: abort on (NO CARRIER)', 'chat[1402]: send (ATZ^M)', 'chat[1402]: expect (OK)']],
+    [150, ['chat[1402]: ATZ^M^M', 'chat[1402]: OK', 'chat[1402]:  -- got it', 'chat[1402]: send (AT+CBST=71,0,1^M)', 'chat[1402]: expect (OK)']],
+    [250, ['chat[1402]: AT+CBST=71,0,1^M^M', 'chat[1402]: OK', 'chat[1402]:  -- got it', 'chat[1402]: send (AT+CSQ^M)', 'chat[1402]: expect (OK)']],
+    [650, ['chat[1402]: AT+CSQ^M^M', 'chat[1402]: +CSQ:4^M', 'chat[1402]: ^M', 'chat[1402]: OK', 'chat[1402]:  -- got it',
+      'chat[1402]: send (ATDT008816000025^M)', 'chat[1402]: expect (CONNECT)']],
+    [2900, ['chat[1402]: ATDT008816000025^M^M', 'chat[1402]: CONNECT 19200', 'chat[1402]:  -- got it']],
     [900, ['pppd[1401]: Serial connection established.']],
-    [750, ['pppd[1401]: Using interface ppp0']],
-    [1900, ['pppd[1401]: local IP address 10.184.12.94']]
+    [750, ['pppd[1401]: Using interface ppp0', 'pppd[1401]: Connect: ppp0 <--> /dev/ttyUSB0']],
+    [1900, ['pppd[1401]: local IP address 172.16.8.94', 'pppd[1401]: remote IP address 172.16.1.1']]
   ];
   const schritt = function (i) {
     if (t.modem !== modem || !terminalSatLinkAktiv(link)) return;
@@ -854,23 +884,24 @@ function terminalPppEinwahl(link, vordergrund) {
   schritt(0);
   return ende;
 }
-async function terminalPppShell(befehl, arg) {
+async function terminalPppShell(befehl, arg, args = []) {
   const t = TERMINAL_ZUSTAND, link = t.satLink;
   if (befehl === 'predict') {
-    const m = /^-t\s+\/var\/cache\/tle\/iridium\.tle\s+-([pf])\s+"IRIDIUM 142"$/.exec(arg);
-    if (!m) { terminalAusgabe('usage: predict -t ' + TERMINAL_PPP_DATEI + ' -p "' + TERMINAL_PPP_SAT + '"'); return 2; }
+    // predict(1): -t <tlefile>, -p <sat> [start] (ein Überflug), -f <sat> [start [ende]] (Positionsdaten);
+    // ohne -p/-f das interaktive Programm (hier direkt die Verfolgung des einen Satelliten, Ende mit Strg+C).
+    const o = terminalPredictOptionen(args);
+    if (o.fehler) { terminalAusgabe(o.fehler === 'usage' ? TERMINAL_PREDICT_USAGE : 'predict: ' + o.fehler); return o.fehler === 'usage' ? 2 : 1; }
     if (link && link.modus !== 'ppp') { terminalAusgabe('predict: sat0 is still in use'); return 1; }
     if (!link || link.abgelaufen) {
       const jetzt = Math.floor(Date.now() / 1000) * 1000;
       const pass = { modus: 'ppp', von: jetzt - 180000, bis: jetzt + (300 + terminalKanalZufall(601)) * 1000,
         orbit: 25000 + terminalKanalZufall(70000), abgelaufen: false };
       t.satLink = pass;
-      t.modemEnde = null;
-      pass.timer = setInterval(function () { if (terminalSatLinkAktiv(pass)) terminalSatAnzeige(); }, 250);
+          pass.timer = setInterval(function () { if (terminalSatLinkAktiv(pass)) terminalSatAnzeige(); }, 250);
       terminalSatAnzeige();
     }
     const pass = t.satLink;
-    if (m[1] === 'f') {
+    if (o.modus === 'live') {
       const orbit = { fertig: null };
       const ende = terminalVordergrund(orbit);
       t.orbitLive = orbit;
@@ -878,7 +909,21 @@ async function terminalPppShell(befehl, arg) {
       terminalKanalPromptSync();
       return ende;
     }
-    terminalAusgabe([pass.von, (pass.von + pass.bis) / 2, pass.bis].map(ms => terminalPppZeile(pass, ms)));
+    if (o.modus === 'f') {
+      const jetzt = Math.floor(Date.now() / 1000);
+      const start = o.start ?? jetzt;
+      if (o.ende === undefined) { terminalAusgabe(terminalPppZeile(pass, start * 1000)); return 0; }
+      const ende = o.ende.relativ ? start + o.ende.wert * (o.ende.minuten ? 60 : 1) : o.ende.wert;
+      const schritt = o.ende.minuten ? 60 : 1;
+      if (ende < start) return 0;
+      const zeilen = [];
+      for (let z = start; z <= ende && zeilen.length < TERMINAL_PREDICT_MAX; z += schritt) zeilen.push(terminalPppZeile(pass, z * 1000));
+      terminalAusgabe(zeilen);
+      return 0;
+    }
+    const von = o.start !== undefined ? Math.max(pass.von, o.start * 1000) : pass.von;
+    if (von > pass.bis) return 0;
+    terminalAusgabe([von, (von + pass.bis) / 2, pass.bis].map(ms => terminalPppZeile(pass, ms)));
     return 0;
   }
   if (befehl === 'pppd') {
@@ -893,13 +938,15 @@ async function terminalPppShell(befehl, arg) {
     return 0;
   }
   if (befehl === 'poff') {
-    if (arg !== 'iridium') { terminalAusgabe('usage: poff iridium'); return 2; }
+    // poff(1): ohne Argument beendet es die einzige laufende Verbindung; Meldungen und Codes wie im poff-Skript.
+    const opt = args.find(function (x) { return /^-/.test(x); });
+    if (opt) { terminalAusgabe('poff: Illegal option -- ' + opt.slice(1, 2) + '.'); return 1; }
     if (!t.modem) {
-      const letzterAbbruch = t.modemEnde?.includes('NO CARRIER');
-      terminalAusgabe('poff: iridium is not running' + (letzterAbbruch ? ' (NO CARRIER)' : ''));
+      terminalAusgabe(args.length ? "poff: I could not find a pppd process for provider '" + args[0] + "'. None stopped." : 'poff: No pppd is running.  None stopped.');
       return 1;
     }
-    // poff beendet pppd still; der Abbau steht im Syslog. Nur ein unerwarteter Abbruch meldet sich selbst in der Shell.
+    if (args.length && args[0] !== 'iridium') { terminalAusgabe("poff: I could not find a pppd process for provider '" + args[0] + "'. None stopped."); return 1; }
+    // Erfolg ist still; der Abbau steht im Syslog. Nur ein unerwarteter Abbruch meldet sich selbst in der Shell.
     terminalPppModemAus('Terminating on signal 15', false);
     return 0;
   }
@@ -1157,7 +1204,7 @@ async function terminalEinzelbefehl(woerter) {
     t.version++; terminalTransferStop(); t.ausgabe = []; terminalAusgabe([]);
     return 0;
   }
-  const ppp = await terminalPppShell(befehl, arg);
+  const ppp = await terminalPppShell(befehl, arg, args);
   if (ppp !== null) return ppp;
   if (befehl === 'echo') { terminalAusgabe(args.join(' ')); return 0; }
   if (befehl === 'true' && !arg) return 0;

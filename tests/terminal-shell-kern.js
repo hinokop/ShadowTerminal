@@ -54,7 +54,7 @@ const { APP } = require('./_pfad');
     await cmd('false && echo nie; echo $?'); assert.equal(await letzte(), '1');
     await cmd('unbekannt; echo $?');
     assert.deepEqual((await out.textContent()).split('\n').slice(-2), ['unbekannt: command not found', '127']);
-    await cmd('poff'); assert.equal(await letzte(), 'usage: poff iridium'); assert.equal(await status(), '2');
+    await cmd('poff'); assert.equal(await letzte(), 'poff: No pppd is running.  None stopped.'); assert.equal(await status(), '1');
 
     /* Abnahme: poff && tail bei laufendem Modem */
     await cmd('predict -t /var/cache/tle/iridium.tle -p "IRIDIUM 142"');
@@ -66,7 +66,7 @@ const { APP } = require('./_pfad');
     assert.equal(await status(), '0');
     /* … und bei bereits beendetem Modem: tail startet nicht, $? zeigt den Fehler */
     await cmd('poff iridium && tail -n 6 /var/log/syslog');
-    assert.equal(await letzte(), 'poff: iridium is not running', 'tail startet nicht');
+    assert.equal(await letzte(), "poff: I could not find a pppd process for provider 'iridium'. None stopped.", 'tail startet nicht');
     assert.equal(await status(), '1');
     await cmd('poff iridium || echo kein Modem'); assert.equal(await letzte(), 'kein Modem');
 
@@ -79,7 +79,7 @@ const { APP } = require('./_pfad');
     assert.equal(await inp.inputValue(), 'echo zwischendurch', 'Eingabe bleibt stehen');
     assert.equal(await p.locator('#profil-terminal form').getAttribute('aria-busy'), 'true', 'sichtbares Signal: Shell beschäftigt');
     await p.clock.runFor(4600);
-    assert.match(await out.textContent(), /local IP address [\d.]+\n\[#\] ip link add wg-sat type wireguard$/);
+    assert.match(await out.textContent(), /remote IP address [\d.]+\n\[#\] ip link add wg-sat type wireguard$/);
     await p.clock.runFor(700);
     assert.equal(await letzte(), 'bereit');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.wgSat.bereit), true);
