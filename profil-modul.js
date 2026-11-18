@@ -1250,9 +1250,70 @@ function terminalTmuxEinzeln(args) {
   return 0;
 }
 async function terminalEinzelbefehl(woerter) {
-  const t = TERMINAL_ZUSTAND, befehl = woerter[0], args = woerter.slice(1), arg = terminalArgText(args);
-  if (befehl === 'exit') {
-    if (arg) { terminalAusgabe('usage: exit'); return 2; }
+  const befehl = woerter[0], args = woerter.slice(1), arg = terminalArgText(args);
+  const eintrag = terminalBefehlEintrag(befehl);
+  if (!eintrag) { terminalAusgabe(befehl + ': command not found'); return 127; }
+  return eintrag.aus(args, arg);
+}
+// Aufruffehler einfacher Befehle: usage-Zeile, Rückgabewert 2.
+function terminalUsage(text) { terminalAusgabe('usage: ' + text); return 2; }
+async function terminalDateiAusfuehren(befehl, arg) {
+  const t = TERMINAL_ZUSTAND;
+  if (t.dateiLaeuft) { terminalAusgabe('Datenbankanfrage läuft bereits'); return 1; }
+  t.dateiLaeuft = true;
+  const version = t.version;
+  try {
+    return await terminalDateiBefehl(befehl, arg, version);
+  } catch (e) {
+    if (t.version === version) terminalAusgabe('Dateioperation fehlgeschlagen');
+    return 1;
+  } finally { t.dateiLaeuft = false; }
+}
+function terminalHilfe() {
+  const zeilen = [[], [], []];
+  TERMINAL_TABELLE.forEach(function (e) { (e.hilfe || []).forEach(function (h) { zeilen[h[0]].push(h); }); });
+  return zeilen.map(function (z) { return z.sort(function (a, b) { return a[1] - b[1]; }).map(function (h) { return h[2]; }).join(' · '); })
+    .concat('cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?');
+}
+/* Befehlstabelle: Name, Hilfe (Zeile, Position, Text), Ausführung und Art der Tab-Ergänzung an einer Stelle.
+   Tab-Arten: pfad (Dateien und Ordner), fest (feste Argumentfolgen), optionen (Optionen ohne Leerzeichen danach),
+   predict (Optionen und Satellitennamen), tail (-n mit Syslog, sonst pfad). Dynamische Kandidaten bleiben Funktionen. */
+const TERMINAL_PPP = function (name) { return function (args, arg) { return terminalPppShell(name, arg, args); }; };
+const TERMINAL_DATEI = function (name) { return function (args, arg) { return terminalDateiAusfuehren(name, arg); }; };
+const TERMINAL_TABELLE = [
+  { name: 'ls', hilfe: [[0, 0, 'ls [-a|-l|-la]']], tab: { art: 'pfad', optionen: ['-a', '-l', '-la'] }, aus: TERMINAL_DATEI('ls') },
+  { name: 'cd', hilfe: [[0, 1, 'cd <ordner>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('cd') },
+  { name: 'cat', hilfe: [[0, 3, 'cat <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('cat') },
+  { name: 'head', hilfe: [[0, 4, 'head <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('head') },
+  { name: 'tail', hilfe: [[0, 5, 'tail <datei>']], tab: { art: 'tail' }, aus: async function (args, arg) {
+    const ppp = await terminalPppShell('tail', arg, args);
+    return ppp !== null ? ppp : terminalDateiAusfuehren('tail', arg);
+  } },
+  { name: 'wget', hilfe: [[0, 6, 'wget <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('wget') },
+  { name: 'help', aus: function (args, arg) { if (arg) return terminalUsage('help'); terminalAusgabe(terminalHilfe()); return 0; } },
+  { name: 'pwd', hilfe: [[0, 2, 'pwd']], aus: function (args, arg) { if (arg) return terminalUsage('pwd'); terminalAusgabe(terminalArbeitsverzeichnis()); return 0; } },
+  { name: 'whoami', hilfe: [[0, 10, 'whoami']], aus: function (args, arg) { if (arg) return terminalUsage('whoami'); terminalAusgabe('root'); return 0; } },
+  { name: 'uname', hilfe: [[0, 11, 'uname -a']], tab: { art: 'optionen', werte: ['-a'] },
+    aus: function (args, arg) { if (arg !== '-a') return terminalUsage('uname -a'); terminalAusgabe(TERMINAL_UBUNTU); return 0; } },
+  { name: 'date', hilfe: [[0, 12, 'date [+%s]']], aus: function (args, arg) {
+    if (arg === '+%s') { terminalAusgabe(String(Math.floor(Date.now() / 1000))); return 0; }
+    if (arg) return terminalUsage('date');
+    terminalAusgabe(fmtZ(new Date())); return 0;
+  } },
+  { name: 'ping', hilfe: [[0, 13, 'ping relay']], tab: { art: 'optionen', werte: ['relay'] }, aus: async function (args, arg) {
+    if (arg === 'relay') return await terminalPing() ? 0 : 1;
+    terminalAusgabe(arg ? 'ping: ' + arg + ': Name or service not known' : 'ping: usage: ping <destination>');
+    return arg ? 2 : 1;
+  } },
+  { name: 'clear', hilfe: [[0, 14, 'clear']], aus: function (args, arg) {
+    const t = TERMINAL_ZUSTAND;
+    if (arg) return terminalUsage('clear');
+    t.version++; terminalTransferStop(); t.ausgabe = []; terminalAusgabe([]);
+    return 0;
+  } },
+  { name: 'exit', hilfe: [[0, 15, 'exit']], aus: function (args, arg) {
+    const t = TERMINAL_ZUSTAND;
+    if (arg) return terminalUsage('exit');
     // In tmux beendet exit die Shell der Sitzung; vereinfacht endet damit die ganze Sitzung samt oberem Fenster.
     if (t.tmux && !t.kanal && !t.orbitLive) { terminalTmuxEnde(); terminalAusgabe('[exited]'); return 0; }
     t.kette = null;
@@ -1261,53 +1322,23 @@ async function terminalEinzelbefehl(woerter) {
     terminalTransferStop();
     terminalKonsoleSchliessen();
     return 0;
-  }
-  if (befehl === 'clear') {
-    if (arg) { terminalAusgabe('usage: clear'); return 2; }
-    t.version++; terminalTransferStop(); t.ausgabe = []; terminalAusgabe([]);
-    return 0;
-  }
-  const ppp = await terminalPppShell(befehl, arg, args);
-  if (ppp !== null) return ppp;
-  if (befehl === 'echo') { terminalAusgabe(args.join(' ')); return 0; }
-  if (befehl === 'tmux') return terminalTmux(args);
-  if (befehl === 'true' && !arg) return 0;
-  if (befehl === 'false' && !arg) return 1;
-  if (befehl === 'help' && !arg) {
-    terminalAusgabe(['ls [-a|-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · echo · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
-      'predict · pon kestrel · pppd call kestrel [updetach] · poff [kestrel] · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
-      'tmux · tmux split-window -bd predict · Ctrl+B ↑/↓ switch pane · tmux kill-pane -t \'{up-of}\'',
-      'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);
-    return 0;
-  }
-  if (befehl === 'pwd' && !arg) { terminalAusgabe(terminalArbeitsverzeichnis()); return 0; }
-  if (befehl === 'whoami' && !arg) { terminalAusgabe('root'); return 0; }
-  if (befehl === 'uname' && arg === '-a') { terminalAusgabe(TERMINAL_UBUNTU); return 0; }
-  if (befehl === 'date' && !arg) { terminalAusgabe(fmtZ(new Date())); return 0; }
-  if (befehl === 'date' && arg === '+%s') { terminalAusgabe(String(Math.floor(Date.now() / 1000))); return 0; }
-  if (befehl === 'ping') {
-    if (arg === 'relay') return await terminalPing() ? 0 : 1;
-    terminalAusgabe(arg ? 'ping: ' + arg + ': Name or service not known' : 'ping: usage: ping <destination>');
-    return arg ? 2 : 1;
-  }
-  if (TERMINAL_DATEIBEFEHLE.includes(befehl)) {
-    if (t.dateiLaeuft) { terminalAusgabe('Datenbankanfrage läuft bereits'); return 1; }
-    t.dateiLaeuft = true;
-    const version = t.version;
-    try {
-      return await terminalDateiBefehl(befehl, arg, version);
-    } catch (e) {
-      if (t.version === version) terminalAusgabe('Dateioperation fehlgeschlagen');
-      return 1;
-    } finally { t.dateiLaeuft = false; }
-  }
-  if (['help', 'pwd', 'whoami', 'uname', 'date', 'true', 'false'].includes(befehl)) {
-    terminalAusgabe('usage: ' + befehl + (befehl === 'uname' ? ' -a' : ''));
-    return 2;
-  }
-  terminalAusgabe(befehl + ': command not found');
-  return 127;
-}
+  } },
+  { name: 'predict', hilfe: [[1, 0, 'predict']], tab: { art: 'predict' }, aus: TERMINAL_PPP('predict') },
+  { name: 'pon', hilfe: [[1, 1, 'pon kestrel']], tab: { art: 'fest', werte: ['kestrel'] }, aus: TERMINAL_PPP('pon') },
+  { name: 'pppd', hilfe: [[1, 2, 'pppd call kestrel [updetach]']],
+    tab: { art: 'fest', werte: ['call kestrel updetach'], kette: 'call kestrel && tail -n 12 /var/log/syslog' }, aus: TERMINAL_PPP('pppd') },
+  { name: 'poff', hilfe: [[1, 3, 'poff [kestrel]']], tab: { art: 'fest', werte: ['kestrel'], kette: 'kestrel && tail -n 6 /var/log/syslog' }, aus: TERMINAL_PPP('poff') },
+  { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
+  { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
+  { name: 'false', hilfe: [[0, 9, 'false']], aus: function (args, arg) { return arg ? terminalUsage('false') : 1; } },
+  { name: 'wg-quick', hilfe: [[1, 4, 'wg-quick']], tab: { art: 'fest', werte: ['up wg-sat', 'down wg-sat'] }, aus: TERMINAL_PPP('wg-quick') },
+  { name: 'wg', hilfe: [[1, 5, 'wg']], tab: { art: 'fest', werte: ['show wg-sat'] }, aus: TERMINAL_PPP('wg') },
+  { name: 'profanity', hilfe: [[1, 6, 'profanity (/msg, /omemo, /sendfile, /quit)']], aus: TERMINAL_PPP('profanity') },
+  { name: 'tmux', hilfe: [[2, 0, 'tmux'], [2, 1, 'tmux split-window -bd predict'], [2, 2, 'Ctrl+B ↑/↓ switch pane'], [2, 3, "tmux kill-pane -t '{up-of}'"]],
+    tab: { art: 'fest', werte: ['split-window -bd predict', "kill-pane -t '{up-of}'", 'kill-server'] }, aus: function (args) { return terminalTmux(args); } }
+];
+const TERMINAL_TABELLE_INDEX = new Map(TERMINAL_TABELLE.map(function (e) { return [e.name, e]; }));
+function terminalBefehlEintrag(name) { return TERMINAL_TABELLE_INDEX.get(name) || null; }
 async function terminalKetteAusfuehren(folge) {
   const t = TERMINAL_ZUSTAND, kette = { abgebrochen: false };
   t.kette = kette;
@@ -1345,13 +1376,7 @@ function terminalBefehl(zeile) {
   if (z.fehler) { terminalAusgabe(z.fehler); t.status = 2; return; }
   void terminalKetteAusfuehren(z.folge);
 }
-const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
-const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit',
-  'predict', 'pon', 'pppd', 'poff', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
-const TERMINAL_PPP_TAB = new Map([
-  ['predict', []],
-  ['pppd', ['call kestrel updetach']], ['pon', ['kestrel']], ['poff', ['kestrel']], ['wg-quick', ['up wg-sat', 'down wg-sat']], ['wg', ['show wg-sat']], ['tmux', ['split-window -bd predict', "kill-pane -t '{up-of}'", 'kill-server']]
-]);
+const TERMINAL_BEFEHLE = TERMINAL_TABELLE.map(function (e) { return e.name; });
 let terminalTabLauf = null, terminalTabAuswahl = null;
 function terminalTabReset() {
   terminalTabLauf = terminalTabAuswahl = null;
@@ -1392,7 +1417,9 @@ async function terminalTab(lauf, m) {
     fertig('', befehl, TERMINAL_BEFEHLE, function (x) { return x + ' '; });
     return;
   }
-  if (befehl === 'predict') {
+  const tab = terminalBefehlEintrag(befehl)?.tab;
+  if (!tab) return;
+  if (tab.art === 'predict') {
     let rest = arg, kopf = 'predict ';
     const vorgabe = [['-t'], [TERMINAL_PPP_DATEI], ['-p'], kestrelSats().map(function (x) { return x.name; })];
     for (let i = 0; i < vorgabe.length; i++) {
@@ -1405,23 +1432,18 @@ async function terminalTab(lauf, m) {
     }
     return;
   }
-  if (TERMINAL_PPP_TAB.has(befehl)) {
-    if ((befehl === 'pppd' || befehl === 'poff') && arg.includes('&&')) {
-      const befehlsanfang = befehl === 'pppd' ? 'call kestrel' : 'kestrel';
-      fertig(befehl + ' ', arg, [befehlsanfang + ' && tail -n ' + (befehl === 'pppd' ? '12' : '6') + ' /var/log/syslog'], x => x);
-      return;
-    }
-    fertig(befehl + ' ', arg, TERMINAL_PPP_TAB.get(befehl), x => x);
+  if (tab.art === 'fest') {
+    fertig(befehl + ' ', arg, tab.kette && arg.includes('&&') ? [tab.kette] : tab.werte, x => x);
     return;
   }
-  if (befehl === 'tail' && /^-n(?:\s|$)/.test(arg)) {
+  if (tab.art === 'tail' && /^-n(?:\s|$)/.test(arg)) {
     const m = /^(-n\s+\d{1,2}\s+)(.*)$/.exec(arg);
     if (m) fertig('tail ' + m[1], m[2], ['/var/log/syslog'], x => x);
     else fertig('tail ', arg, ['-n 12 /var/log/syslog'], x => x);
     return;
   }
-  if (befehl === 'ping' || befehl === 'uname' || (befehl === 'ls' && arg.startsWith('-'))) {
-    fertig(befehl + ' ', arg, befehl === 'ping' ? ['relay'] : befehl === 'uname' ? ['-a'] : ['-a', '-l', '-la'], function (x) { return x; });
+  if (tab.art === 'optionen' || (tab.optionen && arg.startsWith('-'))) {
+    fertig(befehl + ' ', arg, tab.werte || tab.optionen, function (x) { return x; });
     return;
   }
   const anfang = arg[0] === '"' || arg[0] === "'" ? arg[0] : '';
@@ -1546,7 +1568,7 @@ function terminalTabTaste(ev) {
   if (t.kanal ? t.kanal.phase !== 'eingabe' ||
       !(/^\/(?:sendfile|msg|omemo)\s/.test(bisher) || (bisher.startsWith('/') && !/\s/.test(bisher))) :
       t.dateiLaeuft || !m || (m[2] === undefined ? !TERMINAL_BEFEHLE.some(x => x.startsWith(m[1])) :
-      !TERMINAL_PPP_TAB.has(m[1]) && !['cd', 'cat', 'head', 'tail', 'wget', 'ping', 'uname', 'ls'].includes(m[1]))) return;
+      !terminalBefehlEintrag(m[1])?.tab)) return;
   ev.preventDefault();
   if (terminalTabLauf?.wert === bisher && terminalTabGueltig(terminalTabLauf)) return;
   terminalTabAuswahl = null;
