@@ -760,7 +760,8 @@ function terminalPppModemAus(grund, inShell = true) {
     clearTimeout(modem.timer);
     const zeilen = ['pppd[' + TERMINAL_SITZUNG.pppd + ']: ' + grund, terminalPppEnde()];
     zeilen.forEach(terminalPppLog);
-    if (inShell) terminalAusgabe(zeilen);
+    // Liest plog -f mit, erscheinen die Zeilen schon über den Syslog; die direkte Meldung entfällt dann.
+    if (inShell && !t.plogFolgen) terminalAusgabe(zeilen);
     terminalVordergrundEnde(modem, grund.includes('signal 2') ? 5 : 1);
   }
   t.modem = null;
@@ -1407,7 +1408,12 @@ const TERMINAL_TABELLE = [
     const t = TERMINAL_ZUSTAND;
     if (arg) return terminalUsage('exit');
     // In tmux beendet exit die Shell der Sitzung; vereinfacht endet damit die ganze Sitzung samt oberem Fenster.
-    if (t.tmux && !t.kanal && !t.orbitLive) { terminalTmuxEnde(); terminalAusgabe('[exited]'); return 0; }
+    // Mit der Shell enden auch ein laufendes plog -f und der Rest der Kette.
+    if (t.tmux && !t.kanal && !t.orbitLive) {
+      if (t.plogFolgen) { t.kette = null; terminalPlogEnde(1); }
+      terminalTmuxEnde(); terminalAusgabe('[exited]'); terminalKanalPromptSync();
+      return 0;
+    }
     t.kette = null;
     terminalKanalAbbruch();
     t.version++;

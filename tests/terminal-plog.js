@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
+const { imUeberflug } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -74,6 +75,45 @@ const { APP } = require('./_pfad');
       await cmd(z); await p.waitForFunction(() => terminalBeschaeftigt());
       await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     }
+
+    /* LOS während plog -f: die Abbruchzeilen nur einmal (über den Syslog), plog läuft weiter */
+    await imUeberflug(p, { wahl: 'ok' });
+    await cmd('pon kestrel'); await p.clock.runFor(8000);
+    await p.waitForFunction(() => TERMINAL_ZUSTAND.modem?.bereit);
+    await cmd('plog -fn 0'); await p.waitForFunction(() => terminalBeschaeftigt());
+    await p.evaluate(() => { TERMINAL_ZUSTAND.satLink.bis = Date.now() + 1000; });
+    await p.clock.runFor(2000);
+    await p.waitForFunction(() => !TERMINAL_ZUSTAND.modem);
+    const los = (await out.textContent()).split('# plog -fn 0\n').at(-1).split('\n');
+    assert.equal(los.length, 2, 'zwei Zeilen, jede einmal: ' + JSON.stringify(los));
+    assert.match(los[0], /^\w{3} \d+ [\d:]{8} terminal pppd\[\d+\]: Modem hangup \(NO CARRIER\)$/);
+    assert.match(los[1], /^\w{3} \d+ [\d:]{8} terminal pppd\[\d+\]: Connection terminated\.$/);
+    assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.plogFolgen && terminalBeschaeftigt()), true, 'plog -f läuft nach LOS weiter');
+    await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
+    /* Ohne plog -f bleibt die direkte Meldung in der Shell */
+    await imUeberflug(p, { wahl: 'ok' });
+    await cmd('pon kestrel'); await p.clock.runFor(8000);
+    await p.waitForFunction(() => TERMINAL_ZUSTAND.modem?.bereit);
+    await cmd('true');
+    await p.evaluate(() => { TERMINAL_ZUSTAND.satLink.bis = Date.now() + 1000; });
+    await p.clock.runFor(2000);
+    await p.waitForFunction(() => !TERMINAL_ZUSTAND.modem);
+    assert.deepEqual((await out.textContent()).split('# true\n').at(-1).split('\n'), [
+      await p.evaluate(() => 'pppd[' + TERMINAL_SITZUNG.pppd + ']: Modem hangup (NO CARRIER)'),
+      await p.evaluate(() => 'pppd[' + TERMINAL_SITZUNG.pppd + ']: Connection terminated.')]);
+
+    /* exit in tmux beendet die Shell samt plog -f; was in der Kette danach käme, läuft nicht mehr */
+    await cmd('tmux'); await p.waitForFunction(() => TERMINAL_ZUSTAND.tmux && !TERMINAL_ZUSTAND.kette);
+    await cmd('plog -f; echo danach'); await p.waitForFunction(() => terminalBeschaeftigt());
+    await cmd('exit');
+    await p.waitForFunction(() => !TERMINAL_ZUSTAND.tmux);
+    assert.equal(await p.evaluate(() => ({ f: TERMINAL_ZUSTAND.plogFolgen, k: TERMINAL_ZUSTAND.kette, b: terminalBeschaeftigt() })).then(x => !x.f && !x.k && !x.b), true, 'Follower und Kette beendet');
+    const nachExit = await out.textContent();
+    assert.match(nachExit, /\[exited\]$/);
+    await p.evaluate(() => terminalPppLog('pppd[1]: nach exit'));
+    await p.clock.runFor(500);
+    assert.equal(await out.textContent(), nachExit, 'keine Logzeilen und kein "danach" nach exit');
+    assert.deepEqual(await nach('echo frei'), ['frei'], 'Shell nimmt wieder Befehle an');
 
     /* Sperre beendet ein laufendes plog -f */
     await cmd('plog -f'); await p.waitForFunction(() => terminalBeschaeftigt());
