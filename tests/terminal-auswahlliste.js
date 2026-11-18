@@ -12,7 +12,7 @@ const { chatBereit } = require('./_kestrel');
     p.setDefaultTimeout(12000);
     const errors = []; let verzoegern = 0;
     p.on('pageerror', e => errors.push(e.message));
-    const dateien = ['Ablaufplan.docx', 'Abschrift.txt', 'Adressen.csv', 'archiv/'];
+    let dateien = ['Ablaufplan.docx', 'Abschrift.txt', 'Adressen.csv', 'archiv/'];
     await p.route(/^https?:/, async r => {
       const req = r.request();
       if (req.url() !== 'http://127.0.0.1:45679/db') return r.abort();
@@ -69,7 +69,44 @@ const { chatBereit } = require('./_kestrel');
     await inp.press('Tab'); assert.equal(await inp.inputValue(), '/sendfile /pgcl-eu3.arch07/dokumente/Ablaufplan.docx');
     await inp.press('Enter');
     assert.doesNotMatch(await p.locator('#profil-terminal-chat').textContent(), /Sending file/, 'Enter wählt nur aus');
+    const chatText = () => p.locator('#profil-terminal-chat').textContent();
+    const pfad = '/sendfile /pgcl-eu3.arch07/dokumente/';
+    /* Pfeiltasten bei offener Liste: ←/→ Eintrag, ↓/↑ Zeile; ohne Liste bleibt der Verlauf zuständig */
+    dateien = Array.from({ length: 20 }, (_, i) => 'akte-' + String(i + 1).padStart(2, '0') + '.txt');
+    const akte = i => 'akte-' + String(i).padStart(2, '0') + '.txt';
+    await inp.fill(pfad + 'a'); await inp.press('Tab'); await p.waitForFunction(v => $('profil-terminal-eingabe').value === v, pfad + 'akte-');
+    await inp.fill(pfad + 'akte-'); await inp.press('Tab'); await liste.waitFor({ state: 'visible' });
+    const sp = await p.evaluate(() => terminalTabSpalten());
+    assert.ok(sp >= 2 && sp < 20, 'mehrere Spalten und Zeilen: ' + sp);
+    await inp.press('ArrowDown'); assert.deepEqual(await aktiv(), [akte(1)]);
+    await inp.press('ArrowRight'); assert.deepEqual(await aktiv(), [akte(2)]); assert.equal(await inp.inputValue(), pfad + akte(2));
+    await inp.press('ArrowDown'); assert.deepEqual(await aktiv(), [akte(2 + sp)]);
+    await inp.press('ArrowUp'); assert.deepEqual(await aktiv(), [akte(2)]);
+    await inp.press('ArrowLeft'); assert.deepEqual(await aktiv(), [akte(1)]);
+    await inp.press('ArrowLeft'); assert.deepEqual(await aktiv(), [akte(20)], 'rückwärts über den Anfang');
+    await inp.press('Escape'); assert.equal(await inp.inputValue(), pfad + 'akte-');
+    /* 61 Treffer: Umschalt+Tab vom Anfang springt auf den letzten, der Ausschnitt wandert mit */
+    dateien = Array.from({ length: 61 }, (_, i) => 'f' + String(i + 1).padStart(2, '0'));
+    await inp.fill(pfad + 'f'); await inp.press('Tab'); await liste.waitFor({ state: 'visible' });
+    assert.match(await liste.textContent(), /… 1 more/);
+    await inp.press('Shift+Tab');
+    assert.equal(await inp.inputValue(), pfad + 'f61'); assert.deepEqual(await aktiv(), ['f61'], 'sichtbar markiert');
+    assert.match(await liste.textContent(), /… \d+ before/);
+    await inp.press('Tab'); assert.deepEqual(await aktiv(), ['f01']); assert.doesNotMatch(await liste.textContent(), /before/);
+    await inp.press('Escape');
+    /* Enter bei offener Liste ohne Auswahl: nur schließen, nicht senden; erst das nächste Enter führt aus */
+    dateien = ['A', 'A.txt'];
+    await inp.fill(pfad + 'A'); await inp.press('Tab'); await liste.waitFor({ state: 'visible' });
+    assert.deepEqual(await eintraege(), ['A', 'A.txt']);
+    await inp.press('Enter');
+    assert.equal(await liste.isVisible(), false); assert.equal(await inp.inputValue(), pfad + 'A');
+    assert.doesNotMatch(await chatText(), /Sending file/);
+    await inp.press('Enter');
+    await p.waitForFunction(() => /Sending file: \/pgcl-eu3\.arch07\/dokumente\/A \(/.test($('profil-terminal-chat').textContent));
     await inp.fill(''); await inp.press('Escape'); // beendet profanity
+    /* Ohne Liste: ↑ blättert im Verlauf */
+    await inp.press('ArrowUp'); assert.match(await inp.inputValue(), /profanity|tmux|cat/);
+    await inp.fill('');
 
     /* Fokuswechsel nach oben verwirft eine laufende Ergänzung (verzögerte Brücke) */
     await inp.fill('tmux \\; split-window -bd predict'); await inp.press('Enter');

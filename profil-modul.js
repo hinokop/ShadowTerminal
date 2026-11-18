@@ -1391,11 +1391,38 @@ function terminalTabListe() {
   if (!feld) return;
   feld.hidden = !a;
   if (!a) { feld.replaceChildren(); return; }
-  const eintraege = a.anzeige.slice(0, TERMINAL_AUSWAHL_MAX).map(function (name, i) {
-    return h('span', { class: (name.endsWith('/') ? 'ordner' : '') + (i === a.index ? ' aktiv' : '') }, name);
+  // Sichtbarer Ausschnitt wandert mit der Auswahl; gleich breite Spalten wie in zsh.
+  const n = a.anzeige.length, sp = terminalTabSpalten();
+  // Ausschnitt an Zeilen ausgerichtet, damit Spalten beim Blättern gleich bleiben.
+  const roh = n <= TERMINAL_AUSWAHL_MAX || a.index < 0 ? 0 : Math.max(0, a.index - TERMINAL_AUSWAHL_MAX + 1);
+  const start = Math.min(Math.ceil(roh / sp) * sp, Math.max(0, Math.ceil((n - TERMINAL_AUSWAHL_MAX) / sp) * sp));
+  a.start = start;
+  const breite = Math.max.apply(null, a.anzeige.map(function (x) { return x.length; })) + 2;
+  feld.style.setProperty('--spalte', breite + 'ch');
+  const eintraege = a.anzeige.slice(start, start + TERMINAL_AUSWAHL_MAX).map(function (name, i) {
+    return h('span', { class: (name.endsWith('/') ? 'ordner' : '') + (start + i === a.index ? ' aktiv' : '') }, name);
   });
-  if (a.anzeige.length > TERMINAL_AUSWAHL_MAX) eintraege.push(h('span', { class: 'mehr' }, '… ' + (a.anzeige.length - TERMINAL_AUSWAHL_MAX) + ' more'));
+  if (start > 0) eintraege.unshift(h('span', { class: 'mehr' }, '… ' + start + ' before'));
+  if (start + TERMINAL_AUSWAHL_MAX < n) eintraege.push(h('span', { class: 'mehr' }, '… ' + (n - start - TERMINAL_AUSWAHL_MAX) + ' more'));
   feld.replaceChildren.apply(feld, eintraege);
+}
+// Spalten der Liste aus dem Layout (für ↑/↓ zeilenweise).
+function terminalTabSpalten() {
+  const feld = $('profil-terminal-auswahl');
+  const spalten = feld ? getComputedStyle(feld).gridTemplateColumns.split(' ').filter(Boolean).length : 1;
+  return Math.max(1, spalten || 1);
+}
+// Eine Auswahlfunktion für Tab, Umschalt+Tab und Pfeiltasten: schritt = ±1 (Eintrag) oder ±Spalten (Zeile).
+function terminalTabWaehlen(auswahl, schritt) {
+  const n = auswahl.werte.length;
+  if (auswahl.index < 0) auswahl.index = schritt > 0 ? 0 : n - 1;
+  else if (Math.abs(schritt) === 1) auswahl.index = (auswahl.index + schritt + n) % n;
+  else {
+    const ziel = auswahl.index + schritt;
+    auswahl.index = ziel < 0 || ziel >= n ? (ziel < 0 ? auswahl.index % Math.abs(schritt) + Math.floor((n - 1 - auswahl.index % Math.abs(schritt)) / Math.abs(schritt)) * Math.abs(schritt) : auswahl.index % Math.abs(schritt)) : ziel;
+  }
+  terminalEingabeSetzen(auswahl.input, auswahl.werte[auswahl.index]);
+  terminalTabListe();
 }
 function terminalTabAnzeigename(x) {
   const ordner = x.endsWith('/'), rein = ordner ? x.slice(0, -1) : x;
@@ -1562,9 +1589,19 @@ function terminalVerlaufTaste(ev) {
 }
 function terminalTabTaste(ev) {
   const offen = terminalTabAuswahl;
-  if (ev.key === 'Enter' && offen && offen.index >= 0 && !ev.isComposing) {
-    // Enter übernimmt den gewählten Eintrag, führt aber nichts aus.
+  if (ev.key === 'Enter' && offen && !ev.isComposing) {
+    // Bei sichtbarer Liste führt Enter nie aus: mit Auswahl übernimmt es den Eintrag, ohne Auswahl schließt es nur die Liste.
     ev.preventDefault(); terminalTabReset(); return;
+  }
+  const pfeile = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 'zeile', ArrowUp: '-zeile' };
+  if (offen && pfeile[ev.key] !== undefined && !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey &&
+      offen.input === ev.currentTarget && terminalTabKontext(offen) &&
+      ev.currentTarget.value === (offen.index < 0 ? offen.original : offen.werte[offen.index])) {
+    // Pfeiltasten nur bei offener Liste: ←/→ Eintrag für Eintrag, ↑/↓ zeilenweise; sonst bleibt der Verlauf zuständig.
+    ev.preventDefault();
+    const sp = terminalTabSpalten(), r = pfeile[ev.key];
+    terminalTabWaehlen(offen, r === 'zeile' ? sp : r === '-zeile' ? -sp : r);
+    return;
   }
   if (ev.key !== 'Tab' && ev.key !== 'Shift') terminalTabReset();
   if (ev.key === 'Enter') {
@@ -1580,10 +1617,7 @@ function terminalTabTaste(ev) {
   const auswahl = terminalTabAuswahl;
   if (auswahl?.input === input && terminalTabKontext(auswahl) && bisher === (auswahl.index < 0 ? auswahl.original : auswahl.werte[auswahl.index])) {
     ev.preventDefault();
-    const n = auswahl.werte.length;
-    auswahl.index = auswahl.index < 0 ? (ev.shiftKey ? n - 1 : 0) : (auswahl.index + (ev.shiftKey ? -1 : 1) + n) % n;
-    terminalEingabeSetzen(input, auswahl.werte[auswahl.index]);
-    terminalTabListe();
+    terminalTabWaehlen(auswahl, ev.shiftKey ? -1 : 1);
     return;
   }
   if (ev.shiftKey) return;
