@@ -544,8 +544,12 @@ function terminalBeschaeftigt() {
 function terminalKanalPromptSync() {
   const label = $('profil-terminal-prompt');
   if (!label) return;
+  // Der Prompt ändert die Höhe der Eingabezeile; war die Ausgabe unten, bleibt sie unten.
+  const aus = $('profil-terminal-ausgabe');
+  const unten = !!aus && aus.scrollHeight - aus.scrollTop - aus.clientHeight < 4;
   label.textContent = terminalPrompt();
   label.parentElement?.setAttribute('aria-busy', terminalBeschaeftigt() ? 'true' : 'false');
+  if (unten) aus.scrollTop = aus.scrollHeight;
 }
 function terminalKanalAbbruch() {
   const t = TERMINAL_ZUSTAND;
@@ -1108,9 +1112,34 @@ function terminalOrbitEnde() {
   t.orbitLive = false;
   if (orbit && typeof orbit === 'object') terminalVordergrundEnde(orbit, 130);
 }
-function terminalKetteAbbrechen() {
+// Strg+C bricht die ganze Kette ab. $? ist der Rückgabewert des unterbrochenen Programms:
+// pppd fängt SIGINT ab und endet mit 5 (pppd(8)), andere Programme enden durch das Signal (128 + 2).
+function terminalKetteAbbrechen(code = 130) {
   const kette = TERMINAL_ZUSTAND.kette;
-  if (kette) kette.abgebrochen = true;
+  if (kette && !kette.abgebrochen) { kette.abgebrochen = true; kette.code = code; }
+}
+function terminalStrgC() {
+  const t = TERMINAL_ZUSTAND, input = $('profil-terminal-eingabe');
+  if (t.orbitLive || terminalPppWaehltVorne() || t.satAufbau) { terminalKonsoleEscape(); return true; }
+  if (t.kanal) return false;
+  if (t.kette) {
+    terminalKetteAbbrechen(130);
+    const wg = t.wgSat;
+    if (wg && !wg.bereit) {
+      // wg-quick räumt beim Abbruch die halb angelegte Schnittstelle wieder ab.
+      clearTimeout(wg.timer); t.wgSat = null;
+      terminalAusgabe(['^C', '[#] ip link delete dev wg-sat']);
+      terminalVordergrundEnde(wg, 130);
+      terminalSatAnzeige();
+    } else terminalAusgabe('^C');
+    return true;
+  }
+  terminalTabReset();
+  terminalAusgabe(terminalPrompt() + ' ' + (input?.value || '').replace(/\n/g, ' ') + '^C');
+  if (input) terminalEingabeSetzen(input, '');
+  t.vpos = -1;
+  t.status = 130;
+  return true;
 }
 async function terminalEinzelbefehl(woerter) {
   const t = TERMINAL_ZUSTAND, befehl = woerter[0], args = woerter.slice(1), arg = terminalArgText(args);
@@ -1189,7 +1218,7 @@ async function terminalKetteAusfuehren(folge) {
       let code;
       try { code = await terminalEinzelbefehl(woerter); } catch (e) { code = 1; }
       if (t.kette !== kette) return;
-      t.status = kette.abgebrochen ? 130 : typeof code === 'number' ? code : 0;
+      t.status = kette.abgebrochen ? kette.code : typeof code === 'number' ? code : 0;
     }
   } finally {
     if (t.kette === kette) { t.kette = null; terminalKanalPromptSync(); }
@@ -1591,7 +1620,7 @@ function terminalKonsoleEscape() {
     terminalPppAnzeige();
     terminalKanalPromptSync();
   } else if (terminalPppWaehltVorne()) {
-    terminalKetteAbbrechen();
+    terminalKetteAbbrechen(5);
     terminalPppModemAus('Terminating on signal 2');
   } else if (t.satAufbau) {
     terminalKetteAbbrechen();
@@ -1608,9 +1637,15 @@ function terminalKonsoleEscape() {
 }
 document.addEventListener('keydown', function (ev) {
   if (document.body.classList.contains('locked') || terminalKonsoleDialogOffen() || ev.isComposing) return;
-  const trackingStop = (TERMINAL_ZUSTAND.orbitLive || terminalPppWaehltVorne()) && ev.ctrlKey && !ev.altKey && !ev.metaKey &&
-    ev.key.toLowerCase() === 'c' && $('profil-terminal')?.contains(ev.target);
-  if ((ev.key === 'Escape' || trackingStop) && TERMINAL_ZUSTAND.offen) {
+  const strgC = ev.ctrlKey && !ev.altKey && !ev.metaKey && !ev.shiftKey && ev.key.toLowerCase() === 'c' &&
+    TERMINAL_ZUSTAND.offen && $('profil-terminal')?.contains(ev.target);
+  if (strgC && !ev.repeat) {
+    // Markierter Text wird wie gewohnt kopiert; sonst wirkt Strg+C wie SIGINT.
+    const feld = ev.target, auswahl = String(window.getSelection?.() || '') ||
+      (typeof feld.selectionStart === 'number' && feld.selectionStart !== feld.selectionEnd);
+    if (!auswahl && terminalStrgC()) { ev.preventDefault(); ev.stopImmediatePropagation(); return; }
+  }
+  if (ev.key === 'Escape' && TERMINAL_ZUSTAND.offen) {
     ev.preventDefault();
     ev.stopImmediatePropagation(); // Escape darf nie zugleich ein Kartenwerkzeug abbrechen.
     if (!ev.repeat) terminalKonsoleEscape();

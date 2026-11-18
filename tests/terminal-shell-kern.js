@@ -23,6 +23,18 @@ const { APP } = require('./_pfad');
     const letzte = async () => (await out.textContent()).split('\n').at(-1);
     const status = async () => { await cmd('echo $?'); return letzte(); };
 
+    /* Ausgabe bleibt nach einer Kette unten (Prompt-Wechsel ändert die Höhe der Eingabezeile) */
+    for (let i = 0; i < 6; i++) await cmd('help');
+    await cmd('echo "Hello"');
+    const unten = () => p.$eval('#profil-terminal-ausgabe', el => el.scrollHeight - el.scrollTop - el.clientHeight);
+    assert.ok(await unten() < 4, 'letzte Zeile sichtbar: ' + await unten());
+    await cmd('clear');
+
+    /* Strg+C an der leeren Eingabe: ^C, $? = 130 */
+    await inp.fill('halb getippt'); await inp.press('Control+c');
+    assert.equal(await letzte(), 'root@terminal:/# halb getippt^C'); assert.equal(await inp.inputValue(), '');
+    await cmd('$?'); assert.equal(await letzte(), '130: command not found');
+
     /* Zerlegung */
     await cmd(`echo "a  b" 'c $?' d\\ e`); assert.equal(await letzte(), 'a  b c $? d e');
     await cmd('echo "Status $?"'); assert.equal(await letzte(), 'Status 0');
@@ -86,7 +98,17 @@ const { APP } = require('./_pfad');
     assert.deepEqual(await p.evaluate(() => [TERMINAL_ZUSTAND.modem, TERMINAL_ZUSTAND.wgSat, TERMINAL_ZUSTAND.kanal, TERMINAL_ZUSTAND.kette]), [null, null, null, null]);
     assert.equal(await p.locator('#profil-terminal-chat').isVisible(), false);
     assert.match(await out.textContent(), /Connection terminated\.$/, 'nach dem Abbruch keine weitere Ausgabe');
+    assert.equal(await status(), '5', 'pppd endet nach SIGINT mit 5 (pppd(8))');
+
+    /* Strg+C während wg-quick up: Kette abgebrochen, Schnittstelle abgeräumt, $? 130 */
+    await cmd('pppd call iridium updetach'); await p.clock.runFor(7600);
+    await cmd('wg-quick up wg-sat && profanity'); await p.clock.runFor(200);
+    await inp.press('Control+c');
+    assert.match(await out.textContent(), /\^C\n\[#\] ip link delete dev wg-sat$/);
+    await p.clock.runFor(10000);
+    assert.deepEqual(await p.evaluate(() => [TERMINAL_ZUSTAND.wgSat, TERMINAL_ZUSTAND.kanal, TERMINAL_ZUSTAND.kette]), [null, null, null]);
     assert.equal(await status(), '130');
+    await cmd('poff iridium');
 
     /* Interaktiv: nach /quit läuft die Kette weiter */
     await cmd('pppd call iridium updetach && wg-quick up wg-sat'); await p.clock.runFor(8300);
