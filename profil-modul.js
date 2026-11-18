@@ -422,9 +422,11 @@ async function terminalDateiBefehl(befehl, arg, version) {
 }
 
 const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satAufbau: null, satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0 };
+// Scrollback der Shell; größer als die längste Einzelausgabe (predict -f), damit nichts still verloren geht.
+const TERMINAL_PUFFER = 1000;
 function terminalAusgabe(zeile) {
   const t = TERMINAL_ZUSTAND;
-  t.ausgabe = t.ausgabe.concat(zeile).slice(-45);
+  t.ausgabe = t.ausgabe.concat(zeile).slice(-TERMINAL_PUFFER);
   terminalPppAnzeige();
   const el = $('profil-terminal-ausgabe');
   if (!el) return;
@@ -1069,7 +1071,8 @@ async function terminalPppShell(befehl, arg, args = []) {
       if (ende < start) return 0;
       const zeilen = [];
       for (let z = start; z <= ende && zeilen.length < TERMINAL_PREDICT_MAX; z += schritt) zeilen.push(terminalPppZeile(o.satObj, z * 1000));
-      terminalAusgabe(zeilen);
+      const gekuerzt = Math.floor((ende - start) / schritt) + 1 > zeilen.length;
+      terminalAusgabe(gekuerzt ? zeilen.concat('predict: output limited to ' + TERMINAL_PREDICT_MAX + ' lines') : zeilen);
       return 0;
     }
     // -p: Überflug ab Startzeit in Minutenschritten vom Aufgang bis zum Untergang (Schrittweite eigene Näherung).

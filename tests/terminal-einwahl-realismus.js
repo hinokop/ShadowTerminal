@@ -56,6 +56,13 @@ const { imUeberflug } = require('./_kestrel');
     const jetzt = await p.evaluate(() => Math.floor(Date.now() / 1000));
     assert.deepEqual((await nach(`predict -t ${F} -f ${S} ${jetzt} +10`)).map(z => spalte(z, 0) - jetzt), [...Array(11).keys()]);
     assert.deepEqual((await nach(`predict -f ${S} ${jetzt} +3m`)).map(z => spalte(z, 0) - jetzt), [0, 60, 120, 180]);
+    /* lange Ausgabe: vollständig im Scrollback; Kürzung über dem Limit sichtbar */
+    const lang = await nach(`predict -t ${F} -f ${S} ${jetzt} +120`);
+    assert.equal(lang.length, 121);
+    assert.deepEqual([spalte(lang[0], 0), spalte(lang.at(-1), 0)], [jetzt, jetzt + 120]);
+    const sehrLang = await nach(`predict -f ${S} ${jetzt} +700`);
+    assert.equal(sehrLang.length, 601);
+    assert.equal(sehrLang.at(-1), 'predict: output limited to 600 lines');
     assert.ok(spalte((await nach(`predict -f ${S} ${Math.floor(pass.bis / 1000) + 600}`))[0], 4) < 0);
     /* -p mit Startzeit nach dem Untergang: nächster Überflug */
     const naechster = await nach(`predict -p ${S} ${Math.floor(pass.bis / 1000) + 60}`);
