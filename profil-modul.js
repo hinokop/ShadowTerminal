@@ -1195,8 +1195,24 @@ function terminalTmuxFokus(richtung) {
   if (!t.tmux?.pane) return;
   t.tmux.fokus = richtung;
   terminalTmuxPaneAnzeige();
+  // Der Tastaturfokus bleibt im Eingabefeld; unten ist es wieder beschreibbar.
+  $('profil-terminal-eingabe')?.focus();
 }
+// Befehlsfolgen wie in tmux(1): "tmux new \; split-window -bd predict" (Trenner ";" als eigenes Wort).
 function terminalTmux(args) {
+  const teile = [[]];
+  for (const a of args) { if (a === ';') teile.push([]); else teile.at(-1).push(a); }
+  if (teile.length === 1) return terminalTmuxEinzeln(args);
+  let code = 0;
+  for (let i = 0; i < teile.length; i++) {
+    if (!teile[i].length && i === 0) { code = terminalTmuxEinzeln([]); continue; }
+    if (!teile[i].length) continue;
+    code = terminalTmuxEinzeln(teile[i]);
+    if (code !== 0) return code;
+  }
+  return code;
+}
+function terminalTmuxEinzeln(args) {
   const t = TERMINAL_ZUSTAND, unter = args[0] === undefined ? 'new-session' : args[0];
   const sitzungsBefehle = ['new-session', 'new', 'split-window', 'splitw', 'kill-pane', 'killp', 'kill-server'];
   if (!sitzungsBefehle.includes(unter)) { terminalAusgabe('unknown command: ' + unter); return 1; }
@@ -1720,13 +1736,23 @@ document.addEventListener('keydown', function (ev) {
   if (document.body.classList.contains('locked') || terminalKonsoleDialogOffen() || ev.isComposing) return;
   const tx = TERMINAL_ZUSTAND.tmux, imTerminal = TERMINAL_ZUSTAND.offen && $('profil-terminal')?.contains(ev.target);
   if (tx && imTerminal) {
-    if (tx.praefix && !['Control', 'Shift', 'Alt', 'Meta'].includes(ev.key)) {
-      tx.praefix = false; ev.preventDefault(); ev.stopImmediatePropagation();
-      if (ev.key === 'ArrowUp') terminalTmuxFokus('oben');
-      else if (ev.key === 'ArrowDown') terminalTmuxFokus('unten');
-      else if (ev.key === 'o') terminalTmuxFokus(tx.fokus === 'oben' ? 'unten' : 'oben');
+    // Pfeiltasten sind wie in tmux wiederholbar (-r): nach dem Präfix innerhalb von 500 ms ohne neues Strg+B.
+    const pfeil = !ev.ctrlKey && !ev.altKey && !ev.metaKey && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown');
+    if (pfeil && tx.wiederholBis && Date.now() < tx.wiederholBis) {
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      terminalTmuxFokus(ev.key === 'ArrowUp' ? 'oben' : 'unten');
+      tx.wiederholBis = Date.now() + 500;
       return;
     }
+    if (tx.praefix && !['Control', 'Shift', 'Alt', 'Meta'].includes(ev.key)) {
+      tx.praefix = false; tx.wiederholBis = 0; ev.preventDefault(); ev.stopImmediatePropagation();
+      if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+        terminalTmuxFokus(ev.key === 'ArrowUp' ? 'oben' : 'unten');
+        if (!ev.ctrlKey) tx.wiederholBis = Date.now() + 500;
+      } else if (ev.key === 'o') terminalTmuxFokus(tx.fokus === 'oben' ? 'unten' : 'oben');
+      return;
+    }
+    if (tx.wiederholBis && !['Control', 'Shift', 'Alt', 'Meta'].includes(ev.key)) tx.wiederholBis = 0;
     if (ev.ctrlKey && !ev.altKey && !ev.metaKey && ev.key.toLowerCase() === 'b') { tx.praefix = true; ev.preventDefault(); ev.stopImmediatePropagation(); return; }
     if (tx.fokus === 'oben' && ev.ctrlKey && ev.key.toLowerCase() === 'c' && !ev.repeat) {
       // Strg+C beendet predict im oberen Fenster; tmux schließt das Fenster, der Fokus geht zurück zur Shell.

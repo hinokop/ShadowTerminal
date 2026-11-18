@@ -91,6 +91,22 @@ const { imUeberflug } = require('./_kestrel');
     /* kill-pane ohne Ziel trifft die Shell: Sitzung endet */
     await cmd('tmux'); await cmd('tmux split-window -bd predict'); await cmd('tmux kill-pane');
     assert.equal(await letzte(), '[exited]'); assert.equal(await status.isVisible(), false);
+    /* Befehlsfolge wie in tmux: tmux \; split-window -bd predict */
+    await cmd('tmux \\; split-window -bd predict');
+    assert.deepEqual([await status.isVisible(), await pane.isVisible()], [true, true]);
+    /* Pfeiltasten wiederholbar: einmal Strg+B, dann ↑ und ↓ innerhalb von 500 ms; danach steht der Fokus im Eingabefeld */
+    await inp.press('Control+b'); await inp.press('ArrowUp');
+    assert.equal(await pane.evaluate(e => e.classList.contains('aktiv')), true);
+    await p.clock.runFor(200); await inp.press('ArrowDown');
+    assert.equal(await pane.evaluate(e => e.classList.contains('aktiv')), false);
+    await p.clock.runFor(200); await inp.press('ArrowUp');
+    assert.equal(await pane.evaluate(e => e.classList.contains('aktiv')), true);
+    await p.clock.runFor(800); await inp.press('ArrowDown');
+    assert.equal(await pane.evaluate(e => e.classList.contains('aktiv')), true, 'nach 500 ms wieder Präfix nötig');
+    await pane.click(); await inp.press('Control+b'); await inp.press('ArrowDown');
+    assert.equal(await p.evaluate(() => document.activeElement?.id), 'profil-terminal-eingabe');
+    await inp.press('a'); assert.equal(await inp.inputValue(), 'a', 'unten sofort beschreibbar');
+    await cmd('exit');
     /* Sperre beendet die Sitzung */
     await cmd('tmux'); await cmd('tmux split-window -bd predict');
     await p.evaluate(() => document.body.classList.add('locked'));
