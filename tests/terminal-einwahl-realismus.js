@@ -42,6 +42,15 @@ const { APP } = require('./_pfad');
     const min = await nach(`predict -t ${F} -f "IRIDIUM 142" ${jetzt} +3m`);
     assert.deepEqual(min.map(z => Number(z.split(/\s+/)[0]) - jetzt), [0, 60, 120, 180]);
     assert.equal((await nach(`predict -t ${F} -f "IRIDIUM 142" ${jetzt} ${jetzt + 4}`)).length, 5);
+    /* ungültige Zeitangaben werden benannt; date +%s liefert den Zeitstempel */
+    assert.deepEqual(await nach(`predict -t ${F} -f "IRIDIUM 142" 10`), ["predict: invalid start time '10' (expected Unix time)"]);
+    assert.equal(await status(), '1');
+    assert.deepEqual(await nach(`predict -t ${F} -f "IRIDIUM 142" ${jetzt} 10`), ["predict: invalid end time '10' (expected Unix time or +n[m])"]);
+    assert.deepEqual(await nach('date +%s'), [String(jetzt)]);
+    /* interaktiv: Prompt nennt predict ohne -f */
+    await cmd(`predict -t ${F}`);
+    assert.equal(await p.locator('#profil-terminal-prompt').textContent(), 'predict · Ctrl+C');
+    await inp.press('Control+c');
     /* außerhalb des Überflugs unter dem Horizont */
     const bis = await p.evaluate(() => Math.floor(TERMINAL_ZUSTAND.satLink.bis / 1000));
     const spaet = await nach(`predict -t ${F} -f "IRIDIUM 142" ${bis + 600}`);

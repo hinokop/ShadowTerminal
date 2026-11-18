@@ -280,7 +280,7 @@ function terminalSitzungTrennen() {
   return terminalBruecke('disconnect');
 }
 function terminalPrompt() {
-  if (TERMINAL_ZUSTAND.orbitLive) return 'predict -f · Ctrl+C';
+  if (TERMINAL_ZUSTAND.orbitLive) return 'predict · Ctrl+C';
   if (terminalPppWaehltVorne()) return '';
   if (TERMINAL_ZUSTAND.kette && !TERMINAL_ZUSTAND.kanal) return '';
   const kanal = TERMINAL_ZUSTAND.kanal;
@@ -739,10 +739,10 @@ function terminalPredictOptionen(args) {
       const rest = [];
       while (args[i + 1] !== undefined && !/^-[a-z]/.test(args[i + 1])) rest.push(args[++i]);
       if (rest.length > (a === '-p' ? 1 : 2)) return { fehler: 'usage' };
-      if (rest[0] !== undefined) { if (!/^\d{9,11}$/.test(rest[0])) return { fehler: 'usage' }; o.start = Number(rest[0]); }
+      if (rest[0] !== undefined) { if (!/^\d{9,11}$/.test(rest[0])) return { fehler: "invalid start time '" + rest[0] + "' (expected Unix time)" }; o.start = Number(rest[0]); }
       if (rest[1] !== undefined) {
         const m = /^(\+)?(\d{1,11})(m)?$/.exec(rest[1]);
-        if (!m) return { fehler: 'usage' };
+        if (!m || (!m[1] && m[2].length < 9)) return { fehler: "invalid end time '" + rest[1] + "' (expected Unix time or +n[m])" };
         o.ende = { relativ: !!m[1], wert: Number(m[2]), minuten: !!m[3] };
       }
       continue;
@@ -1210,7 +1210,7 @@ async function terminalEinzelbefehl(woerter) {
   if (befehl === 'true' && !arg) return 0;
   if (befehl === 'false' && !arg) return 1;
   if (befehl === 'help' && !arg) {
-    terminalAusgabe(['ls [-a|-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · echo · true · false · whoami · uname -a · date · ping relay · clear · exit',
+    terminalAusgabe(['ls [-a|-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · echo · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
       'predict · pppd call iridium [updetach] · poff iridium · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
       'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);
     return 0;
@@ -1219,6 +1219,7 @@ async function terminalEinzelbefehl(woerter) {
   if (befehl === 'whoami' && !arg) { terminalAusgabe('root'); return 0; }
   if (befehl === 'uname' && arg === '-a') { terminalAusgabe(TERMINAL_UBUNTU); return 0; }
   if (befehl === 'date' && !arg) { terminalAusgabe(fmtZ(new Date())); return 0; }
+  if (befehl === 'date' && arg === '+%s') { terminalAusgabe(String(Math.floor(Date.now() / 1000))); return 0; }
   if (befehl === 'ping') {
     if (arg === 'relay') return await terminalPing() ? 0 : 1;
     terminalAusgabe(arg ? 'ping: ' + arg + ': Name or service not known' : 'ping: usage: ping <destination>');
