@@ -50,13 +50,14 @@ const { imUeberflug } = require('./_kestrel');
       const [epoch, day, date, time] = row.split(/\s+/);
       assert.equal(new Date(+epoch * 1000).toISOString().slice(11, 19), time);
       assert.equal(new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }).format(new Date(+epoch * 1000)), day);
-      assert.equal(row.trim().split(/\s+/).length, 12, date);
+      assert.ok(row.trim().split(/\s+/).length === 12 || (row.trim().split(/\s+/).length === 11 && / $/.test(row)), date); // im Erdschatten ist die letzte Spalte leer
     }
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.satLink), null, 'predict rechnet nur');
     await cmd('predict -t /var/cache/tle/kestrel.tle -f KESTREL-1');
     // -f ohne Zeitangabe: eine Zeile für jetzt (predict(1)); die laufende Verfolgung gehört zum interaktiven predict.
     assert.equal(await orbit.isVisible(), false);
-    assert.equal((await out.textContent()).split('-f KESTREL-1\n').at(-1).trim().split(/\s+/).length, 12);
+    const fZeile = (await out.textContent()).split('-f KESTREL-1\n').at(-1);
+    assert.ok([12, 11].includes(fZeile.trim().split(/\s+/).length) && !fZeile.includes('\n'), fZeile);
     await cmd('predict');
     assert.equal(await orbit.isVisible(), true);
     const ersteZeile = await orbit.textContent();

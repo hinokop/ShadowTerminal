@@ -733,8 +733,15 @@ async function terminalSatKanalEnde(kanal, bestaetigt) {
 /* KESTREL-Relaiskette: fiktive Namen, Bahndaten echter Satelliten in niedriger Umlaufbahn (TLE, Prüfsumme geprüft).
    Bahnrechnung mit SGP4 (satellite.js); Beobachter (QTH) ist der erste Ausgangsort mit Kartenposition. */
 const KESTREL_TLE = [
-  ['KESTREL-1', '1 25984U 99065E   25193.69088000  .00000493  00000+0  20771-3 0  9993',
-    '2 25984  45.0407 330.0296 0002572 101.9402 258.1736 14.38166112338094']
+  // Stand: Celestrak, Epoche 17./18.11.2026 (Gruppe orbcomm). Bahndaten veralten; nach einigen Wochen neu laden.
+  ['KESTREL-1', '1 25159U 98007C   26322.22333344  .00000814  00000+0  32286-3 0  9991',
+    '2 25159 107.9644 126.4710 0038305  54.9257 305.5467 14.35966259498705'],
+  ['KESTREL-2', '1 40086U 14040A   26321.64062303  .00000552  00000+0  15257-3 0  9999',
+    '2 40086  47.0025  85.8943 0002081 215.7844 144.2902 14.58980736656759'],
+  ['KESTREL-3', '1 41184U 15081F   26322.22716031  .00000693  00000+0  18210-3 0  9992',
+    '2 41184  46.9992 261.7608 0002649 216.5058 143.5648 14.59032038581445'],
+  ['KESTREL-4', '1 41182U 15081D   26322.25736361  .00000726  00000+0  18913-3 0  9998',
+    '2 41182  47.0032 352.8610 0001881  44.3171 315.7865 14.59012720580129']
 ];
 const TERMINAL_PPP_DATEI = '/var/cache/tle/kestrel.tle';
 const TERMINAL_PREDICT_DB = '~/.predict/predict.tle';
