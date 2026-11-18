@@ -66,8 +66,17 @@ const { imUeberflug } = require('./_kestrel');
     assert.equal(await pane.evaluate(e => e.classList.contains('aktiv')), true);
     assert.equal(await inp.evaluate(e => e.readOnly), true);
     const vorEnter = await out.textContent(); await inp.press('Enter'); assert.equal(await out.textContent(), vorEnter, 'Enter oben führt nichts aus');
+    // Oben gehören die Tasten predict: Verlauf, Tab und Zeichen ändern den Entwurf unten nicht.
+    await inp.press('Control+b'); await inp.press('ArrowDown');
+    await inp.fill('echo halbfertig'); await inp.evaluate(e => e.setSelectionRange(6, 6));
+    await inp.press('Control+b'); await inp.press('ArrowUp'); await p.clock.runFor(800);
+    for (const k of ['ArrowUp', 'ArrowDown', 'Tab', 'x', 'Backspace', 'Enter']) await inp.press(k);
+    assert.equal(await inp.inputValue(), 'echo halbfertig');
+    assert.deepEqual(await inp.evaluate(e => [e.selectionStart, e.selectionEnd]), [6, 6]);
     await inp.press('Control+b'); await inp.press('ArrowDown');
     assert.equal(await inp.evaluate(e => e.readOnly), false);
+    assert.equal(await inp.inputValue(), 'echo halbfertig');
+    await inp.fill('');
     /* Klick oben, Strg+C oben schließt nur das Fenster; PPP bleibt bestehen */
     await imUeberflug(p);
     await cmd('pppd call kestrel updetach'); await p.clock.runFor(7600);
@@ -94,6 +103,13 @@ const { imUeberflug } = require('./_kestrel');
     /* Befehlsfolge wie in tmux: tmux \; split-window -bd predict */
     await cmd('tmux \\; split-window -bd predict');
     assert.deepEqual([await status.isVisible(), await pane.isVisible()], [true, true]);
+    // In laufender Sitzung: Fehler der verschachtelten Sitzung bricht die Folge ab, kein zweites Fenster, $? 1.
+    await cmd("tmux kill-pane -t '{up-of}'");
+    await cmd('tmux \\; split-window -bd predict');
+    assert.match(await out.textContent(), /sessions should be nested with care, unset \$TMUX to force$/);
+    assert.equal(await pane.isVisible(), false);
+    await cmd('echo $?'); assert.equal(await letzte(), '1');
+    await cmd('tmux split-window -bd predict');
     /* Pfeiltasten wiederholbar: einmal Strg+B, dann ↑ und ↓ innerhalb von 500 ms; danach steht der Fokus im Eingabefeld */
     await inp.press('Control+b'); await inp.press('ArrowUp');
     assert.equal(await pane.evaluate(e => e.classList.contains('aktiv')), true);

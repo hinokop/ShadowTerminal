@@ -1205,7 +1205,7 @@ function terminalTmux(args) {
   if (teile.length === 1) return terminalTmuxEinzeln(args);
   let code = 0;
   for (let i = 0; i < teile.length; i++) {
-    if (!teile[i].length && i === 0) { code = terminalTmuxEinzeln([]); continue; }
+    if (!teile[i].length && i === 0) { code = terminalTmuxEinzeln([]); if (code !== 0) return code; continue; }
     if (!teile[i].length) continue;
     code = terminalTmuxEinzeln(teile[i]);
     if (code !== 0) return code;
@@ -1758,6 +1758,8 @@ document.addEventListener('keydown', function (ev) {
       // Strg+C beendet predict im oberen Fenster; tmux schließt das Fenster, der Fokus geht zurück zur Shell.
       ev.preventDefault(); ev.stopImmediatePropagation(); terminalTmuxPaneSchliessen(); return;
     }
+    // Ist oben aktiv, gehören alle übrigen Tasten predict: kein Verlauf, keine Ergänzung, keine Eingabe unten. Escape bleibt frei.
+    if (tx.fokus === 'oben' && ev.key !== 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); return; }
   }
   const strgC = ev.ctrlKey && !ev.altKey && !ev.metaKey && !ev.shiftKey && ev.key.toLowerCase() === 'c' &&
     TERMINAL_ZUSTAND.offen && $('profil-terminal')?.contains(ev.target);
