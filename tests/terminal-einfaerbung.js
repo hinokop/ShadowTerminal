@@ -27,6 +27,9 @@ const { chatBereit } = require('./_kestrel');
       ['echo "a $? b" \'c\'', [['echo', 'befehl'], [' ', 'leer'], ['"a ', 'zeichenkette'], ['$?', 'variable'], [' b"', 'zeichenkette'], [' ', 'leer'], ["'c'", 'zeichenkette']]],
       ['echo $? && foo; ls', [['echo', 'befehl'], [' ', 'leer'], ['$?', 'variable'], [' ', 'leer'], ['&&', 'operator'], [' ', 'leer'], ['foo', 'unbekannt'], [';', 'operator'], [' ', 'leer'], ['ls', 'befehl']]],
       ['echo "offen', [['echo', 'befehl'], [' ', 'leer'], ['"offen', 'zeichenkette']]],
+      ['"echo', [['"echo', 'zeichenkette']]],
+      ['"echo" x', [['"echo"', 'befehl'], [' ', 'leer'], ['x', 'argument']]],
+      ['ec"ho', [['ec', 'unbekannt'], ['"ho', 'zeichenkette']]],
       ['ls | cat', [['ls', 'befehl'], [' ', 'leer'], ['|', 'fehler'], [' ', 'leer'], ['cat', 'argument']]],
       ['&& ls', [['&&', 'fehler'], [' ', 'leer'], ['ls', 'befehl']]],
       ['e\\cho x', [['e\\cho', 'befehl'], [' ', 'leer'], ['x', 'argument']]],
@@ -69,6 +72,32 @@ const { chatBereit } = require('./_kestrel');
     assert.ok(lauf.leiste, 'Testaufbau: Bildlaufleiste vorhanden');
     assert.ok(Math.abs(lauf.hoehe[0] - lauf.hoehe[1]) <= 1, 'gleicher Umbruch: ' + lauf.hoehe);
     assert.ok(lauf.oben[0] > 0 && Math.abs(lauf.oben[0] - lauf.oben[1]) <= 1, 'gleiche Rollposition: ' + lauf.oben);
+    /* Fenster schmaler und wieder breiter ziehen, ohne Tastendruck: die Leiste erscheint und verschwindet,
+       das Overlay folgt (Größen-Observer). Länge so gewählt, dass die Zeile breit gerade ohne Leiste auskommt. */
+    const deckung = () => p.evaluate(() => new Promise(fertig => requestAnimationFrame(() => requestAnimationFrame(() => {
+      const i = document.getElementById('profil-terminal-eingabe'), g = document.getElementById('profil-terminal-vorschlag');
+      const ib = i.getBoundingClientRect(), st = getComputedStyle(i);
+      const rand = ib.left + i.clientLeft + i.clientWidth - parseFloat(st.paddingRight);
+      const rechts = Math.max(...[...g.querySelector('.text').getClientRects()].map(r => r.right));
+      fertig({ leiste: i.offsetWidth - i.clientWidth - i.clientLeft * 2 > 2, ueber: rechts - rand, hoehe: [i.scrollHeight, g.scrollHeight] });
+    }))));
+    const breitAlt = await p.evaluate(() => { terminalKonsoleGeometrie.breite = 900; terminalKonsoleLayout(); return 900; });
+    let n = 8;
+    for (; n < 140; n++) {
+      await inp.fill('echo ' + 'wort"x"'.repeat(n + 1));
+      if ((await deckung()).leiste) break;
+    }
+    await inp.fill('echo ' + 'wort"x"'.repeat(n)); await inp.focus();
+    assert.equal((await deckung()).leiste, false, 'Testaufbau: breit ohne Leiste');
+    await p.evaluate(() => { terminalKonsoleGeometrie.breite = 560; terminalKonsoleLayout(); });
+    let d = await deckung();
+    assert.ok(d.leiste, 'Testaufbau: schmal mit Leiste');
+    assert.ok(d.ueber <= 0.5, 'schmal: Overlaytext reicht nicht unter die Leiste: ' + d.ueber);
+    assert.ok(Math.abs(d.hoehe[0] - d.hoehe[1]) <= 1, 'schmal: gleicher Umbruch ' + d.hoehe);
+    await p.evaluate(b => { terminalKonsoleGeometrie.breite = b; terminalKonsoleLayout(); }, breitAlt);
+    d = await deckung();
+    assert.equal(d.leiste, false, 'breit: Leiste wieder weg');
+    assert.ok(Math.abs(d.hoehe[0] - d.hoehe[1]) <= 1, 'breit: gleicher Umbruch ' + d.hoehe);
     /* Programmatische Änderungen (Tab-Ergänzung, Strg+C) folgen sofort */
     await tippen('pred'); await inp.press('Tab');
     assert.equal(await inp.inputValue(), 'predict ');

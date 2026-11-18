@@ -1690,9 +1690,11 @@ function terminalEinfaerben(zeile) {
   const wortEnde = function () {
     if (!wort) return;
     const name = wort.map(function (w) { return w[2]; }).join('');
-    const art = befehlsPos ? (terminalBefehlEintrag(name) ? 'befehl' : 'unbekannt') : 'argument';
+    // Ein noch offenes Anführungszeichen ist kein fertiges Befehlswort (Enter: unexpected EOF): bleibt gelb.
+    const offen = befehlsPos && quote;
+    const art = befehlsPos ? (!offen && terminalBefehlEintrag(name) ? 'befehl' : 'unbekannt') : 'argument';
     const teil = wort; wort = null;
-    teil.forEach(function (w) { dazu(w[0], w[1] === 'wort' || befehlsPos ? art : w[1]); });
+    teil.forEach(function (w) { dazu(w[0], w[1] === 'wort' || (befehlsPos && !offen) ? art : w[1]); });
     befehlsPos = false;
   };
   // Ein Wort sammelt Abschnitte mit dem Wert, den terminalZerlegen daraus macht (für den Namen des Befehls).
@@ -1818,11 +1820,15 @@ function terminalKonsoleBauen() {
   terminalKonsoleZeiger(titel, fenster, false);
   terminalKonsoleZeiger(griff, fenster, true);
   let breite = 0;
-  new ResizeObserver(function () {
+  const beobachter = new ResizeObserver(function () {
     if (input.clientWidth === breite) return;
     breite = input.clientWidth;
     terminalEingabeHoehe(input);
-  }).observe(fenster);
+    // Neue Breite oder eine erscheinende Bildlaufleiste: das Overlay bricht sonst anders um als das durchsichtige Feld.
+    terminalVorschlagAnzeige();
+  });
+  beobachter.observe(fenster);
+  beobachter.observe(input);
   return fenster;
 }
 
