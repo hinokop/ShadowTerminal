@@ -20,7 +20,7 @@ const { chatBereit } = require('./_kestrel');
     const inp = p.locator('#profil-terminal-eingabe'), geist = p.locator('#profil-terminal-vorschlag');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); };
     const tippen = async z => { await inp.fill(''); await inp.focus(); await p.keyboard.type(z); };
-    const rest = async () => (await geist.isVisible()) ? geist.locator('.rest').textContent() : null;
+    const rest = async () => (await geist.locator('.rest').count()) ? geist.locator('.rest').textContent() : null;
 
     await cmd('echo eins'); await cmd('predict -t /var/cache/tle/kestrel.tle -p KESTREL-2'); await cmd('echo zwei');
     /* Anzeige: jüngster passender Eintrag */
