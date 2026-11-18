@@ -85,7 +85,7 @@ const PF = require('./_pfad');
     assert.match(await cmd('pwd'), /\n\/$/);
     assert.match(await cmd('ls'), /\npgcl-eu3\.arch07\/$/);
     const vorUngueltig = netz.length;
-    assert.match(await cmd('cd /etc'), /cd: \/etc: No such file or directory$/);
+    assert.match(await cmd('cd /opt'), /cd: \/opt: No such file or directory$/);
     assert.match(await cmd('cat /etc/passwd'), /cat: \/etc\/passwd: No such file or directory$/);
     assert.match(await cmd('ls --falsch'), /ls: unrecognized option '--falsch'$/);
     assert.match(await cmd('lss'), /lss: command not found$/);

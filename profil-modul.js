@@ -242,7 +242,15 @@ function terminalShellPfad(arg) {
   return out;
 }
 const TERMINAL_TLE_DIRS = new Map([['/var', ['cache/', 'log/']], ['/var/cache', ['tle/']],
-  ['/var/cache/tle', ['leo.txt', 'iridium.tle']], ['/var/log', ['syslog']]]);
+  ['/var/cache/tle', ['leo.txt', 'kestrel.tle']], ['/var/log', ['syslog']],
+  ['/etc', ['chatscripts/', 'ppp/']], ['/etc/ppp', ['peers/']], ['/etc/ppp/peers', ['kestrel']], ['/etc/chatscripts', ['kestrel']]]);
+// Virtuelle Textdateien der Einwahlkette (Inhalt bei Aufruf erzeugt).
+const TERMINAL_VIRT_DATEIEN = new Map([
+  ['/var/cache/tle/kestrel.tle', function () { return KESTREL_TLE.map(function (e) { return e.join('\n'); }).join('\n'); }],
+  ['/etc/ppp/peers/kestrel', function () { return ['/dev/ttyUSB0', '19200', 'crtscts', 'lock', 'noauth', 'defaultroute', 'usepeerdns',
+    'connect "/usr/sbin/chat -v -f /etc/chatscripts/kestrel"'].join('\n'); }],
+  ['/etc/chatscripts/kestrel', function () { return ['ABORT BUSY', "ABORT 'NO CARRIER'", "'' ATZ", 'OK AT+CSQ', 'OK ATDT' + TERMINAL_PPP_WAHL, "CONNECT ''"].join('\n'); }]
+]);
 const TERMINAL_TLE_DATEI = '/var/cache/tle/leo.txt';
 function terminalArbeitsverzeichnis() {
   const t = TERMINAL_ZUSTAND;
@@ -362,19 +370,22 @@ async function terminalDateiBefehl(befehl, arg, version) {
   const nichtGefunden = befehl + ': ' + name + ': No such file or directory';
   if (!virtuell) { terminalAusgabe(befehl + ': ' + name + ': Permission denied'); return 1; }
   const voll = '/' + virtuell.join('/');
-  const listing = !virtuell.length ? ['var/', TERMINAL_DB + '/'] : TERMINAL_TLE_DIRS.get(voll);
+  const listing = !virtuell.length ? ['etc/', 'var/', TERMINAL_DB + '/'] : TERMINAL_TLE_DIRS.get(voll);
   if (listing) {
     if (befehl === 'cd') { t.ort = null; t.virtuellerOrt = virtuell; terminalKanalPromptSync(); return 0; }
     if (befehl === 'ls') { terminalAusgabe(listing.join('\n')); return 0; }
     terminalAusgabe(befehl + ': ' + name + ': Is a directory');
     return 1;
   }
-  if (voll === '/var/log/syslog' || voll === TERMINAL_TLE_DATEI || voll === TERMINAL_PPP_DATEI) {
+  if (voll === '/var/log/syslog' || voll === TERMINAL_TLE_DATEI || TERMINAL_VIRT_DATEIEN.has(voll)) {
     if (befehl === 'cd') { terminalAusgabe('cd: ' + name + ': Not a directory'); return 1; }
     if (befehl === 'wget') { terminalAusgabe('wget: ' + name + ': unsupported source'); return 1; }
     if (befehl === 'ls') terminalAusgabe(virtuell.at(-1));
     else if (voll === '/var/log/syslog') terminalSyslog(befehl === 'cat' ? 60 : 10);
-    else if (voll === TERMINAL_PPP_DATEI) terminalAusgabe('IRIDIUM 142');
+    else if (TERMINAL_VIRT_DATEIEN.has(voll)) {
+      const zeilen = TERMINAL_VIRT_DATEIEN.get(voll)().split('\n');
+      terminalAusgabe(befehl === 'head' ? zeilen.slice(0, 10) : befehl === 'tail' ? zeilen.slice(-10) : zeilen);
+    }
     else terminalAusgabe('IRIDIUM-142\nProfile: demo LEO pass\nAzimuth: 142°\nElevation: 48°');
     return 0;
   }
@@ -460,7 +471,7 @@ function terminalSatAnzeige() {
   // Ein berechneter Überflug allein belegt keine Verbindung; der Countdown gilt nur, solange die Einwahl steht.
   const sichtbar = !!link && (link.modus !== 'ppp' || (!link.abgelaufen && !!(t.modem || t.wgSat || t.kanal?.ui === 'xmpp')));
   feld.hidden = !sichtbar;
-  feld.textContent = sichtbar ? (link.modus === 'ppp' ? 'IRIDIUM 142' : 'sat0') + ' · LOS ' + terminalSatRest(link) : '';
+  feld.textContent = sichtbar ? (link.modus === 'ppp' ? link.sat.name : 'sat0') + ' · LOS ' + terminalSatRest(link) : '';
   terminalPppAnzeige();
 }
 function terminalSatLinkAktiv(link) {
@@ -719,13 +730,107 @@ async function terminalSatKanalEnde(kanal, bestaetigt) {
 }
 
 /* Fixed command grammar and in-memory state. No host processes, sockets or network configuration. */
-const TERMINAL_PPP_DATEI = '/var/cache/tle/iridium.tle';
-const TERMINAL_PPP_SAT = 'IRIDIUM 142';
-const TERMINAL_PPP_ENDE = 'pppd[1401]: Connection terminated.';
+/* KESTREL-Relaiskette: fiktive Namen, Bahndaten echter Satelliten in niedriger Umlaufbahn (TLE, Prüfsumme geprüft).
+   Bahnrechnung mit SGP4 (satellite.js); Beobachter (QTH) ist der erste Ausgangsort mit Kartenposition. */
+const KESTREL_TLE = [
+  ['KESTREL-1', '1 25984U 99065E   25193.69088000  .00000493  00000+0  20771-3 0  9993',
+    '2 25984  45.0407 330.0296 0002572 101.9402 258.1736 14.38166112338094']
+];
+const TERMINAL_PPP_DATEI = '/var/cache/tle/kestrel.tle';
+const TERMINAL_PREDICT_DB = '~/.predict/predict.tle';
+const TERMINAL_PPP_PEER = 'kestrel';
+const TERMINAL_PPP_WAHL = '00882994401'; // Gateway im Format der Vorwahl +882 (International Networks); Netzkennung nicht als frei geprüft
+const KESTREL_MIN_EL = 5;
+const KESTREL_QTH_STANDARD = { name: 'DEFAULT', lat: 52.52, lon: 13.405, hoehe: 34 };
+let KESTREL_SATS = null;
+function kestrelSats() {
+  if (!KESTREL_SATS) KESTREL_SATS = KESTREL_TLE.map(function (e) {
+    return { name: e[0], l1: e[1], l2: e[2], rec: satellite.twoline2satrec(e[1], e[2]), rev: Number(e[2].slice(63, 68)) };
+  });
+  return KESTREL_SATS;
+}
+function kestrelSat(name) { return kestrelSats().find(function (x) { return x.name === name; }) || null; }
+function kestrelQth() {
+  const o = (typeof PROFIL !== 'undefined' && Array.isArray(PROFIL.ausgang) ? PROFIL.ausgang : []).find(function (x) { return x && Array.isArray(x.ll); });
+  return o ? { name: String(o.name || 'QTH').slice(0, 24), lat: Number(o.ll[0]), lon: Number(o.ll[1]), hoehe: 100 } : KESTREL_QTH_STANDARD;
+}
+// Sonnenrichtung (Näherung des Astronomical Almanac) im äquatorialen System, Einheit km.
+function kestrelSonne(ms) {
+  const n = ms / 86400000 + 2440587.5 - 2451545.0, r = Math.PI / 180;
+  const g = (357.528 + 0.9856003 * n) * r, L = 280.460 + 0.9856474 * n;
+  const lam = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * r, eps = (23.439 - 0.0000004 * n) * r;
+  const au = 149597870.7 * (1.00014 - 0.01671 * Math.cos(g) - 0.00014 * Math.cos(2 * g));
+  return { x: au * Math.cos(lam), y: au * Math.cos(eps) * Math.sin(lam), z: au * Math.sin(eps) * Math.sin(lam) };
+}
+function kestrelLage(sat, ms) {
+  const S = satellite, d = new Date(ms), q = kestrelQth(), r = Math.PI / 180;
+  const pv = S.propagate(sat.rec, d);
+  if (!pv || !pv.position) return null;
+  const gmst = S.gstime(d);
+  const obs = { latitude: q.lat * r, longitude: q.lon * r, height: q.hoehe / 1000 };
+  const la = S.ecfToLookAngles(obs, S.eciToEcf(pv.position, gmst));
+  const geo = S.eciToGeodetic(pv.position, gmst);
+  const minuten = ms / 60000 - (sat.rec.jdsatepoch - 2440587.5) * 1440;
+  const ma = ((sat.rec.mo + sat.rec.no * minuten) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+  const p = pv.position, so = kestrelSonne(ms), sl = Math.hypot(so.x, so.y, so.z);
+  const dot = (p.x * so.x + p.y * so.y + p.z * so.z) / sl;
+  const quer = Math.sqrt(Math.max(0, p.x * p.x + p.y * p.y + p.z * p.z - dot * dot));
+  const sonnig = dot > 0 || quer > 6378.137;
+  const lonE = geo.longitude / r;
+  return { el: la.elevation / r, az: ((la.azimuth / r) % 360 + 360) % 360, lat: geo.latitude / r, lonW: ((360 - lonE) % 360 + 360) % 360,
+    range: la.rangeSat, phase: Math.floor(ma * 256 / (2 * Math.PI)) % 256,
+    umlauf: sat.rev + Math.floor((sat.rec.mo + sat.rec.no * minuten) / (2 * Math.PI)), sonnig };
+}
+function kestrelEl(sat, ms) { const l = kestrelLage(sat, ms); return l ? l.el : -90; }
+// Nächster Überflug ab "ab" (läuft einer, dann dieser): Aufgang, Untergang, höchster Punkt; null, wenn keiner in 48 h.
+function kestrelUeberflug(sat, ab) {
+  // Zwischenspeicher: ein berechneter Überflug gilt für alle späteren Anfragen bis zu seinem Untergang (gleicher QTH).
+  const q = kestrelQth(), schluessel = q.lat + ',' + q.lon, c = sat.cache;
+  if (c && c.schluessel === schluessel && ab >= c.ab && (c.u ? ab <= c.u.bis : ab - c.ab < 3600000)) return c.u;
+  const u = kestrelUeberflugRechnen(sat, ab);
+  sat.cache = { schluessel, ab, u };
+  return u;
+}
+function kestrelUeberflugRechnen(sat, ab) {
+  const schritt = 30000, grenze = function (a, b) {
+    let lo = a, hi = b; // el(lo) < 0 <= el(hi) oder umgekehrt
+    const steigend = kestrelEl(sat, b) >= 0;
+    while (hi - lo > 1000) { const m = (lo + hi) / 2; if ((kestrelEl(sat, m) >= 0) === steigend) hi = m; else lo = m; }
+    return Math.round((steigend ? hi : lo) / 1000) * 1000;
+  };
+  let von;
+  if (kestrelEl(sat, ab) >= 0) {
+    let a = ab;
+    while (kestrelEl(sat, a - schritt) >= 0 && ab - a < 3600000) a -= schritt;
+    von = grenze(a - schritt, a);
+  } else {
+    let a = ab;
+    // Tief unter dem Horizont größere Schritte; ein Überflug dauert länger als der größte Schritt bis zum Aufgang.
+    let e = kestrelEl(sat, a), letzter = schritt;
+    while (e < 0) { letzter = e < -40 ? 240000 : e < -15 ? 90000 : schritt; a += letzter; if (a - ab > 172800000) return null; e = kestrelEl(sat, a); }
+    von = grenze(a - letzter, a);
+  }
+  let b = Math.max(von, ab) + 1000, max = { ms: von, el: 0 };
+  while (kestrelEl(sat, b) >= 0) { const e = kestrelEl(sat, b); if (e > max.el) max = { ms: b, el: e }; b += 10000; if (b - von > 3600000) break; }
+  let lo = b - 10000, hi = b;
+  while (hi - lo > 1000) { const m = (lo + hi) / 2; if (kestrelEl(sat, m) >= 0) lo = m; else hi = m; }
+  return { sat, von, bis: Math.round(lo / 1000) * 1000, maxMs: Math.round(max.ms / 1000) * 1000, maxEl: max.el };
+}
+function kestrelSichtbar(ms) {
+  return kestrelSats().map(function (x) { return { sat: x, el: kestrelEl(x, ms) }; })
+    .filter(function (x) { return x.el >= 0; }).sort(function (a, b) { return b.el - a.el; });
+}
+// Sitzungswerte: Prozessnummern und Adressen je Sitzung verschieden.
+const TERMINAL_SITZUNG = (function () {
+  const z = function (n) { return crypto.getRandomValues(new Uint32Array(1))[0] % n; };
+  const pid = 1100 + z(28000);
+  return { pppd: pid, chat: pid + 1, lokal: '10.64.' + (z(250) + 2) + '.' + (z(250) + 2), gegenstelle: '10.64.0.1' };
+})();
+function terminalPppEnde() { return 'pppd[' + TERMINAL_SITZUNG.pppd + ']: Connection terminated.'; }
 function terminalPppZeit(ms) {
   return new Date(ms).toISOString().slice(11, 19);
 }
-const TERMINAL_PREDICT_USAGE = 'usage: predict -t <tlefile> [-p <satellite> [start] | -f <satellite> [start [end|+n[m]]]]';
+const TERMINAL_PREDICT_USAGE = 'usage: predict [-t <tlefile>] [-p <satellite> [start] | -f <satellite> [start [end|+n[m]]]]';
 const TERMINAL_PREDICT_MAX = 600;
 function terminalPredictOptionen(args) {
   const o = { modus: 'live' };
@@ -749,40 +854,39 @@ function terminalPredictOptionen(args) {
     }
     return { fehler: 'usage' };
   }
-  if (datei === null) return { fehler: 'usage' };
-  if (datei !== TERMINAL_PPP_DATEI) return { fehler: datei + ': No such file or directory' };
-  if (o.modus !== 'live' && o.sat !== TERMINAL_PPP_SAT) return { fehler: '"' + o.sat + '" not found in ' + TERMINAL_PPP_DATEI };
+  // Ohne -t liest predict seine Datenbank ~/.predict/predict.tle (predict(1)); hier dieselben Bahndaten.
+  if (datei !== null && datei !== TERMINAL_PPP_DATEI && datei !== TERMINAL_PREDICT_DB) return { fehler: datei + ': No such file or directory' };
+  if (o.modus !== 'live') { o.satObj = kestrelSat(o.sat); if (!o.satObj) return { fehler: '"' + o.sat + '" not found in ' + (datei || TERMINAL_PREDICT_DB) }; }
   return o;
 }
-function terminalPppZeile(link, ms) {
-  const zeit = ms;
-  const datum = new Date(zeit);
+// Zeile wie predict -f/-p: Unix-Zeit, Datum/Zeit (UTC), Elevation, Azimut, Phase (0-255), Breite, Länge (West),
+// Entfernung (km), Umlauf, Sichtbarkeit ('*' sonnig, ' ' im Erdschatten, '+' sichtbar: sonnig und am Ort dunkel).
+function terminalPppZeile(sat, ms) {
+  const datum = new Date(ms), l = kestrelLage(sat, ms);
   const tag = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }).format(datum);
   const mon = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(datum);
   const iso = datum.toISOString();
-  const faktor = (zeit - link.von) / (link.bis - link.von);
-  // Außerhalb des Überflugs steht der Satellit unter dem Horizont (negative Elevation).
-  const abstand = faktor < 0 ? -faktor : faktor > 1 ? faktor - 1 : 0;
-  const hoehe = abstand ? -Math.min(80, Math.round(2 + 60 * abstand)) : Math.round(48 * Math.sin(Math.PI * faktor));
-  const azimut = ((Math.round(112 + 203 * faktor) % 360) + 360) % 360;
-  return [Math.floor(zeit / 1000), tag, iso.slice(8, 10) + mon + iso.slice(2, 4),
-    terminalPppZeit(zeit), hoehe, azimut, ((Math.floor(192 + 42 * faktor) % 256) + 256) % 256,
-    Math.round(51 + 4 * faktor), Math.round(7 + 9 * faktor),
-    Math.round(2410 - 1498 * Math.sin(Math.PI * faktor)), link.orbit, '*'].join('  ');
+  const q = kestrelQth(), so = kestrelSonne(ms);
+  const nachtAmOrt = (function () {
+    const S = satellite, r = Math.PI / 180, obs = { latitude: q.lat * r, longitude: q.lon * r, height: 0 };
+    return S.ecfToLookAngles(obs, S.eciToEcf(so, S.gstime(datum))).elevation / r < -6;
+  })();
+  const sicht = !l.sonnig ? ' ' : l.el > 0 && nachtAmOrt ? '+' : '*';
+  return [Math.floor(ms / 1000), tag, iso.slice(8, 10) + mon + iso.slice(2, 4), terminalPppZeit(ms), Math.round(l.el), Math.round(l.az) % 360,
+    l.phase, Math.round(l.lat), Math.round(l.lonW) % 360, Math.round(l.range), l.umlauf, sicht].join('  ');
 }
 function terminalPppAnzeige() {
   const t = TERMINAL_ZUSTAND, chat = t.kanal?.ui === 'xmpp' ? t.kanal : null;
   const oben = $('profil-terminal-orbit'), unten = $('profil-terminal-chat'), shell = $('profil-terminal-ausgabe');
   if (!oben || !unten || !shell) return;
-  const live = t.orbitLive && !!t.satLink;
+  const live = !!t.orbitLive;
   oben.hidden = !chat && !live;
   oben.classList.toggle('orbit-live', live);
   unten.hidden = !chat;
   if (!chat && !live) { shell.hidden = false; return; }
   shell.hidden = !!chat;
-  const link = chat ? chat.link : t.satLink;
-  const daten = TERMINAL_PPP_SAT + '  [LOS ' + terminalSatRest(link) + ']\n' +
-    terminalPppZeile(link, Date.now()) + (link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '');
+  const daten = chat ? chat.link.sat.name + '  [LOS ' + terminalSatRest(chat.link) + ']\n' + terminalPppZeile(chat.link.sat, Date.now()) +
+    (chat.link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '') : terminalPredictLive(Date.now());
   if (oben.textContent !== daten) oben.textContent = daten;
   if (!chat) return;
   const text = chat.log.join('\n');
@@ -790,6 +894,18 @@ function terminalPppAnzeige() {
     unten.textContent = text;
     unten.scrollTop = unten.scrollHeight;
   }
+}
+// Interaktives predict: Verfolgung aller Satelliten der Datei mit nächstem Ereignis (eigene Darstellung).
+function terminalPredictLive(ms) {
+  const q = kestrelQth(), rest = function (x) { const sek = Math.max(0, Math.round((x - ms) / 1000)); return String(Math.floor(sek / 60)).padStart(2, '0') + 'm ' + String(sek % 60).padStart(2, '0') + 's'; };
+  const kopf = 'PREDICT multi-satellite tracking · QTH ' + q.name + ' ' + Math.abs(q.lat).toFixed(2) + (q.lat >= 0 ? 'N ' : 'S ') +
+    Math.abs(q.lon).toFixed(2) + (q.lon >= 0 ? 'E' : 'W') + ' · ' + terminalPppZeit(ms) + ' UTC';
+  const zeilen = kestrelSats().map(function (sat) {
+    const l = kestrelLage(sat, ms), u = kestrelUeberflug(sat, ms);
+    const ereignis = !u ? '-' : l.el >= 0 ? 'LOS ' + terminalPppZeit(u.bis) + ' (' + rest(u.bis) + ')' : 'AOS ' + terminalPppZeit(u.von) + ' (' + rest(u.von) + ')';
+    return sat.name.padEnd(12) + String(Math.round(l.az)).padStart(5) + String(Math.round(l.el)).padStart(6) + String(Math.round(l.range)).padStart(8) + '   ' + ereignis;
+  });
+  return [kopf, 'Satellite      Az    El   Range   Next event'].concat(zeilen).join('\n');
 }
 function terminalPppChatLog(chat, text) {
   if (TERMINAL_ZUSTAND.kanal !== chat) return;
@@ -821,7 +937,7 @@ function terminalPppModemAus(grund, inShell = true) {
   const t = TERMINAL_ZUSTAND, modem = t.modem;
   if (modem) {
     clearTimeout(modem.timer);
-    const zeilen = ['pppd[1401]: ' + grund, TERMINAL_PPP_ENDE];
+    const zeilen = ['pppd[' + TERMINAL_SITZUNG.pppd + ']: ' + grund, terminalPppEnde()];
     zeilen.forEach(terminalPppLog);
     if (inShell) terminalAusgabe(zeilen);
     terminalVordergrundEnde(modem, grund.includes('signal 2') ? 5 : 1);
@@ -849,25 +965,55 @@ function terminalPppWaehltVorne() {
   const modem = TERMINAL_ZUSTAND.modem;
   return !!modem?.vordergrund && !modem.bereit;
 }
-function terminalPppEinwahl(link, vordergrund) {
-  const t = TERMINAL_ZUSTAND, modem = { bereit: false, vordergrund, timer: null };
+// Ausgang eines Wahlversuchs. Für Tests festlegbar: TERMINAL_ZUSTAND.wahlVorgabe = 'ok' | 'busy' | 'nocarrier'.
+// Sonst: kein Satellit über der Mindestelevation -> NO CARRIER; Gateway gelegentlich besetzt; tief am Horizont öfter kein Träger.
+function terminalWahlausgang(el) {
+  const vorgabe = TERMINAL_ZUSTAND.wahlVorgabe;
+  if (vorgabe === 'ok' || vorgabe === 'busy' || vorgabe === 'nocarrier') return el >= KESTREL_MIN_EL || vorgabe !== 'ok' ? vorgabe : 'nocarrier';
+  if (el < KESTREL_MIN_EL) return 'nocarrier';
+  const w = crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+  if (w < 0.08) return 'busy';
+  if (el < 15 && w < 0.38) return 'nocarrier';
+  return 'ok';
+}
+// Signalstärke im Format von AT+CSQ (rssi 0-31, ber 99) nach Elevation mit leichter Schwankung.
+function terminalCsq(el) {
+  if (el < 0) return '+CSQ: 99,99';
+  const w = crypto.getRandomValues(new Uint32Array(1))[0] % 5 - 2;
+  return '+CSQ: ' + Math.max(0, Math.min(31, Math.round(4 + el * 0.45) + w)) + ',99';
+}
+function terminalPppEinwahl(vordergrund) {
+  const t = TERMINAL_ZUSTAND, jetzt = Date.now(), S = TERMINAL_SITZUNG;
+  const oben = kestrelSichtbar(jetzt)[0] || null;
+  const ausgang = terminalWahlausgang(oben ? oben.el : -90);
+  if (t.satLink) clearInterval(t.satLink.timer);
+  let link = null;
+  if (ausgang === 'ok') {
+    const u = kestrelUeberflug(oben.sat, jetzt);
+    link = { modus: 'ppp', sat: oben.sat, von: u.von, bis: u.bis, abgelaufen: false, timer: null };
+    link.timer = setInterval(function () { if (terminalSatLinkAktiv(link)) terminalSatAnzeige(); }, 250);
+  }
+  t.satLink = link;
+  const modem = { bereit: false, vordergrund, timer: null, link };
   t.modem = modem;
   terminalKanalPromptSync();
   terminalSatAnzeige();
+  const c = 'chat[' + S.chat + ']: ', d = 'pppd[' + S.pppd + ']: ';
+  const wahl = 'ATDT' + TERMINAL_PPP_WAHL;
   const schritte = [
-    // Iridium-Datenruf (Circuit Switched Data): Bearer AT+CBST=71,0,1, Einwahl 008816000025.
-    [0, ['chat[1402]: abort on (BUSY)', 'chat[1402]: abort on (NO CARRIER)', 'chat[1402]: send (ATZ^M)', 'chat[1402]: expect (OK)']],
-    [150, ['chat[1402]: ATZ^M^M', 'chat[1402]: OK', 'chat[1402]:  -- got it', 'chat[1402]: send (AT+CBST=71,0,1^M)', 'chat[1402]: expect (OK)']],
-    [250, ['chat[1402]: AT+CBST=71,0,1^M^M', 'chat[1402]: OK', 'chat[1402]:  -- got it', 'chat[1402]: send (AT+CSQ^M)', 'chat[1402]: expect (OK)']],
-    [650, ['chat[1402]: AT+CSQ^M^M', 'chat[1402]: +CSQ:4^M', 'chat[1402]: ^M', 'chat[1402]: OK', 'chat[1402]:  -- got it',
-      'chat[1402]: send (ATDT008816000025^M)', 'chat[1402]: expect (CONNECT)']],
-    [2900, ['chat[1402]: ATDT008816000025^M^M', 'chat[1402]: CONNECT 19200', 'chat[1402]:  -- got it']],
-    [900, ['pppd[1401]: Serial connection established.']],
-    [750, ['pppd[1401]: Using interface ppp0', 'pppd[1401]: Connect: ppp0 <--> /dev/ttyUSB0']],
-    [1900, ['pppd[1401]: local IP address 172.16.8.94', 'pppd[1401]: remote IP address 172.16.1.1']]
+    [0, [c + 'abort on (BUSY)', c + 'abort on (NO CARRIER)', c + 'send (ATZ^M)', c + 'expect (OK)']],
+    [150, [c + 'ATZ^M^M', c + 'OK', c + ' -- got it', c + 'send (AT+CSQ^M)', c + 'expect (OK)']],
+    [550, [c + 'AT+CSQ^M^M', c + terminalCsq(oben ? oben.el : -1) + '^M', c + '^M', c + 'OK', c + ' -- got it',
+      c + 'send (' + wahl + '^M)', c + 'expect (CONNECT)']]
   ];
+  if (ausgang === 'ok') schritte.push(
+    [3250, [c + wahl + '^M^M', c + 'CONNECT 19200', c + ' -- got it']],
+    [900, [d + 'Serial connection established.']],
+    [750, [d + 'Using interface ppp0', d + 'Connect: ppp0 <--> /dev/ttyUSB0']],
+    [1900, [d + 'local  IP address ' + S.lokal, d + 'remote IP address ' + S.gegenstelle]]);
+  else schritte.push([ausgang === 'busy' ? 1800 : 6000, [c + wahl + '^M^M', c + (ausgang === 'busy' ? 'BUSY' : 'NO CARRIER'), d + 'Connect script failed']]);
   const schritt = function (i) {
-    if (t.modem !== modem || !terminalSatLinkAktiv(link)) return;
+    if (t.modem !== modem || (link && !terminalSatLinkAktiv(link))) return;
     const zeilen = schritte[i][1];
     zeilen.forEach(terminalPppLog);
     if (vordergrund) terminalAusgabe(zeilen);
@@ -875,8 +1021,16 @@ function terminalPppEinwahl(link, vordergrund) {
       modem.timer = setTimeout(() => schritt(i + 1), schritte[i + 1][0]);
       return;
     }
-    modem.bereit = true;
     modem.timer = null;
+    if (!link) {
+      // Wahl gescheitert: pppd endet mit 8 (connect script failed, pppd(8)).
+      t.modem = null;
+      terminalKanalPromptSync();
+      terminalSatAnzeige();
+      terminalVordergrundEnde(modem, 8);
+      return;
+    }
+    modem.bereit = true;
     terminalKanalPromptSync();
     terminalVordergrundEnde(modem, 0);
   };
@@ -888,50 +1042,45 @@ async function terminalPppShell(befehl, arg, args = []) {
   const t = TERMINAL_ZUSTAND, link = t.satLink;
   if (befehl === 'predict') {
     // predict(1): -t <tlefile>, -p <sat> [start] (ein Überflug), -f <sat> [start [ende]] (Positionsdaten);
-    // ohne -p/-f das interaktive Programm (hier direkt die Verfolgung des einen Satelliten, Ende mit Strg+C).
+    // ohne -p/-f das interaktive Programm (hier die Verfolgung aller Satelliten, Ende mit Strg+C).
     const o = terminalPredictOptionen(args);
     if (o.fehler) { terminalAusgabe(o.fehler === 'usage' ? TERMINAL_PREDICT_USAGE : 'predict: ' + o.fehler); return o.fehler === 'usage' ? 2 : 1; }
-    if (link && link.modus !== 'ppp') { terminalAusgabe('predict: sat0 is still in use'); return 1; }
-    if (!link || link.abgelaufen) {
-      const jetzt = Math.floor(Date.now() / 1000) * 1000;
-      const pass = { modus: 'ppp', von: jetzt - 180000, bis: jetzt + (300 + terminalKanalZufall(601)) * 1000,
-        orbit: 25000 + terminalKanalZufall(70000), abgelaufen: false };
-      t.satLink = pass;
-          pass.timer = setInterval(function () { if (terminalSatLinkAktiv(pass)) terminalSatAnzeige(); }, 250);
-      terminalSatAnzeige();
-    }
-    const pass = t.satLink;
     if (o.modus === 'live') {
-      const orbit = { fertig: null };
+      const orbit = { fertig: null, timer: setInterval(terminalPppAnzeige, 1000) };
       const ende = terminalVordergrund(orbit);
       t.orbitLive = orbit;
       terminalPppAnzeige();
       terminalKanalPromptSync();
       return ende;
     }
+    const jetzt = Math.floor(Date.now() / 1000);
     if (o.modus === 'f') {
-      const jetzt = Math.floor(Date.now() / 1000);
       const start = o.start ?? jetzt;
-      if (o.ende === undefined) { terminalAusgabe(terminalPppZeile(pass, start * 1000)); return 0; }
+      if (o.ende === undefined) { terminalAusgabe(terminalPppZeile(o.satObj, start * 1000)); return 0; }
       const ende = o.ende.relativ ? start + o.ende.wert * (o.ende.minuten ? 60 : 1) : o.ende.wert;
       const schritt = o.ende.minuten ? 60 : 1;
       if (ende < start) return 0;
       const zeilen = [];
-      for (let z = start; z <= ende && zeilen.length < TERMINAL_PREDICT_MAX; z += schritt) zeilen.push(terminalPppZeile(pass, z * 1000));
+      for (let z = start; z <= ende && zeilen.length < TERMINAL_PREDICT_MAX; z += schritt) zeilen.push(terminalPppZeile(o.satObj, z * 1000));
       terminalAusgabe(zeilen);
       return 0;
     }
-    const von = o.start !== undefined ? Math.max(pass.von, o.start * 1000) : pass.von;
-    if (von > pass.bis) return 0;
-    terminalAusgabe([von, (von + pass.bis) / 2, pass.bis].map(ms => terminalPppZeile(pass, ms)));
+    // -p: Überflug ab Startzeit in Minutenschritten vom Aufgang bis zum Untergang (Schrittweite eigene Näherung).
+    const u = kestrelUeberflug(o.satObj, (o.start ?? jetzt) * 1000);
+    if (!u) return 0;
+    const zeiten = [];
+    for (let z = u.von; z < u.bis; z += 60000) zeiten.push(z);
+    zeiten.push(u.bis);
+    terminalAusgabe(zeiten.map(function (ms) { return terminalPppZeile(o.satObj, ms); }));
     return 0;
   }
-  if (befehl === 'pppd') {
-    const m = /^call iridium( updetach)?$/.exec(arg);
-    if (!m) { terminalAusgabe('usage: pppd call iridium [updetach]'); return 2; }
-    if (link?.modus !== 'ppp' || !terminalSatLinkAktiv(link)) { terminalAusgabe('pppd: NO CARRIER'); return 1; }
-    if (t.modem) { terminalAusgabe('pppd: iridium already running'); return 1; }
-    return terminalPppEinwahl(link, !!m[1]);
+  if (befehl === 'pppd' || befehl === 'pon') {
+    // pon <peer> entspricht pppd call <peer> (pon(1)); updetach hält die Shell bis zur fertigen Verbindung an.
+    const m = befehl === 'pon' ? /^(\S+)$/.exec(arg) : /^call (\S+)( updetach)?$/.exec(arg);
+    if (!m) { terminalAusgabe(befehl === 'pon' ? 'usage: pon <peer>' : 'usage: pppd call <peer> [updetach]'); return 2; }
+    if (m[1] !== TERMINAL_PPP_PEER) { terminalAusgabe('pppd: unable to open /etc/ppp/peers/' + m[1] + ': No such file or directory'); return 2; }
+    if (t.modem) { terminalAusgabe('pppd: ' + TERMINAL_PPP_PEER + ' already running'); return 1; }
+    return terminalPppEinwahl(befehl === 'pppd' && !!m[2]);
   }
   if (befehl === 'tail' && /^-n \d{1,2} \/var\/log\/syslog$/.test(arg)) {
     terminalSyslog(Number(arg.split(' ')[1]));
@@ -945,7 +1094,7 @@ async function terminalPppShell(befehl, arg, args = []) {
       terminalAusgabe(args.length ? "poff: I could not find a pppd process for provider '" + args[0] + "'. None stopped." : 'poff: No pppd is running.  None stopped.');
       return 1;
     }
-    if (args.length && args[0] !== 'iridium') { terminalAusgabe("poff: I could not find a pppd process for provider '" + args[0] + "'. None stopped."); return 1; }
+    if (args.length && args[0] !== TERMINAL_PPP_PEER) { terminalAusgabe("poff: I could not find a pppd process for provider '" + args[0] + "'. None stopped."); return 1; }
     // Erfolg ist still; der Abbau steht im Syslog. Nur ein unerwarteter Abbruch meldet sich selbst in der Shell.
     terminalPppModemAus('Terminating on signal 15', false);
     return 0;
@@ -1157,6 +1306,7 @@ function terminalVordergrundEnde(obj, code) {
 function terminalOrbitEnde() {
   const t = TERMINAL_ZUSTAND, orbit = t.orbitLive;
   t.orbitLive = false;
+  if (orbit && typeof orbit === 'object') clearInterval(orbit.timer);
   if (orbit && typeof orbit === 'object') terminalVordergrundEnde(orbit, 130);
 }
 // Strg+C bricht die ganze Kette ab. $? ist der Rückgabewert des unterbrochenen Programms:
@@ -1211,7 +1361,7 @@ async function terminalEinzelbefehl(woerter) {
   if (befehl === 'false' && !arg) return 1;
   if (befehl === 'help' && !arg) {
     terminalAusgabe(['ls [-a|-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · echo · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
-      'predict · pppd call iridium [updetach] · poff iridium · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
+      'predict · pon kestrel · pppd call kestrel [updetach] · poff [kestrel] · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
       'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);
     return 0;
   }
@@ -1290,10 +1440,10 @@ function terminalBefehl(zeile) {
 }
 const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
 const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit',
-  'predict', 'pppd', 'poff', 'wg-quick', 'wg', 'profanity', 'satcon-tx', 'secure-channel', 'send']);
+  'predict', 'pon', 'pppd', 'poff', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'satcon-tx', 'secure-channel', 'send']);
 const TERMINAL_PPP_TAB = new Map([
   ['predict', []],
-  ['pppd', ['call iridium updetach']], ['poff', ['iridium']], ['wg-quick', ['up wg-sat', 'down wg-sat']], ['wg', ['show wg-sat']]
+  ['pppd', ['call kestrel updetach']], ['pon', ['kestrel']], ['poff', ['kestrel']], ['wg-quick', ['up wg-sat', 'down wg-sat']], ['wg', ['show wg-sat']]
 ]);
 let terminalTabLauf = null, terminalTabAuswahl = null;
 function terminalTabReset() {
@@ -1345,11 +1495,12 @@ async function terminalTab(lauf, m) {
   }
   if (befehl === 'predict') {
     let rest = arg, kopf = 'predict ';
-    const vorgabe = ['-t', TERMINAL_PPP_DATEI, '-p', '"' + TERMINAL_PPP_SAT + '"'];
+    const vorgabe = [['-t'], [TERMINAL_PPP_DATEI], ['-p'], kestrelSats().map(function (x) { return x.name; })];
     for (let i = 0; i < vorgabe.length; i++) {
-      const wort = i === 2 && /^-f(?:\s|$)/.test(rest) ? '-f' : vorgabe[i];
-      const trennung = rest.startsWith(wort) && /^\s+/.exec(rest.slice(wort.length));
-      if (!trennung) { fertig(kopf, rest, [wort], x => x + ' '); return; }
+      const liste = i === 2 && /^-f(?:\s|$)/.test(rest) ? ['-f'] : vorgabe[i];
+      const wort = liste.find(function (w) { return rest.startsWith(w) && /^\s+/.test(rest.slice(w.length)); });
+      if (!wort) { fertig(kopf, rest, liste, x => x + ' '); return; }
+      const trennung = /^\s+/.exec(rest.slice(wort.length));
       kopf += wort + trennung[0];
       rest = rest.slice(wort.length + trennung[0].length);
     }
@@ -1357,7 +1508,7 @@ async function terminalTab(lauf, m) {
   }
   if (TERMINAL_PPP_TAB.has(befehl)) {
     if ((befehl === 'pppd' || befehl === 'poff') && arg.includes('&&')) {
-      const befehlsanfang = befehl === 'pppd' ? 'call iridium' : 'iridium';
+      const befehlsanfang = befehl === 'pppd' ? 'call kestrel' : 'kestrel';
       fertig(befehl + ' ', arg, [befehlsanfang + ' && tail -n ' + (befehl === 'pppd' ? '12' : '6') + ' /var/log/syslog'], x => x);
       return;
     }
@@ -1381,7 +1532,7 @@ async function terminalTab(lauf, m) {
   const basis = pfad.slice(0, slash), prefix = pfad.slice(slash);
   const teile = terminalShellPfad(basis);
   if (!teile) return;
-  const listing = !teile.length ? ['var/', TERMINAL_DB + (basis ? '/' : '')] : TERMINAL_TLE_DIRS.get('/' + teile.join('/'));
+  const listing = !teile.length ? ['etc/', 'var/', TERMINAL_DB + (basis ? '/' : '')] : TERMINAL_TLE_DIRS.get('/' + teile.join('/'));
   if (listing) {
     const namen = listing.filter(x => befehl !== 'cd' || x.endsWith('/') || x === TERMINAL_DB).map(x => basis + x);
     fertig(befehl + ' ' + anfang, pfad, namen, function (x) { return x + anfang; });
