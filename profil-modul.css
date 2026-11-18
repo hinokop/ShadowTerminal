@@ -21,7 +21,7 @@
 #profil-terminal-transfer{max-height:25%;flex-shrink:0}
 .profil-terminal-kern form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:end;margin:0;flex:none}
 #profil-terminal-prompt{grid-column:1/-1;color:#a8d293;overflow-wrap:anywhere}
-.profil-terminal-kern textarea{box-sizing:border-box;width:100%;min-width:0;min-height:28px;max-height:min(8em,28vh);resize:none;white-space:pre-wrap;overflow-wrap:anywhere;background:#101217;color:inherit;font-family:var(--mono)}
+.profil-terminal-kern textarea{position:relative;box-sizing:border-box;width:100%;min-width:0;min-height:28px;max-height:min(8em,28vh);resize:none;white-space:pre-wrap;overflow-wrap:anywhere;background:transparent;color:inherit;font-family:var(--mono)}
 .profil-terminal-groesse{position:absolute;right:0;bottom:0;width:13px;height:13px;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 57%,#707b8c 58% 64%,transparent 65% 76%,#707b8c 77% 83%,transparent 84%)}
 
 .profil-zyklus-daten{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -58,3 +58,10 @@
 #profil-terminal-auswahl .aktiv{background:#c9d1db;color:#101217}
 #profil-terminal-auswahl .mehr{color:#7b8594;grid-column:1/-1}
 #profil-terminal-auswahl[hidden]{display:none}
+
+/* Grauer Vorschlag aus dem Verlauf hinter dem Eingabefeld */
+.profil-terminal-feld{position:relative;min-width:0;background:#101217}
+#profil-terminal-vorschlag{position:absolute;inset:0;box-sizing:border-box;margin:0;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;border-style:solid;border-color:transparent;pointer-events:none}
+#profil-terminal-vorschlag[hidden]{display:none}
+#profil-terminal-vorschlag .text{color:transparent}
+#profil-terminal-vorschlag .rest{color:#6b7584}

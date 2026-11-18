@@ -513,6 +513,7 @@ function terminalKanalPromptSync() {
   label.textContent = terminalPrompt();
   label.parentElement?.setAttribute('aria-busy', terminalBeschaeftigt() ? 'true' : 'false');
   if (unten) aus.scrollTop = aus.scrollHeight;
+  terminalVorschlagAnzeige();
 }
 function terminalKanalAbbruch() {
   const t = TERMINAL_ZUSTAND;
@@ -1396,6 +1397,7 @@ function terminalTabListe() {
   const feld = $('profil-terminal-auswahl'), a = terminalTabAuswahl;
   if (!feld) return;
   feld.hidden = !a;
+  terminalVorschlagAnzeige();
   if (!a) { feld.replaceChildren(); return; }
   // Sichtbarer Ausschnitt wandert mit der Auswahl; gleich breite Spalten wie in zsh.
   const n = a.anzeige.length, sp = terminalTabSpalten();
@@ -1595,6 +1597,10 @@ function terminalVerlaufTaste(ev) {
 }
 function terminalTabTaste(ev) {
   const offen = terminalTabAuswahl;
+  if ((ev.key === 'ArrowRight' || ev.key === 'End') && !offen && !ev.isComposing && ev.keyCode !== 229 && !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
+    const rest = terminalVorschlag(), input = ev.currentTarget;
+    if (rest && input.selectionStart === input.value.length) { ev.preventDefault(); terminalEingabeSetzen(input, input.value + rest); return; }
+  }
   if (ev.key === 'Enter' && offen && !ev.isComposing) {
     // Bei sichtbarer Liste führt Enter nie aus: mit Auswahl übernimmt es den Eintrag, ohne Auswahl schließt es nur die Liste.
     ev.preventDefault(); terminalTabReset(); return;
@@ -1655,6 +1661,33 @@ function terminalEingabeSetzen(input, wert) {
   input.value = wert;
   input.setSelectionRange(input.value.length, input.value.length);
   terminalEingabeHoehe(input);
+  terminalVorschlagAnzeige();
+}
+/* Grauer Vorschlag wie zsh-autosuggestions: jüngster Verlaufseintrag, der mit der Eingabe beginnt, als Rest hinter dem Text.
+   → oder Ende am Zeilenende übernimmt ihn. Nicht im Chat, nicht beim Blättern im Verlauf, nicht bei offener Auswahlliste. */
+function terminalVorschlag() {
+  const t = TERMINAL_ZUSTAND, input = $('profil-terminal-eingabe');
+  if (!input || !input.value || t.kanal || t.orbitLive || t.vpos !== -1 || terminalTabAuswahl || t.tmux?.fokus === 'oben' || terminalBeschaeftigt()) return '';
+  if (document.activeElement === input && (input.selectionStart !== input.value.length || input.selectionEnd !== input.value.length)) return '';
+  // Der jüngste passende Eintrag entscheidet; ist er genau die Eingabe, gibt es keinen Vorschlag (kein älterer, längerer).
+  for (let i = t.verlauf.length - 1; i >= 0; i--) {
+    const e = t.verlauf[i];
+    if (e.startsWith(input.value)) return e.slice(input.value.length);
+  }
+  return '';
+}
+function terminalVorschlagAnzeige() {
+  const geist = $('profil-terminal-vorschlag'), input = $('profil-terminal-eingabe');
+  if (!geist || !input) return;
+  const rest = terminalVorschlag();
+  geist.hidden = !rest;
+  if (!rest) { geist.replaceChildren(); return; }
+  // Gleiche Schrift, Abstände und Umbruch wie das Eingabefeld, damit der Rest genau hinter dem Text steht.
+  const st = getComputedStyle(input);
+  ['font', 'letterSpacing', 'lineHeight', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'textIndent'].forEach(function (k) { geist.style[k] = st[k]; });
+  geist.replaceChildren(h('span', { class: 'text' }, input.value), h('span', { class: 'rest' }, rest));
+  geist.scrollTop = input.scrollTop;
 }
 function terminalKonsoleBauen() {
   const t = TERMINAL_ZUSTAND;
@@ -1670,7 +1703,8 @@ function terminalKonsoleBauen() {
         input.setSelectionRange(von, bis);
       }
       terminalEingabeHoehe(input);
-    } });
+      terminalVorschlagAnzeige();
+    }, onkeyup: terminalVorschlagAnzeige, onpointerup: terminalVorschlagAnzeige, onfocus: terminalVorschlagAnzeige, onscroll: function () { const g = $('profil-terminal-vorschlag'); if (g) g.scrollTop = input.scrollTop; } });
   const titel = h('div', { class: 'profil-terminal-titel', 'aria-hidden': 'true' }, 'Shadow Terminal');
   const minimieren = h('button', { type: 'button', id: 'profil-terminal-minimieren',
     'aria-controls': 'profil-terminal-kern', 'aria-expanded': 'true', 'aria-label': 'Minimieren', title: 'Minimieren' }, '−');
@@ -1690,7 +1724,8 @@ function terminalKonsoleBauen() {
         if (zeile !== 'exit' && terminalBeschaeftigt()) return;
         terminalEingabeSetzen(input, '');
         if (zeile) { terminalVerlaufNehmen(zeile); terminalBefehl(zeile); }
-      } }, h('label', { id: 'profil-terminal-prompt', for: input.id, class: 'mono' }, terminalPrompt()), input,
+      } }, h('label', { id: 'profil-terminal-prompt', for: input.id, class: 'mono' }, terminalPrompt()),
+        h('div', { class: 'profil-terminal-feld' }, h('div', { id: 'profil-terminal-vorschlag', class: 'mono', 'aria-hidden': 'true', hidden: true }), input),
         h('button', { type: 'submit' }, 'Ausführen')),
       h('div', { id: 'profil-terminal-auswahl', class: 'mono', 'aria-label': 'Vervollständigung', hidden: true }),
       h('div', { id: 'profil-terminal-tmux', class: 'mono', 'aria-label': 'tmux-Statuszeile', hidden: true }));
