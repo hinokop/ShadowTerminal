@@ -39,6 +39,13 @@ const { APP } = require('./_pfad');
     const sek = await nach(`predict -t ${F} -f "IRIDIUM 142" ${jetzt} +10`);
     assert.equal(sek.length, 11);
     assert.deepEqual(sek.map(z => Number(z.split(/\s+/)[0]) - jetzt), [...Array(11).keys()]);
+    /* lange Ausgabe: vollständig im Scrollback; Kürzung über dem Limit sichtbar */
+    const lang = await nach(`predict -t ${F} -f "IRIDIUM 142" ${jetzt} +120`);
+    assert.equal(lang.length, 121);
+    assert.deepEqual([Number(lang[0].split(/\s+/)[0]), Number(lang.at(-1).split(/\s+/)[0])], [jetzt, jetzt + 120]);
+    const sehrLang = await nach(`predict -t ${F} -f "IRIDIUM 142" ${jetzt} +700`);
+    assert.equal(sehrLang.length, 601);
+    assert.equal(sehrLang.at(-1), 'predict: output limited to 600 lines');
     const min = await nach(`predict -t ${F} -f "IRIDIUM 142" ${jetzt} +3m`);
     assert.deepEqual(min.map(z => Number(z.split(/\s+/)[0]) - jetzt), [0, 60, 120, 180]);
     assert.equal((await nach(`predict -t ${F} -f "IRIDIUM 142" ${jetzt} ${jetzt + 4}`)).length, 5);
