@@ -1194,6 +1194,7 @@ function terminalTmuxFokus(richtung) {
   const t = TERMINAL_ZUSTAND;
   if (!t.tmux?.pane) return;
   t.tmux.fokus = richtung;
+  terminalTabReset();
   terminalTmuxPaneAnzeige();
   // Der Tastaturfokus bleibt im Eingabefeld; unten ist es wieder beschreibbar.
   $('profil-terminal-eingabe')?.focus();
@@ -1380,10 +1381,29 @@ const TERMINAL_BEFEHLE = TERMINAL_TABELLE.map(function (e) { return e.name; });
 let terminalTabLauf = null, terminalTabAuswahl = null;
 function terminalTabReset() {
   terminalTabLauf = terminalTabAuswahl = null;
+  terminalTabListe();
+}
+/* Auswahlliste wie in zsh: Bei mehreren Treffern zeigt der erste Tab die Liste, ohne die Eingabe zu ändern.
+   Jeder weitere Tab (Umschalt+Tab rückwärts) setzt den nächsten Eintrag ein; Enter übernimmt, Escape stellt den Entwurf wieder her. */
+const TERMINAL_AUSWAHL_MAX = 60;
+function terminalTabListe() {
+  const feld = $('profil-terminal-auswahl'), a = terminalTabAuswahl;
+  if (!feld) return;
+  feld.hidden = !a;
+  if (!a) { feld.replaceChildren(); return; }
+  const eintraege = a.anzeige.slice(0, TERMINAL_AUSWAHL_MAX).map(function (name, i) {
+    return h('span', { class: (name.endsWith('/') ? 'ordner' : '') + (i === a.index ? ' aktiv' : '') }, name);
+  });
+  if (a.anzeige.length > TERMINAL_AUSWAHL_MAX) eintraege.push(h('span', { class: 'mehr' }, '… ' + (a.anzeige.length - TERMINAL_AUSWAHL_MAX) + ' more'));
+  feld.replaceChildren.apply(feld, eintraege);
+}
+function terminalTabAnzeigename(x) {
+  const ordner = x.endsWith('/'), rein = ordner ? x.slice(0, -1) : x;
+  return rein.slice(rein.lastIndexOf('/') + 1) + (ordner ? '/' : '');
 }
 function terminalTabKontext(lauf) {
   const t = TERMINAL_ZUSTAND;
-  return t.version === lauf.version && t.kanal === lauf.kanal && (!t.kanal || t.kanal.phase === 'eingabe') &&
+  return t.version === lauf.version && t.kanal === lauf.kanal && (!t.kanal || t.kanal.phase === 'eingabe') && t.tmux?.fokus !== 'oben' &&
     terminalArbeitsverzeichnis() === lauf.ort;
 }
 function terminalTabGueltig(lauf) {
@@ -1401,10 +1421,9 @@ function terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format) {
   while (!treffer.every(function (x) { return x.startsWith(gemeinsam); })) gemeinsam = gemeinsam.slice(0, -1);
   if (gemeinsam.length > prefix.length) terminalEingabeSetzen(input, kopf + gemeinsam);
   else {
-    const werte = treffer.map(x => kopf + format(x));
-    const index = Math.max(0, werte.indexOf(input.value));
-    terminalTabAuswahl = { ...lauf, werte, index };
-    terminalEingabeSetzen(input, werte[index]);
+    // Nur anzeigen; der Entwurf bleibt, bis ein weiterer Tab ausdrücklich einen Eintrag wählt.
+    terminalTabAuswahl = { ...lauf, werte: treffer.map(x => kopf + format(x)), anzeige: treffer.map(terminalTabAnzeigename), index: -1, original: input.value };
+    terminalTabListe();
   }
 }
 async function terminalTab(lauf, m) {
@@ -1542,6 +1561,11 @@ function terminalVerlaufTaste(ev) {
   return true;
 }
 function terminalTabTaste(ev) {
+  const offen = terminalTabAuswahl;
+  if (ev.key === 'Enter' && offen && offen.index >= 0 && !ev.isComposing) {
+    // Enter übernimmt den gewählten Eintrag, führt aber nichts aus.
+    ev.preventDefault(); terminalTabReset(); return;
+  }
   if (ev.key !== 'Tab' && ev.key !== 'Shift') terminalTabReset();
   if (ev.key === 'Enter') {
     if (ev.isComposing || ev.keyCode === 229) return;
@@ -1554,11 +1578,12 @@ function terminalTabTaste(ev) {
   const input = ev.currentTarget, bisher = input.value;
   if (input.selectionStart !== bisher.length || input.selectionEnd !== bisher.length) return;
   const auswahl = terminalTabAuswahl;
-  if (auswahl?.input === input && terminalTabKontext(auswahl) && bisher === auswahl.werte[auswahl.index]) {
+  if (auswahl?.input === input && terminalTabKontext(auswahl) && bisher === (auswahl.index < 0 ? auswahl.original : auswahl.werte[auswahl.index])) {
     ev.preventDefault();
     const n = auswahl.werte.length;
-    auswahl.index = (auswahl.index + (ev.shiftKey ? -1 : 1) + n) % n;
+    auswahl.index = auswahl.index < 0 ? (ev.shiftKey ? n - 1 : 0) : (auswahl.index + (ev.shiftKey ? -1 : 1) + n) % n;
     terminalEingabeSetzen(input, auswahl.werte[auswahl.index]);
+    terminalTabListe();
     return;
   }
   if (ev.shiftKey) return;
@@ -1627,6 +1652,7 @@ function terminalKonsoleBauen() {
         if (zeile) { terminalVerlaufNehmen(zeile); terminalBefehl(zeile); }
       } }, h('label', { id: 'profil-terminal-prompt', for: input.id, class: 'mono' }, terminalPrompt()), input,
         h('button', { type: 'submit' }, 'Ausführen')),
+      h('div', { id: 'profil-terminal-auswahl', class: 'mono', 'aria-label': 'Vervollständigung', hidden: true }),
       h('div', { id: 'profil-terminal-tmux', class: 'mono', 'aria-label': 'tmux-Statuszeile', hidden: true }));
   const fenster = h('section', { id: 'profil-terminal', class: 'panel profil-terminal', 'aria-label': 'Shadow Terminal', tabindex: '-1', hidden: true },
     h('div', { class: 'profil-terminal-kopf' }, titel, h('span', { id: 'profil-terminal-sat', class: 'mono', hidden: true }), minimieren,
@@ -1737,7 +1763,12 @@ function terminalKonsoleSchliessen(fokus = true) {
   terminalKonsoleFokus = null;
 }
 function terminalKonsoleEscape() {
-  const t = TERMINAL_ZUSTAND;
+  const t = TERMINAL_ZUSTAND, liste = terminalTabAuswahl;
+  if (liste) {
+    if (liste.input?.isConnected) terminalEingabeSetzen(liste.input, liste.original);
+    terminalTabReset();
+    return;
+  }
   if (t.orbitLive) {
     terminalKetteAbbrechen();
     terminalOrbitEnde();

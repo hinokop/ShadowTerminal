@@ -50,3 +50,11 @@
 #profil-terminal-pane.aktiv{border-color:#6fbf56}
 .profil-terminal-kern.tmux-oben textarea{opacity:.5}
 #profil-terminal-tmux{flex:none;margin:6px -12px -12px;padding:1px 8px;background:#2f8a3a;color:#0b120c;white-space:pre;overflow:hidden;line-height:1.5}
+
+/* Auswahlliste der Tab-Ergänzung */
+#profil-terminal-auswahl{flex:none;display:flex;flex-wrap:wrap;gap:2px 18px;max-height:30%;overflow-y:auto;margin:4px 0 0;padding:2px 0;color:#c9d1db}
+#profil-terminal-auswahl span{white-space:pre}
+#profil-terminal-auswahl .ordner{color:#7fa8e8}
+#profil-terminal-auswahl .aktiv{background:#c9d1db;color:#101217}
+#profil-terminal-auswahl .mehr{color:#7b8594}
+#profil-terminal-auswahl[hidden]{display:none}

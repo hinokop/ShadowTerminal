@@ -74,7 +74,12 @@ const PF = require('./_pfad');
       await eingabe.press('Tab');
       await p.waitForFunction(wert => $('profil-terminal-eingabe').value === wert, nachher);
     }
-    await tab('wg', 'wget ');
+    // Mehrdeutig: erster Tab zeigt nur die Liste, der zweite wählt den ersten Eintrag.
+    await eingabe.fill('wg'); await eingabe.press('Tab');
+    await p.waitForFunction(() => !$('profil-terminal-auswahl').hidden);
+    assert.equal(await eingabe.inputValue(), 'wg');
+    await eingabe.press('Tab'); assert.equal(await eingabe.inputValue(), 'wget ');
+    await eingabe.press('Enter'); await eingabe.fill('');
     assert.equal(await p.locator('#profil-terminal-prompt').textContent(), 'root@terminal:/#');
     await tab('cd /pg', 'cd /pgcl-eu3.arch07/');
     await eingabe.press('Enter');
