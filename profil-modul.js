@@ -419,7 +419,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   return 0;
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0 };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null };
 // Scrollback der Shell; größer als die längste Einzelausgabe (predict -f), damit nichts still verloren geht.
 const TERMINAL_PUFFER = 1000;
 function terminalAusgabe(zeile) {
@@ -1150,10 +1150,95 @@ function terminalStrgC() {
   t.status = 130;
   return true;
 }
+/* tmux (Ausschnitt, tmux(1)): Sitzung mit Statuszeile, split-window für predict oberhalb der Shell, Fokuswechsel mit
+   Strg+B und Pfeiltaste, kill-pane auf das obere Fenster. Die Shell unten bleibt mit Eingabe, Verlauf, Tab und $? bedienbar. */
+function terminalTmuxStatus() {
+  const feld = $('profil-terminal-tmux'), t = TERMINAL_ZUSTAND;
+  if (!feld) return;
+  feld.hidden = !t.tmux;
+  if (!t.tmux) return;
+  const jetzt = new Date(), z = function (n) { return String(n).padStart(2, '0'); };
+  const mon = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(jetzt);
+  feld.textContent = '[0] 0:' + (t.tmux.pane ? 'predict' : 'bash') + '*' + ' '.repeat(6) +
+    '"terminal" ' + z(jetzt.getUTCHours()) + ':' + z(jetzt.getUTCMinutes()) + ' ' + z(jetzt.getUTCDate()) + '-' + mon + '-' + String(jetzt.getUTCFullYear()).slice(2);
+}
+function terminalTmuxPaneAnzeige() {
+  const feld = $('profil-terminal-pane'), t = TERMINAL_ZUSTAND, pane = t.tmux?.pane;
+  const input = $('profil-terminal-eingabe');
+  if (feld) {
+    feld.hidden = !pane;
+    feld.classList.toggle('aktiv', !!pane && t.tmux.fokus === 'oben');
+    if (pane) { const text = terminalPredictLive(Date.now()); if (feld.textContent !== text) feld.textContent = text; }
+  }
+  if (input) input.readOnly = !!pane && t.tmux.fokus === 'oben';
+  $('profil-terminal-kern')?.classList.toggle('tmux-oben', !!pane && t.tmux?.fokus === 'oben');
+  terminalTmuxStatus();
+}
+function terminalTmuxPaneSchliessen() {
+  const t = TERMINAL_ZUSTAND, pane = t.tmux?.pane;
+  if (!pane) return false;
+  clearInterval(pane.timer);
+  t.tmux.pane = null;
+  t.tmux.fokus = 'unten';
+  terminalTmuxPaneAnzeige();
+  return true;
+}
+function terminalTmuxEnde() {
+  const t = TERMINAL_ZUSTAND;
+  if (!t.tmux) return;
+  terminalTmuxPaneSchliessen();
+  t.tmux = null;
+  terminalTmuxPaneAnzeige();
+}
+function terminalTmuxFokus(richtung) {
+  const t = TERMINAL_ZUSTAND;
+  if (!t.tmux?.pane) return;
+  t.tmux.fokus = richtung;
+  terminalTmuxPaneAnzeige();
+}
+function terminalTmux(args) {
+  const t = TERMINAL_ZUSTAND, unter = args[0] === undefined ? 'new-session' : args[0];
+  const sitzungsBefehle = ['new-session', 'new', 'split-window', 'splitw', 'kill-pane', 'killp', 'kill-server'];
+  if (!sitzungsBefehle.includes(unter)) { terminalAusgabe('unknown command: ' + unter); return 1; }
+  if (unter === 'new-session' || unter === 'new') {
+    if (t.tmux) { terminalAusgabe('sessions should be nested with care, unset $TMUX to force'); return 1; }
+    t.tmux = { pane: null, fokus: 'unten' };
+    terminalTmuxPaneAnzeige();
+    return 0;
+  }
+  if (!t.tmux) { terminalAusgabe('no server running on /tmp/tmux-0/default'); return 1; }
+  if (unter === 'kill-server') { terminalTmuxEnde(); terminalAusgabe('[server exited]'); return 0; }
+  if (unter === 'kill-pane' || unter === 'killp') {
+    const i = args.indexOf('-t'), ziel = i >= 0 ? args[i + 1] : undefined;
+    // Ohne Ziel trifft kill-pane das aktive Fenster, also die Shell; vereinfacht endet damit die Sitzung wie bei exit.
+    if (ziel === undefined) { terminalTmuxEnde(); terminalAusgabe('[exited]'); return 0; }
+    if (!['{up-of}', '{top}', '{last}'].includes(ziel)) { terminalAusgabe("can't find pane: " + ziel); return 1; }
+    if (!terminalTmuxPaneSchliessen()) { terminalAusgabe("can't find pane: " + ziel); return 1; }
+    return 0;
+  }
+  // split-window [-b] [-d] [-v] [Befehl ...]
+  let i = 1, oben = false, bleiben = false;
+  for (; i < args.length && /^-[bdvh]+$/.test(args[i]); i++) {
+    if (args[i].includes('h')) { terminalAusgabe('split-window: -h is not supported in this terminal'); return 1; }
+    oben = oben || args[i].includes('b'); bleiben = bleiben || args[i].includes('d');
+  }
+  if (i < args.length && /^-/.test(args[i])) { terminalAusgabe('split-window: unknown option -- ' + args[i].slice(1, 2)); return 1; }
+  if (t.tmux.pane) { terminalAusgabe('create pane failed: pane too small'); return 1; }
+  const befehl = args.slice(i);
+  // Im oberen Fenster läuft nur die laufende Verfolgung von predict; andere Programme enden sofort und schließen ihr Fenster.
+  const o = befehl[0] === 'predict' ? terminalPredictOptionen(befehl.slice(1)) : null;
+  if (!o || o.fehler || o.modus !== 'live') return 0;
+  t.tmux.pane = { timer: setInterval(terminalTmuxPaneAnzeige, 1000), oben };
+  t.tmux.fokus = bleiben ? 'unten' : 'oben';
+  terminalTmuxPaneAnzeige();
+  return 0;
+}
 async function terminalEinzelbefehl(woerter) {
   const t = TERMINAL_ZUSTAND, befehl = woerter[0], args = woerter.slice(1), arg = terminalArgText(args);
   if (befehl === 'exit') {
     if (arg) { terminalAusgabe('usage: exit'); return 2; }
+    // In tmux beendet exit die Shell der Sitzung; vereinfacht endet damit die ganze Sitzung samt oberem Fenster.
+    if (t.tmux && !t.kanal && !t.orbitLive) { terminalTmuxEnde(); terminalAusgabe('[exited]'); return 0; }
     t.kette = null;
     terminalKanalAbbruch();
     t.version++;
@@ -1169,11 +1254,13 @@ async function terminalEinzelbefehl(woerter) {
   const ppp = await terminalPppShell(befehl, arg, args);
   if (ppp !== null) return ppp;
   if (befehl === 'echo') { terminalAusgabe(args.join(' ')); return 0; }
+  if (befehl === 'tmux') return terminalTmux(args);
   if (befehl === 'true' && !arg) return 0;
   if (befehl === 'false' && !arg) return 1;
   if (befehl === 'help' && !arg) {
     terminalAusgabe(['ls [-a|-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · echo · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
       'predict · pon kestrel · pppd call kestrel [updetach] · poff [kestrel] · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
+      'tmux · tmux split-window -bd predict · Ctrl+B ↑/↓ switch pane · tmux kill-pane -t \'{up-of}\'',
       'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);
     return 0;
   }
@@ -1244,10 +1331,10 @@ function terminalBefehl(zeile) {
 }
 const TERMINAL_DATEIBEFEHLE = ['ls', 'cd', 'cat', 'head', 'tail', 'wget'];
 const TERMINAL_BEFEHLE = TERMINAL_DATEIBEFEHLE.concat(['help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit',
-  'predict', 'pon', 'pppd', 'poff', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity']);
+  'predict', 'pon', 'pppd', 'poff', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
 const TERMINAL_PPP_TAB = new Map([
   ['predict', []],
-  ['pppd', ['call kestrel updetach']], ['pon', ['kestrel']], ['poff', ['kestrel']], ['wg-quick', ['up wg-sat', 'down wg-sat']], ['wg', ['show wg-sat']]
+  ['pppd', ['call kestrel updetach']], ['pon', ['kestrel']], ['poff', ['kestrel']], ['wg-quick', ['up wg-sat', 'down wg-sat']], ['wg', ['show wg-sat']], ['tmux', ['split-window -bd predict', "kill-pane -t '{up-of}'", 'kill-server']]
 ]);
 let terminalTabLauf = null, terminalTabAuswahl = null;
 function terminalTabReset() {
@@ -1486,6 +1573,8 @@ function terminalKonsoleBauen() {
     'aria-controls': 'profil-terminal-kern', 'aria-expanded': 'true', 'aria-label': 'Minimieren', title: 'Minimieren' }, '−');
   const griff = h('span', { class: 'profil-terminal-groesse', 'aria-hidden': 'true' });
   const kern = h('div', { id: 'profil-terminal-kern', class: 'profil-terminal-kern' },
+      h('pre', { id: 'profil-terminal-pane', class: 'mono', 'aria-label': 'tmux: predict', hidden: true,
+        onpointerdown: function (ev) { ev.preventDefault(); terminalTmuxFokus('oben'); } }),
       h('pre', { id: 'profil-terminal-ausgabe', class: 'mono', role: 'log', 'aria-label': 'Terminalausgabe' }, t.ausgabe.join('\n')),
       h('pre', { id: 'profil-terminal-orbit', class: 'mono', 'aria-label': 'Überflug', hidden: true }),
       h('pre', { id: 'profil-terminal-chat', class: 'mono', role: 'log', 'aria-label': 'Chatverlauf', hidden: true }),
@@ -1494,11 +1583,13 @@ function terminalKonsoleBauen() {
         ev.preventDefault();
         terminalTabReset();
         const zeile = input.value.replace(/\n/g, ' ').trim();
+        if (TERMINAL_ZUSTAND.tmux?.fokus === 'oben') return;
         if (zeile !== 'exit' && terminalBeschaeftigt()) return;
         terminalEingabeSetzen(input, '');
         if (zeile) { terminalVerlaufNehmen(zeile); terminalBefehl(zeile); }
       } }, h('label', { id: 'profil-terminal-prompt', for: input.id, class: 'mono' }, terminalPrompt()), input,
-        h('button', { type: 'submit' }, 'Ausführen')));
+        h('button', { type: 'submit' }, 'Ausführen')),
+      h('div', { id: 'profil-terminal-tmux', class: 'mono', 'aria-label': 'tmux-Statuszeile', hidden: true }));
   const fenster = h('section', { id: 'profil-terminal', class: 'panel profil-terminal', 'aria-label': 'Shadow Terminal', tabindex: '-1', hidden: true },
     h('div', { class: 'profil-terminal-kopf' }, titel, h('span', { id: 'profil-terminal-sat', class: 'mono', hidden: true }), minimieren,
       h('button', { type: 'button', id: 'profil-terminal-schliessen', 'aria-label': 'Schließen', title: 'Schließen',
@@ -1627,6 +1718,21 @@ function terminalKonsoleEscape() {
 }
 document.addEventListener('keydown', function (ev) {
   if (document.body.classList.contains('locked') || terminalKonsoleDialogOffen() || ev.isComposing) return;
+  const tx = TERMINAL_ZUSTAND.tmux, imTerminal = TERMINAL_ZUSTAND.offen && $('profil-terminal')?.contains(ev.target);
+  if (tx && imTerminal) {
+    if (tx.praefix && !['Control', 'Shift', 'Alt', 'Meta'].includes(ev.key)) {
+      tx.praefix = false; ev.preventDefault(); ev.stopImmediatePropagation();
+      if (ev.key === 'ArrowUp') terminalTmuxFokus('oben');
+      else if (ev.key === 'ArrowDown') terminalTmuxFokus('unten');
+      else if (ev.key === 'o') terminalTmuxFokus(tx.fokus === 'oben' ? 'unten' : 'oben');
+      return;
+    }
+    if (ev.ctrlKey && !ev.altKey && !ev.metaKey && ev.key.toLowerCase() === 'b') { tx.praefix = true; ev.preventDefault(); ev.stopImmediatePropagation(); return; }
+    if (tx.fokus === 'oben' && ev.ctrlKey && ev.key.toLowerCase() === 'c' && !ev.repeat) {
+      // Strg+C beendet predict im oberen Fenster; tmux schließt das Fenster, der Fokus geht zurück zur Shell.
+      ev.preventDefault(); ev.stopImmediatePropagation(); terminalTmuxPaneSchliessen(); return;
+    }
+  }
   const strgC = ev.ctrlKey && !ev.altKey && !ev.metaKey && !ev.shiftKey && ev.key.toLowerCase() === 'c' &&
     TERMINAL_ZUSTAND.offen && $('profil-terminal')?.contains(ev.target);
   if (strgC && !ev.repeat) {
@@ -1652,7 +1758,7 @@ document.addEventListener('keydown', function (ev) {
 // Locking the app drops the temporary dialogue even when the window stays open.
 new MutationObserver(function () {
   if (!document.body.classList.contains('locked')) return;
-  TERMINAL_ZUSTAND.kette = null; terminalKanalAbbruch(); terminalVerlaufLeeren();
+  TERMINAL_ZUSTAND.kette = null; terminalKanalAbbruch(); terminalTmuxEnde(); terminalVerlaufLeeren();
   const input = $('profil-terminal-eingabe');
   if (input) terminalEingabeSetzen(input, '');
   terminalKonsoleSchliessen(false);
