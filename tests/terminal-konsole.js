@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
-const PF = require('./_pfad'), { vorbereiten } = require('./_satcon');
+const PF = require('./_pfad'), { chatBereit } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -76,15 +76,13 @@ const PF = require('./_pfad'), { vorbereiten } = require('./_satcon');
     assert.match(await p.locator('#profil-terminal-ausgabe').textContent(), /# pwd/);
     await input.press('ArrowUp'); assert.equal(await input.inputValue(), 'pwd');
     await input.press('Escape'); assert.equal(await input.inputValue(), 't');
-    await vorbereiten(p);
-    await befehl('secure-channel --connect --iface sat0 --route mixnet --ephemeral');
-    await p.waitForFunction(() => $('profil-terminal-prompt').textContent === 'you >', null, { timeout: 40000 });
+    await chatBereit(p, { kontakt: false });
     await p.locator('#profil-terminal-schliessen').click(); assert.equal(await panel.isVisible(), false);
-    await p.keyboard.press('t'); assert.equal(await prompt.textContent(), 'you >');
+    await p.keyboard.press('t'); assert.equal(await prompt.textContent(), '>');
     // Focus the underlying SVG deliberately. Escape must still only reach the terminal.
     await p.locator('#k-svg').focus(); await p.keyboard.press('Escape');
     assert.equal(await panel.isVisible(), true);
-    assert.notEqual(await prompt.textContent(), 'you >');
+    assert.notEqual(await prompt.textContent(), '>');
     await p.keyboard.press('Escape'); assert.equal(await panel.isVisible(), false);
     assert.equal(await p.locator('#k-pin-neu').getAttribute('aria-pressed'), 'true');
     await p.keyboard.press('t'); await p.keyboard.press('F2');

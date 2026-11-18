@@ -1,4 +1,4 @@
-const { vorbereiten } = require('./_satcon');
+const { chatBereit } = require('./_kestrel');
 /* Kartenobjekt → neue Archiv-TXT → Tab im offenen Kanal → send. */
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -147,19 +147,17 @@ const PF = require('./_pfad');
     await p.evaluate(() => dispatch({ type: 'NAVIGATION', modul: 'profil' }));
     await p.locator('#profil-terminal-oeffnen').click();
     const input = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
-    await vorbereiten(p);
-    await input.fill('secure-channel --connect --iface sat0 --route mixnet --ephemeral');
-    await input.press('Enter');
-    await p.waitForFunction(() => document.querySelector('#profil-terminal-prompt').textContent === 'you >');
+    await chatBereit(p);
+    const chat = p.locator('#profil-terminal-chat');
     for (const [folder, short, name] of [['dokumente', 'lageblatt-PIN-001.', 'lageblatt-PIN-001.txt'], ['ops', 'zone', 'zone-ZO-001.txt']]) {
-      const arg = 'send /pgcl-eu3.arch07/' + folder + '/';
+      const arg = '/sendfile /pgcl-eu3.arch07/' + folder + '/';
+      const vorher = ((await chat.textContent()).match(/File sent successfully/g) || []).length;
       await input.fill(arg + short);
       await input.press('Tab');
       await p.waitForFunction(value => document.querySelector('#profil-terminal-eingabe').value === value, arg + name);
       await input.press('Enter');
-      await p.waitForFunction(() => document.querySelector('#profil-terminal-prompt').textContent === 'you >');
-      assert.ok((await out.textContent()).split('\n').some(zeile => zeile.startsWith(name + ' ') && zeile.includes('100%')));
-      assert.match(await out.textContent(), /ACK received from peer/);
+      await p.waitForFunction(n => (document.querySelector('#profil-terminal-chat').textContent.match(/File sent successfully/g) || []).length > n, vorher, { timeout: 70000 });
+      assert.ok((await chat.textContent()).split('\n').some(zeile => zeile.includes(name) && zeile.includes('100%')));
     }
 
     const offline = await open('');

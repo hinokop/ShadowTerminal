@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
+const { imUeberflug } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -16,17 +17,19 @@ const { APP } = require('./_pfad');
     await p.fill('#gate-pw', 'pw-test-123');
     if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
-    await p.clock.install(); await p.clock.pauseAt(new Date(Date.now() + 1000));
+    await p.clock.install(); await imUeberflug(p);
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const badge = p.locator('#profil-terminal-sat');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
 
-    await cmd('predict -t /var/cache/tle/iridium.tle -p "IRIDIUM 142"');
-    const bis = await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis);
-    await cmd('pppd call iridium'); await p.clock.runFor(7500);
+    await cmd('predict -t /var/cache/tle/kestrel.tle -p KESTREL-1');
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.satLink), null, 'predict rechnet nur');
+    assert.equal(await badge.isVisible(), false, 'predict allein zeigt keinen Countdown');
+    await cmd('pon kestrel'); await p.clock.runFor(7500);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem.bereit), true);
+    const bis = await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis);
     assert.equal(await badge.isVisible(), true, 'Countdown während der Einwahl sichtbar');
-    assert.match(await badge.textContent(), /LOS \d\dm \d\ds/);
+    assert.match(await badge.textContent(), /^KESTREL-\d · LOS \d\dm \d\ds$/);
     await cmd('wg-quick up wg-sat'); await p.clock.runFor(700);
     await cmd('profanity'); await p.clock.runFor(6100);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal?.phase), 'eingabe');
@@ -36,36 +39,29 @@ const { APP } = require('./_pfad');
     assert.equal(await badge.isVisible(), true, 'nach /quit läuft das Modem noch');
     await cmd('wg-quick down wg-sat');
     assert.equal(await badge.isVisible(), true, 'nach wg-quick down läuft das Modem noch');
-    await cmd('poff iridium');
-    assert.match(await out.textContent(), /root@terminal:\/# poff iridium$/, 'poff bei Erfolg still');
+    await cmd('poff kestrel');
+    assert.match(await out.textContent(), /root@terminal:\/# poff kestrel$/, 'poff bei Erfolg still');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null);
     await p.clock.runFor(500);
     assert.equal(await badge.isVisible(), false, 'nach vollständigem Abbau kein Countdown');
-    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.satLink?.bis), bis, 'Überflugberechnung intern erhalten');
-    await cmd('predict -t /var/cache/tle/iridium.tle -p "IRIDIUM 142"');
-    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis), bis, 'derselbe Überflug');
-    assert.equal(await badge.isVisible(), false, 'predict allein zeigt keinen Countdown');
 
     const vorLos = await out.textContent();
     await p.clock.fastForward(bis - await p.evaluate(() => Date.now()) + 1000);
     await p.clock.runFor(500);
     assert.equal(await out.textContent(), vorLos, 'beim LOS keine zweite Abbruchmeldung');
     assert.equal(await badge.isVisible(), false, 'nach LOS kein Countdown');
-    await cmd('poff iridium');
-    assert.match(await out.textContent(), /poff: I could not find a pppd process for provider 'iridium'\. None stopped\.$/, 'kein Hinweis auf Signalverlust');
+    await cmd('poff kestrel');
+    assert.match(await out.textContent(), /poff: I could not find a pppd process for provider 'kestrel'\. None stopped\.$/, 'kein Hinweis auf Signalverlust');
 
-    /* erneute Einwahl nach LOS: neuer Überflug, Countdown wieder sichtbar */
-    await cmd('predict -t /var/cache/tle/iridium.tle -p "IRIDIUM 142"');
-    assert.notEqual(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis), bis, 'neuer Überflug nach LOS');
-    await cmd('pppd call iridium'); await p.clock.runFor(500);
+    /* nächster Überflug: erneute Einwahl, Countdown wieder sichtbar; LOS bei laufendem Modem meldet sich selbst */
+    await imUeberflug(p);
+    await cmd('pon kestrel'); await p.clock.runFor(500);
     assert.equal(await badge.isVisible(), true, 'Countdown bei erneuter Einwahl');
-    /* LOS bei laufendem Modem: poff nennt NO CARRIER nur bis zum nächsten berechneten Überflug */
     await p.clock.runFor(7500);
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now()) + 1000);
+    assert.match(await out.textContent(), /pppd\[\d+\]: Modem hangup \(NO CARRIER\)\npppd\[\d+\]: Connection terminated\.$/);
     assert.equal(await badge.isVisible(), false, 'nach LOS mit Modem kein Countdown');
-    await cmd('poff iridium'); assert.match(await out.textContent(), /poff: I could not find a pppd process for provider 'iridium'\. None stopped\.$/);
-    await cmd('predict -t /var/cache/tle/iridium.tle -p "IRIDIUM 142"');
-    await cmd('poff iridium'); assert.match(await out.textContent(), /poff: I could not find a pppd process for provider 'iridium'\. None stopped\.$/, 'kein veralteter Abbruchgrund');
+    await cmd('poff'); assert.match(await out.textContent(), /poff: No pppd is running\.  None stopped\.$/);
     assert.deepEqual(errors, []);
     console.log('OK: Einwahlabschluss ohne Countdown und ohne zweite Abbruchmeldung');
   } finally { await b.close(); }
