@@ -1676,17 +1676,80 @@ function terminalVorschlag() {
   }
   return '';
 }
+/* Einfärbung beim Tippen wie zsh-syntax-highlighting. Die Zerlegung folgt terminalZerlegen, damit die Farbe zeigt,
+   was die Shell beim Ausführen tut: Befehlswort grün (bekannt) oder rot (command not found), Anführungszeichen gelb
+   (offen bis zum Zeilenende), $? eigene Farbe, Trenner ohne Farbe; was die Shell abweist (Pipes, Umleitungen,
+   Ersetzungen, Trenner ohne Befehl davor), rot. Ergebnis: lückenlose Abschnitte [text, art]. */
+function terminalEinfaerben(zeile) {
+  const teile = [];
+  let wort = null, befehlsPos = true, quote = null;
+  const dazu = function (text, art) {
+    const letzt = teile.at(-1);
+    if (letzt && letzt[1] === art) letzt[0] += text; else teile.push([text, art]);
+  };
+  const wortEnde = function () {
+    if (!wort) return;
+    const name = wort.map(function (w) { return w[2]; }).join('');
+    const art = befehlsPos ? (terminalBefehlEintrag(name) ? 'befehl' : 'unbekannt') : 'argument';
+    const teil = wort; wort = null;
+    teil.forEach(function (w) { dazu(w[0], w[1] === 'wort' || befehlsPos ? art : w[1]); });
+    befehlsPos = false;
+  };
+  // Ein Wort sammelt Abschnitte mit dem Wert, den terminalZerlegen daraus macht (für den Namen des Befehls).
+  const wortDazu = function (text, art, wert) {
+    if (!wort) wort = [];
+    const letzt = wort.at(-1);
+    if (letzt && letzt[1] === art) { letzt[0] += text; letzt[2] += wert; } else wort.push([text, art, wert]);
+  };
+  for (let i = 0; i < zeile.length; i++) {
+    const c = zeile[i], n = zeile[i + 1];
+    if (quote === "'") { wortDazu(c, 'zeichenkette', c === "'" ? '' : c); if (c === "'") quote = null; continue; }
+    if (quote === '"') {
+      if (c === '"') { wortDazu(c, 'zeichenkette', ''); quote = null; }
+      else if (c === '\\' && n !== undefined && '"\\$'.includes(n)) { wortDazu(c + n, 'zeichenkette', n); i++; }
+      else if (c === '$' && n === '?') { wortDazu('$?', 'variable', '$?'); i++; }
+      else wortDazu(c, 'zeichenkette', c);
+      continue;
+    }
+    if (c === "'" || c === '"') { quote = c; wortDazu(c, 'zeichenkette', ''); continue; }
+    if (/\s/.test(c)) { wortEnde(); dazu(c, 'leer'); continue; }
+    if (c === '\\') { wortDazu(n === undefined ? c : c + n, 'wort', n ?? ''); i++; continue; }
+    const op = (c === '&' && n === '&') || (c === '|' && n === '|') ? c + n : c === ';' ? ';' : '';
+    if (op) {
+      const ohneBefehl = befehlsPos && !wort;
+      wortEnde();
+      dazu(op, ohneBefehl ? 'fehler' : 'operator');
+      befehlsPos = true; i += op.length - 1;
+      continue;
+    }
+    if ('|&<>`'.includes(c) || (c === '$' && n === '(')) { wortEnde(); dazu(c === '$' ? '$(' : c, 'fehler'); if (c === '$') i++; continue; }
+    if (c === '$' && n === '?') { wortDazu('$?', 'variable', '$?'); i++; continue; }
+    wortDazu(c, 'wort', c);
+  }
+  wortEnde();
+  return teile;
+}
+/* Ein Overlay hinter dem (dann durchsichtigen) Eingabefeld zeigt den eingefärbten Text und den grauen Vorschlag.
+   Im Chat bleibt das Feld normal: Nachrichten sind keine Befehle. */
 function terminalVorschlagAnzeige() {
   const geist = $('profil-terminal-vorschlag'), input = $('profil-terminal-eingabe');
   if (!geist || !input) return;
-  const rest = terminalVorschlag();
-  geist.hidden = !rest;
-  if (!rest) { geist.replaceChildren(); return; }
-  // Gleiche Schrift, Abstände und Umbruch wie das Eingabefeld, damit der Rest genau hinter dem Text steht.
+  // Während einer IME-Komposition zeigt das Feld den Text selbst: das Overlay kennt den unfertigen Text nicht.
+  const farbig = !TERMINAL_ZUSTAND.kanal && !input.dataset.ime, rest = input.dataset.ime ? '' : terminalVorschlag();
+  input.parentElement?.classList.toggle('farbig', farbig);
+  geist.hidden = !(rest || (farbig && input.value));
+  if (geist.hidden) { geist.replaceChildren(); return; }
+  // Gleiche Schrift, Abstände und Umbruch wie das Eingabefeld, damit der Text genau unter dem Feld steht.
   const st = getComputedStyle(input);
   ['font', 'letterSpacing', 'lineHeight', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
     'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'textIndent'].forEach(function (k) { geist.style[k] = st[k]; });
-  geist.replaceChildren(h('span', { class: 'text' }, input.value), h('span', { class: 'rest' }, rest));
+  // Eine Bildlaufleiste (Windows) verengt nur das Feld; das Overlay bekommt den Platz als Innenabstand, sonst bricht es anders um.
+  const leiste = input.offsetWidth - input.clientWidth - parseFloat(st.borderLeftWidth) - parseFloat(st.borderRightWidth);
+  if (leiste > 0) geist.style.paddingRight = 'calc(' + st.paddingRight + ' + ' + leiste + 'px)';
+  const text = farbig
+    ? terminalEinfaerben(input.value).map(function (t) { return t[1] === 'leer' || t[1] === 'argument' ? t[0] : h('span', { class: 'f-' + t[1] }, t[0]); })
+    : [input.value];
+  geist.replaceChildren(h('span', { class: 'text' }, ...text), ...(rest ? [h('span', { class: 'rest' }, rest)] : []));
   geist.scrollTop = input.scrollTop;
 }
 function terminalKonsoleBauen() {
@@ -1704,7 +1767,9 @@ function terminalKonsoleBauen() {
       }
       terminalEingabeHoehe(input);
       terminalVorschlagAnzeige();
-    }, onkeyup: terminalVorschlagAnzeige, onpointerup: terminalVorschlagAnzeige, onfocus: terminalVorschlagAnzeige, onscroll: function () { const g = $('profil-terminal-vorschlag'); if (g) g.scrollTop = input.scrollTop; } });
+    }, oncompositionstart: function () { input.dataset.ime = '1'; terminalVorschlagAnzeige(); },
+    oncompositionend: function () { delete input.dataset.ime; terminalVorschlagAnzeige(); },
+    onkeyup: terminalVorschlagAnzeige, onpointerup: terminalVorschlagAnzeige, onfocus: terminalVorschlagAnzeige, onscroll: function () { const g = $('profil-terminal-vorschlag'); if (g) g.scrollTop = input.scrollTop; } });
   const titel = h('div', { class: 'profil-terminal-titel', 'aria-hidden': 'true' }, 'Shadow Terminal');
   const minimieren = h('button', { type: 'button', id: 'profil-terminal-minimieren',
     'aria-controls': 'profil-terminal-kern', 'aria-expanded': 'true', 'aria-label': 'Minimieren', title: 'Minimieren' }, '−');
