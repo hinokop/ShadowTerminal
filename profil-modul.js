@@ -1597,7 +1597,7 @@ function terminalVerlaufTaste(ev) {
 }
 function terminalTabTaste(ev) {
   const offen = terminalTabAuswahl;
-  if ((ev.key === 'ArrowRight' || ev.key === 'End') && !offen && !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
+  if ((ev.key === 'ArrowRight' || ev.key === 'End') && !offen && !ev.isComposing && ev.keyCode !== 229 && !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
     const rest = terminalVorschlag(), input = ev.currentTarget;
     if (rest && input.selectionStart === input.value.length) { ev.preventDefault(); terminalEingabeSetzen(input, input.value + rest); return; }
   }
@@ -1667,11 +1667,12 @@ function terminalEingabeSetzen(input, wert) {
    → oder Ende am Zeilenende übernimmt ihn. Nicht im Chat, nicht beim Blättern im Verlauf, nicht bei offener Auswahlliste. */
 function terminalVorschlag() {
   const t = TERMINAL_ZUSTAND, input = $('profil-terminal-eingabe');
-  if (!input || !input.value || t.kanal || t.vpos !== -1 || terminalTabAuswahl || t.tmux?.fokus === 'oben' || terminalBeschaeftigt()) return '';
+  if (!input || !input.value || t.kanal || t.orbitLive || t.vpos !== -1 || terminalTabAuswahl || t.tmux?.fokus === 'oben' || terminalBeschaeftigt()) return '';
   if (document.activeElement === input && (input.selectionStart !== input.value.length || input.selectionEnd !== input.value.length)) return '';
+  // Der jüngste passende Eintrag entscheidet; ist er genau die Eingabe, gibt es keinen Vorschlag (kein älterer, längerer).
   for (let i = t.verlauf.length - 1; i >= 0; i--) {
     const e = t.verlauf[i];
-    if (e.length > input.value.length && e.startsWith(input.value)) return e.slice(input.value.length);
+    if (e.startsWith(input.value)) return e.slice(input.value.length);
   }
   return '';
 }

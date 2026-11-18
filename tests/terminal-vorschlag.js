@@ -39,6 +39,20 @@ const { chatBereit } = require('./_kestrel');
     assert.equal(await rest(), null); assert.equal(await inp.inputValue(), 'ec', '← bewegt nur den Cursor');
     await p.keyboard.press('ArrowRight'); await p.keyboard.press('ArrowRight');
     assert.equal(await inp.inputValue(), 'echo zwei', 'am Zeilenende übernimmt → wieder');
+    /* Jüngster Treffer entscheidet: nach "echo eins && echo zwei" und später "echo eins" kein Vorschlag bei "echo eins" */
+    await cmd('echo eins && echo zwei'); await cmd('echo eins');
+    await tippen('echo eins'); assert.equal(await rest(), null);
+    await p.keyboard.press('End'); assert.equal(await inp.inputValue(), 'echo eins', 'Ende erweitert einen vollständig getippten Befehl nicht');
+    await tippen('echo ein'); assert.equal(await rest(), 's');
+    /* Vordergrund-predict: kein Vorschlag, keine Übernahme */
+    await inp.fill('predict'); await inp.press('Enter');
+    await tippen('ec'); assert.equal(await rest(), null);
+    await p.keyboard.press('End'); assert.equal(await inp.inputValue(), 'ec');
+    await inp.press('Control+c'); await inp.fill('');
+    /* Während einer IME-Komposition übernehmen → und Ende nicht */
+    await tippen('ec'); assert.equal(await rest(), 'ho eins');
+    await inp.evaluate(e => e.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', isComposing: true, bubbles: true, cancelable: true })));
+    assert.equal(await inp.inputValue(), 'ec');
     /* Blättern im Verlauf: kein Vorschlag */
     await inp.fill(''); await inp.press('ArrowUp'); assert.equal(await rest(), null);
     await inp.press('Escape');
