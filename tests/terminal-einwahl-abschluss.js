@@ -52,7 +52,7 @@ const { APP } = require('./_pfad');
     assert.equal(await out.textContent(), vorLos, 'beim LOS keine zweite Abbruchmeldung');
     assert.equal(await badge.isVisible(), false, 'nach LOS kein Countdown');
     await cmd('poff iridium');
-    assert.match(await out.textContent(), /poff: iridium is not running$/, 'Grund des früheren poff, kein NO CARRIER');
+    assert.match(await out.textContent(), /poff: I could not find a pppd process for provider 'iridium'\. None stopped\.$/, 'kein Hinweis auf Signalverlust');
 
     /* erneute Einwahl nach LOS: neuer Überflug, Countdown wieder sichtbar */
     await cmd('predict -t /var/cache/tle/iridium.tle -p "IRIDIUM 142"');
@@ -63,9 +63,9 @@ const { APP } = require('./_pfad');
     await p.clock.runFor(7500);
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now()) + 1000);
     assert.equal(await badge.isVisible(), false, 'nach LOS mit Modem kein Countdown');
-    await cmd('poff iridium'); assert.match(await out.textContent(), /poff: iridium is not running \(NO CARRIER\)$/);
+    await cmd('poff iridium'); assert.match(await out.textContent(), /poff: I could not find a pppd process for provider 'iridium'\. None stopped\.$/);
     await cmd('predict -t /var/cache/tle/iridium.tle -p "IRIDIUM 142"');
-    await cmd('poff iridium'); assert.match(await out.textContent(), /poff: iridium is not running$/, 'kein veralteter Abbruchgrund');
+    await cmd('poff iridium'); assert.match(await out.textContent(), /poff: I could not find a pppd process for provider 'iridium'\. None stopped\.$/, 'kein veralteter Abbruchgrund');
     assert.deepEqual(errors, []);
     console.log('OK: Einwahlabschluss ohne Countdown und ohne zweite Abbruchmeldung');
   } finally { await b.close(); }
