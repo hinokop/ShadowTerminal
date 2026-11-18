@@ -804,7 +804,7 @@ function kestrelUeberflugRechnen(sat, ab) {
   const schritt = 30000, grenze = function (a, b) {
     let lo = a, hi = b; // el(lo) < 0 <= el(hi) oder umgekehrt
     const steigend = kestrelEl(sat, b) >= 0;
-    while (hi - lo > 1000) { const m = (lo + hi) / 2; if ((kestrelEl(sat, m) >= 0) === steigend) hi = m; else lo = m; }
+    while (hi - lo > 20) { const m = (lo + hi) / 2; if ((kestrelEl(sat, m) >= 0) === steigend) hi = m; else lo = m; }
     return Math.round((steigend ? hi : lo) / 1000) * 1000;
   };
   let von;
@@ -819,10 +819,11 @@ function kestrelUeberflugRechnen(sat, ab) {
     while (e < 0) { letzter = e < -40 ? 240000 : e < -15 ? 90000 : schritt; a += letzter; if (a - ab > 172800000) return null; e = kestrelEl(sat, a); }
     von = grenze(a - letzter, a);
   }
-  let b = Math.max(von, ab) + 1000, max = { ms: von, el: 0 };
+  // Höchster Punkt und Untergang über den ganzen Überflug, unabhängig vom Abfragezeitpunkt.
+  let b = von + 1000, max = { ms: von, el: 0 };
   while (kestrelEl(sat, b) >= 0) { const e = kestrelEl(sat, b); if (e > max.el) max = { ms: b, el: e }; b += 10000; if (b - von > 3600000) break; }
   let lo = b - 10000, hi = b;
-  while (hi - lo > 1000) { const m = (lo + hi) / 2; if (kestrelEl(sat, m) >= 0) lo = m; else hi = m; }
+  while (hi - lo > 20) { const m = (lo + hi) / 2; if (kestrelEl(sat, m) >= 0) lo = m; else hi = m; }
   return { sat, von, bis: Math.round(lo / 1000) * 1000, maxMs: Math.round(max.ms / 1000) * 1000, maxEl: max.el };
 }
 function kestrelSichtbar(ms) {

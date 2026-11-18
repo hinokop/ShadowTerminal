@@ -69,6 +69,12 @@ const { imUeberflug } = require('./_kestrel');
     assert.ok(naechster.length && spalte(naechster[0], 0) > pass.bis / 1000, 'nächster Überflug');
     assert.deepEqual(await nach('date +%s'), [String(jetzt)]);
 
+    /* Höchster Punkt unabhängig vom Abfragezeitpunkt (vor dem Aufgang, nach dem Maximum, kurz vor dem Untergang) */
+    const gleich = await p.evaluate(({ name, von, bis, max }) => {
+      const sat = kestrelSat(name);
+      return [von - 600000, max + 30000, bis - 5000].map(ab => { sat.cache = null; const u = kestrelUeberflug(sat, ab); return [u.von, u.bis, u.maxMs, Math.round(u.maxEl * 10)]; });
+    }, pass);
+    assert.deepEqual(gleich[1], gleich[0]); assert.deepEqual(gleich[2], gleich[0]);
     /* Konfiguration: Peer und Chatscript */
     assert.ok((await nach('cat /etc/ppp/peers/kestrel')).includes('connect "/usr/sbin/chat -v -f /etc/chatscripts/kestrel"'));
     assert.ok((await nach('cat /etc/chatscripts/kestrel')).includes('OK ATDT00882994401'));
