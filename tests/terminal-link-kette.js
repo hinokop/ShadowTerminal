@@ -162,7 +162,8 @@ const { imUeberflug } = require('./_kestrel');
     await cmd('/quit');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem === null && TERMINAL_ZUSTAND.wgSat.handshake === null), true);
     await cmd('wg-quick down wg-sat');
-    // Nach dem Untergang steht kein Satellit über dem Horizont: kein Träger, pppd endet mit 8.
+    // Scheitert die Wahl (kein Träger), endet pppd mit 8. Gezielt ausgelöst, weil nach einem Untergang ein anderer KESTREL aufgegangen sein kann.
+    await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; });
     await cmd('pppd call kestrel updetach'); await p.clock.runFor(7000);
     assert.match(await out.textContent(), /chat\[\d+\]: NO CARRIER\npppd\[\d+\]: Connect script failed$/);
     await cmd('echo $?'); assert.match(await out.textContent(), /\n8$/);

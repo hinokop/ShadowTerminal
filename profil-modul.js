@@ -606,7 +606,7 @@ function kestrelUeberflugRechnen(sat, ab) {
     let lo = a, hi = b; // el(lo) < 0 <= el(hi) oder umgekehrt
     const steigend = kestrelEl(sat, b) >= 0;
     while (hi - lo > 20) { const m = (lo + hi) / 2; if ((kestrelEl(sat, m) >= 0) === steigend) hi = m; else lo = m; }
-    return Math.round((steigend ? hi : lo) / 1000) * 1000;
+    return kestrelSekunde(sat, steigend ? hi : lo, steigend);
   };
   let von;
   if (kestrelEl(sat, ab) >= 0) {
@@ -625,7 +625,13 @@ function kestrelUeberflugRechnen(sat, ab) {
   while (kestrelEl(sat, b) >= 0) { const e = kestrelEl(sat, b); if (e > max.el) max = { ms: b, el: e }; b += 10000; if (b - von > 3600000) break; }
   let lo = b - 10000, hi = b;
   while (hi - lo > 20) { const m = (lo + hi) / 2; if (kestrelEl(sat, m) >= 0) lo = m; else hi = m; }
-  return { sat, von, bis: Math.round(lo / 1000) * 1000, maxMs: Math.round(max.ms / 1000) * 1000, maxEl: max.el };
+  return { sat, von, bis: kestrelSekunde(sat, lo, false), maxMs: Math.round(max.ms / 1000) * 1000, maxEl: max.el };
+}
+// Auf ganze Sekunden festgelegt, unabhängig vom Suchweg: Aufgang = erste Sekunde mit el >= 0, Untergang = letzte.
+function kestrelSekunde(sat, x, steigend) {
+  let t = Math.floor(x / 1000) * 1000;
+  if (steigend) { t -= 1000; while (kestrelEl(sat, t) < 0) t += 1000; return t; }
+  t += 1000; while (kestrelEl(sat, t) < 0) t -= 1000; return t;
 }
 function kestrelSichtbar(ms) {
   return kestrelSats().map(function (x) { return { sat: x, el: kestrelEl(x, ms) }; })
