@@ -8,9 +8,10 @@ async function imUeberflug(p, { minMax = 15, el = 10, wahl = 'ok' } = {}) {
       for (const sat of kestrelSats()) { const u = kestrelUeberflug(sat, ab); if (u && (!best || u.von < best.von)) best = u; }
       if (!best) return null;
       if (best.maxEl >= minMax) {
-        let t = best.von;
-        while (kestrelEl(best.sat, t) < el && t < best.maxMs) t += 5000;
-        return { t, von: best.von, bis: best.bis, max: best.maxMs, name: best.sat.name };
+        // Nicht in die Vergangenheit springen; genug Elevation und mindestens 6 min bis zum Untergang.
+        let t = Math.max(best.von, Math.ceil(Date.now() / 1000) * 1000 + 1000);
+        while (kestrelEl(best.sat, t) < el && t < best.bis) t += 5000;
+        if (kestrelEl(best.sat, t) >= el && best.bis - t >= 360000) return { t, von: best.von, bis: best.bis, max: best.maxMs, name: best.sat.name };
       }
       ab = best.bis + 60000;
     }
