@@ -26,6 +26,7 @@ const { APP } = require('./_pfad');
     /* Zerlegung */
     await cmd(`echo "a  b" 'c $?' d\\ e`); assert.equal(await letzte(), 'a  b c $? d e');
     await cmd('echo "Status $?"'); assert.equal(await letzte(), 'Status 0');
+    await cmd('echo "a && b" \'c || d ; e\''); assert.equal(await letzte(), 'a && b c || d ; e');
     await cmd('echo "offen'); assert.match(await letzte(), /unexpected EOF while looking for matching `"'/);
     assert.equal(await status(), '2');
     await cmd('&& echo x'); assert.match(await letzte(), /syntax error near unexpected token `&&'/);
@@ -49,6 +50,7 @@ const { APP } = require('./_pfad');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem.bereit), true);
     await cmd('poff iridium && tail -n 6 /var/log/syslog');
     assert.match(await out.textContent(), /terminal pppd\[1401\]: Terminating on signal 15\n.*terminal pppd\[1401\]: Connection terminated\.$/, 'tail läuft nach erfolgreichem poff');
+    assert.equal((await out.textContent()).split('poff iridium && tail').at(-1).match(/Terminating on signal 15/g).length, 1, 'Abbau genau einmal, im Syslog');
     assert.equal(await status(), '0');
     /* … und bei bereits beendetem Modem: tail startet nicht, $? zeigt den Fehler */
     await cmd('poff iridium && tail -n 6 /var/log/syslog');
@@ -62,21 +64,28 @@ const { APP } = require('./_pfad');
     await p.clock.runFor(3000);
     await cmd('echo zwischendurch');
     assert.doesNotMatch(await out.textContent(), /zwischendurch|bereit$/, 'Eingabe während der Kette wird nicht ausgeführt');
+    assert.equal(await inp.inputValue(), 'echo zwischendurch', 'Eingabe bleibt stehen');
+    assert.equal(await p.locator('#profil-terminal form').getAttribute('aria-busy'), 'true', 'sichtbares Signal: Shell beschäftigt');
     await p.clock.runFor(4600);
     assert.match(await out.textContent(), /local IP address [\d.]+\n\[#\] ip link add wg-sat type wireguard$/);
     await p.clock.runFor(700);
     assert.equal(await letzte(), 'bereit');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.wgSat.bereit), true);
     assert.equal(await prompt.textContent(), 'root@terminal:/#');
+    assert.equal(await p.locator('#profil-terminal form').getAttribute('aria-busy'), 'false');
+    assert.equal(await inp.inputValue(), 'echo zwischendurch', 'alte Eingabe wird nicht von selbst ausgeführt');
+    assert.doesNotMatch(await out.textContent(), /\nzwischendurch/);
     await cmd('wg-quick down wg-sat; poff iridium; echo $?'); assert.equal(await letzte(), '0');
 
-    /* Abbruch mit Strg+C beendet die ganze Kette */
-    await cmd('pppd call iridium updetach && echo nie');
-    await p.clock.runFor(500);
+    /* Abbruch mit Strg+C beendet die ganze Kette; kein späterer Timer startet Tunnel oder Chat */
+    await cmd('pppd call iridium updetach && wg-quick up wg-sat && profanity');
+    await p.clock.runFor(3000);
     await inp.press('Control+c');
-    await p.clock.runFor(8000);
-    assert.doesNotMatch(await out.textContent(), /\nnie$/);
     assert.match(await out.textContent(), /Terminating on signal 2\npppd\[1401\]: Connection terminated\.$/);
+    await p.clock.runFor(30000);
+    assert.deepEqual(await p.evaluate(() => [TERMINAL_ZUSTAND.modem, TERMINAL_ZUSTAND.wgSat, TERMINAL_ZUSTAND.kanal, TERMINAL_ZUSTAND.kette]), [null, null, null, null]);
+    assert.equal(await p.locator('#profil-terminal-chat').isVisible(), false);
+    assert.match(await out.textContent(), /Connection terminated\.$/, 'nach dem Abbruch keine weitere Ausgabe');
     assert.equal(await status(), '130');
 
     /* Interaktiv: nach /quit läuft die Kette weiter */

@@ -536,9 +536,16 @@ function terminalKanalZufall(n) {
 function terminalKanalZeichen(alphabet, laenge) {
   return Array.from({ length: laenge }, function () { return alphabet[terminalKanalZufall(alphabet.length)]; }).join('');
 }
+// Läuft ein Befehl im Vordergrund ohne eigene Eingabe, nimmt die Shell keine Zeile an; die Eingabe bleibt stehen.
+function terminalBeschaeftigt() {
+  const t = TERMINAL_ZUSTAND;
+  return terminalPppWaehltVorne() || (!!t.kette && !t.kanal && !t.orbitLive);
+}
 function terminalKanalPromptSync() {
   const label = $('profil-terminal-prompt');
-  if (label) label.textContent = terminalPrompt();
+  if (!label) return;
+  label.textContent = terminalPrompt();
+  label.parentElement?.setAttribute('aria-busy', terminalBeschaeftigt() ? 'true' : 'false');
 }
 function terminalKanalAbbruch() {
   const t = TERMINAL_ZUSTAND;
@@ -888,7 +895,8 @@ async function terminalPppShell(befehl, arg) {
       terminalAusgabe('poff: iridium is not running' + (letzterAbbruch ? ' (NO CARRIER)' : ''));
       return 1;
     }
-    terminalPppModemAus('Terminating on signal 15');
+    // poff beendet pppd still; der Abbau steht im Syslog. Nur ein unerwarteter Abbruch meldet sich selbst in der Shell.
+    terminalPppModemAus('Terminating on signal 15', false);
     return 0;
   }
   if (befehl === 'wg-quick') {
@@ -1462,6 +1470,7 @@ function terminalKonsoleBauen() {
         ev.preventDefault();
         terminalTabReset();
         const zeile = input.value.replace(/\n/g, ' ').trim();
+        if (zeile !== 'exit' && terminalBeschaeftigt()) return;
         terminalEingabeSetzen(input, '');
         if (zeile) { terminalVerlaufNehmen(zeile); terminalBefehl(zeile); }
       } }, h('label', { id: 'profil-terminal-prompt', for: input.id, class: 'mono' }, terminalPrompt()), input,

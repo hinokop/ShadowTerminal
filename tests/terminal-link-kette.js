@@ -136,10 +136,12 @@ const { APP } = require('./_pfad');
     assert.match(await out.textContent(), /usage: poff iridium$/);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem.bereit), true);
     await cmd('poff iridium');
-    assert.match(await out.textContent(), /Terminating on signal 15\npppd\[1401\]: Connection terminated\.$/);
+    assert.match(await out.textContent(), /root@terminal:\/# poff iridium$/, 'poff bei Erfolg still');
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null);
     await cmd('pppd call iridium'); await p.clock.runFor(7500);
     await cmd('poff iridium && tail -n 6 /var/log/syslog');
-    assert.match(await out.textContent(), /terminal pppd\[1401\]: Terminating on signal 15\n.*Connection terminated\.$/);
+    assert.match(await out.textContent(), /poff iridium && tail -n 6 \/var\/log\/syslog\n(?:.*\n){4}.*terminal pppd\[1401\]: Terminating on signal 15\n.*Connection terminated\.$/);
+    assert.equal((await out.textContent()).split('poff iridium && tail').at(-1).match(/Terminating on signal 15/g).length, 1, 'Abbau genau einmal, im Syslog');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis), bis);
 
     await bereit();

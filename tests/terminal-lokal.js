@@ -109,6 +109,11 @@ const PF = require('./_pfad');
     assert.match(await cmd('ls -la'), /\.intern/);
     assert.match(await cmd('head "eins zwei.txt"'), /\nZeile-1\n[\s\S]*\nZeile-10$/);
     assert.match(await cmd('tail "eins zwei.txt"'), /\nZeile-3\n[\s\S]*\nZeile-12$/);
+    /* Shell-Kern: Pfade mit Leerzeichen über Backslash und einfache Anführungszeichen, verkettet */
+    const kette = async z => { await eingabe.fill(z); await eingabe.press('Enter'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); return out.textContent(); };
+    assert.match(await kette('head eins\\ zwei.txt && echo erledigt'), /\nZeile-1\n[\s\S]*\nZeile-10\nerledigt$/);
+    assert.match(await kette("tail 'eins zwei.txt'; echo $?"), /\nZeile-12\n0$/);
+    assert.match(await kette('cat "eins drei.txt" || echo "fehlt: $?"'), /cat: eins drei\.txt: No such file or directory\nfehlt: 1$/);
     assert.match(await cmd('cat probe.bin'), /Keine UTF-8-Textdatei/);
     assert.match(await cmd('wget https://example.org'), /Permission denied/);
     const fehlend = await cmd('wget fehlt.bin');
