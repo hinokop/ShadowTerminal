@@ -1,4 +1,4 @@
-const { vorbereiten } = require('./_satcon');
+const { chatBereit } = require('./_kestrel');
 /* Die statische Tab-Vervollständigung beweist keine Verbindung. Browserfehler und Abmeldung erklären den richtigen Neustart. */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
@@ -27,20 +27,18 @@ const PF = require('./_pfad');
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     async function taste(wert, key) { await inp.fill(wert); await inp.press(key); }
     const erwartet = async wert => p.waitForFunction(wert => $('profil-terminal-eingabe').value === wert, wert);
-    const ausgabe = async wert => p.waitForFunction(wert => $('profil-terminal-ausgabe').textContent.includes(wert), wert);
-    await vorbereiten(p);
-    await taste('secure-channel --connect --iface sat0 --route mixnet --ephemeral', 'Enter');
-    await p.waitForFunction(() => $('profil-terminal-prompt').textContent === 'you >');
-    const prefix = 'send /pgcl-eu3.arch07/';
-    await taste('send pg', 'Tab');
+    const ausgabe = async wert => p.waitForFunction(wert => $('profil-terminal-chat').textContent.includes(wert), wert);
+    await chatBereit(p);
+    const prefix = '/sendfile /pgcl-eu3.arch07/';
+    await taste('/sendfile pg', 'Tab');
     await erwartet(prefix);
     assert.deepEqual(antworten, []);
     await taste(prefix + 'doc', 'Tab');
     await ausgabe('Tab: Lokale Datenbank nicht erreichbar.');
-    assert.match(await out.textContent(), /START_TERMINAL\.bat erneut.*Konsolenfenster offen/);
+    assert.match(await p.locator('#profil-terminal-chat').textContent(), /START_TERMINAL\.bat erneut.*Konsolenfenster offen/);
     const datei = prefix + 'dokumente/Ablaufplan.docx';
     await taste(datei, 'Enter');
-    await ausgabe('send: Lokale Datenbank nicht erreichbar.');
+    await ausgabe('Error uploading file: Lokale Datenbank nicht erreichbar.');
     /* Der Windows-Starter kann einen neuen Port und Token im vorhandenen Fenster übergeben. */
     await p.evaluate(() => { location.hash = 'db=38472.' + 'b'.repeat(43); });
     await taste(prefix + 'do', 'Tab');
@@ -48,13 +46,13 @@ const PF = require('./_pfad');
     await taste(prefix + 'dokumente/Ab', 'Tab');
     await erwartet(datei);
     await inp.press('Enter');
-    await ausgabe('ACK received from peer');
+    await ausgabe('Sending file: /pgcl-eu3.arch07/dokumente/Ablaufplan.docx');
     /* Wenn das App-Fenster nach der Abmeldung nicht geschlossen werden darf, keinen alten Port neu laden. */
     await p.evaluate(() => { window.close = function () {}; Zugang.beenden(); });
     await p.locator('#gate-end-fertig').waitFor({state:'visible'});
     assert.equal(await p.locator('#gate-reconnect').isVisible(), false);
     assert.match(await p.locator('#gate-archiv-neustart').textContent(), /START_TERMINAL\.bat erneut/);
     assert.deepEqual(antworten, ['ls','send','ls','ls','send','disconnect']);
-    console.log('OK: Tab und send bei fehlender Brücke, Wiederherstellung und richtiger Neustart nach Abmeldung');
+    console.log('OK: Tab und /sendfile bei fehlender Brücke, Wiederherstellung und richtiger Neustart nach Abmeldung');
   } finally { await b.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

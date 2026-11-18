@@ -34,6 +34,10 @@ const { imUeberflug } = require('./_kestrel');
     await cmd('help');
     assert.match(await out.textContent(), /pon kestrel · pppd call kestrel \[updetach\]/);
     assert.doesNotMatch(await out.textContent(), /satcon-tx|secure-channel|send <datei>/);
+    // Der alte Funkweg (sat0) ist entfernt: keine Befehle, keine Tab-Ergänzung, keine Datei.
+    for (const alt of ['satcon-tx', 'secure-channel', 'send']) { await cmd(alt); assert.match(await out.textContent(), new RegExp(alt + ': command not found$')); }
+    await inp.fill('sec'); await inp.press('Tab'); assert.equal(await inp.inputValue(), 'sec');
+    await cmd('ls /var/cache/tle'); assert.match(await out.textContent(), /\nkestrel\.tle$/);
     await cmd('pppd call iridium'); assert.match(await out.textContent(), /pppd: unable to open \/etc\/ppp\/peers\/iridium: No such file or directory$/);
     await inp.fill('pre'); await inp.press('Tab');
     let eingabe = 'predict ';

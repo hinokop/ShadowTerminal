@@ -30,3 +30,20 @@ async function imUeberflug(p, { minMax = 15, el = 10, wahl = 'ok' } = {}) {
   return ziel;
 }
 module.exports = { imUeberflug };
+
+/* Chat bereitstellen: Uhr in einen Überflug, Einwahl, Tunnel, profanity bis zur Anmeldung; danach läuft die Zeit weiter.
+   kontakt: zusätzlich /msg an den vorgeschlagenen Kontakt (für /sendfile nötig). */
+async function chatBereit(p, { kontakt = true } = {}) {
+  try { await p.clock.install(); } catch (e) { /* bereits installiert */ }
+  await imUeberflug(p);
+  const inp = p.locator('#profil-terminal-eingabe');
+  await inp.fill('pppd call kestrel updetach && wg-quick up wg-sat && profanity'); await inp.press('Enter');
+  await p.clock.runFor(14500);
+  await p.waitForFunction(() => TERMINAL_ZUSTAND.kanal?.phase === 'eingabe');
+  if (kontakt) {
+    const v = await p.evaluate(() => TERMINAL_ZUSTAND.kanal.vorschlag);
+    await inp.fill('/msg ' + v); await inp.press('Enter');
+  }
+  await p.clock.resume();
+}
+module.exports.chatBereit = chatBereit;

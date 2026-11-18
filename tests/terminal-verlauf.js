@@ -1,4 +1,4 @@
-const { vorbereiten } = require('./_satcon');
+const { chatBereit } = require('./_kestrel');
 /* Terminal: Pfeiltasten blättern durch den Befehlsverlauf der Sitzung. Exit-Code 1 bei Fehlschlag. */
 const assert = require('node:assert/strict'); const { chromium } = require('playwright'); const PF = require('./_pfad');
 (async () => {
@@ -25,9 +25,7 @@ const assert = require('node:assert/strict'); const { chromium } = require('play
     await input.fill(''); await input.press('ArrowUp'); await input.press('Enter'); await p.waitForTimeout(150);   /* wiederholter Befehl */
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.join(',')), 'pwd,whoami,date');
     /* Kanal: nichts wird aufgenommen, Pfeiltasten blättern dort nicht */
-    await vorbereiten(p);
-    await lauf('secure-channel --connect --iface sat0 --route mixnet --ephemeral');
-    await p.waitForFunction(() => document.querySelector('#profil-terminal-prompt').textContent === 'you >', null, { timeout: 40000 });
+    await chatBereit(p, { kontakt: false });
     const vorher = await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.join(','));
     await input.fill('hallo'); await input.press('ArrowUp'); assert.equal(await wert(), 'hallo');
     await lauf('pwd');
