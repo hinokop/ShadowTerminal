@@ -61,6 +61,8 @@ const { imUeberflug } = require('./_kestrel');
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now()) + 1000);
     assert.match(await out.textContent(), /pppd\[\d+\]: Modem hangup \(NO CARRIER\)\npppd\[\d+\]: Connection terminated\.$/);
     assert.equal(await badge.isVisible(), false, 'nach LOS mit Modem kein Countdown');
+    // persist: pppd wählt nach LOS weiter; poff beendet es still, danach läuft keins mehr.
+    await cmd('poff'); assert.match(await out.textContent(), /root@terminal:\/# poff$/);
     await cmd('poff'); assert.match(await out.textContent(), /poff: No pppd is running\.  None stopped\.$/);
     assert.deepEqual(errors, []);
     console.log('OK: Einwahlabschluss ohne Countdown und ohne zweite Abbruchmeldung');

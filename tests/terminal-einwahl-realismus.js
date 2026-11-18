@@ -80,15 +80,17 @@ const { imUeberflug } = require('./_kestrel');
     assert.ok((await nach('cat /etc/chatscripts/kestrel')).includes('OK ATDT00882994401'));
     assert.deepEqual(await nach('pon other'), ['pppd: unable to open /etc/ppp/peers/other: No such file or directory']);
 
-    /* BUSY und NO CARRIER gezielt: chat bricht ab, pppd endet mit 8 */
+    /* BUSY und NO CARRIER gezielt: chat bricht ab; mit persist bleibt pppd und wählt nach holdoff neu */
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'busy'; });
     await cmd('pppd call kestrel updetach'); await p.clock.runFor(3000);
     assert.match(await out.textContent(), /chat\[\d+\]: BUSY\npppd\[\d+\]: Connect script failed$/);
-    assert.equal(await status(), '8');
+    await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
+    assert.equal(await status(), '5');
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; });
     await cmd('pon kestrel'); await p.clock.runFor(7000);
-    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null, 'gescheiterte Hintergrundwahl räumt ab');
+    assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.bereit), true, 'gescheiterte Hintergrundwahl: pppd bleibt (persist)');
     assert.match((await nach('tail -n 3 /var/log/syslog')).join('\n'), /NO CARRIER\n.*Connect script failed$/);
+    await nach('poff');
 
     /* Erfolg: Signal nach Elevation, Wahl ins Gateway, vollständiges Protokoll */
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'ok'; });
