@@ -419,7 +419,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   return 0;
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null };
 // Scrollback der Shell; größer als die längste Einzelausgabe (predict -f), damit nichts still verloren geht.
 const TERMINAL_PUFFER = 1000;
 function terminalAusgabe(zeile) {
@@ -519,6 +519,7 @@ function terminalKanalAbbruch() {
   const t = TERMINAL_ZUSTAND;
   terminalSatAbbruch();
   if (t.kanal) terminalPppChatAus();
+  terminalPlogEnde(1);
 }
 function terminalArchivDateipfad(arg) {
   const name = terminalName(arg);
@@ -733,7 +734,9 @@ function terminalPppChatLog(chat, text) {
 function terminalPppLog(text) {
   const t = TERMINAL_ZUSTAND, jetzt = new Date();
   const tag = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(jetzt);
-  t.syslog = t.syslog.concat(tag + ' ' + terminalPppZeit(+jetzt) + ' terminal ' + text).slice(-60);
+  const zeile = tag + ' ' + terminalPppZeit(+jetzt) + ' terminal ' + text;
+  t.syslog = t.syslog.concat(zeile).slice(-60);
+  terminalPlogZeile(zeile);
 }
 function terminalPppChatAus() {
   const t = TERMINAL_ZUSTAND, chat = t.kanal;
@@ -988,6 +991,86 @@ async function terminalPppShell(befehl, arg, args = []) {
   }
   return null;
 }
+/* plog (pon(1), Debian-ppp). Ohne /var/log/ppp.log (die Peer-Datei setzt kein logfile) ist es
+     exec tail "$@" /var/log/syslog | grep ' \(pppd\|chat\)\['
+   Argumente gehen an tail (GNU-Ausschnitt: -n N, -nN, -N, --lines=N, -f, -F, --follow), der Rückgabewert ist der
+   von grep: 0 mit, 1 ohne Treffer. -f folgt neuen Zeilen bis Strg+C (130). */
+const TERMINAL_PLOG_GREP = / (pppd|chat)\[/;
+function terminalPlogTail(args) {
+  const fehler = function (text, hilfe) { return { fehler: hilfe ? [text, "Try 'tail --help' for more information."] : [text] }; };
+  const zahl = function (w) {
+    const m = /^([+-]?)(\d+)$/.exec(w);
+    return m ? { n: Number(m[2]), vonAnfang: m[1] === '+' } : null;
+  };
+  let n = { n: 10, vonAnfang: false }, folgen = false, dateien = [], optionen = true;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (!optionen || a === '-' || !a.startsWith('-')) { dateien.push(a); continue; }
+    if (a === '--') { optionen = false; continue; }
+    // Veraltete Form -N[f], nur als erstes Argument (wie GNU tail).
+    const alt = i === 0 && /^-(\d+)(f?)$/.exec(a);
+    if (alt) { n = { n: Number(alt[1]), vonAnfang: false }; folgen = folgen || !!alt[2]; continue; }
+    if (a.startsWith('--')) {
+      const [name, wert] = a.includes('=') ? [a.slice(0, a.indexOf('=')), a.slice(a.indexOf('=') + 1)] : [a, null];
+      if (name === '--follow' && (wert === null || wert === 'name' || wert === 'descriptor')) { folgen = true; continue; }
+      if (name === '--lines') {
+        const w = wert ?? args[++i];
+        if (w === undefined) return fehler("tail: option '--lines' requires an argument", true);
+        n = zahl(w); if (!n) return fehler("tail: invalid number of lines: '" + w + "'");
+        continue;
+      }
+      return fehler("tail: unrecognized option '" + a + "'", true);
+    }
+    for (let k = 1; k < a.length; k++) {
+      const c = a[k];
+      if (c === 'f' || c === 'F') { folgen = true; continue; }
+      if (c === 'n') {
+        const w = k + 1 < a.length ? a.slice(k + 1) : args[++i];
+        if (w === undefined) return fehler("tail: option requires an argument -- 'n'", true);
+        n = zahl(w); if (!n) return fehler("tail: invalid number of lines: '" + w + "'");
+        break;
+      }
+      return fehler("tail: invalid option -- '" + c + "'", true);
+    }
+  }
+  return { n, folgen, dateien: dateien.concat('/var/log/syslog') };
+}
+// Inhalt einer Datei für tail: Zeilen, oder eine Fehlermeldung. Dateien im Archiv werden nicht geöffnet
+// (ihr Inhalt enthält keine pppd-Zeilen, grep ließe ohnehin nichts durch); ihr Vorhandensein bleibt ungeprüft.
+function terminalPlogDatei(name) {
+  const virtuell = terminalShellPfad(name), voll = virtuell && '/' + virtuell.join('/');
+  if (voll === '/var/log/syslog') return { zeilen: TERMINAL_ZUSTAND.syslog };
+  if (voll && TERMINAL_VIRT_DATEIEN.has(voll)) return { zeilen: TERMINAL_VIRT_DATEIEN.get(voll)().split('\n') };
+  if (voll && (voll === '/' || TERMINAL_TLE_DIRS.has(voll))) return { fehler: "tail: error reading '" + name + "': Is a directory" };
+  if (virtuell && virtuell[0] === TERMINAL_DB) return { zeilen: [] };
+  return { fehler: "tail: cannot open '" + name + "' for reading: No such file or directory" };
+}
+function terminalPlog(args) {
+  const t = TERMINAL_ZUSTAND, opt = terminalPlogTail(args);
+  if (opt.fehler) { terminalAusgabe(opt.fehler); return 1; }
+  let treffer = false;
+  opt.dateien.forEach(function (name) {
+    const d = terminalPlogDatei(name);
+    if (d.fehler) { terminalAusgabe(d.fehler); return; }
+    const zeilen = opt.n.vonAnfang ? d.zeilen.slice(Math.max(0, opt.n.n - 1)) : opt.n.n ? d.zeilen.slice(-opt.n.n) : [];
+    const gefiltert = zeilen.filter(function (z) { return TERMINAL_PLOG_GREP.test(z); });
+    if (gefiltert.length) { treffer = true; terminalAusgabe(gefiltert); }
+  });
+  if (!opt.folgen) return treffer ? 0 : 1;
+  const folgen = {};
+  t.plogFolgen = folgen;
+  return terminalVordergrund(folgen);
+}
+// Neue Syslog-Zeile: ein laufendes plog -f gibt sie aus, wenn grep sie durchlässt.
+function terminalPlogZeile(zeile) {
+  if (TERMINAL_ZUSTAND.plogFolgen && TERMINAL_PLOG_GREP.test(zeile)) terminalAusgabe(zeile);
+}
+function terminalPlogEnde(code) {
+  const t = TERMINAL_ZUSTAND, folgen = t.plogFolgen;
+  if (!folgen) return;
+  t.plogFolgen = null;
+  terminalVordergrundEnde(folgen, code);
+}
 function terminalSyslog(n) {
   const log = TERMINAL_ZUSTAND.syslog;
   terminalAusgabe(n ? log.slice(-n) : '');
@@ -1148,6 +1231,7 @@ function terminalStrgC() {
       terminalVordergrundEnde(wg, 130);
       terminalSatAnzeige();
     } else terminalAusgabe('^C');
+    terminalPlogEnde(130);
     return true;
   }
   terminalTabReset();
@@ -1336,6 +1420,7 @@ const TERMINAL_TABELLE = [
   { name: 'pppd', hilfe: [[1, 2, 'pppd call kestrel [updetach]']],
     tab: { art: 'fest', werte: ['call kestrel updetach'], kette: 'call kestrel && tail -n 12 /var/log/syslog' }, aus: TERMINAL_PPP('pppd') },
   { name: 'poff', hilfe: [[1, 3, 'poff [kestrel]']], tab: { art: 'fest', werte: ['kestrel'], kette: 'kestrel && tail -n 6 /var/log/syslog' }, aus: TERMINAL_PPP('poff') },
+  { name: 'plog', hilfe: [[1, 3.5, 'plog [-n N] [-f]']], tab: { art: 'optionen', werte: ['-f', '-n'] }, aus: function (args) { return terminalPlog(args); } },
   { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
   { name: 'false', hilfe: [[0, 9, 'false']], aus: function (args, arg) { return arg ? terminalUsage('false') : 1; } },

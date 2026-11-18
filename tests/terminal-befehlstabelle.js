@@ -24,11 +24,11 @@ const { APP } = require('./_pfad');
     assert.equal(new Set(info.namen).size, info.namen.length);
     assert.deepEqual(info.ohneAus, []);
     assert.deepEqual(info.namen, ['ls', 'cd', 'cat', 'head', 'tail', 'wget', 'help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit',
-      'predict', 'pon', 'pppd', 'poff', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
+      'predict', 'pon', 'pppd', 'poff', 'plog', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
     /* Hilfe unverändert, aus der Tabelle erzeugt */
     assert.deepEqual(await nach('help'), [
       'ls [-a|-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · echo · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
-      'predict · pon kestrel · pppd call kestrel [updetach] · poff [kestrel] · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
+      'predict · pon kestrel · pppd call kestrel [updetach] · poff [kestrel] · plog [-n N] [-f] · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
       "tmux · tmux split-window -bd predict · Ctrl+B ↑/↓ switch pane · tmux kill-pane -t '{up-of}'",
       'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);
     /* Aufruffehler und Rückgabewerte wie bisher */
