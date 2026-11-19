@@ -110,8 +110,8 @@ const { chatBereit, schnelleWahl } = require('./_kestrel');
     await cmd('/win 2');
     assert.doesNotMatch(await verlauf.textContent(), /\d [-!~] \/(omemo|win|msg)/, 'Befehle erscheinen nicht im Verlauf');
 
-    /* cons_show_incoming_message: nur Fenster 10 heißt (win 0) (Alt+0, F10), Fenster 11 bleibt (win 11) */
-    assert.deepEqual(await p.evaluate(() => [2, 10, 11, 12].map(terminalPppFensterHinweisNr)), [2, 0, 11, 12]);
+    /* Fensternummern (_wins_get_next_available_num): das zehnte Fenster ist 0, danach 11 (Ablauf in terminal-profanity-win10) */
+    assert.deepEqual(await p.evaluate(() => [1, 9, 10, 11].map(terminalPppFensterNr)), [2, 0, 11, 12]);
 
     /* /win auf ein fehlendes Fenster; /msg auf denselben Kontakt öffnet kein zweites Fenster */
     /* Profanity 0.18.2 cmd_win: cons_show schreibt in die Konsole ohne Hinweis, das aktive Fenster bleibt */

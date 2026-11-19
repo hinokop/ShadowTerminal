@@ -1337,8 +1337,9 @@ function terminalPppFingerprint(jid) {
 function terminalPppGeraet(jid) {
   return 1 + parseInt(terminalPppSha256(jid + '/omemo-device').slice(0, 8), 16) % 2147483646;
 }
-// cons_show_incoming_message: Fenster 10 heißt (win 0), wie die Taste Alt+0; alle anderen Nummern bleiben.
-function terminalPppFensterHinweisNr(nr) { return nr === 10 ? 0 : nr; }
+/* Fensternummer wie Profanity 0.18.2 (_wins_get_next_available_num): 1 bis 9, das zehnte Fenster 0 (Alt+0), danach 11.
+   /win und der Konsolenhinweis (win N) verwenden diese Nummer; die Statuszeile zeigt das zehnte als 10 (true_win). */
+function terminalPppFensterNr(i) { return i === 9 ? 0 : i + 1; }
 // Aufgebaute OMEMO-Sitzungen (session_store, in Profanity dauerhaft): "ready" erscheint nur beim ersten Aufbau.
 const TERMINAL_OMEMO_SITZUNGEN = new Set();
 async function terminalPppChatMeldung(zeile, chat) {
@@ -1348,8 +1349,8 @@ async function terminalPppChatMeldung(zeile, chat) {
   // /win N: Fenster wechseln, auch offline (der Verlauf bleibt lesbar).
   const win = /^\/win\s+(\d+)$/.exec(zeile);
   if (win) {
-    const i = Number(win[1]) - 1;
-    if (i >= 0 && i < chat.fenster.length) terminalPppFensterWechsel(chat, i);
+    const i = chat.fenster.findIndex(function (f, j) { return terminalPppFensterNr(j) === Number(win[1]); });
+    if (i >= 0) terminalPppFensterWechsel(chat, i);
     else terminalPppChatLog(chat, 'Window ' + win[1] + ' does not exist.', chat.fenster[0], { stumm: true }); // cons_show: Konsole, Fenster bleibt
     return;
   }
@@ -1448,7 +1449,7 @@ async function terminalPppChatMeldung(zeile, chat) {
       terminalPppChatLog(chat, kontakt + ': Verstanden.', fenster, { zeichen });
       // chatwin_incoming_msg: steht man nicht im Fenster, meldet die Konsole die Nachricht (console.chat = all, cons_alert).
       const i = chat.fenster.indexOf(fenster);
-      if (i !== chat.aktiv) terminalPppChatLog(chat, '<< chat message: ' + kontakt + ' (win ' + terminalPppFensterHinweisNr(i + 1) + ')');
+      if (i !== chat.aktiv) terminalPppChatLog(chat, '<< chat message: ' + kontakt + ' (win ' + terminalPppFensterNr(i) + ')');
     }, 7000);
   }
 }
