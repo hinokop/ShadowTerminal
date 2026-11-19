@@ -80,7 +80,7 @@ const PF = require('./_pfad');
     const exportVia = async (dossier, nachricht) => {
       await q.evaluate(d => { meldung(''); kartenTxtExport('sichtung', 'SI-001', d); }, dossier);   /* alte Meldung leeren: gewartet wird auf die dieses Exports */
       await q.locator('#k-txt-ordner').selectOption('dokumente'); await q.locator('#dlg-ok').click();
-      await q.waitForFunction(m => document.querySelector('#sys-msg').innerText.includes(m), nachricht);
+      await q.waitForFunction(m => document.querySelector('#sys-msg').innerText.includes(m), nachricht, { timeout: 15000 });   /* ausdrücklich: Brücke plus 400 ms Verzögerung */
     };
     const datei = n => join(root, 'dokumente', n), n1 = 'sichtung-' + z.d1 + '-SI-001.txt', n2 = 'sichtung-' + z.d2 + '-SI-001.txt';
     await exportVia(z.d1, '/pgcl-eu3.arch07/dokumente/' + n1);
