@@ -101,7 +101,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     assert.match(log, /\+CSQ: ([4-9]|[12]\d|3[01]),99\^M/);
     assert.match(log, /local  IP address 10\.64\.\d+\.\d+/);
     assert.ok(!/AT\+CBST|008816|\*99\*\*\*1#/.test(log), 'keine Iridium- oder GPRS-Wahl');
-    assert.match(await p.locator('#profil-terminal-sat').textContent(), new RegExp('^' + S + ' · LOS '));
+    assert.match(await p.locator('#profil-terminal-sat').textContent(), new RegExp('^' + S + ' · LINK END '));
 
     /* poff(1) */
     assert.deepEqual(await nach('poff other'), ["poff: I could not find a pppd process for provider 'other'. None stopped."]);

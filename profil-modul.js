@@ -472,6 +472,8 @@ function terminalZeitstand() {
   return TERMINAL_ZEITSTAND !== null && jetzt - TERMINAL_ZEITSTAND <= 1000 ? TERMINAL_ZEITSTAND : jetzt;
 }
 function terminalSatRest(link) { return terminalCountdown(link.bis, terminalZeitstand()); }
+// Bezeichnung des Linkendes: LINK END, wenn die Funkmaske den Link vor dem geometrischen LOS beendet, sonst LOS.
+function terminalSatEnde(link) { return link.los && link.bis < link.los ? 'LINK END' : 'LOS'; }
 // Ein Takt für alle zeitabhängigen Anzeigen: Zeitstand einmal erfassen, dann alle im selben Aufruf neu zeichnen.
 function terminalTakt() {
   TERMINAL_ZEITSTAND = Math.floor(Date.now() / 1000) * 1000;
@@ -485,7 +487,7 @@ function terminalSatAnzeige() {
   // Ein berechneter Überflug allein belegt keine Verbindung; der Countdown gilt nur, solange die Einwahl steht.
   const sichtbar = !!link && !link.abgelaufen && !!(t.modem || t.wgSat || t.kanal);
   feld.hidden = !sichtbar;
-  feld.textContent = sichtbar ? link.sat.name + ' · LOS ' + terminalSatRest(link) : '';
+  feld.textContent = sichtbar ? link.sat.name + ' · ' + terminalSatEnde(link) + ' ' + terminalSatRest(link) : '';
   terminalPppAnzeige();
 }
 function terminalSatLinkAktiv(link) {
@@ -572,7 +574,12 @@ const TERMINAL_PPP_DATEI = '/var/cache/tle/kestrel.tle';
 const TERMINAL_PREDICT_DB = '~/.predict/predict.tle';
 const TERMINAL_PPP_PEER = 'kestrel';
 const TERMINAL_PPP_WAHL = '00882994401'; // Gateway im Format der Vorwahl +882 (International Networks); Netzkennung nicht als frei geprüft
-const KESTREL_MIN_EL = 5;
+/* Funkmaske (#66): Einwahl ab KESTREL_FUNK.wahl Grad Elevation; ein bestehender Link reißt ab, sobald der Satellit auf dem
+   absteigenden Ast unter KESTREL_FUNK.ende Grad sinkt, aus der Bahnkurve berechnet (kestrelLinkEnde). Modellwerte dieser
+   Simulation, keine allgemeingültige Grenze. PREDICT zeigt weiter den geometrischen LOS (0°); die Verbindungsanzeige zeigt
+   bei abweichender Grenze LINK END. */
+const KESTREL_FUNK = { wahl: 5, ende: 3 };
+const KESTREL_MIN_EL = KESTREL_FUNK.wahl;
 const KESTREL_QTH_STANDARD = { name: 'DEFAULT', lat: 52.52, lon: 13.405, hoehe: 34 };
 let KESTREL_SATS = null;
 function kestrelSats() {
@@ -655,6 +662,17 @@ function kestrelSekunde(sat, x, steigend) {
   if (steigend) { t -= 1000; while (kestrelEl(sat, t) < 0) t += 1000; return t; }
   t += 1000; while (kestrelEl(sat, t) < 0) t -= 1000; return t;
 }
+// Erwartetes Linkende eines Überflugs: erste volle Sekunde mit El < KESTREL_FUNK.ende auf dem absteigenden Ast.
+function kestrelLinkEnde(u) {
+  const ende = KESTREL_FUNK.ende;
+  if (ende <= 0) return u.bis;
+  let lo = u.maxMs, hi = u.bis;
+  if (kestrelEl(u.sat, lo) < ende) return lo;
+  while (hi - lo > 20) { const m = (lo + hi) / 2; if (kestrelEl(u.sat, m) >= ende) lo = m; else hi = m; }
+  let t = Math.floor(lo / 1000) * 1000 + 1000;
+  while (kestrelEl(u.sat, t) < ende) t -= 1000;
+  return t + 1000;
+}
 function kestrelSichtbar(ms) {
   return kestrelSats().map(function (x) { return { sat: x, el: kestrelEl(x, ms) }; })
     .filter(function (x) { return x.el >= 0; }).sort(function (a, b) { return b.el - a.el; });
@@ -734,7 +752,7 @@ function terminalPppAnzeige() {
   if (!chat) { delete oben.dataset.chat; terminalPredictSetzen(oben, terminalZeitstand()); return; }
   if (!block) { delete oben.dataset.chat; oben.replaceChildren(); }
   else {
-    const kopf = chat.link.sat.name + '  [LOS ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand());
+    const kopf = chat.link.sat.name + '  [' + terminalSatEnde(chat.link) + ' ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand());
     const daten = kopf + '\n' + telemetrie;
     if (oben.dataset.chat !== daten) {
       delete oben.dataset.predict; oben.dataset.chat = daten;
@@ -921,7 +939,7 @@ function terminalPppWahl(modem) {
   let link = null;
   if (ausgang === 'ok') {
     const u = kestrelUeberflug(oben.sat, jetzt);
-    link = { modus: 'ppp', sat: oben.sat, von: u.von, bis: u.bis, abgelaufen: false, timer: null };
+    link = { modus: 'ppp', sat: oben.sat, von: u.von, bis: kestrelLinkEnde(u), los: u.bis, abgelaufen: false, timer: null };
     link.timer = setInterval(function () { if (terminalSatLinkAktiv(link)) terminalTakt(); }, 250);
   }
   t.satLink = link;

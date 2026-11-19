@@ -106,7 +106,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
       await p.clock.runFor(650);
       await cmd('profanity');
       assert.equal(await chat.isVisible(), true); assert.equal(await out.isVisible(), false);
-      assert.match(await orbit.textContent(), /KESTREL-\d  \[LOS/);
+      assert.match(await orbit.textContent(), /KESTREL-\d  \[LINK END/);
       assert.match(await chat.textContent(), /Connecting to ghost@node-5966-q\.onion/);
       await p.clock.runFor(5999); assert.doesNotMatch(await chat.textContent(), /logged in/);
       await p.clock.runFor(1); assert.match(await chat.textContent(), /logged in successfully, online\./);
