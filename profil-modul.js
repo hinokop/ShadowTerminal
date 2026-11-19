@@ -681,6 +681,10 @@ function kestrelSichtbar(ms) {
 /* Peer-Datei mit persist, holdoff 20, maxfail 0 (pppd(8), main.c): nach einem gescheiterten Wählversuch wartet pppd
    die holdoff-Zeit ab und wählt ohne eigene Logzeile neu, ohne Grenze für Fehlversuche; nach einem Modem-Hangup
    (LOS) entfällt holdoff. pppd endet nur durch Signal (poff, Strg+C) oder Sitzungsende. */
+/* XMPP-Server des Kanals: Onion-Adresse v3 im echten Format (Tor rend-spec: base32(PUBKEY | CHECKSUM | VERSION), CHECKSUM =
+   SHA3-256(".onion checksum" | PUBKEY | VERSION)[:2], VERSION = 3). Offline mit einem frischen Ed25519-Schlüssel erzeugt,
+   privater Schlüssel verworfen, nie veröffentlicht: ein Platzhalter ohne Dienst. Kein Tor-Zugriff. */
+const TERMINAL_XMPP_DOMAIN = 'gcibomdfyfv6wf3hsfustwcahoehehwrxnpjncwykptqlttkdpx2oxyd.onion';
 const TERMINAL_PPP_HOLDOFF = 20000;
 const TERMINAL_PPP_NEUWAHL = 1000;
 const TERMINAL_SITZUNG = (function () {
@@ -1140,7 +1144,7 @@ async function terminalPppShell(befehl, arg, args = []) {
     if (arg) { terminalAusgabe('usage: profanity'); return 2; }
     if (!t.modem?.bereit || !t.wgSat?.bereit || link?.modus !== 'ppp' || !terminalSatLinkAktiv(link)) { terminalAusgabe('profanity: Network unreachable'); return 1; }
     {
-      const domain = 'node-5966-q.onion';
+      const domain = TERMINAL_XMPP_DOMAIN;
       const chat = { ui: 'xmpp', phase: 'anmeldung', link, log: [], domain, account: 'ghost@' + domain,
         vorschlag: terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14) + '@' + domain,
         kontakt: null, omemo: false, antwort: null, fingerprint: terminalPppFingerprint(), fingerprints: new Map() };
