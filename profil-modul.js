@@ -782,7 +782,7 @@ function terminalPppAnzeige() {
   }
   // Statuszeile (statusbar.c, 0.11.1): links [Zeit] und das eigene Konto, rechts die Fenster ohne Trenner; ein Fenster als
   // [n], das aktuelle als -n-, eines mit Neuem mit normalen Klammern, aber hervorgehoben. Nur Nummern, keine Namen.
-  if (status) status.replaceChildren(h('span', { class: 'xmpp-selbst' }, '[' + terminalPppZeit(terminalZeitstand()).slice(0, 5) + '] [' + chat.account + ']'),
+  if (status) status.replaceChildren(h('span', { class: 'xmpp-selbst' }, '[' + terminalPppZeit(terminalZeitstand()).slice(0, 5) + '] [' + chat.jid + ']'),
     h('span', { class: 'xmpp-tabs' }, ...chat.fenster.map(function (f, i) {
       const nr = String(i + 1);
       return h('span', { class: 'xmpp-fenster' + (i === chat.aktiv ? ' aktiv' : '') + (f.neu ? ' neu' : '') }, i === chat.aktiv ? '-' + nr + '-' : '[' + nr + ']');
@@ -833,13 +833,15 @@ function terminalPredictSetzen(el, ms) {
 /* profanity-Fenster (Profanity-Guide, Basic usage): Fenster 1 ist die Konsole für System- und Befehlsmeldungen, jedes
    Gespräch bekommt ein eigenes nummeriertes Fenster (/msg öffnet es), /win N wechselt. Ein Fenster mit neuen Meldungen
    wird in der Statuszeile hervorgehoben. ziel: Fensterobjekt; ohne Angabe die Konsole. */
-/* ohneHinweis: wie cons_show in Profanity 0.18.2 (Konsole ohne Statuszeilen-Hinweis); cons_show_error und Nachrichten
-   setzen den Hinweis (cons_alert bzw. neue Nachricht). */
-function terminalPppChatLog(chat, text, ziel, ohneHinweis) {
+/* Zeile wie Profanity 0.18.2 (_win_print_internal): "<Zeit> <Zeichen> <Text>". Zeichen '-' (Vorgabe), '!' (Hinweise
+   wie die OMEMO-Meldungen) oder '~' (OMEMO-verschlüsselte Nachricht, omemo.char).
+   opt.stumm: kein Hinweis in der Statuszeile (cons_show, win_println); sonst wird ein nicht aktives Fenster markiert
+   (cons_alert, cons_show_error, eingehende Nachricht). */
+function terminalPppChatLog(chat, text, ziel, opt) {
   if (TERMINAL_ZUSTAND.kanal !== chat) return;
   const fenster = ziel || chat.fenster[0];
-  fenster.log = fenster.log.concat(terminalPppZeit(Date.now()) + ' - ' + text).slice(-70);
-  if (fenster !== chat.fenster[chat.aktiv] && !ohneHinweis) fenster.neu = true;
+  fenster.log = fenster.log.concat(terminalPppZeit(Date.now()) + ' ' + (opt?.zeichen || '-') + ' ' + text).slice(-70);
+  if (fenster !== chat.fenster[chat.aktiv] && !opt?.stumm) fenster.neu = true;
   terminalPppAnzeige();
 }
 function terminalPppAktiv(chat) { return chat.fenster[chat.aktiv]; }
@@ -928,7 +930,7 @@ function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   chat.abbruch = setTimeout(function () {
     if (transfer) terminalPppChatLog(chat, 'Error uploading file: Network unreachable', uploadFenster);
     // Konsole per cons_show_error (cons_alert: Hinweis), die übrigen per win_println (kein Hinweis).
-    chat.fenster.forEach(function (f, i) { terminalPppChatLog(chat, 'Lost connection.', f, i > 0); });
+    chat.fenster.forEach(function (f, i) { terminalPppChatLog(chat, 'Lost connection.', f, { stumm: i > 0 }); });
   }, 750);
 }
 function terminalPppWaehltVorne() {
@@ -1182,17 +1184,21 @@ async function terminalPppShell(befehl, arg, args = []) {
     if (!t.modem?.bereit || !t.wgSat?.bereit || link?.modus !== 'ppp' || !terminalSatLinkAktiv(link)) { terminalAusgabe('profanity: Network unreachable'); return 1; }
     {
       const domain = TERMINAL_XMPP_DOMAIN;
-      const chat = { ui: 'xmpp', phase: 'anmeldung', link, fenster: [{ titel: 'Console', log: [], neu: false }], aktiv: 0, domain, account: 'ghost@' + domain,
+      // Konto wie /account add: Ressource "profanity." + 4 Zeichen (jid_random_resource), danach in accounts gespeichert;
+      // hier aus dem Konto abgeleitet, damit sie über Neustarts gleich bleibt.
+      const account = 'ghost@' + domain;
+      const chat = { ui: 'xmpp', phase: 'anmeldung', link, fenster: [{ titel: 'Console', log: [], neu: false }], aktiv: 0, domain, account,
+        jid: account + '/profanity.' + terminalPppAbleitung(account + '/resource', TERMINAL_PPP_ALNUM, 4),
         vorschlag: terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14) + '@' + domain,
-        kontakt: null, fingerprint: terminalPppFingerprint(), fingerprints: new Map() };
+        kontakt: null };
       const ende = terminalVordergrund(chat);
       t.kanal = chat;
-      terminalPppChatLog(chat, 'Connecting to ' + chat.account);
+      terminalPppChatLog(chat, 'Connecting with account ' + chat.account + ' as ' + chat.jid); // cl_ev_connect_account
       chat.anmeldung = setTimeout(function () {
         if (t.kanal !== chat || chat.phase !== 'anmeldung' || !terminalSatLinkAktiv(link)) return;
         chat.phase = 'eingabe';
         t.wgSat.handshake = Date.now();
-        terminalPppChatLog(chat, chat.account + ' logged in successfully, online.');
+        terminalPppChatLog(chat, chat.jid + ' logged in successfully, online (priority 0).'); // cons_show_login_success
       }, 6000);
       terminalKanalPromptSync();
       return ende;
@@ -1285,9 +1291,62 @@ function terminalSyslog(n) {
   const log = TERMINAL_ZUSTAND.syslog;
   terminalAusgabe(n ? log.slice(-n) : '');
 }
-function terminalPppFingerprint() {
-  return terminalKanalZeichen('0123456789ABCDEF', 64).match(/.{8}/g).join(' ');
+const TERMINAL_PPP_ALNUM = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+/* SHA-256 (FIPS 180-4), synchron, für UTF-8-Text; Ergebnis als Hex. crypto.subtle wäre asynchron, die Ableitungen
+   werden aber synchron gebraucht (Anmeldezeile, Statuszeile). */
+function terminalPppSha256(text) {
+  const K = [], H = [];
+  const bruch = function (x) { return ((x - Math.floor(x)) * 4294967296) >>> 0; };
+  for (let n = 2, k = 0; k < 64; n++) {
+    let prim = true;
+    for (let d = 2; d * d <= n; d++) if (n % d === 0) { prim = false; break; }
+    if (!prim) continue;
+    if (k < 8) H.push(bruch(Math.sqrt(n)));
+    K.push(bruch(Math.cbrt(n))); k++;
+  }
+  const b = Array.from(new TextEncoder().encode(text)), bits = b.length * 8;
+  b.push(0x80);
+  while (b.length % 64 !== 56) b.push(0);
+  for (let i = 7; i >= 0; i--) b.push(i >= 4 ? 0 : (bits >>> (i * 8)) & 0xff);
+  const rot = function (x, n) { return (x >>> n) | (x << (32 - n)); };
+  const W = new Array(64);
+  for (let o = 0; o < b.length; o += 64) {
+    for (let i = 0; i < 16; i++) W[i] = (b[o + 4 * i] << 24 | b[o + 4 * i + 1] << 16 | b[o + 4 * i + 2] << 8 | b[o + 4 * i + 3]) >>> 0;
+    for (let i = 16; i < 64; i++) {
+      const s0 = rot(W[i - 15], 7) ^ rot(W[i - 15], 18) ^ (W[i - 15] >>> 3), s1 = rot(W[i - 2], 17) ^ rot(W[i - 2], 19) ^ (W[i - 2] >>> 10);
+      W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0;
+    }
+    let [a, bb, c, d, e, f, g, h] = H;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (rot(e, 6) ^ rot(e, 11) ^ rot(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + W[i]) >>> 0;
+      const t2 = ((rot(a, 2) ^ rot(a, 13) ^ rot(a, 22)) + ((a & bb) ^ (a & c) ^ (bb & c))) >>> 0;
+      h = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = bb; bb = a; a = (t1 + t2) >>> 0;
+    }
+    [a, bb, c, d, e, f, g, h].forEach(function (v, i) { H[i] = (H[i] + v) >>> 0; });
+  }
+  return H.map(function (v) { return v.toString(16).padStart(8, '0'); }).join('');
 }
+/* Feste Ableitung aus der vollständigen JID (SHA-256): steht für Werte, die Profanity einmal erzeugt und speichert
+   (Ressource, Identitätsschlüssel, Geräte-ID); sie bleiben so über Neustarts gleich, ohne eigene Ablage. */
+function terminalPppAbleitung(text, alphabet, laenge) {
+  const hex = terminalPppSha256(text);
+  let aus = '';
+  for (let i = 0; i < laenge; i++) aus += alphabet[parseInt(hex.substr((i * 2) % 64, 2), 16) % alphabet.length];
+  return aus;
+}
+// omemo_format_fingerprint: 64 Hex-Zeichen klein (Identitätsschlüssel ohne Typbyte), in Achtergruppen mit '-'.
+function terminalPppFingerprint(jid) {
+  return terminalPppSha256(jid + '/omemo-identity').match(/.{8}/g).join('-');
+}
+// Geräte-ID: 31 Bit, nicht 0 (libsignal registration id / OMEMO device id).
+function terminalPppGeraet(jid) {
+  return 1 + parseInt(terminalPppSha256(jid + '/omemo-device').slice(0, 8), 16) % 2147483646;
+}
+/* Fensternummer wie Profanity 0.18.2 (_wins_get_next_available_num): 1 bis 9, das zehnte Fenster 0 (Alt+0), danach 11.
+   /win und der Konsolenhinweis (win N) verwenden diese Nummer; die Statuszeile zeigt das zehnte als 10 (true_win). */
+function terminalPppFensterNr(i) { return i === 9 ? 0 : i + 1; }
+// Aufgebaute OMEMO-Sitzungen (session_store, in Profanity dauerhaft): "ready" erscheint nur beim ersten Aufbau.
+const TERMINAL_OMEMO_SITZUNGEN = new Set();
 async function terminalPppChatMeldung(zeile, chat) {
   const t = TERMINAL_ZUSTAND;
   if (zeile === '/quit') { terminalPppChatAus(); return; }
@@ -1295,9 +1354,9 @@ async function terminalPppChatMeldung(zeile, chat) {
   // /win N: Fenster wechseln, auch offline (der Verlauf bleibt lesbar).
   const win = /^\/win\s+(\d+)$/.exec(zeile);
   if (win) {
-    const i = Number(win[1]) - 1;
-    if (i >= 0 && i < chat.fenster.length) terminalPppFensterWechsel(chat, i);
-    else terminalPppChatLog(chat, 'Window ' + win[1] + ' does not exist.', chat.fenster[0], true); // cons_show: Konsole, Fenster bleibt
+    const i = chat.fenster.findIndex(function (f, j) { return terminalPppFensterNr(j) === Number(win[1]); });
+    if (i >= 0) terminalPppFensterWechsel(chat, i);
+    else terminalPppChatLog(chat, 'Window ' + win[1] + ' does not exist.', chat.fenster[0], { stumm: true }); // cons_show: Konsole, Fenster bleibt
     return;
   }
   if (chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) {
@@ -1314,22 +1373,40 @@ async function terminalPppChatMeldung(zeile, chat) {
     terminalPppFensterWechsel(chat, i);
     return;
   }
-  if (zeile === '/omemo start' || zeile === '/omemo fingerprint') {
-    if (!fenster.kontakt) terminalPppChatLog(chat, 'No active conversation. Use /msg <contact>.', fenster);
-    else if (zeile.endsWith('start')) {
-      // OMEMO gilt je Gespräch: Zustand und Meldung im Fenster des Kontakts, auch wenn inzwischen gewechselt wurde.
-      if (fenster.omemo || fenster.omemoAufbau) return;
-      fenster.omemoAufbau = setTimeout(function () {
-        fenster.omemoAufbau = null;
-        if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
-        fenster.omemo = true;
-        terminalPppChatLog(chat, 'OMEMO session started.', fenster);
-      }, 3000);
-    }
-    else {
-      if (!chat.fingerprints.has(fenster.kontakt)) chat.fingerprints.set(fenster.kontakt, terminalPppFingerprint());
-      terminalPppChatLog(chat, 'Your OMEMO fingerprint: ' + chat.fingerprint, fenster);
-      terminalPppChatLog(chat, fenster.kontakt.split('@')[0] + "'s OMEMO fingerprint: " + chat.fingerprints.get(fenster.kontakt), fenster);
+  /* OMEMO wie Profanity 0.18.2 (cmd_omemo_start/end/fingerprint). Der Fingerprint des Kontakts gilt als bereits
+     vertraut (frühere Prüfung); trustmode bleibt manual, eine Vertrauensabfrage entfällt damit. Meldungen ohne
+     Statuszeilen-Hinweis (win_println, cons_show). */
+  if (zeile === '/omemo start' || zeile === '/omemo end' || zeile === '/omemo fingerprint') {
+    const still = { stumm: true }, hinweis = { stumm: true, zeichen: '!' };
+    if (zeile === '/omemo fingerprint') {
+      if (!fenster.kontakt) {
+        terminalPppChatLog(chat, 'Your OMEMO fingerprint: ' + terminalPppFingerprint(chat.account), fenster, still);
+        terminalPppChatLog(chat, 'There is no known fingerprints for ' + chat.account, fenster, still);
+      } else {
+        terminalPppChatLog(chat, fenster.kontakt + "'s OMEMO fingerprint: " + terminalPppFingerprint(fenster.kontakt) + ' (trusted) (active)', fenster, still);
+        terminalPppChatLog(chat, "You can trust it with '/omemo trust [<contact>] <fingerprint>'", fenster, still);
+        terminalPppChatLog(chat, "You can untrust it with '/omemo untrust [<contact>] <fingerprint>'", fenster, still);
+      }
+    } else if (!fenster.kontakt) {
+      terminalPppChatLog(chat, 'You must be in a regular chat window to start an OMEMO session.', fenster, still);
+    } else if (zeile === '/omemo end') {
+      if (!fenster.omemo) terminalPppChatLog(chat, 'You are not currently in an OMEMO session.', fenster, hinweis);
+      else { fenster.omemo = false; clearTimeout(fenster.omemoAufbau); fenster.omemoAufbau = null; terminalPppAnzeige(); }
+    } else if (fenster.omemo) {
+      terminalPppChatLog(chat, 'You are already in an OMEMO session.', fenster, hinweis);
+    } else {
+      // is_omemo gilt sofort (Titel [OMEMO]); die Sitzung steht, sobald das Bundle des Kontakts über den Link da ist.
+      const kontakt = fenster.kontakt;
+      fenster.omemo = true;
+      terminalPppChatLog(chat, 'Initiating OMEMO session with ' + kontakt + '...', fenster, hinweis);
+      if (!TERMINAL_OMEMO_SITZUNGEN.has(kontakt)) {
+        fenster.omemoAufbau = setTimeout(function () {
+          fenster.omemoAufbau = null;
+          if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
+          TERMINAL_OMEMO_SITZUNGEN.add(kontakt);
+          terminalPppChatLog(chat, 'OMEMO session with ' + kontakt + ' (device ' + terminalPppGeraet(kontakt) + ') ready.', fenster, hinweis);
+        }, 3000);
+      }
     }
     return;
   }
@@ -1358,15 +1435,26 @@ async function terminalPppChatMeldung(zeile, chat) {
     return;
   }
   if (zeile.startsWith('/')) { terminalPppChatLog(chat, 'Unknown command: ' + zeile.split(/\s/)[0], fenster); return; }
-  terminalPppChatLog(chat, 'me: ' + zeile, fenster);
+  // OMEMO ohne Bundle: omemo_on_message_send findet keinen Schlüssel, die Nachricht geht nicht hinaus.
+  if (fenster.omemo && !TERMINAL_OMEMO_SITZUNGEN.has(fenster.kontakt)) {
+    const fehler = { stumm: true, zeichen: '!' };
+    terminalPppChatLog(chat, 'This message cannot be encrypted for any recipient.', fenster, fehler);
+    terminalPppChatLog(chat, 'It could also be that key bundles have not been received. Try "/omemo end", then "/omemo start".', fenster, fehler);
+    return;
+  }
+  const zeichen = fenster.omemo ? '~' : '-';
+  terminalPppChatLog(chat, 'me: ' + zeile, fenster, { stumm: true, zeichen });
   if (/^auftrag (erledigt|gescheitert)\.?$/i.test(zeile)) {
     // Antwort je Gespräch (wie der OMEMO-Aufbau): eine Meldung in einem anderen Fenster löscht sie nicht.
     const kontakt = fenster.kontakt;
     clearTimeout(fenster.antwort);
     fenster.antwort = setTimeout(function () {
       fenster.antwort = null;
-      if (t.kanal === chat && chat.phase !== 'offline' && terminalSatLinkAktiv(chat.link))
-        terminalPppChatLog(chat, kontakt + ': Verstanden.', fenster);
+      if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
+      terminalPppChatLog(chat, kontakt + ': Verstanden.', fenster, { zeichen });
+      // chatwin_incoming_msg: steht man nicht im Fenster, meldet die Konsole die Nachricht (console.chat = all, cons_alert).
+      const i = chat.fenster.indexOf(fenster);
+      if (i !== chat.aktiv) terminalPppChatLog(chat, '<< chat message: ' + kontakt + ' (win ' + terminalPppFensterNr(i) + ')');
     }, 7000);
   }
 }
@@ -1973,7 +2061,7 @@ async function terminalKanalTab(lauf) {
     }
     const omemo = /^\/omemo\s+(.*)$/.exec(lauf.wert);
     if (omemo) {
-      terminalTabKandidaten(lauf, '/omemo ', omemo[1], ['start', 'fingerprint'], x => x);
+      terminalTabKandidaten(lauf, '/omemo ', omemo[1], ['start', 'end', 'fingerprint'], x => x);
       return;
     }
   }
