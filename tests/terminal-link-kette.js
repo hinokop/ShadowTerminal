@@ -152,7 +152,7 @@ const { imUeberflug } = require('./_kestrel');
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now() - 4000));
     await cmd(ziel); await progress.waitFor({ state: 'visible' });
     await p.clock.runFor(4000);
-    assert.match(await orbit.textContent(), /LOS 00m 00s[\s\S]*NO CARRIER/);
+    assert.match(await orbit.textContent(), /LOS 00:00:00[\s\S]*NO CARRIER/);
     assert.equal(await progress.isVisible(), false);
     assert.doesNotMatch(await chat.textContent(), /Error uploading file/);
     await p.clock.runFor(750);

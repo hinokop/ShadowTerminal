@@ -457,9 +457,26 @@ async function terminalPing() {
 }
 // Übertragungsrate der Funkstrecke für /sendfile; Dauer gedeckelt.
 const TERMINAL_SAT_RATE = 2400, TERMINAL_SAT_CAP_MS = 60000;
-function terminalSatRest(link) {
-  const sek = Math.max(0, Math.ceil((link.bis - Date.now()) / 1000));
-  return String(Math.floor(sek / 60)).padStart(2, '0') + 'm ' + String(sek % 60).padStart(2, '0') + 's';
+// Countdown HH:MM:SS, auf volle Sekunden aufgerundet: dieselbe Zeitbasis und Rundung in PREDICT, Kopfzeile und Chat.
+function terminalCountdown(bis, ms) {
+  const sek = Math.max(0, Math.ceil((bis - ms) / 1000)), z = function (n) { return String(n).padStart(2, '0'); };
+  return z(Math.floor(sek / 3600)) + ':' + z(Math.floor(sek / 60) % 60) + ':' + z(sek % 60);
+}
+/* Gemeinsamer Zeitstand aller Anzeigen (volle Sekunde): einmal je Takt erfasst und veröffentlicht. Fensterkopf, Chat-Kopf
+   und PREDICT rechnen davon aus; Neuzeichnen außerhalb des Takts (neue plog-Zeile, Größenänderung) nutzt den zuletzt
+   veröffentlichten Stand, damit keine Anzeige der anderen eine Sekunde vorausläuft. Ohne laufenden Takt (keine Verbindung,
+   kein PREDICT) gilt die laufende Sekunde. */
+let TERMINAL_ZEITSTAND = null;
+function terminalZeitstand() {
+  const jetzt = Math.floor(Date.now() / 1000) * 1000;
+  return TERMINAL_ZEITSTAND !== null && jetzt - TERMINAL_ZEITSTAND <= 1000 ? TERMINAL_ZEITSTAND : jetzt;
+}
+function terminalSatRest(link) { return terminalCountdown(link.bis, terminalZeitstand()); }
+// Ein Takt für alle zeitabhängigen Anzeigen: Zeitstand einmal erfassen, dann alle im selben Aufruf neu zeichnen.
+function terminalTakt() {
+  TERMINAL_ZEITSTAND = Math.floor(Date.now() / 1000) * 1000;
+  terminalSatAnzeige();
+  if (TERMINAL_ZUSTAND.tmux?.panes.some(function (b) { return b.art === 'predict'; })) terminalTmuxPaneAnzeige();
 }
 function terminalSatAnzeige() {
   const feld = $('profil-terminal-sat');
@@ -477,8 +494,10 @@ function terminalSatLinkAktiv(link) {
   if (!link.abgelaufen) {
     link.abgelaufen = true;
     clearInterval(link.timer);
+    // LOS ist ein Taktereignis: neuer Zeitstand vor den Meldungen, damit kein Countdown nach dem Hangup noch 1 s zeigt.
+    TERMINAL_ZEITSTAND = Math.floor(Date.now() / 1000) * 1000;
     terminalPppModemAus('Modem hangup (NO CARRIER)', true, true);
-    terminalSatAnzeige();
+    terminalTakt();
   }
   return false;
 }
@@ -710,27 +729,61 @@ function terminalPppAnzeige() {
   unten.hidden = !chat;
   if (!chat && !live) { shell.hidden = false; return; }
   shell.hidden = !!chat;
-  const daten = chat ? chat.link.sat.name + '  [LOS ' + terminalSatRest(chat.link) + ']\n' + terminalPppZeile(chat.link.sat, Date.now()) +
-    (chat.link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '') : terminalPredictLive(Date.now());
-  if (oben.textContent !== daten) oben.textContent = daten;
-  if (!chat) return;
+  if (!chat) { delete oben.dataset.chat; terminalPredictSetzen(oben, terminalZeitstand()); return; }
+  const kopf = chat.link.sat.name + '  [LOS ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand());
+  const daten = kopf + '\n' + telemetrie + (chat.link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '');
+  if (oben.dataset.chat !== daten) {
+    delete oben.dataset.predict; oben.dataset.chat = daten;
+    oben.replaceChildren(h('span', { class: 'link-kopf' }, kopf), '\n', h('span', { class: 'link-telemetrie' }, telemetrie),
+      chat.link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '');
+  }
   const text = chat.log.join('\n');
   if (unten.textContent !== text) {
     unten.textContent = text;
     unten.scrollTop = unten.scrollHeight;
   }
 }
-// Interaktives predict: Verfolgung aller Satelliten der Datei mit nächstem Ereignis (eigene Darstellung).
-function terminalPredictLive(ms) {
-  const q = kestrelQth(), rest = function (x) { const sek = Math.max(0, Math.round((x - ms) / 1000)); return String(Math.floor(sek / 60)).padStart(2, '0') + 'm ' + String(sek % 60).padStart(2, '0') + 's'; };
-  const kopf = 'PREDICT multi-satellite tracking · QTH ' + q.name + ' ' + Math.abs(q.lat).toFixed(2) + (q.lat >= 0 ? 'N ' : 'S ') +
-    Math.abs(q.lon).toFixed(2) + (q.lon >= 0 ? 'E' : 'W') + ' · ' + terminalPppZeit(ms) + ' UTC';
-  const zeilen = kestrelSats().map(function (sat) {
-    const l = kestrelLage(sat, ms), u = kestrelUeberflug(sat, ms);
-    const ereignis = !u ? '-' : l.el >= 0 ? 'LOS ' + terminalPppZeit(u.bis) + ' (' + rest(u.bis) + ')' : 'AOS ' + terminalPppZeit(u.von) + ' (' + rest(u.von) + ')';
-    return sat.name.padEnd(12) + String(Math.round(l.az)).padStart(5) + String(Math.round(l.el)).padStart(6) + String(Math.round(l.range)).padStart(8) + '   ' + ereignis;
+// Datum wie in predict -p/-f (UTC): 18Nov26.
+function kestrelDatum(ms) {
+  const iso = new Date(ms).toISOString();
+  return iso.slice(8, 10) + new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(new Date(ms)) + iso.slice(2, 4);
+}
+// TLE-Epoche aus Zeile 1 (Spalten 19-32: JJTTT.TTTTTTTT, Tag des Jahres mit Bruchteil), als ms UTC.
+function kestrelEpoche(sat) {
+  const jj = Number(sat.l1.slice(18, 20)), tag = Number(sat.l1.slice(20, 32));
+  return Date.UTC(jj < 57 ? 2000 + jj : 1900 + jj, 0, 1) + (tag - 1) * 86400000;
+}
+/* Interaktives predict (Real-Time Multi-Tracking Mode): alle Satelliten der Datei mit nächstem Ereignis. Kopf mit QTH, Zeit
+   und der Spanne der TLE-Epochen; AOS/LOS mit UTC-Datum und Countdown HH:MM:SS; Entfernung in km. Zeilen über dem
+   geometrischen Horizont (El >= 0) sind markiert (oben); das bedeutet Sicht, keine Verbindung. */
+function terminalPredictLiveTeile(ms) {
+  const q = kestrelQth(), sats = kestrelSats(), uhr = function (x) { return kestrelDatum(x) + ' ' + terminalPppZeit(x); };
+  const epochen = sats.map(kestrelEpoche), von = Math.min(...epochen), bis = Math.max(...epochen);
+  const ep = function (x) { return kestrelDatum(x) + ' ' + terminalPppZeit(x).slice(0, 5); };
+  // Kompakt: drei Kopfzeilen, damit die vier Satelliten auch neben plog in einem Bereich Platz finden.
+  const kopf = ['PREDICT Real-Time Multi-Tracking Mode · ' + uhr(ms) + ' UTC',
+    'QTH ' + q.name + ' ' + Math.abs(q.lat).toFixed(2) + (q.lat >= 0 ? 'N ' : 'S ') + Math.abs(q.lon).toFixed(2) + (q.lon >= 0 ? 'E' : 'W') +
+      ' · TLE epoch ' + (ep(von) === ep(bis) ? ep(von) : ep(von) + ' - ' + ep(bis)) + ' UTC',
+    'Satellite'.padEnd(12) + 'Az'.padStart(5) + 'El'.padStart(6) + 'Range km'.padStart(10) + '   Next event (UTC)'];
+  const zeilen = sats.map(function (sat) {
+    const l = kestrelLage(sat, ms), u = kestrelUeberflug(sat, ms), oben = l.el >= 0;
+    const ereignis = !u ? '-' : oben ? 'LOS ' + uhr(u.bis) + ' (' + terminalCountdown(u.bis, ms) + ')' : 'AOS ' + uhr(u.von) + ' (' + terminalCountdown(u.von, ms) + ')';
+    return { text: sat.name.padEnd(12) + String(Math.round(l.az)).padStart(5) + String(Math.round(l.el)).padStart(6) + String(Math.round(l.range)).padStart(10) + '   ' + ereignis, oben };
   });
-  return [kopf, 'Satellite      Az    El   Range   Next event'].concat(zeilen).join('\n');
+  return { kopf, zeilen };
+}
+function terminalPredictLive(ms) {
+  const d = terminalPredictLiveTeile(ms);
+  return d.kopf.concat(d.zeilen.map(function (z) { return z.text; })).join('\n');
+}
+// Setzt die Verfolgung in ein Element; Zeilen über dem Horizont fett (wie PREDICT: BOLD). Nur bei geändertem Text neu.
+function terminalPredictSetzen(el, ms) {
+  const d = terminalPredictLiveTeile(ms), text = d.kopf.concat(d.zeilen.map(function (z) { return (z.oben ? '+' : '-') + z.text; })).join('\n');
+  if (el.dataset.predict === text) return;
+  el.dataset.predict = text;
+  el.replaceChildren(h('span', { class: 'predict-kopf' }, d.kopf.join('\n')), ...d.zeilen.flatMap(function (z) {
+    return ['\n', h('span', { class: z.oben ? 'predict-oben' : 'predict-unten' }, z.text)];
+  }));
 }
 function terminalPppChatLog(chat, text) {
   if (TERMINAL_ZUSTAND.kanal !== chat) return;
@@ -833,7 +886,7 @@ function terminalPppWahl(modem) {
   if (ausgang === 'ok') {
     const u = kestrelUeberflug(oben.sat, jetzt);
     link = { modus: 'ppp', sat: oben.sat, von: u.von, bis: u.bis, abgelaufen: false, timer: null };
-    link.timer = setInterval(function () { if (terminalSatLinkAktiv(link)) terminalSatAnzeige(); }, 250);
+    link.timer = setInterval(function () { if (terminalSatLinkAktiv(link)) terminalTakt(); }, 250);
   }
   t.satLink = link;
   modem.link = link;
@@ -915,7 +968,7 @@ async function terminalPppShell(befehl, arg, args = []) {
     const o = terminalPredictOptionen(args);
     if (o.fehler) { terminalAusgabe(o.fehler === 'usage' ? TERMINAL_PREDICT_USAGE : 'predict: ' + o.fehler); return o.fehler === 'usage' ? 2 : 1; }
     if (o.modus === 'live') {
-      const orbit = { fertig: null, timer: setInterval(terminalPppAnzeige, 1000) };
+      const orbit = { fertig: null, timer: setInterval(terminalTakt, 250) };
       const ende = terminalVordergrund(orbit);
       t.orbitLive = orbit;
       terminalPppAnzeige();
@@ -1324,8 +1377,8 @@ function terminalTmuxPaneAnzeige() {
         onpointerdown: function (ev) { ev.preventDefault(); terminalTmuxFokusAuf(b); } });
       if (b.el.nextElementSibling !== (bereiche[bereiche.indexOf(b) + 1]?.el || ausgabe)) kern.insertBefore(b.el, bereiche[bereiche.indexOf(b) + 1]?.el || ausgabe);
       b.el.classList.toggle('aktiv', oben && t.tmux.aktiv === b);
-      const text = terminalTmuxBereichText(b);
       if (b.art === 'plog') {
+        const text = terminalTmuxBereichText(b);
         // Wie tail im Terminal: die letzten ganzen Zeilen, die in den Bereich passen; gemessen mit vollem Text.
         if (b.el.textContent !== text) b.el.textContent = text;
         if (b.el.scrollHeight > b.el.clientHeight) {
@@ -1335,7 +1388,7 @@ function terminalTmuxPaneAnzeige() {
           b.el.textContent = b.zeilen.slice(-k).join('\n');
           while (k > 1 && b.el.scrollHeight > b.el.clientHeight) b.el.textContent = b.zeilen.slice(-(--k)).join('\n');
         }
-      } else if (b.el.textContent !== text) b.el.textContent = text;
+      } else terminalPredictSetzen(b.el, terminalZeitstand());
     });
   }
   const input = $('profil-terminal-eingabe');
@@ -1440,7 +1493,7 @@ function terminalTmuxEinzeln(args) {
   let bereich = null;
   if (befehl[0] === 'predict') {
     const o = terminalPredictOptionen(befehl.slice(1));
-    if (o && !o.fehler && o.modus === 'live') bereich = { art: 'predict', timer: setInterval(terminalTmuxPaneAnzeige, 1000) };
+    if (o && !o.fehler && o.modus === 'live') bereich = { art: 'predict', timer: setInterval(terminalTakt, 250) };
   } else if (befehl[0] === 'plog') {
     const opt = terminalPlogTail(befehl.slice(1));
     if (!opt.fehler && opt.folgen) {
