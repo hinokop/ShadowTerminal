@@ -82,6 +82,25 @@ const { imUeberflug } = require('./_kestrel');
     assert.deepEqual(await namen(), ['plog*', 'predict']);
     await taste('ArrowDown'); await taste('ArrowDown'); assert.deepEqual(await namen(), ['plog', 'predict']);
 
+    /* Standardfenster (400 px): plog zuerst, dann predict; plog zeigt ohne neuen Eintrag die jüngsten ganzen Zeilen,
+       auch nach dem Verkleinern und Vergrößern; predict ist bei Platzmangel scrollbar */
+    await cmd('exit');
+    await p.evaluate(() => { terminalKonsoleGeometrie.hoehe = 400; terminalKonsoleLayout(); });
+    for (let i = 0; i < 30; i++) await p.evaluate(i => terminalPppLog('pppd[1]: Zeile ' + i), i);
+    await cmd('tmux'); await cmd('tmux split-window -bd plog -f'); await cmd('tmux split-window -bd predict');
+    // ResizeObserver läuft mit dem Rendern in Echtzeit, unabhängig von der angehaltenen Testuhr.
+    const plogStand = async () => { await p.waitForTimeout(250); return p.evaluate(() => {
+      const el = document.querySelector('.tmux-pane[aria-label="tmux: plog"]'), pr = document.querySelector('.tmux-pane[aria-label="tmux: predict"]');
+      return { letzte: el.textContent.split('\n').at(-1), passt: el.scrollHeight <= el.clientHeight, predict: getComputedStyle(pr).overflowY };
+    }); };
+    let stand = await plogStand();
+    assert.deepEqual([stand.letzte.replace(/^.* pppd/, 'pppd'), stand.passt, stand.predict], ['pppd[1]: Zeile 29', true, 'auto'], 'nach dem zweiten Bereich');
+    for (const hoehe of [300, 560]) {
+      await p.evaluate(h => { terminalKonsoleGeometrie.hoehe = h; terminalKonsoleLayout(); }, hoehe);
+      stand = await plogStand();
+      assert.deepEqual([stand.letzte.replace(/^.* pppd/, 'pppd'), stand.passt], ['pppd[1]: Zeile 29', true], 'Fensterhöhe ' + hoehe);
+    }
+
     /* exit beendet alle Bereiche und verwirft eine laufende Archivabfrage */
     await p.evaluate(() => { window.terminalBruecke = () => new Promise(r => setTimeout(() => r({ text: 'zu spät' }), 2000)); });
     await cmd('cat /' + await p.evaluate(() => TERMINAL_DB) + '/test.txt');

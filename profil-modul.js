@@ -1316,6 +1316,8 @@ function terminalTmuxPaneAnzeige() {
   const t = TERMINAL_ZUSTAND, kern = $('profil-terminal-kern'), ausgabe = $('profil-terminal-ausgabe');
   const bereiche = t.tmux?.panes || [], oben = !!t.tmux && t.tmux.fokus === 'oben';
   if (kern && ausgabe) {
+    // Erst die Aufteilung (ein oder zwei Bereiche) setzen, dann messen: sonst gilt die Kürzung für die alte Höhe.
+    kern.classList.toggle('tmux-zwei', bereiche.length > 1);
     kern.querySelectorAll('.tmux-pane').forEach(function (el) { if (!bereiche.some(function (b) { return b.el === el; })) el.remove(); });
     bereiche.forEach(function (b) {
       if (!b.el) b.el = h('pre', { class: 'tmux-pane mono', 'aria-label': 'tmux: ' + b.art,
@@ -1323,16 +1325,18 @@ function terminalTmuxPaneAnzeige() {
       if (b.el.nextElementSibling !== (bereiche[bereiche.indexOf(b) + 1]?.el || ausgabe)) kern.insertBefore(b.el, bereiche[bereiche.indexOf(b) + 1]?.el || ausgabe);
       b.el.classList.toggle('aktiv', oben && t.tmux.aktiv === b);
       const text = terminalTmuxBereichText(b);
-      if (b.el.textContent !== text) {
-        b.el.textContent = text;
-        // Wie tail im Terminal: die letzten ganzen Zeilen, die in den Bereich passen.
-        if (b.art === 'plog' && b.el.scrollHeight > b.el.clientHeight) {
+      if (b.art === 'plog') {
+        // Wie tail im Terminal: die letzten ganzen Zeilen, die in den Bereich passen; gemessen mit vollem Text.
+        if (b.el.textContent !== text) b.el.textContent = text;
+        if (b.el.scrollHeight > b.el.clientHeight) {
           const st = getComputedStyle(b.el), hoehe = b.el.clientHeight - parseFloat(st.paddingTop) - parseFloat(st.paddingBottom);
-          b.el.textContent = b.zeilen.slice(-Math.max(1, Math.floor(hoehe / parseFloat(st.lineHeight)))).join('\n');
+          // Schätzung nach Zeilenhöhe, dann so lange kürzen, bis auch umbrochene Zeilen ganz hineinpassen.
+          let k = Math.max(1, Math.floor(hoehe / parseFloat(st.lineHeight)));
+          b.el.textContent = b.zeilen.slice(-k).join('\n');
+          while (k > 1 && b.el.scrollHeight > b.el.clientHeight) b.el.textContent = b.zeilen.slice(-(--k)).join('\n');
         }
-      }
+      } else if (b.el.textContent !== text) b.el.textContent = text;
     });
-    kern.classList.toggle('tmux-zwei', bereiche.length > 1);
   }
   const input = $('profil-terminal-eingabe');
   if (input) input.readOnly = oben;
@@ -2025,6 +2029,8 @@ function terminalKonsoleBauen() {
   terminalKonsoleZeiger(griff, fenster, true);
   let breite = 0;
   const beobachter = new ResizeObserver(function () {
+    // Andere Fenstergröße: plog in tmux-Bereichen zeigt wieder die jüngsten ganzen Zeilen, die hineinpassen.
+    if (TERMINAL_ZUSTAND.tmux?.panes.length) terminalTmuxPaneAnzeige();
     if (input.clientWidth === breite) return;
     breite = input.clientWidth;
     terminalEingabeHoehe(input);
