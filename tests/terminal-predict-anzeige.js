@@ -79,6 +79,25 @@ const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 10
       const z = (await pane.textContent()).split('\n').find(x => x.startsWith(pass.name)).match(/\((\d\d:\d\d:\d\d)\)$/)[1];
       assert.equal(z, k, 'Zeitstand nach +' + schritt + ' ms');
     }
+    /* Sekundensprung innerhalb eines Takts: die Uhr läuft während des Takts weiter (Start 1 ms vor der Sekundengrenze, jeder Aufruf von Date.now() +400 ms);
+       Fensterkopf und PREDICT nutzen trotzdem denselben, einmal erfassten Zeitstand */
+    const gleich = async (wo) => {
+      const k = (await p.locator('#profil-terminal-sat').textContent()).split('LOS ')[1];
+      const z = (await p.locator('.tmux-pane[aria-label="tmux: predict"]').textContent()).split('\n').find(x => x.startsWith(pass.name)).match(/\((\d\d:\d\d:\d\d)\)$/)[1];
+      assert.equal(z, k, wo);
+    };
+    await p.evaluate(() => { const echt = Date.now, start = Math.ceil(echt() / 1000) * 1000 - 1; let n = 0; Date.now = () => start + 400 * n++; try { terminalTakt(); } finally { Date.now = echt; } });
+    await gleich('Sekundensprung im Takt');
+    /* Neue plog-Zeile kurz nach einer Sekundengrenze, vor dem nächsten Takt: kein Vorlauf von PREDICT */
+    await cmd('tmux split-window -bd plog -f');
+    for (let i = 0; i < 4; i++) {
+      await p.evaluate(() => { TERMINAL_ZEITSTAND = Math.floor(Date.now() / 1000) * 1000; terminalTakt(); });
+      const bisGrenze = await p.evaluate(() => 1000 - Date.now() % 1000);
+      await p.evaluate(ms => { const echt = Date.now, t = echt() + ms + 5; Date.now = () => t; try { terminalPppLog('pppd[1]: nach der Grenze'); } finally { Date.now = echt; } }, bisGrenze);
+      await gleich('plog-Zeile nach der Sekundengrenze, Versuch ' + (i + 1));
+      await p.clock.runFor(1000);
+    }
+    await cmd("tmux kill-pane -t '{up-of}'");
     /* Farben: kein flächiges Grün. plog in der Textfarbe der Shell; PREDICT-Kopf hellgrau, unter dem Horizont gedämpft,
        über dem Horizont hell und fett; Grün nur für Statusleiste und Fokuslinie */
     await cmd('tmux split-window -bd plog -f');

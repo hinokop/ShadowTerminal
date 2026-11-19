@@ -462,11 +462,19 @@ function terminalCountdown(bis, ms) {
   const sek = Math.max(0, Math.ceil((bis - ms) / 1000)), z = function (n) { return String(n).padStart(2, '0'); };
   return z(Math.floor(sek / 3600)) + ':' + z(Math.floor(sek / 60) % 60) + ':' + z(sek % 60);
 }
-// Gemeinsamer Zeitstand aller Anzeigen: die laufende volle Sekunde. Fensterkopf, Chat-Kopf und PREDICT rechnen davon aus.
-function terminalZeitstand() { return Math.floor(Date.now() / 1000) * 1000; }
+/* Gemeinsamer Zeitstand aller Anzeigen (volle Sekunde): einmal je Takt erfasst und veröffentlicht. Fensterkopf, Chat-Kopf
+   und PREDICT rechnen davon aus; Neuzeichnen außerhalb des Takts (neue plog-Zeile, Größenänderung) nutzt den zuletzt
+   veröffentlichten Stand, damit keine Anzeige der anderen eine Sekunde vorausläuft. Ohne laufenden Takt (keine Verbindung,
+   kein PREDICT) gilt die laufende Sekunde. */
+let TERMINAL_ZEITSTAND = null;
+function terminalZeitstand() {
+  const jetzt = Math.floor(Date.now() / 1000) * 1000;
+  return TERMINAL_ZEITSTAND !== null && jetzt - TERMINAL_ZEITSTAND <= 1000 ? TERMINAL_ZEITSTAND : jetzt;
+}
 function terminalSatRest(link) { return terminalCountdown(link.bis, terminalZeitstand()); }
-// Ein Takt für alle zeitabhängigen Anzeigen, damit sie im selben Aufruf denselben Zeitstand zeigen.
+// Ein Takt für alle zeitabhängigen Anzeigen: Zeitstand einmal erfassen, dann alle im selben Aufruf neu zeichnen.
 function terminalTakt() {
+  TERMINAL_ZEITSTAND = Math.floor(Date.now() / 1000) * 1000;
   terminalSatAnzeige();
   if (TERMINAL_ZUSTAND.tmux?.panes.some(function (b) { return b.art === 'predict'; })) terminalTmuxPaneAnzeige();
 }
@@ -486,8 +494,10 @@ function terminalSatLinkAktiv(link) {
   if (!link.abgelaufen) {
     link.abgelaufen = true;
     clearInterval(link.timer);
+    // LOS ist ein Taktereignis: neuer Zeitstand vor den Meldungen, damit kein Countdown nach dem Hangup noch 1 s zeigt.
+    TERMINAL_ZEITSTAND = Math.floor(Date.now() / 1000) * 1000;
     terminalPppModemAus('Modem hangup (NO CARRIER)', true, true);
-    terminalSatAnzeige();
+    terminalTakt();
   }
   return false;
 }
