@@ -39,6 +39,15 @@ const { chatBereit, schnelleWahl } = require('./_kestrel');
     const lage = await p.evaluate(() => { const s = document.getElementById('profil-terminal-xmpp-status').getBoundingClientRect(), t = document.querySelector('#profil-terminal-xmpp-status .xmpp-tabs').getBoundingClientRect(); return Math.round(s.right - t.right); });
     assert.ok(lage <= 1, 'Fenster rechtsbündig: ' + lage);
 
+    /* Abgeleitete Werte (Fingerprint, Geräte-ID, Ressource) unterscheiden sich je JID, auch bei Zeichen mit gleichen unteren Bits */
+    const ableitung = await p.evaluate(() => {
+      const jids = Array.from({ length: 1000 }, (_, i) => 'k' + i.toString(36) + '@fixture.onion');
+      return { fp: new Set(jids.map(terminalPppFingerprint)).size, geraet: new Set(jids.map(terminalPppGeraet)).size,
+        aq: terminalPppFingerprint('a@fixture.onion') !== terminalPppFingerprint('q@fixture.onion'),
+        sha: terminalPppSha256('abc') };
+    });
+    assert.deepEqual(ableitung, { fp: 1000, geraet: 1000, aq: true, sha: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' });
+
     /* /msg: Fenster 2 für den Kontakt, aktiv; der Befehl erscheint nicht; die Konsole bleibt unverändert */
     const konsole = await verlauf.textContent();
     await cmd('/msg ' + kontakt);
@@ -100,6 +109,9 @@ const { chatBereit, schnelleWahl } = require('./_kestrel');
     assert.match(await verlauf.textContent(), / - You must be in a regular chat window to start an OMEMO session\.$/);
     await cmd('/win 2');
     assert.doesNotMatch(await verlauf.textContent(), /\d [-!~] \/(omemo|win|msg)/, 'Befehle erscheinen nicht im Verlauf');
+
+    /* cons_show_incoming_message: nur Fenster 10 heißt (win 0) (Alt+0, F10), Fenster 11 bleibt (win 11) */
+    assert.deepEqual(await p.evaluate(() => [2, 10, 11, 12].map(terminalPppFensterHinweisNr)), [2, 0, 11, 12]);
 
     /* /win auf ein fehlendes Fenster; /msg auf denselben Kontakt öffnet kein zweites Fenster */
     /* Profanity 0.18.2 cmd_win: cons_show schreibt in die Konsole ohne Hinweis, das aktive Fenster bleibt */

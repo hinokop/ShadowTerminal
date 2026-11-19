@@ -1287,23 +1287,58 @@ function terminalSyslog(n) {
   terminalAusgabe(n ? log.slice(-n) : '');
 }
 const TERMINAL_PPP_ALNUM = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-/* Feste Ableitung aus einem Text (FNV-1a): steht für Werte, die Profanity einmal erzeugt und speichert (Ressource,
-   Identitätsschlüssel, Geräte-ID); sie bleiben so über Neustarts gleich, ohne eigene Ablage. */
-function terminalPppAbleitung(text, alphabet, laenge) {
-  let h = 2166136261 >>> 0, aus = '';
-  for (let i = 0; i < laenge; i++) {
-    for (const c of text + '#' + i) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
-    aus += alphabet[h % alphabet.length];
+/* SHA-256 (FIPS 180-4), synchron, für UTF-8-Text; Ergebnis als Hex. crypto.subtle wäre asynchron, die Ableitungen
+   werden aber synchron gebraucht (Anmeldezeile, Statuszeile). */
+function terminalPppSha256(text) {
+  const K = [], H = [];
+  const bruch = function (x) { return ((x - Math.floor(x)) * 4294967296) >>> 0; };
+  for (let n = 2, k = 0; k < 64; n++) {
+    let prim = true;
+    for (let d = 2; d * d <= n; d++) if (n % d === 0) { prim = false; break; }
+    if (!prim) continue;
+    if (k < 8) H.push(bruch(Math.sqrt(n)));
+    K.push(bruch(Math.cbrt(n))); k++;
   }
+  const b = Array.from(new TextEncoder().encode(text)), bits = b.length * 8;
+  b.push(0x80);
+  while (b.length % 64 !== 56) b.push(0);
+  for (let i = 7; i >= 0; i--) b.push(i >= 4 ? 0 : (bits >>> (i * 8)) & 0xff);
+  const rot = function (x, n) { return (x >>> n) | (x << (32 - n)); };
+  const W = new Array(64);
+  for (let o = 0; o < b.length; o += 64) {
+    for (let i = 0; i < 16; i++) W[i] = (b[o + 4 * i] << 24 | b[o + 4 * i + 1] << 16 | b[o + 4 * i + 2] << 8 | b[o + 4 * i + 3]) >>> 0;
+    for (let i = 16; i < 64; i++) {
+      const s0 = rot(W[i - 15], 7) ^ rot(W[i - 15], 18) ^ (W[i - 15] >>> 3), s1 = rot(W[i - 2], 17) ^ rot(W[i - 2], 19) ^ (W[i - 2] >>> 10);
+      W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0;
+    }
+    let [a, bb, c, d, e, f, g, h] = H;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (rot(e, 6) ^ rot(e, 11) ^ rot(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + W[i]) >>> 0;
+      const t2 = ((rot(a, 2) ^ rot(a, 13) ^ rot(a, 22)) + ((a & bb) ^ (a & c) ^ (bb & c))) >>> 0;
+      h = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = bb; bb = a; a = (t1 + t2) >>> 0;
+    }
+    [a, bb, c, d, e, f, g, h].forEach(function (v, i) { H[i] = (H[i] + v) >>> 0; });
+  }
+  return H.map(function (v) { return v.toString(16).padStart(8, '0'); }).join('');
+}
+/* Feste Ableitung aus der vollständigen JID (SHA-256): steht für Werte, die Profanity einmal erzeugt und speichert
+   (Ressource, Identitätsschlüssel, Geräte-ID); sie bleiben so über Neustarts gleich, ohne eigene Ablage. */
+function terminalPppAbleitung(text, alphabet, laenge) {
+  const hex = terminalPppSha256(text);
+  let aus = '';
+  for (let i = 0; i < laenge; i++) aus += alphabet[parseInt(hex.substr((i * 2) % 64, 2), 16) % alphabet.length];
   return aus;
 }
 // omemo_format_fingerprint: 64 Hex-Zeichen klein (Identitätsschlüssel ohne Typbyte), in Achtergruppen mit '-'.
 function terminalPppFingerprint(jid) {
-  return terminalPppAbleitung(jid + '/omemo-identity', '0123456789abcdef', 64).match(/.{8}/g).join('-');
+  return terminalPppSha256(jid + '/omemo-identity').match(/.{8}/g).join('-');
 }
+// Geräte-ID: 31 Bit, nicht 0 (libsignal registration id / OMEMO device id).
 function terminalPppGeraet(jid) {
-  return 1 + parseInt(terminalPppAbleitung(jid + '/omemo-device', '0123456789abcdef', 8), 16) % 2147483646;
+  return 1 + parseInt(terminalPppSha256(jid + '/omemo-device').slice(0, 8), 16) % 2147483646;
 }
+// cons_show_incoming_message: Fenster 10 heißt (win 0), wie die Taste Alt+0; alle anderen Nummern bleiben.
+function terminalPppFensterHinweisNr(nr) { return nr === 10 ? 0 : nr; }
 // Aufgebaute OMEMO-Sitzungen (session_store, in Profanity dauerhaft): "ready" erscheint nur beim ersten Aufbau.
 const TERMINAL_OMEMO_SITZUNGEN = new Set();
 async function terminalPppChatMeldung(zeile, chat) {
@@ -1413,7 +1448,7 @@ async function terminalPppChatMeldung(zeile, chat) {
       terminalPppChatLog(chat, kontakt + ': Verstanden.', fenster, { zeichen });
       // chatwin_incoming_msg: steht man nicht im Fenster, meldet die Konsole die Nachricht (console.chat = all, cons_alert).
       const i = chat.fenster.indexOf(fenster);
-      if (i !== chat.aktiv) terminalPppChatLog(chat, '<< chat message: ' + kontakt + ' (win ' + ((i + 1) % 10) + ')');
+      if (i !== chat.aktiv) terminalPppChatLog(chat, '<< chat message: ' + kontakt + ' (win ' + terminalPppFensterHinweisNr(i + 1) + ')');
     }, 7000);
   }
 }
