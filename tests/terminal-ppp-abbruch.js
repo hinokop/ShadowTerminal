@@ -1,6 +1,6 @@
 /* Abbauzeilen von pppd/chat je Phase (main.c, chat.c) und LOS-Zähler nach poff:
-   chat wählt: Signal an chat, Connect script failed, Terminating, Exit. · holdoff: Terminating, Exit. ·
-   nach CONNECT: Terminating, Connection terminated., Exit. · SIGHUP (exit in tmux) je Phase · poff blendet den Zähler aus. */
+   chat wählt: Signal an chat, Connect script failed, Exit. · ohne PPP-Link (CONNECT bis Connect:, holdoff, nach LOS): Terminating, Exit. ·
+   ab Connect: ppp0: Terminating, Connection terminated., Exit. · SIGHUP (exit in tmux) je Phase · poff blendet den Zähler aus. */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
@@ -35,9 +35,9 @@ const { imUeberflug, bis, verbunden, gescheitert } = require('./_kestrel');
     await cmd('pon kestrel'); await p.clock.runFor(1000);
     assert.equal((await stand()).phase, 'chat');
     await marke(); await nach('poff');
-    assert.deepEqual(await seitMarke(), ['chat: SIGTERM', 'pppd: Connect script failed', 'pppd: Terminating on signal 15', 'pppd: Exit.']);
+    assert.deepEqual(await seitMarke(), ['chat: SIGTERM', 'pppd: Connect script failed', 'pppd: Exit.']);
     await p.clock.runFor(120000);
-    assert.deepEqual(await seitMarke(), ['chat: SIGTERM', 'pppd: Connect script failed', 'pppd: Terminating on signal 15', 'pppd: Exit.'], 'danach keine Wahl mehr');
+    assert.deepEqual(await seitMarke(), ['chat: SIGTERM', 'pppd: Connect script failed', 'pppd: Exit.'], 'danach keine Wahl mehr');
 
     /* poff in der holdoff-Phase: kein Link, kein "Connection terminated." */
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; });
@@ -77,12 +77,26 @@ const { imUeberflug, bis, verbunden, gescheitert } = require('./_kestrel');
     assert.equal(await block.isVisible(), false, 'bleibt aus');
     await cmd('/quit'); await cmd('wg-quick down wg-sat');
 
-    /* Strg+C im Vordergrund, während chat wählt: SIGINT, $? 5 */
+    /* poff nach CONNECT, bevor das PPP-Interface steht: kein Link-Abbau */
+    await cmd('pon kestrel'); await p.clock.runFor(150 + 550 + 3000 + 50);
+    assert.equal((await stand()).phase, 'seriell');
+    await marke(); await nach('poff');
+    assert.deepEqual(await seitMarke(), ['pppd: Terminating on signal 15', 'pppd: Exit.']);
+    /* poff in der Sekunde nach LOS, vor der Neuwahl: der Link ist schon abgebaut, keine zweite Abbauzeile */
+    await cmd('pon kestrel'); await verbunden(p);
+    await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; TERMINAL_ZUSTAND.satLink.bis = Date.now() + 300; });
+    await marke(); await p.clock.runFor(500);
+    assert.deepEqual(await seitMarke(), ['pppd: Modem hangup (NO CARRIER)', 'pppd: Connection terminated.']);
+    await nach('poff');
+    assert.deepEqual(await seitMarke(), ['pppd: Modem hangup (NO CARRIER)', 'pppd: Connection terminated.', 'pppd: Terminating on signal 15', 'pppd: Exit.']);
+    await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'ok'; });
+
+    /* Strg+C im Vordergrund, während chat wählt: SIGINT, Connect-Skript scheitert, $? 8 (EXIT_CONNECT_FAILED, tty.c) */
     await cmd('pppd call kestrel updetach'); await p.clock.runFor(1000);
     await marke(); await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
-    assert.deepEqual(await seitMarke(), ['chat: SIGINT', 'pppd: Connect script failed', 'pppd: Terminating on signal 2', 'pppd: Exit.']);
-    assert.match(await out.textContent(), /chat\[\d+\]: SIGINT\npppd\[\d+\]: Connect script failed\npppd\[\d+\]: Terminating on signal 2\npppd\[\d+\]: Exit\.$/);
-    await nach('echo $?'); assert.match(await out.textContent(), /\n5$/);
+    assert.deepEqual(await seitMarke(), ['chat: SIGINT', 'pppd: Connect script failed', 'pppd: Exit.']);
+    assert.match(await out.textContent(), /chat\[\d+\]: SIGINT\npppd\[\d+\]: Connect script failed\npppd\[\d+\]: Exit\.$/);
+    await nach('echo $?'); assert.match(await out.textContent(), /\n8$/);
 
     /* exit in tmux nach CONNECT (Aushandlung): kein "Connect script failed", Link-Abbau, Neuwahl nach holdoff */
     await cmd('tmux');

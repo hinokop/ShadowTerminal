@@ -75,7 +75,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     await p.clock.runFor(450);
     assert.match(await out.textContent(), /AT\+CSQ/);
     await inp.press('Control+c');
-    assert.match(await out.textContent(), /Terminating on signal 2/);
+    assert.match(await out.textContent(), /chat\[\d+\]: SIGINT\npppd\[\d+\]: Connect script failed\npppd\[\d+\]: Exit\.$/);
     assert.equal(await prompt.textContent(), 'root@terminal:/#');
     await p.clock.runFor(7500);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null);
