@@ -2,7 +2,7 @@
    Historische UI-Tests (siehe docs/r5-bereinigung.md) sind per Namen weiterhin aufrufbar.
    Aufruf (im Ordner tests/, Playwright installiert):   node runall.js            Standardauswahl
                                                         node runall.js zev zp     nur diese Skripte (ohne .js)
-   Je Gruppe laufen die Skripte parallel, höchstens FT_PARALLEL gleichzeitig (Vorgabe: Anzahl der Kerne); Ausgaben und von den Tests geschriebene Dateien (zum Beispiel Screenshots) liegen in <TMP>/ft-out/.
+   Je Gruppe laufen die Skripte parallel, höchstens FT_PARALLEL gleichzeitig (Vorgabe: os.availableParallelism(), ältere Node-Versionen: Anzahl der Kerne); Ausgaben und von den Tests geschriebene Dateien (zum Beispiel Screenshots) liegen in <TMP>/ft-out/.
    Ergebnis je Skript: grün; rot (Exit-Code != 0, Zeitüberschreitung nach 170 s oder Treffer auf FAIL, FEHLER: n, Fehlschläge: n, Error);
    ungeprüft (Exit 0, aber keine Ausgabe: das Skript hat nichts belegt); fehlt (Datei nicht vorhanden). Bekannt rote und unzuverlässige Skripte
    werden getrennt ausgewiesen. Exit-Code 1 bei jedem anderen roten oder ungeprüften Skript und bei einem ausdrücklich angeforderten, fehlenden Skript. */
@@ -15,7 +15,8 @@ const GRUPPEN = [
 const BEKANNT = { m1flow: 'Missionsablauf, auch auf main rot', abd: 'unzuverlässig', 'lage-box': 'unter Parallellast instabil (animationKeinRueckfall), einzeln grün', wk3: 'unzuverlässig', dp: 'unzuverlässig' };
 const FEHLER = /(^|\s)FAIL\b|FEHLER: [1-9]|Fehlschläge: [1-9]|Error/;
 // Höchstzahl gleichzeitig laufender Skripte. Zu viele Browser auf wenigen Kernen lassen Tests am Start scheitern (Absturz, Ladezeit).
-const PARALLEL = Math.max(1, Number(process.env.FT_PARALLEL) || os.cpus().length || 1);
+// availableParallelism zählt die dem Prozess verfügbaren Kerne (u. a. CPU-Affinität); os.cpus() alle Kerne des Rechners.
+const PARALLEL = Math.max(1, Number(process.env.FT_PARALLEL) || (os.availableParallelism ? os.availableParallelism() : os.cpus().length) || 1);
 // Art eines roten Ergebnisses, nur zur Anzeige: Absturz oder Start (Laden, Anmeldung) getrennt von fachlichen Fehlschlägen.
 function fehlerArt(text) {
   if (/Target crashed|Target page, context or browser has been closed|browserType\.launch/.test(text)) return 'Absturz';
