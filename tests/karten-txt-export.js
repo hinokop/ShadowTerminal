@@ -92,6 +92,7 @@ const PF = require('./_pfad');
     const p = await open(ready);
     await seed(p);
     const exportVia = async (button, folder, message) => {
+      await p.evaluate(() => meldung(''));   /* alte Meldung leeren: gewartet wird auf die dieses Exports */
       await p.locator('#' + button).click();
       await p.locator('#k-txt-ordner').selectOption(folder);
       await p.locator('#dlg-ok').click();
