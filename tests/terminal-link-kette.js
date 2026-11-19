@@ -119,7 +119,10 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
       await p.clock.runFor(2999); assert.doesNotMatch(await chat.textContent(), /OMEMO session started/);
       await p.clock.runFor(1);
       await cmd('/omemo fingerprint');
-      assert.match(await chat.textContent(), /\/msg [a-z]+@[a-z2-7]{56}\.onion[\s\S]*\/omemo start[\s\S]*OMEMO session started[\s\S]*\/omemo fingerprint[\s\S]*Your OMEMO fingerprint[\s\S]*'s OMEMO fingerprint/);
+      // Gesprächsfenster des Kontakts: Befehle erscheinen nicht im Verlauf; OMEMO steht im Titel.
+      assert.match(await chat.textContent(), /OMEMO session started[\s\S]*Your OMEMO fingerprint[\s\S]*'s OMEMO fingerprint/);
+      assert.doesNotMatch(await chat.textContent(), /\/msg |\/omemo /);
+      assert.match(await p.locator('#profil-terminal-xmpp-titel').textContent(), /^[a-z]{14}@[a-z2-7]{56}\.onion \[OMEMO\]\[online\]$/);
     };
     await bereit(true);
     await inp.fill('/sendfile /pgcl-eu3.arch07/ops/lageb'); await inp.press('Tab');
@@ -156,7 +159,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     await p.clock.runFor(4000);
     // LOS: Chat offline, der KESTREL-Block verschwindet; die Ursache steht im Chatverlauf.
     assert.equal(await orbit.isVisible(), false);
-    assert.match(await chat.textContent(), /pppd: Modem hangup \(NO CARRIER\)/);
+    assert.doesNotMatch(await chat.textContent(), /pppd:/, 'die Modemursache steht im Syslog, nicht im Chat');
     assert.equal(await progress.isVisible(), false);
     assert.doesNotMatch(await chat.textContent(), /Error uploading file/);
     await p.clock.runFor(750);
