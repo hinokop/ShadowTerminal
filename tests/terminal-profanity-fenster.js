@@ -73,17 +73,33 @@ const { chatBereit, schnelleWahl } = require('./_kestrel');
     await cmd('/win 1'); await cmd('/msg ' + kontakt);
     assert.deepEqual(await fenster(), ['[1]', '-2-']);
 
+    /* Zwei Gespräche: jede Meldung erhält ihre eigene Antwort; die zweite löscht die erste nicht (Timer je Fenster) */
+    const zweiter = 'zweiter@' + kontakt.split('@')[1];
+    await cmd('Auftrag erledigt.');
+    await p.clock.runFor(1000);
+    await cmd('/msg ' + zweiter);
+    assert.deepEqual(await fenster(), ['[1]', '[2]', '-3-']);
+    await cmd('Auftrag erledigt.');
+    await p.clock.runFor(7500);
+    assert.match(await verlauf.textContent(), /zweiter@\S+: Verstanden\.$/);
+    assert.deepEqual(await fenster(), ['[1]', '[2]*', '-3-'], 'die Antwort in Fenster 2 kommt trotz der zweiten Meldung');
+    await cmd('/win 2');
+    assert.equal((await verlauf.textContent()).match(/: Verstanden\./g).length, 2, 'Fenster 2: erste und zweite Antwort');
+
     /* Abbruch: Lost connection. genau einmal in Konsole und Gespräch, keine Modemzeile; Präsenz offline; Fenster bleiben wechselbar */
     await p.evaluate(() => terminalPppShell('poff', '', []));
     await p.clock.runFor(1000);
-    assert.match(await verlauf.textContent(), /OMEMO session started\.\n\d\d:\d\d:\d\d - Lost connection\.$/);
+    assert.match(await verlauf.textContent(), /: Verstanden\.\n\d\d:\d\d:\d\d - Lost connection\.$/);
     assert.doesNotMatch(await verlauf.textContent(), /Disconnected/);
     assert.doesNotMatch(await verlauf.textContent(), /pppd:/);
     assert.equal(await titel.textContent(), kontakt + ' [OMEMO][offline]');
-    assert.deepEqual(await fenster(), ['[1]*', '-2-'], 'cons_show_error setzt den Konsolenhinweis');
+    // cons_show_error setzt den Konsolenhinweis; win_println in den übrigen Fenstern setzt keinen
+    assert.deepEqual(await fenster(), ['[1]*', '-2-', '[3]']);
     await cmd('/win 1');
     assert.match(await verlauf.textContent(), /logged in successfully[\s\S]*Window 3 does not exist\.\n[\s\S]*Lost connection\.$/);
     assert.equal((await verlauf.textContent()).match(/Lost connection\./g).length, 1, 'je Fenster genau eine Meldung');
+    await cmd('/win 3');
+    assert.equal((await verlauf.textContent()).match(/Lost connection\./g).length, 1, 'Fenster 3: genau eine Meldung');
     await cmd('/quit');
     assert.deepEqual([await titel.isVisible(), await status.isVisible()], [false, false], 'nach /quit keine profanity-Zeilen');
     assert.deepEqual(errors, []);

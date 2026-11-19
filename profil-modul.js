@@ -856,10 +856,9 @@ function terminalPppLog(text) {
 function terminalPppChatAus() {
   const t = TERMINAL_ZUSTAND, chat = t.kanal;
   if (chat?.ui !== 'xmpp') return;
-  clearTimeout(chat.antwort);
   clearTimeout(chat.abbruch);
   clearTimeout(chat.anmeldung);
-  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); });
+  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); clearTimeout(f.antwort); });
   t.kanal = null;
   terminalVordergrundEnde(chat, 0);
   terminalTabReset();
@@ -914,9 +913,8 @@ function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   if (chat?.ui !== 'xmpp' || chat.phase === 'offline') return;
   const transfer = chat.phase === 'transfer';
   chat.phase = 'offline';
-  clearTimeout(chat.antwort);
   clearTimeout(chat.anmeldung);
-  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); });
+  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); clearTimeout(f.antwort); });
   terminalTabReset();
   terminalTransferStop();
   // Profanity kennt die Modemursache nicht (sie steht im Syslog); es meldet den eigenen Uploadfehler und den Verbindungsabbruch.
@@ -925,7 +923,8 @@ function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   const uploadFenster = chat.uploadFenster;
   chat.abbruch = setTimeout(function () {
     if (transfer) terminalPppChatLog(chat, 'Error uploading file: Network unreachable', uploadFenster);
-    chat.fenster.forEach(function (f) { terminalPppChatLog(chat, 'Lost connection.', f); });
+    // Konsole per cons_show_error (cons_alert: Hinweis), die übrigen per win_println (kein Hinweis).
+    chat.fenster.forEach(function (f, i) { terminalPppChatLog(chat, 'Lost connection.', f, i > 0); });
   }, 750);
 }
 function terminalPppWaehltVorne() {
@@ -1180,7 +1179,7 @@ async function terminalPppShell(befehl, arg, args = []) {
       const domain = TERMINAL_XMPP_DOMAIN;
       const chat = { ui: 'xmpp', phase: 'anmeldung', link, fenster: [{ titel: 'Console', log: [], neu: false }], aktiv: 0, domain, account: 'ghost@' + domain,
         vorschlag: terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14) + '@' + domain,
-        kontakt: null, omemo: false, antwort: null, fingerprint: terminalPppFingerprint(), fingerprints: new Map() };
+        kontakt: null, fingerprint: terminalPppFingerprint(), fingerprints: new Map() };
       const ende = terminalVordergrund(chat);
       t.kanal = chat;
       terminalPppChatLog(chat, 'Connecting to ' + chat.account);
@@ -1356,9 +1355,11 @@ async function terminalPppChatMeldung(zeile, chat) {
   if (zeile.startsWith('/')) { terminalPppChatLog(chat, 'Unknown command: ' + zeile.split(/\s/)[0], fenster); return; }
   terminalPppChatLog(chat, 'me: ' + zeile, fenster);
   if (/^auftrag (erledigt|gescheitert)\.?$/i.test(zeile)) {
+    // Antwort je Gespräch (wie der OMEMO-Aufbau): eine Meldung in einem anderen Fenster löscht sie nicht.
     const kontakt = fenster.kontakt;
-    clearTimeout(chat.antwort);
-    chat.antwort = setTimeout(function () {
+    clearTimeout(fenster.antwort);
+    fenster.antwort = setTimeout(function () {
+      fenster.antwort = null;
       if (t.kanal === chat && chat.phase !== 'offline' && terminalSatLinkAktiv(chat.link))
         terminalPppChatLog(chat, kontakt + ': Verstanden.', fenster);
     }, 7000);
