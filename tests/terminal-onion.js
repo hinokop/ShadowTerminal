@@ -44,8 +44,8 @@ function base32(text) {
     /* profanity: Anmeldung und Kontaktvorschlag unter dieser Adresse */
     await chatBereit(p, { kontakt: false });
     const chat = await p.locator('#profil-terminal-chat').textContent();
-    assert.ok(chat.includes('Connecting to ghost@' + domain), 'Connecting');
-    assert.ok(chat.includes('ghost@' + domain + ' logged in successfully, online.'), 'Anmeldung');
+    assert.ok(chat.includes('Connecting with account ghost@' + domain + ' as ghost@' + domain + '/profanity.'), 'Connecting');
+    assert.ok(/ghost@\S+\/profanity\.[0-9A-Za-z]{4} logged in successfully, online \(priority 0\)\./.test(chat), 'Anmeldung');
     assert.match(await p.evaluate(() => TERMINAL_ZUSTAND.kanal.vorschlag), new RegExp('^[a-z]{14}@' + m[1] + '\\.onion$'));
     assert.deepEqual(errors, []);
     console.log('OK: Onion-Adresse v3 ' + domain);
