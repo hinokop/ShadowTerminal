@@ -1,0 +1,88 @@
+/* PREDICT-Anzeige (#66 Abschnitt 1): Titel, QTH mit UTC-Datum, Spanne der TLE-Epochen, Entfernung in km, AOS/LOS mit Datum
+   und Countdown HH:MM:SS (auch über UTC-Mitternacht), Hervorhebung nur über dem geometrischen Horizont, gleiche Rundung wie
+   die Link-Anzeige, Bereich ohne eigene Fläche mit schmaler Trennlinie. Bahnrechnung und Einwahl unverändert. */
+const assert = require('node:assert/strict');
+const { chromium } = require('playwright');
+const { APP } = require('./_pfad');
+const { imUeberflug } = require('./_kestrel');
+
+// Unabhängig von der Anwendung: Epoche aus TLE-Zeile 1 (JJTTT.TTTTTTTT).
+const epoche = l1 => { const jj = +l1.slice(18, 20), tag = +l1.slice(20, 32); return Date.UTC(2000 + jj, 0, 1) + (tag - 1) * 86400000; };
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const datum = ms => { const d = new Date(ms); return String(d.getUTCDate()).padStart(2, '0') + MON[d.getUTCMonth()] + String(d.getUTCFullYear()).slice(2); };
+const uhr = ms => new Date(ms).toISOString().slice(11, 19);
+const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 1000)), z = n => String(n).padStart(2, '0'); return z(Math.floor(s / 3600)) + ':' + z(Math.floor(s / 60) % 60) + ':' + z(s % 60); };
+
+(async () => {
+  const b = await chromium.launch();
+  try {
+    const p = await b.newPage({ reducedMotion: 'reduce' });
+    p.setDefaultTimeout(12000);
+    const errors = [];
+    p.on('pageerror', e => errors.push(e.message));
+    await p.route(/^https?:/, r => r.abort());
+    await p.goto(APP);
+    await p.fill('#gate-pw', 'pw-test-123');
+    if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
+    await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
+    await p.clock.install();
+    const inp = p.locator('#profil-terminal-eingabe');
+    const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
+
+    /* Kopf: Titel, QTH mit Datum, Spanne der TLE-Epochen, Spaltenkopf mit km */
+    const tle = await p.evaluate(() => KESTREL_TLE.map(e => e[1]));
+    const ep = tle.map(epoche), von = Math.min(...ep), bis = Math.max(...ep);
+    assert.notEqual(von, bis, 'Testaufbau: unterschiedliche Epochen');
+    const jetzt = await p.evaluate(() => Date.now());
+    const kopf = (await p.evaluate(ms => terminalPredictLive(ms), jetzt)).split('\n');
+    assert.match(kopf[0], new RegExp('^PREDICT Real-Time Multi-Tracking Mode · ' + datum(jetzt) + ' \\d\\d:\\d\\d:\\d\\d UTC$'));
+    assert.match(kopf[1], new RegExp('^QTH \\S+ \\d+\\.\\d\\d[NS] \\d+\\.\\d\\d[EW] · TLE epoch ' + datum(von) + ' ' + uhr(von).slice(0, 5) + ' - ' + datum(bis) + ' ' + uhr(bis).slice(0, 5) + ' UTC$'));
+    assert.match(kopf[2], /^Satellite\s+Az\s+El\s+Range km\s+Next event \(UTC\)$/);
+    assert.equal(kopf.length, 3 + tle.length, 'drei Kopfzeilen, eine Zeile je Satellit');
+
+    /* Pflichtfall: nächster AOS nach UTC-Mitternacht, mit Datum des Folgetags und Countdown */
+    const fall = await p.evaluate(start => {
+      for (let ms = start; ms < start + 3 * 86400000; ms += 600000) for (const sat of kestrelSats()) {
+        const l = kestrelLage(sat, ms), u = kestrelUeberflug(sat, ms);
+        if (u && l.el < 0 && new Date(u.von).getUTCDate() !== new Date(ms).getUTCDate()) return { ms, name: sat.name, von: u.von };
+      }
+      return null;
+    }, jetzt);
+    assert.ok(fall, 'Testaufbau: AOS nach Mitternacht gefunden');
+    const zeile = (await p.evaluate(ms => terminalPredictLive(ms), fall.ms)).split('\n').find(z => z.startsWith(fall.name));
+    assert.notEqual(datum(fall.von), datum(fall.ms));
+    assert.ok(zeile.endsWith('AOS ' + datum(fall.von) + ' ' + uhr(fall.von) + ' (' + countdown(fall.von, fall.ms) + ')'), zeile);
+    assert.match(zeile, /\(\d\d:\d\d:\d\d\)$/);
+
+    /* Über dem Horizont: fett markiert, nur diese Zeile; LOS-Countdown wie in der Link-Anzeige */
+    const pass = await imUeberflug(p, { wahl: 'ok' });
+    await p.clock.pauseAt(await p.evaluate(() => Date.now() + 1000));
+    await cmd('pppd call kestrel updetach'); await p.clock.runFor(7600);
+    await p.waitForFunction(() => TERMINAL_ZUSTAND.modem?.bereit);
+    await cmd('tmux'); await cmd('tmux split-window -bd predict');
+    await p.clock.runFor(1000);
+    const pane = p.locator('.tmux-pane');
+    const markiert = await pane.locator('.predict-oben').allTextContents();
+    const oben = await p.evaluate(() => kestrelSats().filter(s => kestrelLage(s, Date.now()).el >= 0).map(s => s.name));
+    assert.ok(oben.includes(pass.name), 'Testaufbau: Überflug-Satellit über dem Horizont');
+    assert.deepEqual(markiert.map(t => t.split(' ')[0]).sort(), oben.sort(), 'genau die Satelliten über dem Horizont');
+    assert.equal(await pane.locator('.predict-oben').first().evaluate(e => getComputedStyle(e).fontWeight), '700');
+    const zeilePass = (await pane.textContent()).split('\n').find(z => z.startsWith(pass.name));
+    const badge = await p.locator('#profil-terminal-sat').textContent();
+    assert.match(badge, /^KESTREL-\d · LOS \d\d:\d\d:\d\d$/);
+    assert.ok(zeilePass.endsWith('(' + badge.split('LOS ')[1] + ')'), 'gleiche Rundung: ' + zeilePass + ' / ' + badge);
+    /* Gleicher Zeitstand: zu beliebigen Zeitpunkten innerhalb der Sekunden zeigen Fensterkopf und PREDICT denselben Countdown */
+    for (const schritt of [137, 251, 333, 89, 412, 177, 263, 501, 71, 349]) {
+      await p.clock.runFor(schritt);
+      const k = (await p.locator('#profil-terminal-sat').textContent()).split('LOS ')[1];
+      const z = (await pane.textContent()).split('\n').find(x => x.startsWith(pass.name)).match(/\((\d\d:\d\d:\d\d)\)$/)[1];
+      assert.equal(z, k, 'Zeitstand nach +' + schritt + ' ms');
+    }
+    /* Fläche: keine eigene Hintergrundfarbe, schmale Trennlinie unten */
+    const stil = await pane.evaluate(e => { const s = getComputedStyle(e); return [s.backgroundColor, s.borderTopWidth, s.borderBottomWidth]; });
+    assert.deepEqual(stil, ['rgba(0, 0, 0, 0)', '0px', '1px']);
+    await cmd('exit'); await cmd('poff');
+    assert.deepEqual(errors, []);
+    console.log('OK: PREDICT-Anzeige');
+  } finally { await b.close(); }
+})().catch(e => { console.error(e); process.exitCode = 1; });

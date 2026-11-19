@@ -115,7 +115,7 @@ const { imUeberflug } = require('./_kestrel');
     await cmd('predict');
     assert.equal(await p.locator('#profil-terminal-prompt').textContent(), 'predict · Ctrl+C');
     const live = await p.locator('#profil-terminal-orbit').textContent();
-    assert.match(live, new RegExp(S + '\\s+\\d+\\s+\\d+\\s+\\d+\\s+LOS \\d\\d:\\d\\d:\\d\\d'));
+    assert.match(live, new RegExp(S + '\\s+\\d+\\s+\\d+\\s+\\d+\\s+LOS \\d\\d[A-Z][a-z]{2}\\d\\d \\d\\d:\\d\\d:\\d\\d \\(\\d\\d:\\d\\d:\\d\\d\\)'));
     await inp.press('Control+c');
     assert.deepEqual(errors, []);
     console.log('OK: Einwahlkette mit echter Bahnrechnung');

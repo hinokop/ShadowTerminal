@@ -38,7 +38,7 @@
 .profil-verlauf-raster{stroke:var(--border-strong)}
 .profil-verlauf-linie{fill:none;stroke:var(--accent);stroke-width:2}
 #profil-terminal-sat{color:#a8d293;font-size:11px;white-space:nowrap;margin-right:6px}
-#profil-terminal-orbit{flex:none;max-height:29%;border:1px solid #363f49;padding:5px 7px;color:#a8d293;background:#171d25}
+#profil-terminal-orbit{flex:none;max-height:29%;border:0;border-bottom:1px solid #363f49;padding:2px 0 6px;color:#a8d293;background:transparent}
 #profil-terminal-chat{flex:1}
 #profil-terminal-orbit.orbit-live{max-height:none}
 
@@ -46,9 +46,12 @@
 #profil-terminal form[aria-busy="true"] #profil-terminal-eingabe { opacity: .5; }
 
 /* tmux: obere Bereiche (predict, plog -f), Statuszeile unten (tmux-Standard: grüne Leiste) */
-#profil-terminal-kern.tmux-zwei .tmux-pane{max-height:24%}
-#profil-terminal-kern .tmux-pane{flex:none;max-height:38%;overflow:hidden;margin:0 0 4px;border:1px solid #363f49;padding:5px 7px;color:#a8d293;background:#171d25;cursor:default}
-#profil-terminal-kern .tmux-pane.aktiv{border-color:#6fbf56}
+#profil-terminal-kern.tmux-zwei .tmux-pane{max-height:22%}
+#profil-terminal-kern.tmux-zwei .tmux-pane[aria-label="tmux: predict"]{max-height:38%}
+#profil-terminal-kern .tmux-pane{flex:none;max-height:38%;overflow:hidden;margin:0 0 4px;border:0;border-bottom:1px solid #363f49;padding:2px 0 6px;color:#a8d293;background:transparent;cursor:default}
+#profil-terminal-kern .tmux-pane.aktiv{border-bottom-color:#6fbf56}
+/* PREDICT: Satelliten über dem geometrischen Horizont fett (Sicht, keine Verbindung) */
+.predict-oben{font-weight:700;color:#d4f0c4}
 /* predict: passt die Liste nicht, bleibt sie scrollbar (plog zeigt ohnehin die jüngsten ganzen Zeilen) */
 #profil-terminal-kern .tmux-pane[aria-label="tmux: predict"]{overflow-y:auto}
 .profil-terminal-kern.tmux-oben textarea{opacity:.5}
