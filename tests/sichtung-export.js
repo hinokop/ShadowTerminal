@@ -72,6 +72,8 @@ const PF = require('./_pfad');
     });
     assert.equal(z.id1, 'SI-001');
     const exportVia = async (dossier, nachricht) => {
+      /* Warten bis sys-msg leer ist, damit die Nachricht des vorherigen Exports nicht fälschlich erkannt wird */
+      await q.waitForFunction(() => !document.querySelector('#sys-msg').innerText.trim());
       await q.evaluate(d => kartenTxtExport('sichtung', 'SI-001', d), dossier);
       await q.locator('#k-txt-ordner').selectOption('dokumente'); await q.locator('#dlg-ok').click();
       await q.waitForFunction(m => document.querySelector('#sys-msg').innerText.includes(m), nachricht);
