@@ -160,13 +160,18 @@ const { imUeberflug } = require('./_kestrel');
     await p.clock.fastForward(61000);
     assert.doesNotMatch(await chat.textContent(), /File sent successfully/);
     await cmd('/quit');
-    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem === null && TERMINAL_ZUSTAND.wgSat.handshake === null), true);
+    // persist: nach dem Hangup bleibt pppd und wählt neu (ohne Verbindung); der Tunnel hat keinen Handshake mehr.
+    assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.bereit && TERMINAL_ZUSTAND.wgSat.handshake === null), true);
     await cmd('wg-quick down wg-sat');
-    // Scheitert die Wahl (kein Träger), endet pppd mit 8. Gezielt ausgelöst, weil nach einem Untergang ein anderer KESTREL aufgegangen sein kann.
+    await cmd('poff');
+    // Scheitert die Wahl (kein Träger), wartet updetach mit persist im Vordergrund weiter; Strg+C beendet pppd mit 5.
+    // Gezielt ausgelöst, weil nach einem Untergang ein anderer KESTREL aufgegangen sein kann.
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; });
     await cmd('pppd call kestrel updetach'); await p.clock.runFor(7000);
     assert.match(await out.textContent(), /chat\[\d+\]: NO CARRIER\npppd\[\d+\]: Connect script failed$/);
-    await cmd('echo $?'); assert.match(await out.textContent(), /\n8$/);
+    assert.equal(await p.evaluate(() => terminalBeschaeftigt()), true);
+    await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
+    await cmd('echo $?'); assert.match(await out.textContent(), /\n5$/);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null);
     await imUeberflug(p);
     await cmd('predict -t /var/cache/tle/kestrel.tle -p KESTREL-1');
@@ -175,7 +180,7 @@ const { imUeberflug } = require('./_kestrel');
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now()));
     assert.match(await out.textContent(), /pppd\[\d+\]: Modem hangup \(NO CARRIER\)\npppd\[\d+\]: Connection terminated\.$/);
     await cmd('poff kestrel');
-    assert.match(await out.textContent(), /poff: I could not find a pppd process for provider 'kestrel'\. None stopped\.$/);
+    assert.match(await out.textContent(), /root@terminal:\/# poff kestrel$/, 'persist: pppd läuft nach LOS weiter, poff beendet es still');
     await cmd('poff kestrel && tail -n 6 /var/log/syslog');
     assert.match(await out.textContent(), /poff: I could not find a pppd process for provider 'kestrel'\. None stopped\.$/);
     assert.deepEqual(netz.slice(vor), ['ls', 'send', 'send']);

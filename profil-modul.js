@@ -249,6 +249,7 @@ const TERMINAL_TLE_DIRS = new Map([['/var', ['cache/', 'log/']], ['/var/cache', 
 const TERMINAL_VIRT_DATEIEN = new Map([
   ['/var/cache/tle/kestrel.tle', function () { return KESTREL_TLE.map(function (e) { return e.join('\n'); }).join('\n'); }],
   ['/etc/ppp/peers/kestrel', function () { return ['/dev/ttyUSB0', '19200', 'crtscts', 'lock', 'noauth', 'defaultroute', 'usepeerdns',
+    'persist', 'holdoff ' + TERMINAL_PPP_HOLDOFF / 1000, 'maxfail 0',
     'connect "/usr/sbin/chat -v -f /etc/chatscripts/kestrel"'].join('\n'); }],
   ['/etc/chatscripts/kestrel', function () { return ['ABORT BUSY', "ABORT 'NO CARRIER'", "'' ATZ", 'OK AT+CSQ', 'OK ATDT' + TERMINAL_PPP_WAHL, "CONNECT ''"].join('\n'); }]
 ]);
@@ -476,7 +477,7 @@ function terminalSatLinkAktiv(link) {
   if (!link.abgelaufen) {
     link.abgelaufen = true;
     clearInterval(link.timer);
-    terminalPppModemAus('Modem hangup (NO CARRIER)');
+    terminalPppModemAus('Modem hangup (NO CARRIER)', true, true);
     terminalSatAnzeige();
   }
   return false;
@@ -640,6 +641,11 @@ function kestrelSichtbar(ms) {
     .filter(function (x) { return x.el >= 0; }).sort(function (a, b) { return b.el - a.el; });
 }
 // Sitzungswerte: Prozessnummern und Adressen je Sitzung verschieden.
+/* Peer-Datei mit persist, holdoff 20, maxfail 0 (pppd(8), main.c): nach einem gescheiterten Wählversuch wartet pppd
+   die holdoff-Zeit ab und wählt ohne eigene Logzeile neu, ohne Grenze für Fehlversuche; nach einem Modem-Hangup
+   (LOS) entfällt holdoff. pppd endet nur durch Signal (poff, Strg+C) oder Sitzungsende. */
+const TERMINAL_PPP_HOLDOFF = 20000;
+const TERMINAL_PPP_NEUWAHL = 1000;
 const TERMINAL_SITZUNG = (function () {
   const z = function (n) { return crypto.getRandomValues(new Uint32Array(1))[0] % n; };
   const pid = 1100 + z(28000);
@@ -754,7 +760,8 @@ function terminalPppChatAus() {
   terminalKanalPromptSync();
   terminalSatAnzeige();
 }
-function terminalPppModemAus(grund, inShell = true) {
+// neuWaehlen: Modem-Hangup mit persist; pppd bleibt und wählt sofort neu (holdoff entfällt).
+function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   const t = TERMINAL_ZUSTAND, modem = t.modem;
   if (modem) {
     clearTimeout(modem.timer);
@@ -762,9 +769,12 @@ function terminalPppModemAus(grund, inShell = true) {
     zeilen.forEach(terminalPppLog);
     // Liest plog -f mit, erscheinen die Zeilen schon über den Syslog; die direkte Meldung entfällt dann.
     if (inShell && !t.plogFolgen) terminalAusgabe(zeilen);
-    terminalVordergrundEnde(modem, grund.includes('signal 2') ? 5 : 1);
+    if (!neuWaehlen) terminalVordergrundEnde(modem, grund.includes('signal 2') ? 5 : 1);
   }
-  t.modem = null;
+  if (modem && neuWaehlen) {
+    modem.bereit = false; modem.link = null;
+    modem.timer = setTimeout(function () { if (TERMINAL_ZUSTAND.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_NEUWAHL);
+  } else t.modem = null;
   terminalKanalPromptSync();
   terminalSatAnzeige();
   if (t.wgSat) t.wgSat.handshake = null;
@@ -805,7 +815,17 @@ function terminalCsq(el) {
   return '+CSQ: ' + Math.max(0, Math.min(31, Math.round(4 + el * 0.45) + w)) + ',99';
 }
 function terminalPppEinwahl(vordergrund) {
+  const modem = { bereit: false, vordergrund, timer: null, link: null, versuche: 0 };
+  TERMINAL_ZUSTAND.modem = modem;
+  const ende = vordergrund ? terminalVordergrund(modem) : 0;
+  terminalPppWahl(modem);
+  return ende;
+}
+// Ein Wählversuch: jedes Mal ein neuer chat-Prozess (neue PID), pppd bleibt derselbe.
+function terminalPppWahl(modem) {
   const t = TERMINAL_ZUSTAND, jetzt = Date.now(), S = TERMINAL_SITZUNG;
+  if (modem.versuche++) S.chat += 1 + terminalKanalZufall(6);
+  modem.holdoff = false;
   const oben = kestrelSichtbar(jetzt)[0] || null;
   const ausgang = terminalWahlausgang(oben ? oben.el : -90);
   if (t.satLink) clearInterval(t.satLink.timer);
@@ -816,8 +836,7 @@ function terminalPppEinwahl(vordergrund) {
     link.timer = setInterval(function () { if (terminalSatLinkAktiv(link)) terminalSatAnzeige(); }, 250);
   }
   t.satLink = link;
-  const modem = { bereit: false, vordergrund, timer: null, link };
-  t.modem = modem;
+  modem.link = link;
   terminalKanalPromptSync();
   terminalSatAnzeige();
   const c = 'chat[' + S.chat + ']: ', d = 'pppd[' + S.pppd + ']: ';
@@ -838,27 +857,52 @@ function terminalPppEinwahl(vordergrund) {
     if (t.modem !== modem || (link && !terminalSatLinkAktiv(link))) return;
     const zeilen = schritte[i][1];
     zeilen.forEach(terminalPppLog);
-    if (vordergrund) terminalAusgabe(zeilen);
+    if (modem.vordergrund) terminalAusgabe(zeilen);
     if (i + 1 < schritte.length) {
       modem.timer = setTimeout(() => schritt(i + 1), schritte[i + 1][0]);
       return;
     }
     modem.timer = null;
     if (!link) {
-      // Wahl gescheitert: pppd endet mit 8 (connect script failed, pppd(8)).
-      t.modem = null;
+      // Wahl gescheitert: mit persist und maxfail 0 bleibt pppd und wählt nach holdoff neu; updetach bleibt im Vordergrund.
+      modem.holdoff = true;
+      modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_HOLDOFF);
       terminalKanalPromptSync();
       terminalSatAnzeige();
-      terminalVordergrundEnde(modem, 8);
       return;
     }
+    // Verbunden: updetach löst sich vom Terminal, spätere Neuwahlen laufen im Hintergrund.
     modem.bereit = true;
+    modem.vordergrund = false;
     terminalKanalPromptSync();
     terminalVordergrundEnde(modem, 0);
   };
-  const ende = vordergrund ? terminalVordergrund(modem) : 0;
   schritt(0);
-  return ende;
+}
+/* Die Shell endet (exit in tmux): Ihr Vordergrundjob erhält SIGHUP.
+   pppd vor dem Abkoppeln (updetach): pppd(8) NOTES, main.c: "Hangup (SIGHUP)", der laufende Versuch endet (chat erhält
+   das Signal, das Connect-Skript scheitert); mit persist bleibt pppd und wählt neu, in der holdoff-Phase sofort.
+   Ohne Terminal läuft es im Hintergrund weiter. wg-quick up: bash endet, die EXIT-Falle (del_if) entfernt wg-sat. */
+function terminalShellSighup() {
+  const t = TERMINAL_ZUSTAND, modem = t.modem, d = 'pppd[' + TERMINAL_SITZUNG.pppd + ']: ';
+  if (modem && modem.vordergrund && !modem.bereit) {
+    modem.vordergrund = false;
+    clearTimeout(modem.timer);
+    terminalPppLog(d + 'Hangup (SIGHUP)');
+    if (modem.holdoff) terminalPppWahl(modem);
+    else {
+      if (modem.link) { clearInterval(modem.link.timer); if (t.satLink === modem.link) t.satLink = null; modem.link = null; }
+      terminalPppLog(d + 'Connect script failed');
+      modem.holdoff = true;
+      modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_HOLDOFF);
+    }
+    terminalVordergrundEnde(modem, 5);
+  }
+  if (t.wgSat && !t.wgSat.bereit) {
+    clearTimeout(t.wgSat.timer); terminalVordergrundEnde(t.wgSat, 1); t.wgSat = null;
+  }
+  terminalPlogEnde(1);
+  terminalSatAnzeige();
 }
 async function terminalPppShell(befehl, arg, args = []) {
   const t = TERMINAL_ZUSTAND, link = t.satLink;
@@ -1408,9 +1452,9 @@ const TERMINAL_TABELLE = [
     const t = TERMINAL_ZUSTAND;
     if (arg) return terminalUsage('exit');
     // In tmux beendet exit die Shell der Sitzung; vereinfacht endet damit die ganze Sitzung samt oberem Fenster.
-    // Mit der Shell enden auch ein laufendes plog -f und der Rest der Kette.
+    // Mit der Shell enden ihr Vordergrundjob (SIGHUP: plog -f, pppd vor dem Abkoppeln, wg-quick up) und der Rest der Kette.
     if (t.tmux && !t.kanal && !t.orbitLive) {
-      if (t.plogFolgen) { t.kette = null; terminalPlogEnde(1); }
+      if (t.kette) { t.kette = null; terminalShellSighup(); }
       terminalTmuxEnde(); terminalAusgabe('[exited]'); terminalKanalPromptSync();
       return 0;
     }
