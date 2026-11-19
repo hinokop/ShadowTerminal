@@ -26,6 +26,8 @@ const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 10
     if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
     await schnelleWahl(p);
+    // Ohne Funkmaske meinen Fensterkopf (LOS) und PREDICT (LOS) dasselbe Ereignis; LINK END prüft terminal-link-end.
+    await p.evaluate(() => { KESTREL_FUNK.ende = 0; });
     await p.clock.install();
     const inp = p.locator('#profil-terminal-eingabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
