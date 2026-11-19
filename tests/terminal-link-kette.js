@@ -163,7 +163,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     assert.equal(await progress.isVisible(), false);
     assert.doesNotMatch(await chat.textContent(), /Error uploading file/);
     await p.clock.runFor(750);
-    assert.match(await chat.textContent(), /Network unreachable[\s\S]*Disconnected/);
+    assert.match(await chat.textContent(), /Network unreachable[\s\S]*Lost connection\./);
     await p.clock.fastForward(61000);
     assert.doesNotMatch(await chat.textContent(), /File sent successfully/);
     await cmd('/quit');

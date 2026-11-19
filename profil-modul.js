@@ -746,7 +746,7 @@ function terminalPppAnzeige() {
   const oben = $('profil-terminal-orbit'), unten = $('profil-terminal-chat'), shell = $('profil-terminal-ausgabe');
   if (!oben || !unten || !shell) return;
   const live = !!t.orbitLive;
-  // Ist der Chat offline (poff, LOS), zeigt der KESTREL-Block keinen Link mehr; der Chatverlauf mit Disconnected bleibt.
+  // Ist der Chat offline (poff, LOS), zeigt der KESTREL-Block keinen Link mehr; der Chatverlauf mit Lost connection. bleibt.
   const block = !!chat && chat.phase !== 'offline';
   oben.hidden = !block && !live;
   oben.classList.toggle('orbit-live', live);
@@ -829,11 +829,13 @@ function terminalPredictSetzen(el, ms) {
 /* profanity-Fenster (Profanity-Guide, Basic usage): Fenster 1 ist die Konsole für System- und Befehlsmeldungen, jedes
    Gespräch bekommt ein eigenes nummeriertes Fenster (/msg öffnet es), /win N wechselt. Ein Fenster mit neuen Meldungen
    wird in der Statuszeile hervorgehoben. ziel: Fensterobjekt; ohne Angabe die Konsole. */
-function terminalPppChatLog(chat, text, ziel) {
+/* ohneHinweis: wie cons_show in Profanity 0.18.2 (Konsole ohne Statuszeilen-Hinweis); cons_show_error und Nachrichten
+   setzen den Hinweis (cons_alert bzw. neue Nachricht). */
+function terminalPppChatLog(chat, text, ziel, ohneHinweis) {
   if (TERMINAL_ZUSTAND.kanal !== chat) return;
   const fenster = ziel || chat.fenster[0];
   fenster.log = fenster.log.concat(terminalPppZeit(Date.now()) + ' - ' + text).slice(-70);
-  if (fenster !== chat.fenster[chat.aktiv]) fenster.neu = true;
+  if (fenster !== chat.fenster[chat.aktiv] && !ohneHinweis) fenster.neu = true;
   terminalPppAnzeige();
 }
 function terminalPppAktiv(chat) { return chat.fenster[chat.aktiv]; }
@@ -918,10 +920,12 @@ function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   terminalTabReset();
   terminalTransferStop();
   // Profanity kennt die Modemursache nicht (sie steht im Syslog); es meldet den eigenen Uploadfehler und den Verbindungsabbruch.
+  // Abbruch wie Profanity 0.18.2: sv_ev_lost_connection schreibt "Lost connection." in die Konsole,
+  // wins_lost_connection dieselbe Zeile in jedes andere Fenster.
   const uploadFenster = chat.uploadFenster;
   chat.abbruch = setTimeout(function () {
     if (transfer) terminalPppChatLog(chat, 'Error uploading file: Network unreachable', uploadFenster);
-    chat.fenster.forEach(function (f) { terminalPppChatLog(chat, 'Disconnected from ' + chat.account, f); });
+    chat.fenster.forEach(function (f) { terminalPppChatLog(chat, 'Lost connection.', f); });
   }, 750);
 }
 function terminalPppWaehltVorne() {
@@ -1289,7 +1293,7 @@ async function terminalPppChatMeldung(zeile, chat) {
   if (win) {
     const i = Number(win[1]) - 1;
     if (i >= 0 && i < chat.fenster.length) terminalPppFensterWechsel(chat, i);
-    else terminalPppChatLog(chat, 'Window ' + win[1] + ' does not exist.', fenster);
+    else terminalPppChatLog(chat, 'Window ' + win[1] + ' does not exist.', chat.fenster[0], true); // cons_show: Konsole, Fenster bleibt
     return;
   }
   if (chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) {

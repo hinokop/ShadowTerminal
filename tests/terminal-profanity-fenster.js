@@ -1,6 +1,6 @@
 /* profanity-Fenster: 1 Console (System- und Befehlsmeldungen), /msg öffnet ein Gesprächsfenster, /win wechselt;
    Titelzeile mit Fenster, [OMEMO] und Präsenz; Statuszeile mit Zeit, Konto und Fenstern (aktuelles -n-, Neues
-   hervorgehoben); Befehle erscheinen nicht im Verlauf; Abbruch meldet Disconnected in allen Fenstern. */
+   hervorgehoben); Befehle erscheinen nicht im Verlauf; Abbruch meldet Lost connection. in jedem Fenster (Profanity 0.18.2: sv_ev_lost_connection, wins_lost_connection). */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
@@ -66,19 +66,24 @@ const { chatBereit, schnelleWahl } = require('./_kestrel');
     assert.doesNotMatch(await verlauf.textContent(), /\/omemo|\/win|\/msg/, 'Befehle erscheinen nicht im Verlauf');
 
     /* /win auf ein fehlendes Fenster; /msg auf denselben Kontakt öffnet kein zweites Fenster */
+    /* Profanity 0.18.2 cmd_win: cons_show schreibt in die Konsole ohne Hinweis, das aktive Fenster bleibt */
     await cmd('/win 3');
-    assert.match(await verlauf.textContent(), /Window 3 does not exist\.$/);
+    assert.doesNotMatch(await verlauf.textContent(), /does not exist/);
+    assert.deepEqual(await fenster(), ['[1]', '-2-']);
     await cmd('/win 1'); await cmd('/msg ' + kontakt);
     assert.deepEqual(await fenster(), ['[1]', '-2-']);
 
-    /* Abbruch: Disconnected in Konsole und Gespräch, keine Modemzeile; Präsenz offline; Fenster bleiben wechselbar */
+    /* Abbruch: Lost connection. genau einmal in Konsole und Gespräch, keine Modemzeile; Präsenz offline; Fenster bleiben wechselbar */
     await p.evaluate(() => terminalPppShell('poff', '', []));
     await p.clock.runFor(1000);
-    assert.match(await verlauf.textContent(), /Disconnected from /);
+    assert.match(await verlauf.textContent(), /OMEMO session started\.\n\d\d:\d\d:\d\d - Lost connection\.$/);
+    assert.doesNotMatch(await verlauf.textContent(), /Disconnected/);
     assert.doesNotMatch(await verlauf.textContent(), /pppd:/);
     assert.equal(await titel.textContent(), kontakt + ' [OMEMO][offline]');
+    assert.deepEqual(await fenster(), ['[1]*', '-2-'], 'cons_show_error setzt den Konsolenhinweis');
     await cmd('/win 1');
-    assert.match(await verlauf.textContent(), /logged in successfully[\s\S]*Disconnected from /);
+    assert.match(await verlauf.textContent(), /logged in successfully[\s\S]*Window 3 does not exist\.\n[\s\S]*Lost connection\.$/);
+    assert.equal((await verlauf.textContent()).match(/Lost connection\./g).length, 1, 'je Fenster genau eine Meldung');
     await cmd('/quit');
     assert.deepEqual([await titel.isVisible(), await status.isVisible()], [false, false], 'nach /quit keine profanity-Zeilen');
     assert.deepEqual(errors, []);

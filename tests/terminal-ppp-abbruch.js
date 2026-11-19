@@ -72,7 +72,7 @@ const { imUeberflug, bis, verbunden, gescheitert } = require('./_kestrel');
     await p.clock.runFor(1000);
     assert.deepEqual([await zaehler.isVisible(), await block.isVisible()], [false, false], 'nach poff beide aus');
     assert.equal(await verlauf.isVisible(), true);
-    assert.match(await verlauf.textContent(), /logged in successfully[\s\S]*Disconnected from/);
+    assert.match(await verlauf.textContent(), /logged in successfully[\s\S]*Lost connection\./);
     assert.doesNotMatch(await verlauf.textContent(), /pppd:/, 'Modemursache nur im Syslog');
     await p.clock.runFor(5000);
     assert.equal(await block.isVisible(), false, 'bleibt aus');
