@@ -719,10 +719,14 @@ function terminalPppAnzeige() {
   unten.hidden = !chat;
   if (!chat && !live) { shell.hidden = false; return; }
   shell.hidden = !!chat;
-  if (!chat) { terminalPredictSetzen(oben, terminalZeitstand()); return; }
-  const daten = chat.link.sat.name + '  [LOS ' + terminalSatRest(chat.link) + ']\n' + terminalPppZeile(chat.link.sat, terminalZeitstand()) +
-    (chat.link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '');
-  if (oben.textContent !== daten) { delete oben.dataset.predict; oben.textContent = daten; }
+  if (!chat) { delete oben.dataset.chat; terminalPredictSetzen(oben, terminalZeitstand()); return; }
+  const kopf = chat.link.sat.name + '  [LOS ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand());
+  const daten = kopf + '\n' + telemetrie + (chat.link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '');
+  if (oben.dataset.chat !== daten) {
+    delete oben.dataset.predict; oben.dataset.chat = daten;
+    oben.replaceChildren(h('span', { class: 'link-kopf' }, kopf), '\n', h('span', { class: 'link-telemetrie' }, telemetrie),
+      chat.link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '');
+  }
   const text = chat.log.join('\n');
   if (unten.textContent !== text) {
     unten.textContent = text;
@@ -767,9 +771,8 @@ function terminalPredictSetzen(el, ms) {
   const d = terminalPredictLiveTeile(ms), text = d.kopf.concat(d.zeilen.map(function (z) { return (z.oben ? '+' : '-') + z.text; })).join('\n');
   if (el.dataset.predict === text) return;
   el.dataset.predict = text;
-  el.replaceChildren(d.kopf.join('\n') + '\n', ...d.zeilen.flatMap(function (z, i) {
-    const zeile = z.oben ? h('span', { class: 'predict-oben' }, z.text) : z.text;
-    return i ? ['\n', zeile] : [zeile];
+  el.replaceChildren(h('span', { class: 'predict-kopf' }, d.kopf.join('\n')), ...d.zeilen.flatMap(function (z) {
+    return ['\n', h('span', { class: z.oben ? 'predict-oben' : 'predict-unten' }, z.text)];
   }));
 }
 function terminalPppChatLog(chat, text) {

@@ -28,6 +28,7 @@ const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 10
     await p.clock.install();
     const inp = p.locator('#profil-terminal-eingabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
+    const taste = async k => { await inp.press('Control+b'); await inp.press(k); await p.clock.runFor(600); };
 
     /* Kopf: Titel, QTH mit Datum, Spanne der TLE-Epochen, Spaltenkopf mit km */
     const tle = await p.evaluate(() => KESTREL_TLE.map(e => e[1]));
@@ -78,10 +79,42 @@ const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 10
       const z = (await pane.textContent()).split('\n').find(x => x.startsWith(pass.name)).match(/\((\d\d:\d\d:\d\d)\)$/)[1];
       assert.equal(z, k, 'Zeitstand nach +' + schritt + ' ms');
     }
+    /* Farben: kein flächiges Grün. plog in der Textfarbe der Shell; PREDICT-Kopf hellgrau, unter dem Horizont gedämpft,
+       über dem Horizont hell und fett; Grün nur für Statusleiste und Fokuslinie */
+    await cmd('tmux split-window -bd plog -f');
+    const farben = await p.evaluate(() => {
+      const c = e => getComputedStyle(e).color, q = s => document.querySelector(s);
+      return { shell: c(q('#profil-terminal-ausgabe')), plog: c(q('.tmux-pane[aria-label="tmux: plog"]')),
+        kopf: c(q('.predict-kopf')), unten: c(q('.predict-unten')), oben: c(q('.predict-oben')),
+        status: getComputedStyle(q('#profil-terminal-tmux')).backgroundColor };
+    });
+    const GRUEN = 'rgb(168, 210, 147)';
+    assert.equal(farben.plog, farben.shell, 'plog wie die Shell');
+    for (const k of ['kopf', 'unten', 'oben']) assert.notEqual(farben[k], GRUEN, k + ' nicht grün');
+    const hell = f => f.match(/\d+/g).slice(0, 3).reduce((a, b) => a + +b, 0);
+    assert.ok(hell(farben.oben) > hell(farben.kopf) && hell(farben.kopf) > hell(farben.unten), 'oben heller als Kopf heller als unten: ' + JSON.stringify(farben));
+    assert.equal(farben.status, 'rgb(47, 138, 58)', 'Statusleiste bleibt grün');
+    await taste('ArrowUp');
+    assert.equal(await p.locator('.tmux-pane.aktiv').evaluate(e => getComputedStyle(e).borderBottomColor), 'rgb(111, 191, 86)', 'Fokuslinie grün');
+    await taste('ArrowDown');
+    await cmd("tmux kill-pane -t '{up-of}'");
     /* Fläche: keine eigene Hintergrundfarbe, schmale Trennlinie unten */
     const stil = await pane.evaluate(e => { const s = getComputedStyle(e); return [s.backgroundColor, s.borderTopWidth, s.borderBottomWidth]; });
     assert.deepEqual(stil, ['rgba(0, 0, 0, 0)', '0px', '1px']);
-    await cmd('exit'); await cmd('poff');
+    await cmd('exit');
+    /* Chat-Kopf: Relais und Countdown hell und halbfett, Telemetrie gedämpft */
+    await cmd('wg-quick up wg-sat'); await p.clock.runFor(1000);
+    await cmd('profanity'); await p.clock.runFor(3000);
+    const orbitStil = await p.evaluate(() => {
+      const k = document.querySelector('#profil-terminal-orbit .link-kopf'), t = document.querySelector('#profil-terminal-orbit .link-telemetrie');
+      return k && t ? { kopf: k.textContent, kc: getComputedStyle(k).color, kw: getComputedStyle(k).fontWeight, tc: getComputedStyle(t).color } : null;
+    });
+    assert.ok(orbitStil, 'Chat-Kopf mit Relais und Telemetrie');
+    assert.match(orbitStil.kopf, new RegExp('^' + pass.name + '  \\[LOS \\d\\d:\\d\\d:\\d\\d\\]$'));
+    assert.equal(orbitStil.kw, '600');
+    assert.ok(hell(orbitStil.kc) > hell(orbitStil.tc), 'Kopf heller als Telemetrie');
+    assert.notEqual(orbitStil.tc, GRUEN);
+    await cmd('/quit'); await cmd('wg-quick down wg-sat'); await cmd('poff');
     assert.deepEqual(errors, []);
     console.log('OK: PREDICT-Anzeige');
   } finally { await b.close(); }
