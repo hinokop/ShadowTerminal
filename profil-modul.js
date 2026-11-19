@@ -215,7 +215,7 @@ let terminalTabFehlerZuletzt = '';
 function terminalTabFehler(lauf, antwort) {
   if (terminalTabGueltig(lauf) && antwort.error && terminalTabFehlerZuletzt !== antwort.error) {
     terminalTabFehlerZuletzt = antwort.error;
-    if (TERMINAL_ZUSTAND.kanal) terminalPppChatLog(TERMINAL_ZUSTAND.kanal, 'Tab: ' + antwort.error);
+    if (TERMINAL_ZUSTAND.kanal) terminalPppChatLog(TERMINAL_ZUSTAND.kanal, 'Tab: ' + antwort.error, terminalPppAktiv(TERMINAL_ZUSTAND.kanal));
     else terminalAusgabe('Tab: ' + antwort.error);
   }
 }
@@ -746,11 +746,12 @@ function terminalPppAnzeige() {
   const oben = $('profil-terminal-orbit'), unten = $('profil-terminal-chat'), shell = $('profil-terminal-ausgabe');
   if (!oben || !unten || !shell) return;
   const live = !!t.orbitLive;
-  // Ist der Chat offline (poff, LOS), zeigt der KESTREL-Block keinen Link mehr; der Chatverlauf mit Disconnected bleibt.
+  // Ist der Chat offline (poff, LOS), zeigt der KESTREL-Block keinen Link mehr; der Chatverlauf mit Lost connection. bleibt.
   const block = !!chat && chat.phase !== 'offline';
   oben.hidden = !block && !live;
   oben.classList.toggle('orbit-live', live);
   unten.hidden = !chat;
+  for (const id of ['profil-terminal-xmpp-titel', 'profil-terminal-xmpp-status']) { const el = $(id); if (el) el.hidden = !chat; }
   if (!chat && !live) { shell.hidden = false; return; }
   shell.hidden = !!chat;
   if (!chat) { delete oben.dataset.chat; terminalPredictSetzen(oben, terminalZeitstand()); return; }
@@ -763,11 +764,25 @@ function terminalPppAnzeige() {
       oben.replaceChildren(h('span', { class: 'link-kopf' }, kopf), '\n', h('span', { class: 'link-telemetrie' }, telemetrie));
     }
   }
-  const text = chat.log.join('\n');
+  const fenster = terminalPppAktiv(chat), text = fenster.log.join('\n');
   if (unten.textContent !== text) {
     unten.textContent = text;
     unten.scrollTop = unten.scrollHeight;
   }
+  // Titelzeile: Titel des aktuellen Fensters (Konsole oder Kontakt, mit [OMEMO]) und die eigene Präsenz.
+  const titel = $('profil-terminal-xmpp-titel'), status = $('profil-terminal-xmpp-status');
+  if (titel) {
+    const praesenz = chat.phase === 'offline' ? 'offline' : chat.phase === 'anmeldung' ? 'connecting' : 'online';
+    const links = fenster.kontakt ? fenster.kontakt + (fenster.omemo ? ' [OMEMO]' : '') : 'Console';
+    titel.replaceChildren(h('span', { class: 'xmpp-titel' }, links), h('span', { class: 'xmpp-praesenz' }, '[' + praesenz + ']'));
+  }
+  // Statuszeile (statusbar.c, 0.11.1): links [Zeit] und das eigene Konto, rechts die Fenster ohne Trenner; ein Fenster als
+  // [n], das aktuelle als -n-, eines mit Neuem mit normalen Klammern, aber hervorgehoben. Nur Nummern, keine Namen.
+  if (status) status.replaceChildren(h('span', { class: 'xmpp-selbst' }, '[' + terminalPppZeit(terminalZeitstand()).slice(0, 5) + '] [' + chat.account + ']'),
+    h('span', { class: 'xmpp-tabs' }, ...chat.fenster.map(function (f, i) {
+      const nr = String(i + 1);
+      return h('span', { class: 'xmpp-fenster' + (i === chat.aktiv ? ' aktiv' : '') + (f.neu ? ' neu' : '') }, i === chat.aktiv ? '-' + nr + '-' : '[' + nr + ']');
+    })));
 }
 // Datum wie in predict -p/-f (UTC): 18Nov26.
 function kestrelDatum(ms) {
@@ -811,9 +826,24 @@ function terminalPredictSetzen(el, ms) {
     return ['\n', h('span', { class: z.oben ? 'predict-oben' : 'predict-unten' }, z.text)];
   }));
 }
-function terminalPppChatLog(chat, text) {
+/* profanity-Fenster (Profanity-Guide, Basic usage): Fenster 1 ist die Konsole für System- und Befehlsmeldungen, jedes
+   Gespräch bekommt ein eigenes nummeriertes Fenster (/msg öffnet es), /win N wechselt. Ein Fenster mit neuen Meldungen
+   wird in der Statuszeile hervorgehoben. ziel: Fensterobjekt; ohne Angabe die Konsole. */
+/* ohneHinweis: wie cons_show in Profanity 0.18.2 (Konsole ohne Statuszeilen-Hinweis); cons_show_error und Nachrichten
+   setzen den Hinweis (cons_alert bzw. neue Nachricht). */
+function terminalPppChatLog(chat, text, ziel, ohneHinweis) {
   if (TERMINAL_ZUSTAND.kanal !== chat) return;
-  chat.log = chat.log.concat(terminalPppZeit(Date.now()) + ' - ' + text).slice(-70);
+  const fenster = ziel || chat.fenster[0];
+  fenster.log = fenster.log.concat(terminalPppZeit(Date.now()) + ' - ' + text).slice(-70);
+  if (fenster !== chat.fenster[chat.aktiv] && !ohneHinweis) fenster.neu = true;
+  terminalPppAnzeige();
+}
+function terminalPppAktiv(chat) { return chat.fenster[chat.aktiv]; }
+function terminalPppFensterWechsel(chat, i) {
+  chat.aktiv = i;
+  const f = chat.fenster[i];
+  f.neu = false;
+  chat.kontakt = f.kontakt || null;
   terminalPppAnzeige();
 }
 function terminalPppLog(text) {
@@ -826,10 +856,9 @@ function terminalPppLog(text) {
 function terminalPppChatAus() {
   const t = TERMINAL_ZUSTAND, chat = t.kanal;
   if (chat?.ui !== 'xmpp') return;
-  clearTimeout(chat.antwort);
   clearTimeout(chat.abbruch);
   clearTimeout(chat.anmeldung);
-  clearTimeout(chat.omemoAufbau);
+  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); clearTimeout(f.antwort); });
   t.kanal = null;
   terminalVordergrundEnde(chat, 0);
   terminalTabReset();
@@ -884,15 +913,18 @@ function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   if (chat?.ui !== 'xmpp' || chat.phase === 'offline') return;
   const transfer = chat.phase === 'transfer';
   chat.phase = 'offline';
-  clearTimeout(chat.antwort);
   clearTimeout(chat.anmeldung);
-  clearTimeout(chat.omemoAufbau);
+  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); clearTimeout(f.antwort); });
   terminalTabReset();
   terminalTransferStop();
-  terminalPppChatLog(chat, 'pppd: ' + grund);
+  // Profanity kennt die Modemursache nicht (sie steht im Syslog); es meldet den eigenen Uploadfehler und den Verbindungsabbruch.
+  // Abbruch wie Profanity 0.18.2: sv_ev_lost_connection schreibt "Lost connection." in die Konsole,
+  // wins_lost_connection dieselbe Zeile in jedes andere Fenster.
+  const uploadFenster = chat.uploadFenster;
   chat.abbruch = setTimeout(function () {
-    if (transfer) terminalPppChatLog(chat, 'Error uploading file: Network unreachable');
-    terminalPppChatLog(chat, 'Disconnected from ' + chat.account);
+    if (transfer) terminalPppChatLog(chat, 'Error uploading file: Network unreachable', uploadFenster);
+    // Konsole per cons_show_error (cons_alert: Hinweis), die übrigen per win_println (kein Hinweis).
+    chat.fenster.forEach(function (f, i) { terminalPppChatLog(chat, 'Lost connection.', f, i > 0); });
   }, 750);
 }
 function terminalPppWaehltVorne() {
@@ -1145,9 +1177,9 @@ async function terminalPppShell(befehl, arg, args = []) {
     if (!t.modem?.bereit || !t.wgSat?.bereit || link?.modus !== 'ppp' || !terminalSatLinkAktiv(link)) { terminalAusgabe('profanity: Network unreachable'); return 1; }
     {
       const domain = TERMINAL_XMPP_DOMAIN;
-      const chat = { ui: 'xmpp', phase: 'anmeldung', link, log: [], domain, account: 'ghost@' + domain,
+      const chat = { ui: 'xmpp', phase: 'anmeldung', link, fenster: [{ titel: 'Console', log: [], neu: false }], aktiv: 0, domain, account: 'ghost@' + domain,
         vorschlag: terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14) + '@' + domain,
-        kontakt: null, omemo: false, antwort: null, fingerprint: terminalPppFingerprint(), fingerprints: new Map() };
+        kontakt: null, fingerprint: terminalPppFingerprint(), fingerprints: new Map() };
       const ende = terminalVordergrund(chat);
       t.kanal = chat;
       terminalPppChatLog(chat, 'Connecting to ' + chat.account);
@@ -1254,70 +1286,82 @@ function terminalPppFingerprint() {
 async function terminalPppChatMeldung(zeile, chat) {
   const t = TERMINAL_ZUSTAND;
   if (zeile === '/quit') { terminalPppChatAus(); return; }
+  const fenster = terminalPppAktiv(chat);
+  // /win N: Fenster wechseln, auch offline (der Verlauf bleibt lesbar).
+  const win = /^\/win\s+(\d+)$/.exec(zeile);
+  if (win) {
+    const i = Number(win[1]) - 1;
+    if (i >= 0 && i < chat.fenster.length) terminalPppFensterWechsel(chat, i);
+    else terminalPppChatLog(chat, 'Window ' + win[1] + ' does not exist.', chat.fenster[0], true); // cons_show: Konsole, Fenster bleibt
+    return;
+  }
   if (chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) {
-    terminalPppChatLog(chat, 'Not connected. Use /quit to return to the terminal.');
+    terminalPppChatLog(chat, 'Not connected. Use /quit to return to the terminal.', fenster);
     return;
   }
   if (chat.phase === 'anmeldung') { terminalPppChatLog(chat, 'Not logged in yet.'); return; }
-  if (zeile.startsWith('/')) terminalPppChatLog(chat, zeile);
+  // /msg öffnet (oder wählt) das Fenster des Kontakts; Befehle selbst erscheinen nicht im Verlauf.
   if (/^\/msg\s+[a-z0-9][a-z0-9_.-]*(?:@[a-z0-9.-]+)?$/i.test(zeile)) {
     const ziel = zeile.slice(5).trim();
-    chat.kontakt = ziel.endsWith('.onion') && !ziel.includes('@') ? chat.vorschlag.split('@')[0] + '@' + ziel : ziel;
-    chat.omemo = false;
-    clearTimeout(chat.antwort);
-    clearTimeout(chat.omemoAufbau);
-    chat.omemoAufbau = null;
+    const kontakt = ziel.endsWith('.onion') && !ziel.includes('@') ? chat.vorschlag.split('@')[0] + '@' + ziel : ziel;
+    let i = chat.fenster.findIndex(function (f) { return f.kontakt === kontakt; });
+    if (i < 0) { chat.fenster.push({ titel: kontakt, kontakt, log: [], neu: false, omemo: false }); i = chat.fenster.length - 1; }
+    terminalPppFensterWechsel(chat, i);
     return;
   }
   if (zeile === '/omemo start' || zeile === '/omemo fingerprint') {
-    if (!chat.kontakt) terminalPppChatLog(chat, 'No active conversation. Use /msg <contact>.');
+    if (!fenster.kontakt) terminalPppChatLog(chat, 'No active conversation. Use /msg <contact>.', fenster);
     else if (zeile.endsWith('start')) {
-      if (chat.omemo || chat.omemoAufbau) return;
-      chat.omemoAufbau = setTimeout(function () {
-        chat.omemoAufbau = null;
+      // OMEMO gilt je Gespräch: Zustand und Meldung im Fenster des Kontakts, auch wenn inzwischen gewechselt wurde.
+      if (fenster.omemo || fenster.omemoAufbau) return;
+      fenster.omemoAufbau = setTimeout(function () {
+        fenster.omemoAufbau = null;
         if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
-        chat.omemo = true;
-        terminalPppChatLog(chat, 'OMEMO session started.');
+        fenster.omemo = true;
+        terminalPppChatLog(chat, 'OMEMO session started.', fenster);
       }, 3000);
     }
     else {
-      if (!chat.fingerprints.has(chat.kontakt)) chat.fingerprints.set(chat.kontakt, terminalPppFingerprint());
-      terminalPppChatLog(chat, 'Your OMEMO fingerprint: ' + chat.fingerprint);
-      terminalPppChatLog(chat, chat.kontakt.split('@')[0] + "'s OMEMO fingerprint: " + chat.fingerprints.get(chat.kontakt));
+      if (!chat.fingerprints.has(fenster.kontakt)) chat.fingerprints.set(fenster.kontakt, terminalPppFingerprint());
+      terminalPppChatLog(chat, 'Your OMEMO fingerprint: ' + chat.fingerprint, fenster);
+      terminalPppChatLog(chat, fenster.kontakt.split('@')[0] + "'s OMEMO fingerprint: " + chat.fingerprints.get(fenster.kontakt), fenster);
     }
     return;
   }
-  if (!chat.kontakt) { terminalPppChatLog(chat, 'No active conversation. Use /msg <contact>.'); return; }
+  if (!fenster.kontakt) { terminalPppChatLog(chat, 'No active conversation. Use /msg <contact>.', fenster); return; }
   if (/^\/sendfile(?:\s|$)/.test(zeile)) {
-    if (chat.phase === 'transfer') { terminalPppChatLog(chat, 'An upload is already in progress.'); return; }
+    if (chat.phase === 'transfer') { terminalPppChatLog(chat, 'An upload is already in progress.', fenster); return; }
     const pfad = terminalArchivDateipfad(zeile.slice(9).trim());
-    if (!pfad?.length) { terminalPppChatLog(chat, 'Usage: /sendfile /' + TERMINAL_DB + '/<file>'); return; }
+    if (!pfad?.length) { terminalPppChatLog(chat, 'Usage: /sendfile /' + TERMINAL_DB + '/<file>', fenster); return; }
     chat.phase = 'transfer';
+    chat.uploadFenster = fenster;
     const aktiv = () => t.kanal === chat && chat.phase === 'transfer' && terminalSatLinkAktiv(chat.link);
     try {
       const antwort = await terminalBruecke('send', pfad);
       if (!aktiv()) return;
-      if (antwort.error) terminalPppChatLog(chat, 'Error uploading file: ' + antwort.error);
+      if (antwort.error) terminalPppChatLog(chat, 'Error uploading file: ' + antwort.error, fenster);
       else {
-        terminalPppChatLog(chat, 'Sending file: /' + [TERMINAL_DB].concat(pfad).join('/') + ' (' + terminalDateigroesse(antwort.bytes) + ')');
+        terminalPppChatLog(chat, 'Sending file: /' + [TERMINAL_DB].concat(pfad).join('/') + ' (' + terminalDateigroesse(antwort.bytes) + ')', fenster);
         const dauer = Math.min(TERMINAL_SAT_CAP_MS, Math.max(64, antwort.bytes) * 8000 / TERMINAL_SAT_RATE);
         const fertig = await terminalTransfer(antwort.name, antwort.bytes, aktiv, dauer, true);
         if (!aktiv()) return;
-        terminalPppChatLog(chat, fertig);
-        terminalPppChatLog(chat, 'File sent successfully.');
+        terminalPppChatLog(chat, fertig, fenster);
+        terminalPppChatLog(chat, 'File sent successfully.', fenster);
       }
-    } catch (e) { if (aktiv()) terminalPppChatLog(chat, 'Error uploading file.'); }
+    } catch (e) { if (aktiv()) terminalPppChatLog(chat, 'Error uploading file.', fenster); }
     if (aktiv()) { terminalTransferStop(); chat.phase = 'eingabe'; }
     return;
   }
-  if (zeile.startsWith('/')) { terminalPppChatLog(chat, 'Unknown command: ' + zeile.split(/\s/)[0]); return; }
-  terminalPppChatLog(chat, 'me: ' + zeile);
+  if (zeile.startsWith('/')) { terminalPppChatLog(chat, 'Unknown command: ' + zeile.split(/\s/)[0], fenster); return; }
+  terminalPppChatLog(chat, 'me: ' + zeile, fenster);
   if (/^auftrag (erledigt|gescheitert)\.?$/i.test(zeile)) {
-    const kontakt = chat.kontakt;
-    clearTimeout(chat.antwort);
-    chat.antwort = setTimeout(function () {
+    // Antwort je Gespräch (wie der OMEMO-Aufbau): eine Meldung in einem anderen Fenster löscht sie nicht.
+    const kontakt = fenster.kontakt;
+    clearTimeout(fenster.antwort);
+    fenster.antwort = setTimeout(function () {
+      fenster.antwort = null;
       if (t.kanal === chat && chat.phase !== 'offline' && terminalSatLinkAktiv(chat.link))
-        terminalPppChatLog(chat, kontakt + ': Verstanden.');
+        terminalPppChatLog(chat, kontakt + ': Verstanden.', fenster);
     }, 7000);
   }
 }
@@ -2113,7 +2157,9 @@ function terminalKonsoleBauen() {
   const kern = h('div', { id: 'profil-terminal-kern', class: 'profil-terminal-kern' },
       h('pre', { id: 'profil-terminal-ausgabe', class: 'mono', role: 'log', 'aria-label': 'Terminalausgabe' }, t.ausgabe.join('\n')),
       h('pre', { id: 'profil-terminal-orbit', class: 'mono', 'aria-label': 'Überflug', hidden: true }),
+      h('div', { id: 'profil-terminal-xmpp-titel', class: 'mono', 'aria-label': 'profanity: Titelzeile', hidden: true }),
       h('pre', { id: 'profil-terminal-chat', class: 'mono', role: 'log', 'aria-label': 'Chatverlauf', hidden: true }),
+      h('div', { id: 'profil-terminal-xmpp-status', class: 'mono', 'aria-label': 'profanity: Statuszeile', hidden: true }),
       h('pre', { id: 'profil-terminal-transfer', class: 'mono', hidden: !t.fortschritt }, t.fortschritt),
       h('form', { onsubmit: function (ev) {
         ev.preventDefault();

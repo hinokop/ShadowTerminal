@@ -40,6 +40,14 @@
 #profil-terminal-sat{color:#a8d293;font-size:11px;white-space:nowrap;margin-right:6px}
 #profil-terminal-orbit{flex:none;max-height:29%;border:0;border-bottom:1px solid #363f49;padding:2px 0 6px;color:inherit;background:transparent}
 #profil-terminal-chat{flex:1}
+/* profanity: Titelzeile oben (Fenster und Präsenz), Statuszeile unten (Zeit, Konto, Fenster; aktuelles -n-, Neues hervorgehoben) */
+#profil-terminal-xmpp-titel,#profil-terminal-xmpp-status{flex:none;display:flex;gap:8px;white-space:pre;overflow:hidden;padding:1px 0;color:#c3cad4;border-bottom:1px solid #363f49}
+#profil-terminal-xmpp-titel[hidden],#profil-terminal-xmpp-status[hidden]{display:none}
+#profil-terminal-xmpp-titel .xmpp-titel{flex:1;overflow:hidden;text-overflow:ellipsis}
+#profil-terminal-xmpp-status{border-bottom:0;border-top:1px solid #363f49;margin-bottom:4px}
+#profil-terminal-xmpp-status .xmpp-selbst{flex:1;overflow:hidden;text-overflow:ellipsis}
+#profil-terminal-xmpp-status .xmpp-tabs{flex:none}
+#profil-terminal-xmpp-status .xmpp-fenster.neu{font-weight:700;color:#f2f5f8}
 #profil-terminal-orbit.orbit-live{max-height:none}
 
 /* Shell beschäftigt: Eingabe bleibt stehen, wird aber nicht angenommen. */
