@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
-const { imUeberflug } = require('./_kestrel');
+const { imUeberflug, bis: bisGilt, verbunden } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -25,13 +25,13 @@ const { imUeberflug } = require('./_kestrel');
     await cmd('predict -t /var/cache/tle/kestrel.tle -p KESTREL-1');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.satLink), null, 'predict rechnet nur');
     assert.equal(await badge.isVisible(), false, 'predict allein zeigt keinen Countdown');
-    await cmd('pon kestrel'); await p.clock.runFor(7500);
+    await cmd('pon kestrel'); await verbunden(p);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem.bereit), true);
     const bis = await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis);
     assert.equal(await badge.isVisible(), true, 'Countdown während der Einwahl sichtbar');
     assert.match(await badge.textContent(), /^KESTREL-\d · LOS \d\d:\d\d:\d\d$/);
     await cmd('wg-quick up wg-sat'); await p.clock.runFor(700);
-    await cmd('profanity'); await p.clock.runFor(6100);
+    await cmd('profanity'); await bisGilt(p, () => TERMINAL_ZUSTAND.kanal?.phase === 'eingabe');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal?.phase), 'eingabe');
     assert.equal(await badge.isVisible(), true, 'Countdown im Chat sichtbar');
 
@@ -57,7 +57,7 @@ const { imUeberflug } = require('./_kestrel');
     await imUeberflug(p);
     await cmd('pon kestrel'); await p.clock.runFor(500);
     assert.equal(await badge.isVisible(), true, 'Countdown bei erneuter Einwahl');
-    await p.clock.runFor(7500);
+    await verbunden(p);
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now()) + 1000);
     assert.match(await out.textContent(), /pppd\[\d+\]: Modem hangup \(NO CARRIER\)\npppd\[\d+\]: Connection terminated\.$/);
     assert.equal(await badge.isVisible(), false, 'nach LOS mit Modem kein Countdown');

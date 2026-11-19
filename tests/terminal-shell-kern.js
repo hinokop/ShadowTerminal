@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
-const { imUeberflug } = require('./_kestrel');
+const { imUeberflug, bis, verbunden } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -59,7 +59,7 @@ const { imUeberflug } = require('./_kestrel');
 
     /* Abnahme: poff && tail bei laufendem Modem */
     await cmd('predict -t /var/cache/tle/kestrel.tle -p KESTREL-1');
-    await cmd('pppd call kestrel'); await p.clock.runFor(7500);
+    await cmd('pppd call kestrel'); await verbunden(p);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem.bereit), true);
     await cmd('poff kestrel && tail -n 6 /var/log/syslog');
     assert.match(await out.textContent(), /terminal pppd\[\d+\]: Terminating on signal 15\n.*terminal pppd\[\d+\]: Connection terminated\.$/, 'tail läuft nach erfolgreichem poff');
@@ -79,7 +79,7 @@ const { imUeberflug } = require('./_kestrel');
     assert.doesNotMatch(await out.textContent(), /zwischendurch|bereit$/, 'Eingabe während der Kette wird nicht ausgeführt');
     assert.equal(await inp.inputValue(), 'echo zwischendurch', 'Eingabe bleibt stehen');
     assert.equal(await p.locator('#profil-terminal form').getAttribute('aria-busy'), 'true', 'sichtbares Signal: Shell beschäftigt');
-    await p.clock.runFor(4600);
+    await verbunden(p);
     assert.match(await out.textContent(), /remote IP address [\d.]+\n\[#\] ip link add wg-sat type wireguard$/);
     await p.clock.runFor(700);
     assert.equal(await letzte(), 'bereit');
@@ -102,7 +102,7 @@ const { imUeberflug } = require('./_kestrel');
     assert.equal(await status(), '5', 'pppd endet nach SIGINT mit 5 (pppd(8))');
 
     /* Strg+C während wg-quick up: Kette abgebrochen, Schnittstelle abgeräumt, $? 130 */
-    await cmd('pppd call kestrel updetach'); await p.clock.runFor(7600);
+    await cmd('pppd call kestrel updetach'); await verbunden(p);
     await cmd('wg-quick up wg-sat && profanity'); await p.clock.runFor(200);
     await inp.press('Control+c');
     assert.match(await out.textContent(), /\^C\n\[#\] ip link delete dev wg-sat$/);
@@ -112,8 +112,8 @@ const { imUeberflug } = require('./_kestrel');
     await cmd('poff kestrel');
 
     /* Interaktiv: nach /quit läuft die Kette weiter */
-    await cmd('pppd call kestrel updetach && wg-quick up wg-sat'); await p.clock.runFor(8300);
-    await cmd('profanity && echo zurueck'); await p.clock.runFor(6100);
+    await cmd('pppd call kestrel updetach && wg-quick up wg-sat'); await bis(p, () => TERMINAL_ZUSTAND.wgSat?.bereit && !TERMINAL_ZUSTAND.kette);
+    await cmd('profanity && echo zurueck'); await bis(p, () => TERMINAL_ZUSTAND.kanal?.phase === 'eingabe');
     assert.equal(await p.locator('#profil-terminal-chat').isVisible(), true);
     await cmd('/quit');
     assert.equal(await letzte(), 'zurueck');
