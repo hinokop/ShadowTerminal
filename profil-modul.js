@@ -251,7 +251,7 @@ const TERMINAL_VIRT_DATEIEN = new Map([
   ['/etc/ppp/peers/kestrel', function () { return ['/dev/ttyUSB0', '19200', 'crtscts', 'lock', 'noauth', 'defaultroute', 'usepeerdns',
     'persist', 'holdoff ' + TERMINAL_PPP_HOLDOFF / 1000, 'maxfail 0',
     'connect "/usr/sbin/chat -v -f /etc/chatscripts/kestrel"'].join('\n'); }],
-  ['/etc/chatscripts/kestrel', function () { return ['ABORT BUSY', "ABORT 'NO CARRIER'", "'' ATZ", 'OK AT+CSQ', 'OK ATDT' + TERMINAL_PPP_WAHL, "CONNECT ''"].join('\n'); }]
+  ['/etc/chatscripts/kestrel', function () { return ['ABORT BUSY', "ABORT 'NO CARRIER'", "'' ATZ", 'OK AT+CSQ', 'TIMEOUT ' + TERMINAL_PPP_DAUER.timeout / 1000, 'OK ATDT' + TERMINAL_PPP_WAHL, "CONNECT ''"].join('\n'); }]
 ]);
 function terminalArbeitsverzeichnis() {
   const t = TERMINAL_ZUSTAND;
@@ -852,9 +852,12 @@ function terminalPppWaehltVorne() {
 }
 // Ausgang eines Wahlversuchs. Für Tests festlegbar: TERMINAL_ZUSTAND.wahlVorgabe = 'ok' | 'busy' | 'nocarrier'.
 // Sonst: kein Satellit über der Mindestelevation -> NO CARRIER; Gateway gelegentlich besetzt; tief am Horizont öfter kein Träger.
+/* Wahlausgang: ok, busy, nocarrier (Satellit über dem Horizont, Ruf kommt nicht zustande) oder alarm (kein Satellit über dem
+   Horizont, das Modem antwortet nicht; chat bricht nach TIMEOUT ab). */
 function terminalWahlausgang(el) {
   const vorgabe = TERMINAL_ZUSTAND.wahlVorgabe;
-  if (vorgabe === 'ok' || vorgabe === 'busy' || vorgabe === 'nocarrier') return el >= KESTREL_MIN_EL || vorgabe !== 'ok' ? vorgabe : 'nocarrier';
+  if (['ok', 'busy', 'nocarrier', 'alarm'].includes(vorgabe)) return el >= KESTREL_MIN_EL || vorgabe !== 'ok' ? vorgabe : el < 0 ? 'alarm' : 'nocarrier';
+  if (el < 0) return 'alarm';
   if (el < KESTREL_MIN_EL) return 'nocarrier';
   const w = crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
   if (w < 0.08) return 'busy';
@@ -867,6 +870,11 @@ function terminalCsq(el) {
   const w = crypto.getRandomValues(new Uint32Array(1))[0] % 5 - 2;
   return '+CSQ: ' + Math.max(0, Math.min(31, Math.round(4 + el * 0.45) + w)) + ',99';
 }
+/* Dauern der Wahl (ms). Belegt an Syslog-Auszügen echter Einwahlen mit chat/pppd: Iridium-Datenruf ATDT bis CONNECT etwa
+   10 s, CONNECT bis IP-Adresse etwa 13 s, ohne Antwort Abbruch durch den chat-Timeout (dort 60 s); Analogmodem ATD bis
+   CONNECT 19-20 s. Spannen mit Streuung; BUSY und NO CARRIER nicht belegt, angenommen. */
+const TERMINAL_PPP_DAUER = { connect: [10000, 20000], ppp: [600, 1000], ip: [9000, 12000], busy: [3000, 5000], nocarrier: [15000, 30000], timeout: 60000 };
+function terminalPppDauer(spanne) { return spanne[0] + crypto.getRandomValues(new Uint32Array(1))[0] % (spanne[1] - spanne[0] + 1); }
 function terminalPppEinwahl(vordergrund) {
   const modem = { bereit: false, vordergrund, timer: null, link: null, versuche: 0 };
   TERMINAL_ZUSTAND.modem = modem;
@@ -896,16 +904,23 @@ function terminalPppWahl(modem) {
   const wahl = 'ATDT' + TERMINAL_PPP_WAHL;
   const schritte = [
     [0, [c + 'abort on (BUSY)', c + 'abort on (NO CARRIER)', c + 'send (ATZ^M)', c + 'expect (OK)']],
-    [150, [c + 'ATZ^M^M', c + 'OK', c + ' -- got it', c + 'send (AT+CSQ^M)', c + 'expect (OK)']],
+    [150, [c + 'ATZ^M^M', c + 'OK', c + ' -- got it', c + 'send (AT+CSQ^M)', c + 'timeout set to ' + TERMINAL_PPP_DAUER.timeout / 1000 + ' seconds', c + 'expect (OK)']],
     [550, [c + 'AT+CSQ^M^M', c + terminalCsq(oben ? oben.el : -1) + '^M', c + '^M', c + 'OK', c + ' -- got it',
       c + 'send (' + wahl + '^M)', c + 'expect (CONNECT)']]
   ];
+  // chat(8): ABORT-Treffer " -- failed" und "Failed (<abort>)", Timeout "alarm" und "Failed" (chat.c); danach pppd.
+  const D = TERMINAL_PPP_DAUER;
   if (ausgang === 'ok') schritte.push(
-    [3250, [c + wahl + '^M^M', c + 'CONNECT 19200', c + ' -- got it']],
-    [900, [d + 'Serial connection established.']],
-    [750, [d + 'Using interface ppp0', d + 'Connect: ppp0 <--> /dev/ttyUSB0']],
-    [1900, [d + 'local  IP address ' + S.lokal, d + 'remote IP address ' + S.gegenstelle]]);
-  else schritte.push([ausgang === 'busy' ? 1800 : 6000, [c + wahl + '^M^M', c + (ausgang === 'busy' ? 'BUSY' : 'NO CARRIER'), d + 'Connect script failed']]);
+    [terminalPppDauer(D.connect), [c + wahl + '^M^M', c + 'CONNECT 19200', c + ' -- got it']],
+    [100, [d + 'Serial connection established.']],
+    [terminalPppDauer(D.ppp), [d + 'Using interface ppp0', d + 'Connect: ppp0 <--> /dev/ttyUSB0']],
+    [terminalPppDauer(D.ip), [d + 'local  IP address ' + S.lokal, d + 'remote IP address ' + S.gegenstelle]]);
+  // Ohne Antwort bleibt die Echozeile unvollständig (sie endet erst mit dem Zeilenumbruch vor einer Antwort) und erscheint nicht.
+  else if (ausgang === 'alarm') schritte.push([D.timeout, [c + 'alarm', c + 'Failed', d + 'Connect script failed']]);
+  else {
+    const grund = ausgang === 'busy' ? 'BUSY' : 'NO CARRIER';
+    schritte.push([terminalPppDauer(ausgang === 'busy' ? D.busy : D.nocarrier), [c + wahl + '^M^M', c + grund, c + ' -- failed', c + 'Failed (' + grund + ')', d + 'Connect script failed']]);
+  }
   const schritt = function (i) {
     if (t.modem !== modem || (link && !terminalSatLinkAktiv(link))) return;
     const zeilen = schritte[i][1];

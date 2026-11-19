@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
-const { imUeberflug } = require('./_kestrel');
+const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -79,14 +79,16 @@ const { imUeberflug } = require('./_kestrel');
     assert.equal(await prompt.textContent(), 'root@terminal:/#');
     await p.clock.runFor(7500);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null);
+    // Feste Dauern für die Grenzprüfungen (sonst gestreut, siehe TERMINAL_PPP_DAUER): CONNECT 12 s nach ATDT, IP 10,9 s danach.
+    await p.evaluate(() => Object.assign(TERMINAL_PPP_DAUER, { connect: [12000, 12000], ppp: [800, 800], ip: [10000, 10000] }));
     const bereit = async (vordergrund = false) => {
       await cmd(vordergrund ? 'pppd call kestrel updetach' : 'pppd call kestrel && tail -n 12 /var/log/syslog');
       if (vordergrund) {
-        await p.clock.runFor(3949);
+        await p.clock.runFor(150 + 550 + 12000 - 1);
         assert.doesNotMatch((await out.textContent()).split('updetach\n').at(-1), /CONNECT 19200/);
         await p.clock.runFor(1);
         assert.match(await out.textContent(), /CONNECT 19200/);
-        await p.clock.runFor(3549);
+        await p.clock.runFor(100 + 800 + 10000 - 1);
         assert.equal(await prompt.textContent(), '');
         await cmd('wg-quick up wg-sat');
         assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.wgSat), null);
@@ -95,7 +97,7 @@ const { imUeberflug } = require('./_kestrel');
         assert.equal(await prompt.textContent(), 'root@terminal:/#');
       } else {
         await cmd('wg-quick up wg-sat'); assert.match(await out.textContent(), /ppp0 is not ready$/);
-        await p.clock.runFor(7500);
+        await verbunden(p);
       }
       await cmd('tail -n 12 /var/log/syslog'); assert.match(await out.textContent(), /Using interface ppp0/);
       // wg-quick läuft im Vordergrund; profanity vorher scheitert ohne Tunnel.
@@ -142,7 +144,7 @@ const { imUeberflug } = require('./_kestrel');
     await cmd('poff kestrel');
     assert.match(await out.textContent(), /root@terminal:\/# poff kestrel$/, 'poff bei Erfolg still');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null);
-    await cmd('pppd call kestrel'); await p.clock.runFor(7500);
+    await cmd('pppd call kestrel'); await verbunden(p);
     await cmd('poff kestrel && tail -n 6 /var/log/syslog');
     assert.match(await out.textContent(), /poff kestrel && tail -n 6 \/var\/log\/syslog\n(?:.*\n){4}.*terminal pppd\[\d+\]: Terminating on signal 15\n.*Connection terminated\.$/);
     assert.equal((await out.textContent()).split('poff kestrel && tail').at(-1).match(/Terminating on signal 15/g).length, 1, 'Abbau genau einmal, im Syslog');
@@ -167,8 +169,8 @@ const { imUeberflug } = require('./_kestrel');
     // Scheitert die Wahl (kein Träger), wartet updetach mit persist im Vordergrund weiter; Strg+C beendet pppd mit 5.
     // Gezielt ausgelöst, weil nach einem Untergang ein anderer KESTREL aufgegangen sein kann.
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; });
-    await cmd('pppd call kestrel updetach'); await p.clock.runFor(7000);
-    assert.match(await out.textContent(), /chat\[\d+\]: NO CARRIER\npppd\[\d+\]: Connect script failed$/);
+    await cmd('pppd call kestrel updetach'); await gescheitert(p);
+    assert.match(await out.textContent(), /chat\[\d+\]: NO CARRIER\nchat\[\d+\]:  -- failed\nchat\[\d+\]: Failed \(NO CARRIER\)\npppd\[\d+\]: Connect script failed$/);
     assert.equal(await p.evaluate(() => terminalBeschaeftigt()), true);
     await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     await cmd('echo $?'); assert.match(await out.textContent(), /\n5$/);
@@ -176,7 +178,7 @@ const { imUeberflug } = require('./_kestrel');
     await imUeberflug(p);
     await cmd('predict -t /var/cache/tle/kestrel.tle -p KESTREL-1');
     await cmd('pppd call kestrel updetach');
-    await p.clock.runFor(7500);
+    await verbunden(p);
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now()));
     assert.match(await out.textContent(), /pppd\[\d+\]: Modem hangup \(NO CARRIER\)\npppd\[\d+\]: Connection terminated\.$/);
     await cmd('poff kestrel');

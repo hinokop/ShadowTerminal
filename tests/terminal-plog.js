@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
-const { imUeberflug } = require('./_kestrel');
+const { imUeberflug, schnelleWahl } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -17,6 +17,7 @@ const { imUeberflug } = require('./_kestrel');
     await p.fill('#gate-pw', 'pw-test-123');
     if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
+    await schnelleWahl(p);
     await p.clock.install();
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
@@ -37,7 +38,7 @@ const { imUeberflug } = require('./_kestrel');
     assert.equal(await status(), '0');
     for (const z of ['plog -n 3', 'plog -n3', 'plog -3', 'plog --lines=3', 'plog --lines 3'])
       assert.deepEqual(await nach(z), await syslog(3), z);
-    assert.match((await nach('plog -n 2')).join('\n'), /BUSY\n.* pppd\[\d+\]: Connect script failed$/);
+    assert.match((await nach('plog -n 4')).join('\n'), /BUSY\n.* -- failed\n.*Failed \(BUSY\)\n.* pppd\[\d+\]: Connect script failed$/);
     assert.deepEqual(await nach('plog -n 0'), []);
     assert.equal(await status(), '1', 'tail -n 0: grep ohne Treffer');
 
@@ -58,7 +59,7 @@ const { imUeberflug } = require('./_kestrel');
     assert.equal(await p.evaluate(() => terminalBeschaeftigt()), true, 'plog -f hält die Shell im Vordergrund');
     await p.clock.runFor(3000);
     const live = (await out.textContent()).split('# pon kestrel && plog -f\n').at(-1);
-    assert.match(live, /^(.*\n){6}.* chat\[\d+\]: abort on \(BUSY\)\n[\s\S]* chat\[\d+\]: BUSY\n.* pppd\[\d+\]: Connect script failed$/);
+    assert.match(live, /^(.*\n){6}.* chat\[\d+\]: abort on \(BUSY\)\n[\s\S]* chat\[\d+\]: BUSY\n.* -- failed\n.*Failed \(BUSY\)\n.* pppd\[\d+\]: Connect script failed$/);
     assert.equal(live.split('abort on (BUSY)').length, 2, 'jede Zeile genau einmal');
     assert.deepEqual(live.split('\n').slice(-12), await syslog(12), 'live dieselben Zeilen wie im Protokoll');
     await inp.press('Control+c');

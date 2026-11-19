@@ -4,7 +4,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
-const { imUeberflug } = require('./_kestrel');
+const { imUeberflug, schnelleWahl } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -18,6 +18,7 @@ const { imUeberflug } = require('./_kestrel');
     await p.fill('#gate-pw', 'pw-test-123');
     if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
+    await schnelleWahl(p);
     await p.clock.install();
     await imUeberflug(p);
     await p.clock.pauseAt(await p.evaluate(() => Date.now() + 1000));
@@ -42,7 +43,7 @@ const { imUeberflug } = require('./_kestrel');
     /* plog -f im Bereich: die Einwahl erscheint dort live, die Shell bleibt frei */
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'busy'; });
     await cmd('pon kestrel'); await p.clock.runFor(3000);
-    assert.match(await bereiche.nth(1).textContent(), /chat\[\d+\]: BUSY\n.* pppd\[\d+\]: Connect script failed$/);
+    assert.match(await bereiche.nth(1).textContent(), /chat\[\d+\]:  -- failed\n.* chat\[\d+\]: Failed \(BUSY\)\n.* pppd\[\d+\]: Connect script failed$/);
     assert.equal(await p.evaluate(() => terminalBeschaeftigt()), false);
     await cmd('echo frei'); assert.equal(await letzte(), 'frei');
     await cmd('poff');

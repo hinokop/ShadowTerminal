@@ -4,7 +4,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
-const { imUeberflug } = require('./_kestrel');
+const { imUeberflug, schnelleWahl } = require('./_kestrel');
 
 // Unabhängig von der Anwendung: Epoche aus TLE-Zeile 1 (JJTTT.TTTTTTTT).
 const epoche = l1 => { const jj = +l1.slice(18, 20), tag = +l1.slice(20, 32); return Date.UTC(2000 + jj, 0, 1) + (tag - 1) * 86400000; };
@@ -25,6 +25,7 @@ const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 10
     await p.fill('#gate-pw', 'pw-test-123');
     if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
+    await schnelleWahl(p);
     await p.clock.install();
     const inp = p.locator('#profil-terminal-eingabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };

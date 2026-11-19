@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
-const { imUeberflug } = require('./_kestrel');
+const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -82,19 +82,19 @@ const { imUeberflug } = require('./_kestrel');
 
     /* BUSY und NO CARRIER gezielt: chat bricht ab; mit persist bleibt pppd und wählt nach holdoff neu */
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'busy'; });
-    await cmd('pppd call kestrel updetach'); await p.clock.runFor(3000);
-    assert.match(await out.textContent(), /chat\[\d+\]: BUSY\npppd\[\d+\]: Connect script failed$/);
+    await cmd('pppd call kestrel updetach'); await gescheitert(p);
+    assert.match(await out.textContent(), /chat\[\d+\]: BUSY\nchat\[\d+\]:  -- failed\nchat\[\d+\]: Failed \(BUSY\)\npppd\[\d+\]: Connect script failed$/);
     await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     assert.equal(await status(), '5');
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; });
-    await cmd('pon kestrel'); await p.clock.runFor(7000);
+    await cmd('pon kestrel'); await gescheitert(p);
     assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.bereit), true, 'gescheiterte Hintergrundwahl: pppd bleibt (persist)');
-    assert.match((await nach('tail -n 3 /var/log/syslog')).join('\n'), /NO CARRIER\n.*Connect script failed$/);
+    assert.match((await nach('tail -n 4 /var/log/syslog')).join('\n'), /NO CARRIER\n.* -- failed\n.*Failed \(NO CARRIER\)\n.*Connect script failed$/);
     await nach('poff');
 
     /* Erfolg: Signal nach Elevation, Wahl ins Gateway, vollständiges Protokoll */
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'ok'; });
-    await cmd('pppd call kestrel updetach'); await p.clock.runFor(7600);
+    await cmd('pppd call kestrel updetach'); await verbunden(p);
     const log = await out.textContent();
     for (const z of ['send (AT+CSQ^M)', 'send (ATDT00882994401^M)', 'expect (CONNECT)', 'CONNECT 19200', ' -- got it',
       'Connect: ppp0 <--> /dev/ttyUSB0', 'remote IP address 10.64.0.1']) assert.ok(log.includes(z), z);

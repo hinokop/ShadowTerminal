@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
-const { imUeberflug } = require('./_kestrel');
+const { imUeberflug, schnelleWahl } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -17,6 +17,7 @@ const { imUeberflug } = require('./_kestrel');
     await p.fill('#gate-pw', 'pw-test-123');
     if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
+    await schnelleWahl(p);
     await p.clock.install();
     const pass = await imUeberflug(p);
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');

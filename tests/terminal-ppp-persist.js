@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
-const { imUeberflug } = require('./_kestrel');
+const { imUeberflug, schnelleWahl } = require('./_kestrel');
 
 (async () => {
   const b = await chromium.launch();
@@ -17,6 +17,7 @@ const { imUeberflug } = require('./_kestrel');
     await p.fill('#gate-pw', 'pw-test-123');
     if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
+    await schnelleWahl(p);
     await p.clock.install();
     // Uhr anhalten: nur runFor bewegt die Zeit, damit holdoff unter Last genau prüfbar bleibt.
     await p.clock.pauseAt(await p.evaluate(() => Date.now() + 1000));
@@ -54,7 +55,7 @@ const { imUeberflug } = require('./_kestrel');
     await imUeberflug(p, { wahl: 'busy' });
     await cmd('pppd call kestrel updetach && echo verbunden');
     await p.clock.runFor(3000);
-    assert.match(await out.textContent(), /chat\[\d+\]: BUSY\npppd\[\d+\]: Connect script failed$/);
+    assert.match(await out.textContent(), /chat\[\d+\]: BUSY\nchat\[\d+\]:  -- failed\nchat\[\d+\]: Failed \(BUSY\)\npppd\[\d+\]: Connect script failed$/);
     assert.equal(await p.evaluate(() => terminalBeschaeftigt()), true, 'updetach wartet weiter');
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'ok'; });
     await p.clock.runFor(20000 + 7600);
