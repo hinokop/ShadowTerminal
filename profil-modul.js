@@ -724,18 +724,22 @@ function terminalPppAnzeige() {
   const oben = $('profil-terminal-orbit'), unten = $('profil-terminal-chat'), shell = $('profil-terminal-ausgabe');
   if (!oben || !unten || !shell) return;
   const live = !!t.orbitLive;
-  oben.hidden = !chat && !live;
+  // Ist der Chat offline (poff, LOS), zeigt der KESTREL-Block keinen Link mehr; der Chatverlauf mit Disconnected bleibt.
+  const block = !!chat && chat.phase !== 'offline';
+  oben.hidden = !block && !live;
   oben.classList.toggle('orbit-live', live);
   unten.hidden = !chat;
   if (!chat && !live) { shell.hidden = false; return; }
   shell.hidden = !!chat;
   if (!chat) { delete oben.dataset.chat; terminalPredictSetzen(oben, terminalZeitstand()); return; }
-  const kopf = chat.link.sat.name + '  [LOS ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand());
-  const daten = kopf + '\n' + telemetrie + (chat.link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '');
-  if (oben.dataset.chat !== daten) {
-    delete oben.dataset.predict; oben.dataset.chat = daten;
-    oben.replaceChildren(h('span', { class: 'link-kopf' }, kopf), '\n', h('span', { class: 'link-telemetrie' }, telemetrie),
-      chat.link.abgelaufen ? '\npppd: Modem hangup (NO CARRIER)' : '');
+  if (!block) { delete oben.dataset.chat; oben.replaceChildren(); }
+  else {
+    const kopf = chat.link.sat.name + '  [LOS ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand());
+    const daten = kopf + '\n' + telemetrie;
+    if (oben.dataset.chat !== daten) {
+      delete oben.dataset.predict; oben.dataset.chat = daten;
+      oben.replaceChildren(h('span', { class: 'link-kopf' }, kopf), '\n', h('span', { class: 'link-telemetrie' }, telemetrie));
+    }
   }
   const text = chat.log.join('\n');
   if (unten.textContent !== text) {
@@ -814,20 +818,43 @@ function terminalPppChatAus() {
   terminalSatAnzeige();
 }
 // neuWaehlen: Modem-Hangup mit persist; pppd bleibt und wählt sofort neu (holdoff entfällt).
+/* Abbauzeilen nach pppd/chat-Quelltext (main.c, tty.c, auth.c, chat.c). Phasen: chat (Connect-Skript läuft), seriell
+   (CONNECT, PPP-Interface noch nicht eingerichtet), ppp (ab "Connect: ppp0 <--> …", LCP/IPCP), up, holdoff, neuwahl
+   (nach Modem-Hangup, kein Link bis zur nächsten Wahl).
+   Signal während chat: es geht an chat ("SIGTERM"/"SIGINT"), das Connect-Skript scheitert, der Fehlerpfad setzt
+   asked_to_quit; pppd endet ohne "Terminating on signal" mit "Exit.". Ohne PPP-Link (seriell, holdoff, neuwahl):
+   "Terminating" und "Exit.". Ab ppp baut pppd den Link ab ("Connection terminated."). Modem-Hangup mit persist: kein "Exit.". */
+function terminalPppAbbauZeilen(modem, grund) {
+  const d = 'pppd[' + TERMINAL_SITZUNG.pppd + ']: ', c = 'chat[' + TERMINAL_SITZUNG.chat + ']: ';
+  const signal = /^Terminating on signal (\d+)$/.exec(grund);
+  if (!signal) return [d + grund, terminalPppEnde()];
+  if (modem.phase === 'chat') return [c + (signal[1] === '2' ? 'SIGINT' : 'SIGTERM'), d + 'Connect script failed', d + 'Exit.'];
+  if (modem.phase === 'ppp' || modem.phase === 'up') return [d + grund, terminalPppEnde(), d + 'Exit.'];
+  return [d + grund, d + 'Exit.'];
+}
 function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   const t = TERMINAL_ZUSTAND, modem = t.modem;
   if (modem) {
     clearTimeout(modem.timer);
-    const zeilen = ['pppd[' + TERMINAL_SITZUNG.pppd + ']: ' + grund, terminalPppEnde()];
+    const zeilen = terminalPppAbbauZeilen(modem, grund);
     zeilen.forEach(terminalPppLog);
     // Liest plog -f mit, erscheinen die Zeilen schon über den Syslog; die direkte Meldung entfällt dann.
     if (inShell && !t.plogFolgen) terminalAusgabe(zeilen);
-    if (!neuWaehlen) terminalVordergrundEnde(modem, grund.includes('signal 2') ? 5 : 1);
+    // Rückgabewert (pppd(8), tty.c/main.c): Bricht das Signal das laufende Connect-Skript ab, endet pppd mit
+    // EXIT_CONNECT_FAILED (8); verarbeitet es das Signal in der Ereignisschleife (holdoff, Aushandlung), mit EXIT_USER_REQUEST (5).
+    const code = /^Terminating on signal/.test(grund) && modem.phase === 'chat' ? 8 : grund.includes('signal 2') ? 5 : 1;
+    if (!neuWaehlen) terminalVordergrundEnde(modem, code);
   }
   if (modem && neuWaehlen) {
-    modem.bereit = false; modem.link = null;
+    // Der Link ist abgebaut; bis zur Neuwahl besteht kein PPP-Link (ein poff in dieser Sekunde baut nichts mehr ab).
+    modem.bereit = false; modem.link = null; modem.phase = 'neuwahl';
     modem.timer = setTimeout(function () { if (TERMINAL_ZUSTAND.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_NEUWAHL);
-  } else t.modem = null;
+  } else {
+    t.modem = null;
+    // pppd ist beendet: der Funklink besteht nicht mehr, der LOS-Zähler im Fensterkopf verschwindet (auch mit wg-sat oder Chat).
+    // PREDICT rechnet den Überflug unabhängig davon weiter.
+    if (t.satLink) { clearInterval(t.satLink.timer); t.satLink = null; }
+  }
   terminalKanalPromptSync();
   terminalSatAnzeige();
   if (t.wgSat) t.wgSat.handshake = null;
@@ -887,6 +914,7 @@ function terminalPppWahl(modem) {
   const t = TERMINAL_ZUSTAND, jetzt = Date.now(), S = TERMINAL_SITZUNG;
   if (modem.versuche++) S.chat += 1 + terminalKanalZufall(6);
   modem.holdoff = false;
+  modem.phase = 'chat';
   const oben = kestrelSichtbar(jetzt)[0] || null;
   const ausgang = terminalWahlausgang(oben ? oben.el : -90);
   if (t.satLink) clearInterval(t.satLink.timer);
@@ -926,6 +954,9 @@ function terminalPppWahl(modem) {
     const zeilen = schritte[i][1];
     zeilen.forEach(terminalPppLog);
     if (modem.vordergrund) terminalAusgabe(zeilen);
+    // Nach CONNECT ist das Connect-Skript fertig; ab "Connect: ppp0 <--> …" besteht das PPP-Interface (LCP/IPCP).
+    if (zeilen.some(function (z) { return z.endsWith('CONNECT 19200'); })) modem.phase = 'seriell';
+    if (zeilen.some(function (z) { return z.includes('Connect: ppp0 <--> '); })) modem.phase = 'ppp';
     if (i + 1 < schritte.length) {
       modem.timer = setTimeout(() => schritt(i + 1), schritte[i + 1][0]);
       return;
@@ -933,14 +964,14 @@ function terminalPppWahl(modem) {
     modem.timer = null;
     if (!link) {
       // Wahl gescheitert: mit persist und maxfail 0 bleibt pppd und wählt nach holdoff neu; updetach bleibt im Vordergrund.
-      modem.holdoff = true;
+      modem.holdoff = true; modem.phase = 'holdoff';
       modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_HOLDOFF);
       terminalKanalPromptSync();
       terminalSatAnzeige();
       return;
     }
     // Verbunden: updetach löst sich vom Terminal, spätere Neuwahlen laufen im Hintergrund.
-    modem.bereit = true;
+    modem.bereit = true; modem.phase = 'up';
     modem.vordergrund = false;
     terminalKanalPromptSync();
     terminalVordergrundEnde(modem, 0);
@@ -956,14 +987,17 @@ function terminalShellSighup() {
   if (modem && modem.vordergrund && !modem.bereit) {
     modem.vordergrund = false;
     clearTimeout(modem.timer);
-    terminalPppLog(d + 'Hangup (SIGHUP)');
-    if (modem.holdoff) terminalPppWahl(modem);
-    else {
-      if (modem.link) { clearInterval(modem.link.timer); if (t.satLink === modem.link) t.satLink = null; modem.link = null; }
-      terminalPppLog(d + 'Connect script failed');
-      modem.holdoff = true;
+    if (modem.link) { clearInterval(modem.link.timer); if (t.satLink === modem.link) t.satLink = null; modem.link = null; }
+    // SIGHUP mit persist (pppd(8), main.c): Während chat wählt, geht das Signal an chat, das Connect-Skript scheitert; der
+    // Hangup wird in der holdoff-Schleife verarbeitet und beendet sie sofort. In holdoff ebenso sofort. Nach CONNECT wählt
+    // pppd nach holdoff neu; besteht schon das PPP-Interface, baut es zuvor den Link ab.
+    if (modem.phase === 'chat') ['chat[' + TERMINAL_SITZUNG.chat + ']: SIGHUP', d + 'Connect script failed', d + 'Hangup (SIGHUP)'].forEach(terminalPppLog);
+    else terminalPppLog(d + 'Hangup (SIGHUP)');
+    if (modem.phase === 'ppp' || modem.phase === 'seriell') {
+      if (modem.phase === 'ppp') terminalPppLog(terminalPppEnde());
+      modem.holdoff = true; modem.phase = 'holdoff';
       modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_HOLDOFF);
-    }
+    } else terminalPppWahl(modem);
     terminalVordergrundEnde(modem, 5);
   }
   if (t.wgSat && !t.wgSat.bereit) {
@@ -2199,7 +2233,8 @@ function terminalKonsoleEscape() {
     terminalPppAnzeige();
     terminalKanalPromptSync();
   } else if (terminalPppWaehltVorne()) {
-    terminalKetteAbbrechen(5);
+    // Rückgabewert wie in terminalPppModemAus: 8, solange das Connect-Skript läuft, sonst 5.
+    terminalKetteAbbrechen(t.modem?.phase === 'chat' ? 8 : 5);
     terminalPppModemAus('Terminating on signal 2');
   } else if (t.kanal) {
     terminalPppChatAus();

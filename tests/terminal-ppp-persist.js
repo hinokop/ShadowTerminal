@@ -90,16 +90,14 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
     assert.deepEqual(await nach('echo frei'), ['frei']);
     await nach('poff');
 
-    /* exit in tmux während chat wählt: SIGHUP beendet den Versuch, danach holdoff */
+    /* exit in tmux während chat wählt: das Signal geht an chat, das Connect-Skript scheitert, der Hangup beendet holdoff sofort
+       (genauer in terminal-ppp-abbruch) */
     await cmd('tmux'); await p.waitForFunction(() => TERMINAL_ZUSTAND.tmux && !TERMINAL_ZUSTAND.kette);
     await cmd('pppd call kestrel updetach'); await p.clock.runFor(300);
     await cmd('exit');
-    rest = (await log()).split(/pppd\[\d+\]: Hangup \(SIGHUP\)/).at(-1);
-    assert.match(rest, /^\n.* pppd\[\d+\]: Connect script failed$/, "SIGHUP beendet den Versuch");
-    await p.clock.runFor(19000);
-    assert.doesNotMatch((await log()).split('Hangup (SIGHUP)').at(-1), /abort on/, 'holdoff nach dem abgebrochenen Versuch');
-    await p.clock.runFor(1500);
-    assert.match((await log()).split('Hangup (SIGHUP)').at(-1), /abort on \(BUSY\)/);
+    rest = (await log()).split(/pppd\[\d+\]: Hangup \(SIGHUP\)/);
+    assert.match(rest.at(-2), /chat\[\d+\]: SIGHUP\n.* pppd\[\d+\]: Connect script failed\n.*$/, 'SIGHUP beendet den Versuch');
+    assert.match(rest.at(-1), /^\n.* chat\[\d+\]: abort on \(BUSY\)/, 'holdoff endet sofort, neue Wahl');
     assert.equal(await nachExit(), '');
     await nach('poff');
 
