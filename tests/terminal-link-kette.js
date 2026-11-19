@@ -146,7 +146,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null);
     await cmd('pppd call kestrel'); await verbunden(p);
     await cmd('poff kestrel && tail -n 6 /var/log/syslog');
-    assert.match(await out.textContent(), /poff kestrel && tail -n 6 \/var\/log\/syslog\n(?:.*\n){4}.*terminal pppd\[\d+\]: Terminating on signal 15\n.*Connection terminated\.$/);
+    assert.match(await out.textContent(), /poff kestrel && tail -n 6 \/var\/log\/syslog\n(?:.*\n){3}.*terminal pppd\[\d+\]: Terminating on signal 15\n.*Connection terminated\.\n.*terminal pppd\[\d+\]: Exit\.$/);
     assert.equal((await out.textContent()).split('poff kestrel && tail').at(-1).match(/Terminating on signal 15/g).length, 1, 'Abbau genau einmal, im Syslog');
 
     await bereit();
@@ -154,7 +154,9 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now() - 4000));
     await cmd(ziel); await progress.waitFor({ state: 'visible' });
     await p.clock.runFor(4000);
-    assert.match(await orbit.textContent(), /LOS 00:00:00[\s\S]*NO CARRIER/);
+    // LOS: Chat offline, der KESTREL-Block verschwindet; die Ursache steht im Chatverlauf.
+    assert.equal(await orbit.isVisible(), false);
+    assert.match(await chat.textContent(), /pppd: Modem hangup \(NO CARRIER\)/);
     assert.equal(await progress.isVisible(), false);
     assert.doesNotMatch(await chat.textContent(), /Error uploading file/);
     await p.clock.runFor(750);

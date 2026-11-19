@@ -62,7 +62,7 @@ const { imUeberflug, bis, verbunden } = require('./_kestrel');
     await cmd('pppd call kestrel'); await verbunden(p);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem.bereit), true);
     await cmd('poff kestrel && tail -n 6 /var/log/syslog');
-    assert.match(await out.textContent(), /terminal pppd\[\d+\]: Terminating on signal 15\n.*terminal pppd\[\d+\]: Connection terminated\.$/, 'tail läuft nach erfolgreichem poff');
+    assert.match(await out.textContent(), /terminal pppd\[\d+\]: Terminating on signal 15\n.*terminal pppd\[\d+\]: Connection terminated\.\n.*terminal pppd\[\d+\]: Exit\.$/, 'tail läuft nach erfolgreichem poff');
     assert.equal((await out.textContent()).split('poff kestrel && tail').at(-1).match(/Terminating on signal 15/g).length, 1, 'Abbau genau einmal, im Syslog');
     assert.equal(await status(), '0');
     /* … und bei bereits beendetem Modem: tail startet nicht, $? zeigt den Fehler */
@@ -94,11 +94,11 @@ const { imUeberflug, bis, verbunden } = require('./_kestrel');
     await cmd('pppd call kestrel updetach && wg-quick up wg-sat && profanity');
     await p.clock.runFor(3000);
     await inp.press('Control+c');
-    assert.match(await out.textContent(), /Terminating on signal 2\npppd\[\d+\]: Connection terminated\.$/);
+    assert.match(await out.textContent(), /chat\[\d+\]: SIGINT\npppd\[\d+\]: Connect script failed\npppd\[\d+\]: Terminating on signal 2\npppd\[\d+\]: Exit\.$/);
     await p.clock.runFor(30000);
     assert.deepEqual(await p.evaluate(() => [TERMINAL_ZUSTAND.modem, TERMINAL_ZUSTAND.wgSat, TERMINAL_ZUSTAND.kanal, TERMINAL_ZUSTAND.kette]), [null, null, null, null]);
     assert.equal(await p.locator('#profil-terminal-chat').isVisible(), false);
-    assert.match(await out.textContent(), /Connection terminated\.$/, 'nach dem Abbruch keine weitere Ausgabe');
+    assert.match(await out.textContent(), /pppd\[\d+\]: Exit\.$/, 'nach dem Abbruch keine weitere Ausgabe');
     assert.equal(await status(), '5', 'pppd endet nach SIGINT mit 5 (pppd(8))');
 
     /* Strg+C während wg-quick up: Kette abgebrochen, Schnittstelle abgeräumt, $? 130 */
