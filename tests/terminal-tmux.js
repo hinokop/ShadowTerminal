@@ -20,7 +20,7 @@ const { imUeberflug } = require('./_kestrel');
     await p.clock.install();
     const pass = await imUeberflug(p);
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
-    const pane = p.locator('#profil-terminal-pane'), status = p.locator('#profil-terminal-tmux');
+    const pane = p.locator('.tmux-pane'), status = p.locator('#profil-terminal-tmux');
     const prompt = p.locator('#profil-terminal-prompt');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
     const letzte = async () => (await out.textContent()).split('\n').at(-1);
@@ -36,16 +36,24 @@ const { imUeberflug } = require('./_kestrel');
     await cmd('tmux'); assert.equal(await letzte(), 'sessions should be nested with care, unset $TMUX to force');
 
     /* Tab-Ergänzung und Split: Fokus bleibt unten */
-    await inp.fill('tmux sp'); await inp.press('Tab'); assert.equal(await inp.inputValue(), 'tmux split-window -bd predict');
+    await inp.fill('tmux sp'); await inp.press('Tab'); assert.equal(await inp.inputValue(), 'tmux split-window -bd p', 'gemeinsamer Anfang von predict und plog -f');
+    await inp.press('r'); await inp.press('Tab'); assert.equal(await inp.inputValue(), 'tmux split-window -bd predict');
     await inp.press('Enter');
     assert.equal(await pane.isVisible(), true);
     assert.match(await pane.textContent(), new RegExp(pass.name + '\\s+\\d+\\s+\\d+\\s+\\d+\\s+LOS '));
-    assert.match(await status.textContent(), /^\[0\] 0:predict\*/);
+    // automatic-rename: der Name folgt dem aktiven Bereich; mit -d bleibt das die Shell.
+    assert.match(await status.textContent(), /^\[0\] 0:bash\*/);
     assert.equal(await prompt.textContent(), 'root@terminal:/#');
     assert.equal(await inp.evaluate(e => e.readOnly), false);
     const panePos = await pane.evaluate(e => e.getBoundingClientRect().top), ausPos = await out.evaluate(e => e.getBoundingClientRect().top);
     assert.ok(panePos < ausPos, 'Fenster oberhalb der Shell');
+    /* Zweiter Bereich: plog -f direkt über der Shell; ein dritter passt nicht */
+    await cmd('tmux split-window -bd plog -f');
+    assert.equal(await pane.count(), 2);
+    assert.deepEqual(await pane.evaluateAll(l => l.map(e => e.getAttribute('aria-label'))), ['tmux: predict', 'tmux: plog']);
     await cmd('tmux split-window -bd predict'); assert.equal(await letzte(), 'create pane failed: pane too small');
+    await cmd("tmux kill-pane -t '{up-of}'");
+    assert.deepEqual(await pane.evaluateAll(l => l.map(e => e.getAttribute('aria-label'))), ['tmux: predict']);
 
     /* Abnahme: unten halb getippt, oben LOS -> nächster AOS; Eingabe, Cursor, $? unverändert */
     await cmd('false');
