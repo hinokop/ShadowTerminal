@@ -73,7 +73,50 @@ const { imUeberflug } = require('./_kestrel');
     assert.deepEqual(await nach('echo frei'), ['frei']);
     await nach('poff');
 
+    /* exit in tmux während updetach wartet (holdoff): SIGHUP, pppd wählt sofort im Hintergrund neu, die Shell ist frei */
+    const nachExit = async () => (await out.textContent()).split('[exited]').at(-1);
+    await cmd('tmux'); await p.waitForFunction(() => TERMINAL_ZUSTAND.tmux && !TERMINAL_ZUSTAND.kette);
+    await cmd('pppd call kestrel updetach; echo danach'); await p.clock.runFor(7000);
+    assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.bereit && terminalBeschaeftigt()), true, 'Testaufbau: holdoff im Vordergrund');
+    await cmd('exit');
+    assert.equal(await p.evaluate(() => !TERMINAL_ZUSTAND.tmux && !TERMINAL_ZUSTAND.kette && !terminalBeschaeftigt()), true, 'Shell frei');
+    let rest = (await log()).split(/pppd\[\d+\]: Hangup \(SIGHUP\)/);
+    assert.equal(rest.length, 2, 'Hangup (SIGHUP) im Syslog');
+    assert.match(rest[1], /chat\[\d+\]: abort on \(BUSY\)/, 'holdoff endet sofort, neue Wahl');
+    await p.clock.runFor(8000);
+    assert.equal(await nachExit(), '', 'keine Ausgabe in der Shell, kein "danach"');
+    assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.vordergrund), true, 'pppd läuft im Hintergrund');
+    assert.deepEqual(await nach('echo frei'), ['frei']);
+    await nach('poff');
+
+    /* exit in tmux während chat wählt: SIGHUP beendet den Versuch, danach holdoff */
+    await cmd('tmux'); await p.waitForFunction(() => TERMINAL_ZUSTAND.tmux && !TERMINAL_ZUSTAND.kette);
+    await cmd('pppd call kestrel updetach'); await p.clock.runFor(300);
+    await cmd('exit');
+    rest = (await log()).split(/pppd\[\d+\]: Hangup \(SIGHUP\)/).at(-1);
+    assert.match(rest, /^\n.* pppd\[\d+\]: Connect script failed$/, "SIGHUP beendet den Versuch");
+    await p.clock.runFor(19000);
+    assert.doesNotMatch((await log()).split('Hangup (SIGHUP)').at(-1), /abort on/, 'holdoff nach dem abgebrochenen Versuch');
+    await p.clock.runFor(1500);
+    assert.match((await log()).split('Hangup (SIGHUP)').at(-1), /abort on \(BUSY\)/);
+    assert.equal(await nachExit(), '');
+    await nach('poff');
+
+    /* exit in tmux während wg-quick up: bash endet, die EXIT-Falle entfernt wg-sat; keine Ausgabe danach */
+    await imUeberflug(p, { wahl: 'ok' });
+    await cmd('pppd call kestrel updetach'); await p.clock.runFor(7600);
+    await p.waitForFunction(() => TERMINAL_ZUSTAND.modem?.bereit && !TERMINAL_ZUSTAND.kette);
+    await cmd('tmux'); await p.waitForFunction(() => TERMINAL_ZUSTAND.tmux && !TERMINAL_ZUSTAND.kette);
+    await cmd('wg-quick up wg-sat && echo danach'); await p.clock.runFor(100);
+    await cmd('exit');
+    await p.clock.runFor(2000);
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.wgSat), null, 'wg-sat entfernt');
+    assert.equal(await nachExit(), '');
+    assert.deepEqual(await nach('echo frei'), ['frei']);
+    await nach('poff');
+
     /* Strg+C während holdoff im Vordergrund: Signal 2, $? 5 */
+    await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; });
     await cmd('pppd call kestrel updetach'); await p.clock.runFor(7000);
     assert.equal(await p.evaluate(() => terminalBeschaeftigt()), true);
     await inp.press('Control+c');

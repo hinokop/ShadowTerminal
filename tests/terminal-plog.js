@@ -28,10 +28,10 @@ const { imUeberflug } = require('./_kestrel');
     assert.deepEqual(await nach('plog'), []);
     assert.equal(await status(), '1');
 
-    /* Eine gescheiterte Wahl füllt das Protokoll */
+    /* Eine gescheiterte Wahl füllt das Protokoll (pppd wählt mit persist weiter; poff nach den Prüfungen) */
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'busy'; });
-    await cmd('pppd call kestrel updetach'); await p.clock.runFor(3000);
-    await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette && !TERMINAL_ZUSTAND.modem);
+    await cmd('pon kestrel'); await p.clock.runFor(3000);
+    await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette && TERMINAL_ZUSTAND.modem?.holdoff);
     assert.ok((await syslog(99)).length > 10, 'Testaufbau: mehr als zehn Zeilen');
     assert.deepEqual(await nach('plog'), await syslog(10), 'wie tail: die letzten zehn Zeilen');
     assert.equal(await status(), '0');
@@ -51,6 +51,7 @@ const { imUeberflug } = require('./_kestrel');
     assert.equal(fehlt[0], "tail: cannot open '/nix' for reading: No such file or directory");
     assert.deepEqual(fehlt.slice(1), await syslog(2), 'die übrigen Dateien liest tail trotzdem');
     assert.equal(await status(), '0');
+    await nach('poff');
 
     /* -f: folgt dem Protokoll; pon im Hintergrund, die Wahl erscheint live */
     await cmd('pon kestrel && plog -f');
@@ -67,6 +68,7 @@ const { imUeberflug } = require('./_kestrel');
     await p.evaluate(() => terminalPppLog('pppd[1]: live')); assert.match(await out.textContent(), /# plog -fn 0\n.* pppd\[1\]: live$/);
     await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     assert.equal(await status(), '130');
+    await nach('poff');
     /* Nach dem Ende wird nichts mehr angehängt */
     const vorher = await out.textContent();
     await p.evaluate(() => terminalPppLog('pppd[1]: nachher'));
@@ -76,31 +78,37 @@ const { imUeberflug } = require('./_kestrel');
       await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     }
 
-    /* LOS während plog -f: die Abbruchzeilen nur einmal (über den Syslog), plog läuft weiter */
+    /* LOS während plog -f: die Abbruchzeilen nur einmal (über den Syslog), plog läuft weiter und zeigt die Neuwahl (persist) */
     await imUeberflug(p, { wahl: 'ok' });
     await cmd('pon kestrel'); await p.clock.runFor(8000);
     await p.waitForFunction(() => TERMINAL_ZUSTAND.modem?.bereit);
     await cmd('plog -fn 0'); await p.waitForFunction(() => terminalBeschaeftigt());
-    await p.evaluate(() => { TERMINAL_ZUSTAND.satLink.bis = Date.now() + 1000; });
-    await p.clock.runFor(2000);
-    await p.waitForFunction(() => !TERMINAL_ZUSTAND.modem);
+    await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; TERMINAL_ZUSTAND.satLink.bis = Date.now() + 500; });
+    await p.clock.runFor(1000);
+    await p.waitForFunction(() => TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.bereit);
     const los = (await out.textContent()).split('# plog -fn 0\n').at(-1).split('\n');
     assert.equal(los.length, 2, 'zwei Zeilen, jede einmal: ' + JSON.stringify(los));
     assert.match(los[0], /^\w{3} \d+ [\d:]{8} terminal pppd\[\d+\]: Modem hangup \(NO CARRIER\)$/);
     assert.match(los[1], /^\w{3} \d+ [\d:]{8} terminal pppd\[\d+\]: Connection terminated\.$/);
     assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.plogFolgen && terminalBeschaeftigt()), true, 'plog -f läuft nach LOS weiter');
+    await p.clock.runFor(1500);
+    assert.match((await out.textContent()).split('Connection terminated.').at(-1), /^\n.* chat\[\d+\]: abort on \(BUSY\)/, 'Neuwahl erscheint im Protokoll');
     await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
+    await nach('poff');
     /* Ohne plog -f bleibt die direkte Meldung in der Shell */
     await imUeberflug(p, { wahl: 'ok' });
     await cmd('pon kestrel'); await p.clock.runFor(8000);
     await p.waitForFunction(() => TERMINAL_ZUSTAND.modem?.bereit);
     await cmd('true');
-    await p.evaluate(() => { TERMINAL_ZUSTAND.satLink.bis = Date.now() + 1000; });
-    await p.clock.runFor(2000);
-    await p.waitForFunction(() => !TERMINAL_ZUSTAND.modem);
+    await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; TERMINAL_ZUSTAND.satLink.bis = Date.now() + 500; });
+    await p.clock.runFor(1000);
+    await p.waitForFunction(() => TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.bereit);
     assert.deepEqual((await out.textContent()).split('# true\n').at(-1).split('\n'), [
       await p.evaluate(() => 'pppd[' + TERMINAL_SITZUNG.pppd + ']: Modem hangup (NO CARRIER)'),
       await p.evaluate(() => 'pppd[' + TERMINAL_SITZUNG.pppd + ']: Connection terminated.')]);
+    await p.clock.runFor(1500);
+    assert.doesNotMatch((await out.textContent()).split('# true\n').at(-1), /abort on/, 'Neuwahl im Hintergrund schreibt nicht in die Shell');
+    await nach('poff');
 
     /* exit in tmux beendet die Shell samt plog -f; was in der Kette danach käme, läuft nicht mehr */
     await cmd('tmux'); await p.waitForFunction(() => TERMINAL_ZUSTAND.tmux && !TERMINAL_ZUSTAND.kette);

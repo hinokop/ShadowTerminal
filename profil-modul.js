@@ -825,6 +825,7 @@ function terminalPppEinwahl(vordergrund) {
 function terminalPppWahl(modem) {
   const t = TERMINAL_ZUSTAND, jetzt = Date.now(), S = TERMINAL_SITZUNG;
   if (modem.versuche++) S.chat += 1 + terminalKanalZufall(6);
+  modem.holdoff = false;
   const oben = kestrelSichtbar(jetzt)[0] || null;
   const ausgang = terminalWahlausgang(oben ? oben.el : -90);
   if (t.satLink) clearInterval(t.satLink.timer);
@@ -864,6 +865,7 @@ function terminalPppWahl(modem) {
     modem.timer = null;
     if (!link) {
       // Wahl gescheitert: mit persist und maxfail 0 bleibt pppd und wählt nach holdoff neu; updetach bleibt im Vordergrund.
+      modem.holdoff = true;
       modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_HOLDOFF);
       terminalKanalPromptSync();
       terminalSatAnzeige();
@@ -876,6 +878,31 @@ function terminalPppWahl(modem) {
     terminalVordergrundEnde(modem, 0);
   };
   schritt(0);
+}
+/* Die Shell endet (exit in tmux): Ihr Vordergrundjob erhält SIGHUP.
+   pppd vor dem Abkoppeln (updetach): pppd(8) NOTES, main.c: "Hangup (SIGHUP)", der laufende Versuch endet (chat erhält
+   das Signal, das Connect-Skript scheitert); mit persist bleibt pppd und wählt neu, in der holdoff-Phase sofort.
+   Ohne Terminal läuft es im Hintergrund weiter. wg-quick up: bash endet, die EXIT-Falle (del_if) entfernt wg-sat. */
+function terminalShellSighup() {
+  const t = TERMINAL_ZUSTAND, modem = t.modem, d = 'pppd[' + TERMINAL_SITZUNG.pppd + ']: ';
+  if (modem && modem.vordergrund && !modem.bereit) {
+    modem.vordergrund = false;
+    clearTimeout(modem.timer);
+    terminalPppLog(d + 'Hangup (SIGHUP)');
+    if (modem.holdoff) terminalPppWahl(modem);
+    else {
+      if (modem.link) { clearInterval(modem.link.timer); if (t.satLink === modem.link) t.satLink = null; modem.link = null; }
+      terminalPppLog(d + 'Connect script failed');
+      modem.holdoff = true;
+      modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_HOLDOFF);
+    }
+    terminalVordergrundEnde(modem, 5);
+  }
+  if (t.wgSat && !t.wgSat.bereit) {
+    clearTimeout(t.wgSat.timer); terminalVordergrundEnde(t.wgSat, 1); t.wgSat = null;
+  }
+  terminalPlogEnde(1);
+  terminalSatAnzeige();
 }
 async function terminalPppShell(befehl, arg, args = []) {
   const t = TERMINAL_ZUSTAND, link = t.satLink;
@@ -1425,9 +1452,9 @@ const TERMINAL_TABELLE = [
     const t = TERMINAL_ZUSTAND;
     if (arg) return terminalUsage('exit');
     // In tmux beendet exit die Shell der Sitzung; vereinfacht endet damit die ganze Sitzung samt oberem Fenster.
-    // Mit der Shell enden auch ein laufendes plog -f und der Rest der Kette.
+    // Mit der Shell enden ihr Vordergrundjob (SIGHUP: plog -f, pppd vor dem Abkoppeln, wg-quick up) und der Rest der Kette.
     if (t.tmux && !t.kanal && !t.orbitLive) {
-      if (t.plogFolgen) { t.kette = null; terminalPlogEnde(1); }
+      if (t.kette) { t.kette = null; terminalShellSighup(); }
       terminalTmuxEnde(); terminalAusgabe('[exited]'); terminalKanalPromptSync();
       return 0;
     }
