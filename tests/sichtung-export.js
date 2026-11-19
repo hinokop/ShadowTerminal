@@ -71,8 +71,14 @@ const PF = require('./_pfad');
       return { d1, d2, id1: STATE.dossiers.entitaeten[d1].sichtungen[0].id };
     });
     assert.equal(z.id1, 'SI-001');
+    /* Anfragen an die Brücke für export-txt gehen verzögert hinaus: so zeigt der Test, dass er auf die Meldung dieses Exports wartet
+       und nicht auf eine gleichlautende ältere (die Meldungszeile bleibt stehen, bis eine neue kommt). */
+    await q.evaluate(() => {
+      const echt = window.terminalBruecke;
+      window.terminalBruecke = async function (op, ...rest) { if (op === 'export-txt') await new Promise(r => setTimeout(r, 400)); return echt(op, ...rest); };
+    });
     const exportVia = async (dossier, nachricht) => {
-      await q.evaluate(d => kartenTxtExport('sichtung', 'SI-001', d), dossier);
+      await q.evaluate(d => { meldung(''); kartenTxtExport('sichtung', 'SI-001', d); }, dossier);   /* alte Meldung leeren: gewartet wird auf die dieses Exports */
       await q.locator('#k-txt-ordner').selectOption('dokumente'); await q.locator('#dlg-ok').click();
       await q.waitForFunction(m => document.querySelector('#sys-msg').innerText.includes(m), nachricht);
     };
