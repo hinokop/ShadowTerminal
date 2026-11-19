@@ -45,9 +45,12 @@
 /* Shell beschäftigt: Eingabe bleibt stehen, wird aber nicht angenommen. */
 #profil-terminal form[aria-busy="true"] #profil-terminal-eingabe { opacity: .5; }
 
-/* tmux: oberes Fenster mit predict, Statuszeile unten (tmux-Standard: grüne Leiste) */
-#profil-terminal-pane{flex:none;max-height:38%;border:1px solid #363f49;padding:5px 7px;color:#a8d293;background:#171d25;cursor:default}
-#profil-terminal-pane.aktiv{border-color:#6fbf56}
+/* tmux: obere Bereiche (predict, plog -f), Statuszeile unten (tmux-Standard: grüne Leiste) */
+#profil-terminal-kern.tmux-zwei .tmux-pane{max-height:24%}
+#profil-terminal-kern .tmux-pane{flex:none;max-height:38%;overflow:hidden;margin:0 0 4px;border:1px solid #363f49;padding:5px 7px;color:#a8d293;background:#171d25;cursor:default}
+#profil-terminal-kern .tmux-pane.aktiv{border-color:#6fbf56}
+/* predict: passt die Liste nicht, bleibt sie scrollbar (plog zeigt ohnehin die jüngsten ganzen Zeilen) */
+#profil-terminal-kern .tmux-pane[aria-label="tmux: predict"]{overflow-y:auto}
 .profil-terminal-kern.tmux-oben textarea{opacity:.5}
 #profil-terminal-tmux{flex:none;margin:6px -12px -12px;padding:1px 8px;background:#2f8a3a;color:#0b120c;white-space:pre;overflow:hidden;line-height:1.5}
 

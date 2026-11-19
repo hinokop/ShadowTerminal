@@ -29,7 +29,7 @@ const { APP } = require('./_pfad');
     assert.deepEqual(await nach('help'), [
       'ls [-a|-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · echo · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
       'predict · pon kestrel · pppd call kestrel [updetach] · poff [kestrel] · plog [-n N] [-f] · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
-      "tmux · tmux split-window -bd predict · Ctrl+B ↑/↓ switch pane · tmux kill-pane -t '{up-of}'",
+      "tmux · tmux split-window -bd predict · tmux split-window -bd plog -f · Ctrl+B ↑/↓ switch pane · tmux kill-pane -t '{up-of}'",
       'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);
     /* Aufruffehler und Rückgabewerte wie bisher */
     for (const [z, erwartet, code] of [['help x', 'usage: help', '2'], ['pwd x', 'usage: pwd', '2'], ['uname', 'usage: uname -a', '2'],

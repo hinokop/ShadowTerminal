@@ -902,6 +902,9 @@ function terminalShellSighup() {
     clearTimeout(t.wgSat.timer); terminalVordergrundEnde(t.wgSat, 1); t.wgSat = null;
   }
   terminalPlogEnde(1);
+  // Laufende Archivabfragen und Übertragungen der Shell werden verworfen (wie bei clear und Sitzungsende).
+  TERMINAL_ZUSTAND.version++;
+  terminalTransferStop();
   terminalSatAnzeige();
 }
 async function terminalPppShell(befehl, arg, args = []) {
@@ -1109,6 +1112,7 @@ function terminalPlog(args) {
 // Neue Syslog-Zeile: ein laufendes plog -f gibt sie aus, wenn grep sie durchlässt.
 function terminalPlogZeile(zeile) {
   if (TERMINAL_ZUSTAND.plogFolgen && TERMINAL_PLOG_GREP.test(zeile)) terminalAusgabe(zeile);
+  terminalTmuxPlogZeile(zeile);
 }
 function terminalPlogEnde(code) {
   const t = TERMINAL_ZUSTAND, folgen = t.plogFolgen;
@@ -1286,8 +1290,11 @@ function terminalStrgC() {
   t.status = 130;
   return true;
 }
-/* tmux (Ausschnitt, tmux(1)): Sitzung mit Statuszeile, split-window für predict oberhalb der Shell, Fokuswechsel mit
-   Strg+B und Pfeiltaste, kill-pane auf das obere Fenster. Die Shell unten bleibt mit Eingabe, Verlauf, Tab und $? bedienbar. */
+/* tmux (Ausschnitt, tmux(1)): Sitzung mit Statuszeile; split-window legt Bereiche oberhalb der Shell an (bis zu zwei:
+   predict und plog -f), Fokuswechsel mit Strg+B und Pfeiltaste (select-pane -U/-D, ohne Umlauf) oder o (nächster Bereich),
+   kill-pane auf {up-of}, {top} oder {last}. Die Shell unten bleibt mit Eingabe, Verlauf, Tab und $? bedienbar.
+   Endet das Programm eines Bereichs, schließt tmux ihn (remain-on-exit ist aus). */
+const TERMINAL_TMUX_BEREICHE = 2;
 function terminalTmuxStatus() {
   const feld = $('profil-terminal-tmux'), t = TERMINAL_ZUSTAND;
   if (!feld) return;
@@ -1295,45 +1302,92 @@ function terminalTmuxStatus() {
   if (!t.tmux) return;
   const jetzt = new Date(), z = function (n) { return String(n).padStart(2, '0'); };
   const mon = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(jetzt);
-  feld.textContent = '[0] 0:' + (t.tmux.pane ? 'predict' : 'bash') + '*' + ' '.repeat(6) +
+  // automatic-rename: der Fenstername ist das laufende Programm des aktiven Bereichs (plog ist ein sh-Skript).
+  const aktiv = t.tmux.fokus === 'oben' ? t.tmux.aktiv : null;
+  const name = !aktiv ? 'bash' : aktiv.art === 'plog' ? 'sh' : 'predict';
+  feld.textContent = '[0] 0:' + name + '*' + ' '.repeat(6) +
     '"terminal" ' + z(jetzt.getUTCHours()) + ':' + z(jetzt.getUTCMinutes()) + ' ' + z(jetzt.getUTCDate()) + '-' + mon + '-' + String(jetzt.getUTCFullYear()).slice(2);
 }
+function terminalTmuxBereichText(bereich) {
+  if (bereich.art === 'predict') return terminalPredictLive(Date.now());
+  return bereich.zeilen.join('\n');
+}
 function terminalTmuxPaneAnzeige() {
-  const feld = $('profil-terminal-pane'), t = TERMINAL_ZUSTAND, pane = t.tmux?.pane;
-  const input = $('profil-terminal-eingabe');
-  if (feld) {
-    feld.hidden = !pane;
-    feld.classList.toggle('aktiv', !!pane && t.tmux.fokus === 'oben');
-    if (pane) { const text = terminalPredictLive(Date.now()); if (feld.textContent !== text) feld.textContent = text; }
+  const t = TERMINAL_ZUSTAND, kern = $('profil-terminal-kern'), ausgabe = $('profil-terminal-ausgabe');
+  const bereiche = t.tmux?.panes || [], oben = !!t.tmux && t.tmux.fokus === 'oben';
+  if (kern && ausgabe) {
+    // Erst die Aufteilung (ein oder zwei Bereiche) setzen, dann messen: sonst gilt die Kürzung für die alte Höhe.
+    kern.classList.toggle('tmux-zwei', bereiche.length > 1);
+    kern.querySelectorAll('.tmux-pane').forEach(function (el) { if (!bereiche.some(function (b) { return b.el === el; })) el.remove(); });
+    bereiche.forEach(function (b) {
+      if (!b.el) b.el = h('pre', { class: 'tmux-pane mono', 'aria-label': 'tmux: ' + b.art,
+        onpointerdown: function (ev) { ev.preventDefault(); terminalTmuxFokusAuf(b); } });
+      if (b.el.nextElementSibling !== (bereiche[bereiche.indexOf(b) + 1]?.el || ausgabe)) kern.insertBefore(b.el, bereiche[bereiche.indexOf(b) + 1]?.el || ausgabe);
+      b.el.classList.toggle('aktiv', oben && t.tmux.aktiv === b);
+      const text = terminalTmuxBereichText(b);
+      if (b.art === 'plog') {
+        // Wie tail im Terminal: die letzten ganzen Zeilen, die in den Bereich passen; gemessen mit vollem Text.
+        if (b.el.textContent !== text) b.el.textContent = text;
+        if (b.el.scrollHeight > b.el.clientHeight) {
+          const st = getComputedStyle(b.el), hoehe = b.el.clientHeight - parseFloat(st.paddingTop) - parseFloat(st.paddingBottom);
+          // Schätzung nach Zeilenhöhe, dann so lange kürzen, bis auch umbrochene Zeilen ganz hineinpassen.
+          let k = Math.max(1, Math.floor(hoehe / parseFloat(st.lineHeight)));
+          b.el.textContent = b.zeilen.slice(-k).join('\n');
+          while (k > 1 && b.el.scrollHeight > b.el.clientHeight) b.el.textContent = b.zeilen.slice(-(--k)).join('\n');
+        }
+      } else if (b.el.textContent !== text) b.el.textContent = text;
+    });
   }
-  if (input) input.readOnly = !!pane && t.tmux.fokus === 'oben';
-  $('profil-terminal-kern')?.classList.toggle('tmux-oben', !!pane && t.tmux?.fokus === 'oben');
+  const input = $('profil-terminal-eingabe');
+  if (input) input.readOnly = oben;
+  kern?.classList.toggle('tmux-oben', oben);
   terminalTmuxStatus();
 }
-function terminalTmuxPaneSchliessen() {
-  const t = TERMINAL_ZUSTAND, pane = t.tmux?.pane;
-  if (!pane) return false;
-  clearInterval(pane.timer);
-  t.tmux.pane = null;
-  t.tmux.fokus = 'unten';
+function terminalTmuxPaneSchliessen(bereich) {
+  const t = TERMINAL_ZUSTAND, panes = t.tmux?.panes;
+  if (!panes || !panes.includes(bereich)) return false;
+  clearInterval(bereich.timer);
+  panes.splice(panes.indexOf(bereich), 1);
+  if (t.tmux.letzter === bereich) t.tmux.letzter = null;
+  // Schließt der aktive Bereich, geht der Fokus an die Shell.
+  if (t.tmux.aktiv === bereich) { t.tmux.aktiv = null; t.tmux.fokus = 'unten'; }
   terminalTmuxPaneAnzeige();
   return true;
 }
 function terminalTmuxEnde() {
   const t = TERMINAL_ZUSTAND;
   if (!t.tmux) return;
-  terminalTmuxPaneSchliessen();
+  t.tmux.panes.slice().forEach(terminalTmuxPaneSchliessen);
   t.tmux = null;
   terminalTmuxPaneAnzeige();
 }
-function terminalTmuxFokus(richtung) {
+// Fokus auf einen oberen Bereich oder (null) auf die Shell; der vorherige wird für {last} gemerkt.
+function terminalTmuxFokusAuf(bereich) {
   const t = TERMINAL_ZUSTAND;
-  if (!t.tmux?.pane) return;
-  t.tmux.fokus = richtung;
+  if (!t.tmux || (bereich && !t.tmux.panes.includes(bereich))) return;
+  const vorher = t.tmux.fokus === 'oben' ? t.tmux.aktiv : 'shell';
+  t.tmux.aktiv = bereich || null;
+  t.tmux.fokus = bereich ? 'oben' : 'unten';
+  if (vorher !== (bereich || 'shell')) t.tmux.letzter = vorher;
   terminalTabReset();
   terminalTmuxPaneAnzeige();
   // Der Tastaturfokus bleibt im Eingabefeld; unten ist es wieder beschreibbar.
   $('profil-terminal-eingabe')?.focus();
+}
+// select-pane -U / -D (ohne Umlauf) und -t :.+ (nächster Bereich, mit Umlauf); Reihenfolge von oben nach unten, die Shell zuletzt.
+function terminalTmuxWechsel(richtung) {
+  const t = TERMINAL_ZUSTAND;
+  if (!t.tmux?.panes.length) return;
+  const folge = t.tmux.panes.concat(null), jetzt = folge.indexOf(t.tmux.fokus === 'oben' ? t.tmux.aktiv : null);
+  const ziel = richtung === 'hoch' ? Math.max(0, jetzt - 1) : richtung === 'runter' ? Math.min(folge.length - 1, jetzt + 1) : (jetzt + 1) % folge.length;
+  terminalTmuxFokusAuf(folge[ziel]);
+}
+// Neue plog-Zeile für Bereiche, in denen plog -f läuft.
+function terminalTmuxPlogZeile(zeile) {
+  const bereiche = TERMINAL_ZUSTAND.tmux?.panes.filter(function (b) { return b.art === 'plog'; }) || [];
+  if (!bereiche.length || !TERMINAL_PLOG_GREP.test(zeile)) return;
+  bereiche.forEach(function (b) { b.zeilen = b.zeilen.concat(zeile).slice(-200); });
+  terminalTmuxPaneAnzeige();
 }
 // Befehlsfolgen wie in tmux(1): "tmux new \; split-window -bd predict" (Trenner ";" als eigenes Wort).
 function terminalTmux(args) {
@@ -1355,7 +1409,7 @@ function terminalTmuxEinzeln(args) {
   if (!sitzungsBefehle.includes(unter)) { terminalAusgabe('unknown command: ' + unter); return 1; }
   if (unter === 'new-session' || unter === 'new') {
     if (t.tmux) { terminalAusgabe('sessions should be nested with care, unset $TMUX to force'); return 1; }
-    t.tmux = { pane: null, fokus: 'unten' };
+    t.tmux = { panes: [], fokus: 'unten', aktiv: null, letzter: null };
     terminalTmuxPaneAnzeige();
     return 0;
   }
@@ -1363,27 +1417,48 @@ function terminalTmuxEinzeln(args) {
   if (unter === 'kill-server') { terminalTmuxEnde(); terminalAusgabe('[server exited]'); return 0; }
   if (unter === 'kill-pane' || unter === 'killp') {
     const i = args.indexOf('-t'), ziel = i >= 0 ? args[i + 1] : undefined;
-    // Ohne Ziel trifft kill-pane das aktive Fenster, also die Shell; vereinfacht endet damit die Sitzung wie bei exit.
+    // Ohne Ziel trifft kill-pane das aktive Fenster: von der Shell aus endet vereinfacht die Sitzung wie bei exit.
+    // kill-pane wird hier immer aus der Shell aufgerufen; {up-of} ist der Bereich direkt über ihr.
     if (ziel === undefined) { terminalTmuxEnde(); terminalAusgabe('[exited]'); return 0; }
-    if (!['{up-of}', '{top}', '{last}'].includes(ziel)) { terminalAusgabe("can't find pane: " + ziel); return 1; }
-    if (!terminalTmuxPaneSchliessen()) { terminalAusgabe("can't find pane: " + ziel); return 1; }
+    const panes = t.tmux.panes;
+    const treffer = ziel === '{up-of}' ? panes.at(-1) : ziel === '{top}' ? panes[0] : ziel === '{last}' ? (t.tmux.letzter === 'shell' ? undefined : t.tmux.letzter) : undefined;
+    if (!['{up-of}', '{top}', '{last}'].includes(ziel) || !treffer) { terminalAusgabe("can't find pane: " + ziel); return 1; }
+    terminalTmuxPaneSchliessen(treffer);
     return 0;
   }
   // split-window [-b] [-d] [-v] [Befehl ...]
-  let i = 1, oben = false, bleiben = false;
+  let i = 1, davor = false, bleiben = false;
   for (; i < args.length && /^-[bdvh]+$/.test(args[i]); i++) {
     if (args[i].includes('h')) { terminalAusgabe('split-window: -h is not supported in this terminal'); return 1; }
-    oben = oben || args[i].includes('b'); bleiben = bleiben || args[i].includes('d');
+    davor = davor || args[i].includes('b'); bleiben = bleiben || args[i].includes('d');
   }
   if (i < args.length && /^-/.test(args[i])) { terminalAusgabe('split-window: unknown option -- ' + args[i].slice(1, 2)); return 1; }
-  if (t.tmux.pane) { terminalAusgabe('create pane failed: pane too small'); return 1; }
+  if (t.tmux.panes.length >= TERMINAL_TMUX_BEREICHE) { terminalAusgabe('create pane failed: pane too small'); return 1; }
   const befehl = args.slice(i);
-  // Im oberen Fenster läuft nur die laufende Verfolgung von predict; andere Programme enden sofort und schließen ihr Fenster.
-  const o = befehl[0] === 'predict' ? terminalPredictOptionen(befehl.slice(1)) : null;
-  if (!o || o.fehler || o.modus !== 'live') return 0;
-  t.tmux.pane = { timer: setInterval(terminalTmuxPaneAnzeige, 1000), oben };
-  t.tmux.fokus = bleiben ? 'unten' : 'oben';
-  terminalTmuxPaneAnzeige();
+  // Im neuen Bereich laufen nur Programme, die nicht sofort enden: die Verfolgung von predict und plog -f.
+  // Alle anderen enden sofort, ihr Bereich schließt sich wieder.
+  let bereich = null;
+  if (befehl[0] === 'predict') {
+    const o = terminalPredictOptionen(befehl.slice(1));
+    if (o && !o.fehler && o.modus === 'live') bereich = { art: 'predict', timer: setInterval(terminalTmuxPaneAnzeige, 1000) };
+  } else if (befehl[0] === 'plog') {
+    const opt = terminalPlogTail(befehl.slice(1));
+    if (!opt.fehler && opt.folgen) {
+      const zeilen = [];
+      opt.dateien.forEach(function (name) {
+        const d = terminalPlogDatei(name);
+        if (d.fehler) { zeilen.push(d.fehler); return; }
+        const teil = opt.n.vonAnfang ? d.zeilen.slice(Math.max(0, opt.n.n - 1)) : opt.n.n ? d.zeilen.slice(-opt.n.n) : [];
+        zeilen.push(...teil.filter(function (z) { return TERMINAL_PLOG_GREP.test(z); }));
+      });
+      bereich = { art: 'plog', zeilen };
+    }
+  }
+  if (!bereich) return 0;
+  // -b: oberhalb des aktiven Bereichs, sonst darunter; ist die Shell aktiv, steht der neue Bereich direkt über ihr.
+  const panes = t.tmux.panes, aktiv = t.tmux.fokus === 'oben' ? panes.indexOf(t.tmux.aktiv) : -1;
+  panes.splice(aktiv < 0 ? panes.length : davor ? aktiv : aktiv + 1, 0, bereich);
+  if (bleiben) terminalTmuxPaneAnzeige(); else terminalTmuxFokusAuf(bereich);
   return 0;
 }
 async function terminalEinzelbefehl(woerter) {
@@ -1477,8 +1552,8 @@ const TERMINAL_TABELLE = [
   { name: 'wg-quick', hilfe: [[1, 4, 'wg-quick']], tab: { art: 'fest', werte: ['up wg-sat', 'down wg-sat'] }, aus: TERMINAL_PPP('wg-quick') },
   { name: 'wg', hilfe: [[1, 5, 'wg']], tab: { art: 'fest', werte: ['show wg-sat'] }, aus: TERMINAL_PPP('wg') },
   { name: 'profanity', hilfe: [[1, 6, 'profanity (/msg, /omemo, /sendfile, /quit)']], aus: TERMINAL_PPP('profanity') },
-  { name: 'tmux', hilfe: [[2, 0, 'tmux'], [2, 1, 'tmux split-window -bd predict'], [2, 2, 'Ctrl+B ↑/↓ switch pane'], [2, 3, "tmux kill-pane -t '{up-of}'"]],
-    tab: { art: 'fest', werte: ['split-window -bd predict', "kill-pane -t '{up-of}'", 'kill-server'] }, aus: function (args) { return terminalTmux(args); } }
+  { name: 'tmux', hilfe: [[2, 0, 'tmux'], [2, 1, 'tmux split-window -bd predict'], [2, 1.5, 'tmux split-window -bd plog -f'], [2, 2, 'Ctrl+B ↑/↓ switch pane'], [2, 3, "tmux kill-pane -t '{up-of}'"]],
+    tab: { art: 'fest', werte: ['split-window -bd predict', 'split-window -bd plog -f', "kill-pane -t '{up-of}'", 'kill-server'] }, aus: function (args) { return terminalTmux(args); } }
 ];
 const TERMINAL_TABELLE_INDEX = new Map(TERMINAL_TABELLE.map(function (e) { return [e.name, e]; }));
 function terminalBefehlEintrag(name) { return TERMINAL_TABELLE_INDEX.get(name) || null; }
@@ -1912,8 +1987,6 @@ function terminalKonsoleBauen() {
     'aria-controls': 'profil-terminal-kern', 'aria-expanded': 'true', 'aria-label': 'Minimieren', title: 'Minimieren' }, '−');
   const griff = h('span', { class: 'profil-terminal-groesse', 'aria-hidden': 'true' });
   const kern = h('div', { id: 'profil-terminal-kern', class: 'profil-terminal-kern' },
-      h('pre', { id: 'profil-terminal-pane', class: 'mono', 'aria-label': 'tmux: predict', hidden: true,
-        onpointerdown: function (ev) { ev.preventDefault(); terminalTmuxFokus('oben'); } }),
       h('pre', { id: 'profil-terminal-ausgabe', class: 'mono', role: 'log', 'aria-label': 'Terminalausgabe' }, t.ausgabe.join('\n')),
       h('pre', { id: 'profil-terminal-orbit', class: 'mono', 'aria-label': 'Überflug', hidden: true }),
       h('pre', { id: 'profil-terminal-chat', class: 'mono', role: 'log', 'aria-label': 'Chatverlauf', hidden: true }),
@@ -1956,6 +2029,8 @@ function terminalKonsoleBauen() {
   terminalKonsoleZeiger(griff, fenster, true);
   let breite = 0;
   const beobachter = new ResizeObserver(function () {
+    // Andere Fenstergröße: plog in tmux-Bereichen zeigt wieder die jüngsten ganzen Zeilen, die hineinpassen.
+    if (TERMINAL_ZUSTAND.tmux?.panes.length) terminalTmuxPaneAnzeige();
     if (input.clientWidth === breite) return;
     breite = input.clientWidth;
     terminalEingabeHoehe(input);
@@ -2074,23 +2149,23 @@ document.addEventListener('keydown', function (ev) {
     const pfeil = !ev.ctrlKey && !ev.altKey && !ev.metaKey && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown');
     if (pfeil && tx.wiederholBis && Date.now() < tx.wiederholBis) {
       ev.preventDefault(); ev.stopImmediatePropagation();
-      terminalTmuxFokus(ev.key === 'ArrowUp' ? 'oben' : 'unten');
+      terminalTmuxWechsel(ev.key === 'ArrowUp' ? 'hoch' : 'runter');
       tx.wiederholBis = Date.now() + 500;
       return;
     }
     if (tx.praefix && !['Control', 'Shift', 'Alt', 'Meta'].includes(ev.key)) {
       tx.praefix = false; tx.wiederholBis = 0; ev.preventDefault(); ev.stopImmediatePropagation();
       if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
-        terminalTmuxFokus(ev.key === 'ArrowUp' ? 'oben' : 'unten');
+        terminalTmuxWechsel(ev.key === 'ArrowUp' ? 'hoch' : 'runter');
         if (!ev.ctrlKey) tx.wiederholBis = Date.now() + 500;
-      } else if (ev.key === 'o') terminalTmuxFokus(tx.fokus === 'oben' ? 'unten' : 'oben');
+      } else if (ev.key === 'o') terminalTmuxWechsel('naechstes');
       return;
     }
     if (tx.wiederholBis && !['Control', 'Shift', 'Alt', 'Meta'].includes(ev.key)) tx.wiederholBis = 0;
     if (ev.ctrlKey && !ev.altKey && !ev.metaKey && ev.key.toLowerCase() === 'b') { tx.praefix = true; ev.preventDefault(); ev.stopImmediatePropagation(); return; }
     if (tx.fokus === 'oben' && ev.ctrlKey && ev.key.toLowerCase() === 'c' && !ev.repeat) {
-      // Strg+C beendet predict im oberen Fenster; tmux schließt das Fenster, der Fokus geht zurück zur Shell.
-      ev.preventDefault(); ev.stopImmediatePropagation(); terminalTmuxPaneSchliessen(); return;
+      // Strg+C beendet das Programm im aktiven oberen Bereich; tmux schließt ihn, der Fokus geht zurück zur Shell.
+      ev.preventDefault(); ev.stopImmediatePropagation(); terminalTmuxPaneSchliessen(tx.aktiv); return;
     }
     // Ist oben aktiv, gehören alle übrigen Tasten predict: kein Verlauf, keine Ergänzung, keine Eingabe unten. Escape bleibt frei.
     if (tx.fokus === 'oben' && ev.key !== 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); return; }

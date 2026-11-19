@@ -113,7 +113,7 @@ const { chatBereit } = require('./_kestrel');
     await inp.fill('cat /pgcl-eu3.arch07/dokumente/Abl');
     verzoegern = 800;
     await inp.press('Tab');
-    await p.locator('#profil-terminal-pane').click();   // Wechsel per Klick: keine Taste, die die Ergänzung ohnehin abbräche
+    await p.locator('.tmux-pane').click();   // Wechsel per Klick: keine Taste, die die Ergänzung ohnehin abbräche
     await p.waitForTimeout(1200);
     verzoegern = 0;
     await inp.press('Control+b'); await inp.press('ArrowDown');
