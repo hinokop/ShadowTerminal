@@ -849,7 +849,8 @@ function terminalPredictSetzen(el, ms) {
    (cons_alert, cons_show_error, eingehende Nachricht). */
 function terminalPppChatLog(chat, text, ziel, opt) {
   if (TERMINAL_ZUSTAND.kanal !== chat) return null;
-  const fenster = ziel || chat.fenster[0], kopf = terminalPppZeit(Date.now()) + ' ' + (opt?.zeichen || '-') + ' ';
+  // opt.zeit: Zeit der Zeile, wenn sie nicht die Ankunft ist (Verzögerungsvermerk, XEP-0203)
+  const fenster = ziel || chat.fenster[0], kopf = terminalPppZeit(opt?.zeit ?? Date.now()) + ' ' + (opt?.zeichen || '-') + ' ';
   // opt.eintrag: Zeile mit Kennung, die später an derselben Stelle ersetzt wird (Uploadstatus); die Zeit bleibt.
   const eintrag = opt?.eintrag ? { kopf, zeile: kopf + text } : kopf + text;
   fenster.log = fenster.log.concat(eintrag).slice(-70);
@@ -882,7 +883,8 @@ function terminalPppChatAus() {
   if (chat?.ui !== 'xmpp') return;
   clearTimeout(chat.abbruch);
   clearTimeout(chat.anmeldung);
-  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); clearTimeout(f.antwort); });
+  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); });
+  clearTimeout(chat.zustellung);
   terminalPppUploadsBeenden(chat);
   t.kanal = null;
   terminalVordergrundEnde(chat, 0);
@@ -938,7 +940,8 @@ function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   if (chat?.ui !== 'xmpp' || chat.phase === 'offline') return;
   chat.phase = 'offline';
   clearTimeout(chat.anmeldung);
-  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); clearTimeout(f.antwort); });
+  chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); });
+  clearTimeout(chat.zustellung);
   terminalTabReset();
   terminalTransferStop();
   // Profanity kennt die Modemursache nicht (sie steht im Syslog); es meldet den eigenen Uploadfehler und den Verbindungsabbruch.
@@ -1219,6 +1222,8 @@ async function terminalPppShell(befehl, arg, args = []) {
         chat.phase = 'eingabe';
         t.wgSat.handshake = Date.now();
         terminalPppChatLog(chat, chat.jid + ' logged in successfully, online (priority 0).'); // cons_show_login_success
+        // Nach der Anmeldung (Präsenz) stellt der Server gespeicherte Nachrichten zu.
+        terminalXmppZustellungPlanen(chat, TERMINAL_XMPP_OFFLINE_MS);
       }, 6000);
       terminalKanalPromptSync();
       return ende;
@@ -1368,7 +1373,8 @@ function terminalPppFensterNr(i) { return i === 9 ? 0 : i + 1; }
 /* XMPP-Daten im Profil (dauerhaft, wie bei Profanity in accounts und im OMEMO-Speicher):
    kontakt: Lokalteil des festen Kontakts, einmal erzeugt (mit vertrautem Fingerprint);
    omemo: OMEMO je Kontakt gemerkt (accounts_add_omemo_state, true nach /omemo start, false nach /omemo end);
-   sitzungen: Kontakte mit aufgebauter OMEMO-Sitzung (session_store): "ready" erscheint nur beim ersten Aufbau. */
+   sitzungen: Kontakte mit aufgebauter OMEMO-Sitzung (session_store): "ready" erscheint nur beim ersten Aufbau;
+   ausstehend: Nachrichten des Kontakts beim Server (XEP-0160), je { kontakt, text, zeit (Sendezeit), omemo }. */
 function terminalXmppProfil() {
   if (!PROFIL.xmpp || typeof PROFIL.xmpp !== 'object') PROFIL.xmpp = {};
   const x = PROFIL.xmpp;
@@ -1376,6 +1382,7 @@ function terminalXmppProfil() {
   if (neu) x.kontakt = terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14);
   if (!x.omemo || typeof x.omemo !== 'object') x.omemo = {};
   if (!Array.isArray(x.sitzungen)) x.sitzungen = [];
+  if (!Array.isArray(x.ausstehend)) x.ausstehend = [];
   // Ein neu erzeugter Kontakt wird sofort gespeichert, nicht erst mit dem nächsten Speichervorgang.
   if (neu) terminalXmppSpeichern();
   return x;
@@ -1503,19 +1510,49 @@ function terminalPppNachricht(chat, fenster, text) {
   const zeichen = fenster.omemo ? '~' : '-';
   terminalPppChatLog(chat, 'me: ' + text, fenster, { stumm: true, zeichen });
   if (/^auftrag (erledigt|gescheitert)\.?$/i.test(text)) {
-    // Antwort je Gespräch (wie der OMEMO-Aufbau): eine Meldung in einem anderen Fenster löscht sie nicht.
-    const kontakt = fenster.kontakt;
-    clearTimeout(fenster.antwort);
-    fenster.antwort = setTimeout(function () {
-      fenster.antwort = null;
-      if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
-      terminalPppChatLog(chat, kontakt + ': Verstanden.', fenster, { zeichen });
-      // chatwin_incoming_msg: steht man nicht im Fenster, meldet die Konsole die Nachricht (console.chat = all, cons_alert).
-      const i = chat.fenster.indexOf(fenster);
-      if (i !== chat.aktiv) terminalPppChatLog(chat, '<< chat message: ' + kontakt + ' (win ' + terminalPppFensterNr(i) + ')');
-    }, 7000);
+    // Die Nachricht ist beim Server; der Kontakt antwortet nach 7 s, gleich ob wir dann noch verbunden sind. Die Antwort
+    // hängt nicht am Fenster: jede Meldung erhält ihre eigene, auch über einen Verbindungsabbruch hinweg.
+    const x = terminalXmppProfil();
+    x.ausstehend.push({ kontakt: fenster.kontakt, text: 'Verstanden.', zeit: Date.now() + 7000, omemo: fenster.omemo });
+    terminalXmppSpeichern();
+    terminalXmppZustellungPlanen(chat);
   }
   return true;
+}
+/* Zustellung durch den Server: fällige Nachrichten gehen an eine verfügbare Sitzung (angemeldet, Link steht), sonst
+   bleiben sie gespeichert (XEP-0160) und folgen nach der nächsten Anmeldung mit Verzögerungsvermerk (XEP-0203). */
+const TERMINAL_XMPP_OFFLINE_MS = 500; // Zustellung gespeicherter Nachrichten nach der Anmeldung (angenommen)
+function terminalXmppZustellungPlanen(chat, mindestens = 0) {
+  const t = TERMINAL_ZUSTAND;
+  clearTimeout(chat.zustellung);
+  chat.zustellung = null;
+  const offen = terminalXmppProfil().ausstehend;
+  if (!offen.length || chat.phase !== 'eingabe') return;
+  const naechste = Math.min.apply(null, offen.map(function (n) { return n.zeit; }));
+  chat.zustellung = setTimeout(function () {
+    chat.zustellung = null;
+    if (t.kanal !== chat || chat.phase !== 'eingabe' || !terminalSatLinkAktiv(chat.link)) return;
+    const x = terminalXmppProfil(), jetzt = Date.now();
+    const faellig = x.ausstehend.filter(function (n) { return n.zeit <= jetzt; }).sort(function (a, b) { return a.zeit - b.zeit; });
+    x.ausstehend = x.ausstehend.filter(function (n) { return n.zeit > jetzt; });
+    terminalXmppSpeichern();
+    faellig.forEach(function (n) { terminalXmppEingang(chat, n); });
+    terminalXmppZustellungPlanen(chat);
+  }, Math.max(mindestens, naechste - Date.now()));
+}
+/* sv_ev_incoming_message: ohne Fenster für den Kontakt öffnet chatwin_new eines (ohne Fokus; OMEMO still, falls gemerkt);
+   die Zeile trägt die Sendezeit (stanza_get_oldest_delay); steht man nicht im Fenster, meldet die Konsole die Nachricht
+   (console.chat = all, cons_alert). */
+function terminalXmppEingang(chat, n) {
+  let i = chat.fenster.findIndex(function (f) { return f.kontakt === n.kontakt; });
+  if (i < 0) {
+    const omemo = terminalXmppProfil().omemo[n.kontakt] === true;
+    chat.fenster.push({ titel: n.kontakt, kontakt: n.kontakt, log: [], neu: false, omemo });
+    i = chat.fenster.length - 1;
+    if (omemo) terminalPppOmemoAufbau(chat, chat.fenster[i]);
+  }
+  terminalPppChatLog(chat, n.kontakt + ': ' + n.text, chat.fenster[i], { zeichen: n.omemo ? '~' : '-', zeit: n.zeit });
+  if (i !== chat.aktiv) terminalPppChatLog(chat, '<< chat message: ' + n.kontakt + ' (win ' + terminalPppFensterNr(i) + ')');
 }
 
 /* Dateiversand wie Profanity 0.18.2. cmd_sendfile prüft der Reihe nach Datei, Verbindung und Fenster; im OMEMO-Gespräch
