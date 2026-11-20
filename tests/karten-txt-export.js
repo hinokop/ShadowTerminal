@@ -152,13 +152,14 @@ const PF = require('./_pfad');
     const chat = p.locator('#profil-terminal-chat');
     for (const [folder, short, name] of [['dokumente', 'lageblatt-PIN-001.', 'lageblatt-PIN-001.txt'], ['ops', 'zone', 'zone-ZO-001.txt']]) {
       const arg = '/sendfile /pgcl-eu3.arch07/' + folder + '/';
-      const vorher = ((await chat.textContent()).match(/File sent successfully/g) || []).length;
+      const vorher = ((await chat.textContent()).match(/': done\n/g) || []).length;
       await input.fill(arg + short);
       await input.press('Tab');
       await p.waitForFunction(value => document.querySelector('#profil-terminal-eingabe').value === value, arg + name);
       await input.press('Enter');
-      await p.waitForFunction(n => (document.querySelector('#profil-terminal-chat').textContent.match(/File sent successfully/g) || []).length > n, vorher, { timeout: 70000 });
-      assert.ok((await chat.textContent()).split('\n').some(zeile => zeile.includes(name) && zeile.includes('100%')));
+      await p.waitForFunction(n => (document.querySelector('#profil-terminal-chat').textContent.match(/': done\n/g) || []).length > n, vorher, { timeout: 70000 });
+      // Statuszeile bis done, danach die URL mit dem Dateinamen als Nachricht
+      assert.match(await chat.textContent(), new RegExp("Uploading '" + (arg.slice(10) + name).replace(/\./g, '\\.') + "': done\\n.* - me: http://upload\\.\\S+/file_share/[0-9a-f-]{36}/" + name.replace(/\./g, '\\.') + '$'));
     }
 
     const offline = await open('');

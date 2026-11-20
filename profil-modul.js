@@ -336,10 +336,10 @@ function terminalTransferStop() {
   TERMINAL_ZUSTAND.fortschritt = '';
   terminalTransferAktualisieren();
 }
-async function terminalTransfer(name, bytes, weiter, simMs, zeitErhalten = false) {
+async function terminalTransfer(name, bytes, weiter, simMs) {
   const t = TERMINAL_ZUSTAND, start = performance.now();
   // Animation for a local copy, not a measurement of a remote network.
-  const dauer = !zeitErhalten && matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 :
+  const dauer = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 :
     (simMs ?? Math.min(6500, 550 + bytes / (1.5 * 1024)));
   do {
     if (!weiter()) return null;
@@ -768,7 +768,7 @@ function terminalPppAnzeige() {
       oben.replaceChildren(h('span', { class: 'link-kopf' }, kopf), '\n', h('span', { class: 'link-telemetrie' }, telemetrie));
     }
   }
-  const fenster = terminalPppAktiv(chat), text = fenster.log.join('\n');
+  const fenster = terminalPppAktiv(chat), text = fenster.log.map(function (e) { return e.zeile ?? e; }).join('\n');
   if (unten.textContent !== text) {
     unten.textContent = text;
     unten.scrollTop = unten.scrollHeight;
@@ -838,10 +838,18 @@ function terminalPredictSetzen(el, ms) {
    opt.stumm: kein Hinweis in der Statuszeile (cons_show, win_println); sonst wird ein nicht aktives Fenster markiert
    (cons_alert, cons_show_error, eingehende Nachricht). */
 function terminalPppChatLog(chat, text, ziel, opt) {
-  if (TERMINAL_ZUSTAND.kanal !== chat) return;
-  const fenster = ziel || chat.fenster[0];
-  fenster.log = fenster.log.concat(terminalPppZeit(Date.now()) + ' ' + (opt?.zeichen || '-') + ' ' + text).slice(-70);
+  if (TERMINAL_ZUSTAND.kanal !== chat) return null;
+  const fenster = ziel || chat.fenster[0], kopf = terminalPppZeit(Date.now()) + ' ' + (opt?.zeichen || '-') + ' ';
+  // opt.eintrag: Zeile mit Kennung, die später an derselben Stelle ersetzt wird (Uploadstatus); die Zeit bleibt.
+  const eintrag = opt?.eintrag ? { kopf, zeile: kopf + text } : kopf + text;
+  fenster.log = fenster.log.concat(eintrag).slice(-70);
   if (fenster !== chat.fenster[chat.aktiv] && !opt?.stumm) fenster.neu = true;
+  terminalPppAnzeige();
+  return eintrag;
+}
+function terminalPppEintragSetzen(chat, eintrag, text) {
+  if (!eintrag || TERMINAL_ZUSTAND.kanal !== chat) return;
+  eintrag.zeile = eintrag.kopf + text;
   terminalPppAnzeige();
 }
 function terminalPppAktiv(chat) { return chat.fenster[chat.aktiv]; }
@@ -865,6 +873,7 @@ function terminalPppChatAus() {
   clearTimeout(chat.abbruch);
   clearTimeout(chat.anmeldung);
   chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); clearTimeout(f.antwort); });
+  terminalPppUploadsBeenden(chat);
   t.kanal = null;
   terminalVordergrundEnde(chat, 0);
   terminalTabReset();
@@ -917,7 +926,6 @@ function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   if (t.wgSat) t.wgSat.handshake = null;
   const chat = t.kanal;
   if (chat?.ui !== 'xmpp' || chat.phase === 'offline') return;
-  const transfer = chat.phase === 'transfer';
   chat.phase = 'offline';
   clearTimeout(chat.anmeldung);
   chat.fenster.forEach(function (f) { clearTimeout(f.omemoAufbau); clearTimeout(f.antwort); });
@@ -925,10 +933,11 @@ function terminalPppModemAus(grund, inShell = true, neuWaehlen = false) {
   terminalTransferStop();
   // Profanity kennt die Modemursache nicht (sie steht im Syslog); es meldet den eigenen Uploadfehler und den Verbindungsabbruch.
   // Abbruch wie Profanity 0.18.2: sv_ev_lost_connection schreibt "Lost connection." in die Konsole,
-  // wins_lost_connection dieselbe Zeile in jedes andere Fenster.
-  const uploadFenster = chat.uploadFenster;
+  // wins_lost_connection dieselbe Zeile in jedes andere Fenster. Ein laufender Upload (http_file_put) scheitert mit dem
+  // Fehlertext von curl; eine noch unbeantwortete Slot-Anfrage verfällt ohne Meldung.
+  const uploads = terminalPppUploadsBeenden(chat);
   chat.abbruch = setTimeout(function () {
-    if (transfer) terminalPppChatLog(chat, 'Error uploading file: Network unreachable', uploadFenster);
+    uploads.forEach(function (u) { if (u.status) terminalPppUploadFehler(chat, u, TERMINAL_UPLOAD_ABBRUCH); });
     // Konsole per cons_show_error (cons_alert: Hinweis), die übrigen per win_println (kein Hinweis).
     chat.fenster.forEach(function (f, i) { terminalPppChatLog(chat, 'Lost connection.', f, { stumm: i > 0 }); });
   }, 750);
@@ -1359,92 +1368,100 @@ async function terminalPppChatMeldung(zeile, chat) {
     else terminalPppChatLog(chat, 'Window ' + win[1] + ' does not exist.', chat.fenster[0], { stumm: true }); // cons_show: Konsole, Fenster bleibt
     return;
   }
-  if (chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) {
-    terminalPppChatLog(chat, 'Not connected. Use /quit to return to the terminal.', fenster);
-    return;
-  }
-  if (chat.phase === 'anmeldung') { terminalPppChatLog(chat, 'Not logged in yet.'); return; }
-  // /msg öffnet (oder wählt) das Fenster des Kontakts; Befehle selbst erscheinen nicht im Verlauf.
-  if (/^\/msg\s+[a-z0-9][a-z0-9_.-]*(?:@[a-z0-9.-]+)?$/i.test(zeile)) {
-    const ziel = zeile.slice(5).trim();
-    const kontakt = ziel.endsWith('.onion') && !ziel.includes('@') ? chat.vorschlag.split('@')[0] + '@' + ziel : ziel;
-    let i = chat.fenster.findIndex(function (f) { return f.kontakt === kontakt; });
-    if (i < 0) { chat.fenster.push({ titel: kontakt, kontakt, log: [], neu: false, omemo: false }); i = chat.fenster.length - 1; }
-    terminalPppFensterWechsel(chat, i);
-    return;
-  }
-  /* OMEMO wie Profanity 0.18.2 (cmd_omemo_start/end/fingerprint). Der Fingerprint des Kontakts gilt als bereits
-     vertraut (frühere Prüfung); trustmode bleibt manual, eine Vertrauensabfrage entfällt damit. Meldungen ohne
-     Statuszeilen-Hinweis (win_println, cons_show). */
-  if (zeile === '/omemo start' || zeile === '/omemo end' || zeile === '/omemo fingerprint') {
-    const still = { stumm: true }, hinweis = { stumm: true, zeichen: '!' };
-    if (zeile === '/omemo fingerprint') {
-      if (!fenster.kontakt) {
-        terminalPppChatLog(chat, 'Your OMEMO fingerprint: ' + terminalPppFingerprint(chat.account), fenster, still);
-        terminalPppChatLog(chat, 'There is no known fingerprints for ' + chat.account, fenster, still);
-      } else {
-        terminalPppChatLog(chat, fenster.kontakt + "'s OMEMO fingerprint: " + terminalPppFingerprint(fenster.kontakt) + ' (trusted) (active)', fenster, still);
-        terminalPppChatLog(chat, "You can trust it with '/omemo trust [<contact>] <fingerprint>'", fenster, still);
-        terminalPppChatLog(chat, "You can untrust it with '/omemo untrust [<contact>] <fingerprint>'", fenster, still);
-      }
-    } else if (!fenster.kontakt) {
-      terminalPppChatLog(chat, 'You must be in a regular chat window to start an OMEMO session.', fenster, still);
-    } else if (zeile === '/omemo end') {
-      if (!fenster.omemo) terminalPppChatLog(chat, 'You are not currently in an OMEMO session.', fenster, hinweis);
-      else { fenster.omemo = false; clearTimeout(fenster.omemoAufbau); fenster.omemoAufbau = null; terminalPppAnzeige(); }
-    } else if (fenster.omemo) {
-      terminalPppChatLog(chat, 'You are already in an OMEMO session.', fenster, hinweis);
-    } else {
-      // is_omemo gilt sofort (Titel [OMEMO]); die Sitzung steht, sobald das Bundle des Kontakts über den Link da ist.
-      const kontakt = fenster.kontakt;
-      fenster.omemo = true;
-      terminalPppChatLog(chat, 'Initiating OMEMO session with ' + kontakt + '...', fenster, hinweis);
-      if (!TERMINAL_OMEMO_SITZUNGEN.has(kontakt)) {
-        fenster.omemoAufbau = setTimeout(function () {
-          fenster.omemoAufbau = null;
-          if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
-          TERMINAL_OMEMO_SITZUNGEN.add(kontakt);
-          terminalPppChatLog(chat, 'OMEMO session with ' + kontakt + ' (device ' + terminalPppGeraet(kontakt) + ') ready.', fenster, hinweis);
-        }, 3000);
-      }
+  /* Ab hier wie Profanity 0.18.2 (cmd_funcs.c, _cmd_execute_default): jeder Befehl prüft die Verbindung selbst; ein
+     unbekannter Befehl und Text in der Konsole ergeben "Unknown command: <Eingabe>" in der Konsole (cons_alert). */
+  const verbunden = chat.phase === 'eingabe' && terminalSatLinkAktiv(chat.link);
+  const konsole = chat.fenster[0], still = { stumm: true };
+  if (zeile.startsWith('/') && !zeile.startsWith('//')) {
+    const woerter = zeile.split(/\s+/), befehl = woerter[0].slice(1);
+    if (befehl === 'msg') {
+      // /msg <contact> [<message>]: Fenster öffnen oder wählen, eine Nachricht geht gleich hinaus.
+      const m = /^\/msg\s+(\S+)(?:\s+(.+))?$/.exec(zeile);
+      if (!m) { terminalPppFalscheNutzung(chat, fenster, 'msg'); return; }
+      if (!verbunden) { terminalPppChatLog(chat, 'You are not currently connected.', konsole, still); return; }
+      const ziel = m[1];
+      const kontakt = ziel.endsWith('.onion') && !ziel.includes('@') ? chat.vorschlag.split('@')[0] + '@' + ziel : ziel;
+      let i = chat.fenster.findIndex(function (f) { return f.kontakt === kontakt; });
+      if (i < 0) { chat.fenster.push({ titel: kontakt, kontakt, log: [], neu: false, omemo: false }); i = chat.fenster.length - 1; }
+      terminalPppFensterWechsel(chat, i);
+      if (m[2]) terminalPppNachricht(chat, chat.fenster[i], m[2]);
+      return;
     }
-    return;
-  }
-  if (!fenster.kontakt) { terminalPppChatLog(chat, 'No active conversation. Use /msg <contact>.', fenster); return; }
-  if (/^\/sendfile(?:\s|$)/.test(zeile)) {
-    if (chat.phase === 'transfer') { terminalPppChatLog(chat, 'An upload is already in progress.', fenster); return; }
-    const pfad = terminalArchivDateipfad(zeile.slice(9).trim());
-    if (!pfad?.length) { terminalPppChatLog(chat, 'Usage: /sendfile /' + TERMINAL_DB + '/<file>', fenster); return; }
-    chat.phase = 'transfer';
-    chat.uploadFenster = fenster;
-    const aktiv = () => t.kanal === chat && chat.phase === 'transfer' && terminalSatLinkAktiv(chat.link);
-    try {
-      const antwort = await terminalBruecke('send', pfad);
-      if (!aktiv()) return;
-      if (antwort.error) terminalPppChatLog(chat, 'Error uploading file: ' + antwort.error, fenster);
-      else {
-        terminalPppChatLog(chat, 'Sending file: /' + [TERMINAL_DB].concat(pfad).join('/') + ' (' + terminalDateigroesse(antwort.bytes) + ')', fenster);
-        const dauer = Math.min(TERMINAL_SAT_CAP_MS, Math.max(64, antwort.bytes) * 8000 / TERMINAL_SAT_RATE);
-        const fertig = await terminalTransfer(antwort.name, antwort.bytes, aktiv, dauer, true);
-        if (!aktiv()) return;
-        terminalPppChatLog(chat, fertig, fenster);
-        terminalPppChatLog(chat, 'File sent successfully.', fenster);
+    if (befehl === 'omemo') {
+      /* OMEMO wie cmd_omemo_start/end/fingerprint. Der Fingerprint des Kontakts gilt als bereits vertraut (frühere
+         Prüfung); trustmode bleibt manual, eine Vertrauensabfrage entfällt damit. Meldungen ohne Statuszeilen-Hinweis
+         (win_println, cons_show). Weitere Unterbefehle (gen, trust, untrust, …) bildet das Terminal nicht ab. */
+      const unter = woerter.length === 2 ? woerter[1] : null;
+      if (!['start', 'end', 'fingerprint'].includes(unter)) { terminalPppFalscheNutzung(chat, fenster, 'omemo'); return; }
+      if (!verbunden) { terminalPppChatLog(chat, 'You must be connected with an account to load OMEMO information.', konsole, still); return; }
+      const hinweis = { stumm: true, zeichen: '!' };
+      if (unter === 'fingerprint') {
+        if (!fenster.kontakt) {
+          terminalPppChatLog(chat, 'Your OMEMO fingerprint: ' + terminalPppFingerprint(chat.account), fenster, still);
+          terminalPppChatLog(chat, 'There is no known fingerprints for ' + chat.account, fenster, still);
+        } else {
+          terminalPppChatLog(chat, fenster.kontakt + "'s OMEMO fingerprint: " + terminalPppFingerprint(fenster.kontakt) + ' (trusted) (active)', fenster, still);
+          terminalPppChatLog(chat, "You can trust it with '/omemo trust [<contact>] <fingerprint>'", fenster, still);
+          terminalPppChatLog(chat, "You can untrust it with '/omemo untrust [<contact>] <fingerprint>'", fenster, still);
+        }
+      } else if (!fenster.kontakt) {
+        terminalPppChatLog(chat, 'You must be in a regular chat window to start an OMEMO session.', fenster, still);
+      } else if (unter === 'end') {
+        if (!fenster.omemo) terminalPppChatLog(chat, 'You are not currently in an OMEMO session.', fenster, hinweis);
+        else { fenster.omemo = false; clearTimeout(fenster.omemoAufbau); fenster.omemoAufbau = null; terminalPppAnzeige(); }
+      } else if (fenster.omemo) {
+        terminalPppChatLog(chat, 'You are already in an OMEMO session.', fenster, hinweis);
+      } else {
+        // is_omemo gilt sofort (Titel [OMEMO]); die Sitzung steht, sobald das Bundle des Kontakts über den Link da ist.
+        const kontakt = fenster.kontakt;
+        fenster.omemo = true;
+        terminalPppChatLog(chat, 'Initiating OMEMO session with ' + kontakt + '...', fenster, hinweis);
+        if (!TERMINAL_OMEMO_SITZUNGEN.has(kontakt)) {
+          fenster.omemoAufbau = setTimeout(function () {
+            fenster.omemoAufbau = null;
+            if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
+            TERMINAL_OMEMO_SITZUNGEN.add(kontakt);
+            terminalPppChatLog(chat, 'OMEMO session with ' + kontakt + ' (device ' + terminalPppGeraet(kontakt) + ') ready.', fenster, hinweis);
+          }, 3000);
+        }
       }
-    } catch (e) { if (aktiv()) terminalPppChatLog(chat, 'Error uploading file.', fenster); }
-    if (aktiv()) { terminalTransferStop(); chat.phase = 'eingabe'; }
+      return;
+    }
+    if (befehl === 'sendfile') {
+      const arg = zeile.slice(woerter[0].length).trim();
+      if (!arg || !terminalName(arg)) { terminalPppFalscheNutzung(chat, fenster, 'sendfile'); return; }
+      await terminalPppSendfile(chat, fenster, arg);
+      return;
+    }
+    terminalPppChatLog(chat, 'Unknown command: ' + zeile, konsole);
     return;
   }
-  if (zeile.startsWith('/')) { terminalPppChatLog(chat, 'Unknown command: ' + zeile.split(/\s/)[0], fenster); return; }
-  // OMEMO ohne Bundle: omemo_on_message_send findet keinen Schlüssel, die Nachricht geht nicht hinaus.
+  // "//" am Anfang: als Nachricht senden, ein "/" fällt weg.
+  const text = zeile.startsWith('//') ? zeile.slice(1) : zeile;
+  if (!fenster.kontakt) { terminalPppChatLog(chat, 'Unknown command: ' + text, konsole); return; }
+  if (!verbunden) { terminalPppChatLog(chat, 'You are not currently connected.', fenster, still); return; }
+  terminalPppNachricht(chat, fenster, text);
+}
+// ui_invalid_command_usage: Leerzeile und Hinweis in der Konsole; steht man im Gespräch, dort zusätzlich der Hinweis.
+function terminalPppFalscheNutzung(chat, fenster, befehl) {
+  const text = "Invalid usage, see '/help " + befehl + "' for details.", still = { stumm: true };
+  terminalPppChatLog(chat, '', chat.fenster[0], still);
+  terminalPppChatLog(chat, text, chat.fenster[0], still);
+  if (fenster.kontakt) terminalPppChatLog(chat, text, fenster, still);
+}
+/* Nachricht senden (cl_ev_send_msg). Im OMEMO-Gespräch ohne Bundle findet omemo_on_message_send keinen Schlüssel, die
+   Nachricht geht nicht hinaus. Rückgabe: ob sie gesendet wurde. */
+function terminalPppNachricht(chat, fenster, text) {
+  const t = TERMINAL_ZUSTAND;
   if (fenster.omemo && !TERMINAL_OMEMO_SITZUNGEN.has(fenster.kontakt)) {
     const fehler = { stumm: true, zeichen: '!' };
     terminalPppChatLog(chat, 'This message cannot be encrypted for any recipient.', fenster, fehler);
     terminalPppChatLog(chat, 'It could also be that key bundles have not been received. Try "/omemo end", then "/omemo start".', fenster, fehler);
-    return;
+    return false;
   }
   const zeichen = fenster.omemo ? '~' : '-';
-  terminalPppChatLog(chat, 'me: ' + zeile, fenster, { stumm: true, zeichen });
-  if (/^auftrag (erledigt|gescheitert)\.?$/i.test(zeile)) {
+  terminalPppChatLog(chat, 'me: ' + text, fenster, { stumm: true, zeichen });
+  if (/^auftrag (erledigt|gescheitert)\.?$/i.test(text)) {
     // Antwort je Gespräch (wie der OMEMO-Aufbau): eine Meldung in einem anderen Fenster löscht sie nicht.
     const kontakt = fenster.kontakt;
     clearTimeout(fenster.antwort);
@@ -1457,6 +1474,92 @@ async function terminalPppChatMeldung(zeile, chat) {
       if (i !== chat.aktiv) terminalPppChatLog(chat, '<< chat message: ' + kontakt + ' (win ' + terminalPppFensterNr(i) + ')');
     }, 7000);
   }
+  return true;
+}
+
+/* Dateiversand wie Profanity 0.18.2. cmd_sendfile prüft der Reihe nach Datei, Verbindung und Fenster; im OMEMO-Gespräch
+   wird die Datei vorher verschlüsselt (XEP-0454, AES-GCM, 16 Byte Tag). iq_http_upload_request holt beim Upload-Dienst
+   einen Slot (XEP-0363). http_file_put lädt hoch und schreibt dabei eine Statuszeile ins Gesprächsfenster, die an
+   derselben Stelle von "0%" bis "done" bzw. "failed: …" fortgeschrieben wird. Danach geht die URL als gewöhnliche
+   Nachricht hinaus (cl_ev_send_msg); im OMEMO-Gespräch als aesgcm://…#IV+Schlüssel. Scheitert dieser Versand (OMEMO
+   ohne Bundle), bleibt der Upload trotzdem "done": Upload und Nachricht sind zwei Schritte. */
+const TERMINAL_UPLOAD_SLOT_MS = 2000; // Slot-Anfrage hin und zurück über Tor und die Funkstrecke (angenommen)
+const TERMINAL_UPLOAD_GRENZE = 10 * 1024 * 1024; // Prosody mod_http_file_share, http_file_share_size_limit (Vorgabe)
+const TERMINAL_UPLOAD_ABBRUCH = 'Failed sending data to the peer'; // curl_easy_strerror(CURLE_SEND_ERROR), angenommen
+const TERMINAL_UPLOAD_DATEIFEHLER = ['Datei oder Ordner nicht gefunden', 'Permission denied', 'Datei nicht lesbar'];
+function terminalPppZufallHex(bytes) {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+}
+// UUID Version 4 (Slot-Kennung im Pfad des Upload-Dienstes)
+function terminalPppUuid() {
+  const h = terminalPppZufallHex(16).split('');
+  h[12] = '4';
+  h[16] = '89ab'[parseInt(h[16], 16) & 3];
+  const x = h.join('');
+  return x.slice(0, 8) + '-' + x.slice(8, 12) + '-' + x.slice(12, 16) + '-' + x.slice(16, 20) + '-' + x.slice(20);
+}
+async function terminalPppSendfile(chat, fenster, arg) {
+  const t = TERMINAL_ZUSTAND, konsole = chat.fenster[0], datei = terminalName(arg);
+  const fehler = function (text) { terminalPppChatLog(chat, text, konsole); }; // cons_show_error
+  const pfad = terminalArchivDateipfad(arg);
+  if (!pfad?.length) { fehler("Uploading '" + datei + "' failed: File not found!"); return; }
+  // chat.pruefung: Dateiprüfungen in Arbeit (Antwort der Brücke steht aus)
+  let antwort;
+  chat.pruefung = (chat.pruefung || 0) + 1;
+  try { antwort = await terminalBruecke('send', pfad); } catch (e) { antwort = { error: TERMINAL_BRUECKE_FEHLER }; }
+  finally { chat.pruefung--; }
+  if (t.kanal !== chat) return;
+  if (antwort.notfile) { fehler("Uploading '" + datei + "' failed: Not a file!"); return; }
+  if (TERMINAL_UPLOAD_DATEIFEHLER.includes(antwort.error)) { fehler("Uploading '" + datei + "' failed: File not found!"); return; }
+  // Ohne Brücke ist die Datei nicht lesbar; das ist ein Zustand des Terminals, kein Profanity-Text.
+  if (antwort.error && antwort.error !== 'Datei zu groß') { terminalPppChatLog(chat, '/sendfile: ' + antwort.error, fenster); return; }
+  if (chat.phase !== 'eingabe' || !terminalSatLinkAktiv(chat.link)) {
+    terminalPppChatLog(chat, 'You are not currently connected.', konsole, { stumm: true }); // cons_show
+    return;
+  }
+  if (!fenster.kontakt) { fehler('Unsupported window for file transmission.'); return; }
+  const omemo = fenster.omemo, dienst = 'upload.' + chat.domain;
+  const u = { fenster, datei, status: null, timer: null, takt: null };
+  const bytes = antwort.error ? Infinity : antwort.bytes + (omemo ? 16 : 0);
+  (chat.uploads ||= []).push(u);
+  const zeile = function (text) { terminalPppEintragSetzen(chat, u.status, "Uploading '" + datei + "'" + text); };
+  u.timer = setTimeout(function () {
+    if (bytes > TERMINAL_UPLOAD_GRENZE) {
+      chat.uploads = chat.uploads.filter(function (x) { return x !== u; });
+      fehler("Uploading '" + datei + "' failed for " + dienst + ': File too large');
+      return;
+    }
+    u.status = terminalPppChatLog(chat, "Uploading '" + datei + "': 0%", fenster, { stumm: true, zeichen: '!', eintrag: true });
+    const dauer = Math.min(TERMINAL_SAT_CAP_MS, Math.max(64, bytes) * 8000 / TERMINAL_SAT_RATE), start = Date.now();
+    let zuletzt = 0;
+    u.takt = setInterval(function () {
+      const anteil = Math.min(1, (Date.now() - start) / dauer);
+      if (anteil < 1) {
+        const prozent = Math.floor(anteil * 100);
+        if (prozent !== zuletzt) { zuletzt = prozent; zeile(': ' + prozent + '%'); }
+        return;
+      }
+      clearInterval(u.takt);
+      chat.uploads = chat.uploads.filter(function (x) { return x !== u; });
+      zeile(': done');
+      const url = (omemo ? 'aesgcm' : 'http') + '://' + dienst + '/file_share/' + terminalPppUuid() + '/' +
+        encodeURIComponent(antwort.name) + (omemo ? '#' + terminalPppZufallHex(12 + 32) : '');
+      terminalPppNachricht(chat, fenster, url);
+    }, 250);
+  }, TERMINAL_UPLOAD_SLOT_MS);
+}
+// Laufende Uploads und offene Slot-Anfragen anhalten (Abbruch, /quit); Rückgabe: die angehaltenen Uploads.
+function terminalPppUploadsBeenden(chat) {
+  const uploads = chat.uploads || [];
+  uploads.forEach(function (u) { clearTimeout(u.timer); clearInterval(u.takt); });
+  chat.uploads = [];
+  return uploads;
+}
+// http_file_put mit curl-Fehler: Statuszeile "failed: …" im Gesprächsfenster, dieselbe Meldung in der Konsole.
+function terminalPppUploadFehler(chat, u, grund) {
+  const text = "Uploading '" + u.datei + "' failed: " + grund;
+  terminalPppEintragSetzen(chat, u.status, text);
+  terminalPppChatLog(chat, text, chat.fenster[0]);
 }
 
 /* nmap: das installierte Nmap auf dem PC über die lokale Brücke (terminal_lokal.py). Die Argumente gehen unverändert an

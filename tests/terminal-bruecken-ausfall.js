@@ -38,7 +38,8 @@ const PF = require('./_pfad');
     assert.match(await p.locator('#profil-terminal-chat').textContent(), /START_TERMINAL\.bat erneut.*Konsolenfenster offen/);
     const datei = prefix + 'dokumente/Ablaufplan.docx';
     await taste(datei, 'Enter');
-    await ausgabe('Error uploading file: Lokale Datenbank nicht erreichbar.');
+    // Ohne Brücke ist die Datei nicht lesbar: Hinweis des Terminals, kein Profanity-Text
+    await ausgabe('/sendfile: Lokale Datenbank nicht erreichbar.');
     /* Der Windows-Starter kann einen neuen Port und Token im vorhandenen Fenster übergeben. */
     await p.evaluate(() => { location.hash = 'db=38472.' + 'b'.repeat(43); });
     await taste(prefix + 'do', 'Tab');
@@ -46,7 +47,7 @@ const PF = require('./_pfad');
     await taste(prefix + 'dokumente/Ab', 'Tab');
     await erwartet(datei);
     await inp.press('Enter');
-    await ausgabe('Sending file: /pgcl-eu3.arch07/dokumente/Ablaufplan.docx');
+    await ausgabe("Uploading '/pgcl-eu3.arch07/dokumente/Ablaufplan.docx': 0%");
     /* Wenn das App-Fenster nach der Abmeldung nicht geschlossen werden darf, keinen alten Port neu laden. */
     await p.evaluate(() => { window.close = function () {}; Zugang.beenden(); });
     await p.locator('#gate-end-fertig').waitFor({state:'visible'});

@@ -159,26 +159,29 @@ const PF = require('./_pfad');
     await tab('/sendfile /pgcl-eu3.arch07/dos', '/sendfile /pgcl-eu3.arch07/dossiers/');
     await tab('/sendfile /pgcl-eu3.arch07/dossiers/date', '/sendfile "/pgcl-eu3.arch07/dossiers/datei mit Leerzeichen.pdf"');
     const vorSend = netz.length;
+    // Profanity (cmd_sendfile): Pfade außerhalb des Archivs und fehlende Dateien ergeben "File not found!" in der Konsole.
     await zeile('/sendfile /anderer-ordner/aussen.txt');
     await zeile('/sendfile /pgcl-eu3.arch07/../aussen.txt');
     assert.equal(netz.length, vorSend);
-    assert.equal((await chatText()).match(/Usage: \/sendfile \/pgcl-eu3\.arch07\/<file>/g).length, 2);
     await zeile('/sendfile /pgcl-eu3.arch07/dossiers/fehlt.pdf');
-    await chatHat(/Error uploading file: Datei oder Ordner nicht gefunden/);
+    await zeile('/win 1');
+    await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/fehlt\.pdf' failed: File not found!/);
+    assert.equal((await chatText()).match(/failed: File not found!/g).length, 3);
+    assert.match(await chatText(), /Uploading '\/anderer-ordner\/aussen\.txt' failed: File not found!/);
+    await zeile('/win 2');
     const netzVorSend = netz.length;
-    await p.emulateMedia({reducedMotion:'no-preference'});
+    // 2 MiB: Slot-Anfrage, dann die Statuszeile bis done (Dauer auf 60 s gedeckelt), danach die URL als Nachricht.
     await zeile('/sendfile "/pgcl-eu3.arch07/dossiers/datei mit Leerzeichen.pdf"');
-    await balken.waitFor({state:'visible'});
-    assert.match(await balken.textContent(), /2(\.0)? MiB/);
+    await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/datei mit Leerzeichen\.pdf': 0%/);
+    assert.equal(await balken.isVisible(), false, 'kein eigener Fortschrittsbalken im Chat');
     await p.clock.fastForward(61000);
-    await chatHat(/File sent successfully/);
-    assert.match(await chatText(), /datei mit Leerzeichen\.pdf.*100%/);
+    await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/datei mit Leerzeichen\.pdf': done\n.* - me: http:\/\/upload\.\S+\/file_share\/[0-9a-f-]{36}\/datei%20mit%20Leerzeichen\.pdf/);
     assert.deepEqual(netz.slice(netzVorSend), [address]);
     await zeile('/sendfile /pgcl-eu3.arch07/dossiers/probe.bin');
-    await balken.waitFor({state:'visible'});
+    await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/probe\.bin': 0%/);
     await eingabe.press('Escape');
     assert.equal(await prompt.textContent(), 'root@terminal:/pgcl-eu3.arch07#');
-    assert.equal(await balken.isVisible(), false);
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal), null);
 
     const getrennt = 'successfully disconnected from relay-07.pgcl-eu3.inv:443';
     await p.emulateMedia({reducedMotion:'reduce'});
