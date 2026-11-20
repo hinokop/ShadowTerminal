@@ -73,7 +73,7 @@ const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 10
     assert.equal(await pane.locator('.predict-oben').first().evaluate(e => getComputedStyle(e).fontWeight), '700');
     const zeilePass = (await pane.textContent()).split('\n').find(z => z.startsWith(pass.name));
     const badge = await p.locator('#profil-terminal-sat').textContent();
-    assert.match(badge, /^KESTREL-\d · LOS \d\d:\d\d:\d\d$/);
+    assert.match(badge, /^KESTREL-\d · EST\. LOS \d\d:\d\d:\d\d$/);
     assert.ok(zeilePass.endsWith('(' + badge.split('LOS ')[1] + ')'), 'gleiche Rundung: ' + zeilePass + ' / ' + badge);
     /* Gleicher Zeitstand: zu beliebigen Zeitpunkten innerhalb der Sekunden zeigen Fensterkopf und PREDICT denselben Countdown */
     for (const schritt of [137, 251, 333, 89, 412, 177, 263, 501, 71, 349]) {

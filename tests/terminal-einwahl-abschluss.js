@@ -29,7 +29,7 @@ const { imUeberflug, bis: bisGilt, verbunden } = require('./_kestrel');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem.bereit), true);
     const bis = await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis);
     assert.equal(await badge.isVisible(), true, 'Countdown während der Einwahl sichtbar');
-    assert.match(await badge.textContent(), /^KESTREL-\d · LINK END \d\d:\d\d:\d\d$/);
+    assert.match(await badge.textContent(), /^KESTREL-\d · EST\. LINK END \d\d:\d\d:\d\d$/);
     await cmd('wg-quick up wg-sat'); await p.clock.runFor(700);
     await cmd('profanity'); await bisGilt(p, () => TERMINAL_ZUSTAND.kanal?.phase === 'eingabe');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal?.phase), 'eingabe');

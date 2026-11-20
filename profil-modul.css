@@ -37,7 +37,8 @@
 .profil-spark svg{width:136px;max-width:100%;height:auto}
 .profil-verlauf-raster{stroke:var(--border-strong)}
 .profil-verlauf-linie{fill:none;stroke:var(--accent);stroke-width:2}
-#profil-terminal-sat{color:#a8d293;font-size:11px;white-space:nowrap;margin-right:6px}
+#profil-terminal-sat{color:#8d96a3;font-size:11px;white-space:nowrap;margin-right:6px}
+#profil-terminal-sat.aktiv{color:#a8d293}
 #profil-terminal-orbit{flex:none;max-height:29%;border:0;border-bottom:1px solid #363f49;padding:2px 0 6px;color:inherit;background:transparent}
 #profil-terminal-chat{flex:1}
 /* profanity: Titelzeile oben (Fenster und Präsenz), Statuszeile unten (Zeit, Konto, Fenster; aktuelles -n-, Neues hervorgehoben) */
