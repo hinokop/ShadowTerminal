@@ -1165,7 +1165,7 @@ function idMigrieren(obj, karte) {
   })(obj);
 }
 const PROFIL = (function () {
-  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], ausgeblendeteKanten: [], daten: {}, seq: { eigen: 0, kante: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], idv: 2, idmap: {}, karteBlanko: false, gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
+  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], ausgeblendeteKanten: [], daten: {}, seq: { eigen: 0, kante: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], idv: 2, idmap: {}, karteBlanko: false, gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {}, xmpp: null }; };
   let p = leer();
   try {
     const raw = window.localStorage.getItem(PROFIL_KEY);
@@ -5609,11 +5609,14 @@ const ACTIONS = {
     return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + zr + rchText };
   },
   PROFIL_LEEREN: function () {
+    /* Eine offene Profanity-Sitzung gehört zum verworfenen Kontakt: sie endet samt Timern (OMEMO-Aufbau, Antworten,
+       Uploads) wie mit /quit, damit nichts davon später in das geleerte Profil zurückschreibt; PPP bleibt stehen. */
+    if (typeof terminalPppChatAus === 'function') terminalPppChatAus();
     const ids = STATE.dossiers.eigene.map(function (e) { return e.id; });
     ids.forEach(function (id) { delete STATE.dossiers.entitaeten[id]; });
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];
     const alt = PROFIL.leer(), zoneZaehler = Math.max((PROFIL.seq && PROFIL.seq.zone) || 0, (PROFIL.zonen || []).reduce(function (m, y) { const k = /^ZO-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0)), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
-    ['eigene', 'eigeneKanten', 'ausgeblendeteKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten', 'gesperrt'].forEach(function (k) { PROFIL[k] = alt[k]; });
+    ['eigene', 'eigeneKanten', 'ausgeblendeteKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten', 'gesperrt', 'xmpp'].forEach(function (k) { PROFIL[k] = alt[k]; });   /* xmpp: fester Kontakt, OMEMO-Merker, Sitzungen */
     if (PROFIL.kartenProtokoll) PROFIL.kartenProtokoll.eintraege = [];
     xPinsLoesen(new Set((PROFIL.pins || []).map(function (p) { return p.id; })));
     PROFIL.recherche.faelle.forEach(function (f) { if (xDossiers(f).some(function (id) { return ids.includes(id); })) f.dossiers = xDossiers(f).filter(function (id) { return !ids.includes(id); }); });

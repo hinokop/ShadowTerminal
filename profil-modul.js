@@ -1209,7 +1209,7 @@ async function terminalPppShell(befehl, arg, args = []) {
       const account = 'ghost@' + domain;
       const chat = { ui: 'xmpp', phase: 'anmeldung', link, fenster: [{ titel: 'Console', log: [], neu: false }], aktiv: 0, domain, account,
         jid: account + '/profanity.' + terminalPppAbleitung(account + '/resource', TERMINAL_PPP_ALNUM, 4),
-        vorschlag: terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14) + '@' + domain,
+        vorschlag: terminalXmppProfil().kontakt + '@' + domain,
         kontakt: null };
       const ende = terminalVordergrund(chat);
       t.kanal = chat;
@@ -1365,8 +1365,38 @@ function terminalPppGeraet(jid) {
 /* Fensternummer wie Profanity 0.18.2 (_wins_get_next_available_num): 1 bis 9, das zehnte Fenster 0 (Alt+0), danach 11.
    /win und der Konsolenhinweis (win N) verwenden diese Nummer; die Statuszeile zeigt das zehnte als 10 (true_win). */
 function terminalPppFensterNr(i) { return i === 9 ? 0 : i + 1; }
-// Aufgebaute OMEMO-Sitzungen (session_store, in Profanity dauerhaft): "ready" erscheint nur beim ersten Aufbau.
-const TERMINAL_OMEMO_SITZUNGEN = new Set();
+/* XMPP-Daten im Profil (dauerhaft, wie bei Profanity in accounts und im OMEMO-Speicher):
+   kontakt: Lokalteil des festen Kontakts, einmal erzeugt (mit vertrautem Fingerprint);
+   omemo: OMEMO je Kontakt gemerkt (accounts_add_omemo_state, true nach /omemo start, false nach /omemo end);
+   sitzungen: Kontakte mit aufgebauter OMEMO-Sitzung (session_store): "ready" erscheint nur beim ersten Aufbau. */
+function terminalXmppProfil() {
+  if (!PROFIL.xmpp || typeof PROFIL.xmpp !== 'object') PROFIL.xmpp = {};
+  const x = PROFIL.xmpp;
+  const neu = typeof x.kontakt !== 'string' || !/^[a-z]{14}$/.test(x.kontakt);
+  if (neu) x.kontakt = terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14);
+  if (!x.omemo || typeof x.omemo !== 'object') x.omemo = {};
+  if (!Array.isArray(x.sitzungen)) x.sitzungen = [];
+  // Ein neu erzeugter Kontakt wird sofort gespeichert, nicht erst mit dem nächsten Speichervorgang.
+  if (neu) terminalXmppSpeichern();
+  return x;
+}
+function terminalXmppSpeichern() { if (typeof profilSpeichern === 'function') profilSpeichern(); }
+const TERMINAL_OMEMO_SITZUNGEN = {
+  has: function (jid) { return terminalXmppProfil().sitzungen.includes(jid); },
+  add: function (jid) { const x = terminalXmppProfil(); if (!x.sitzungen.includes(jid)) { x.sitzungen.push(jid); terminalXmppSpeichern(); } }
+};
+function terminalOmemoMerken(jid, an) { terminalXmppProfil().omemo[jid] = an; terminalXmppSpeichern(); }
+// omemo_start_session: Bundle des Kontakts über den Link holen; "ready" nur, wenn dabei eine neue Sitzung entsteht.
+function terminalPppOmemoAufbau(chat, fenster) {
+  const t = TERMINAL_ZUSTAND, kontakt = fenster.kontakt;
+  if (TERMINAL_OMEMO_SITZUNGEN.has(kontakt)) return;
+  fenster.omemoAufbau = setTimeout(function () {
+    fenster.omemoAufbau = null;
+    if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
+    TERMINAL_OMEMO_SITZUNGEN.add(kontakt);
+    terminalPppChatLog(chat, 'OMEMO session with ' + kontakt + ' (device ' + terminalPppGeraet(kontakt) + ') ready.', fenster, { stumm: true, zeichen: '!' });
+  }, 3000);
+}
 async function terminalPppChatMeldung(zeile, chat) {
   const t = TERMINAL_ZUSTAND;
   if (zeile === '/quit') { terminalPppChatAus(); return; }
@@ -1393,7 +1423,13 @@ async function terminalPppChatMeldung(zeile, chat) {
       const ziel = m[1];
       const kontakt = ziel.endsWith('.onion') && !ziel.includes('@') ? chat.vorschlag.split('@')[0] + '@' + ziel : ziel;
       let i = chat.fenster.findIndex(function (f) { return f.kontakt === kontakt; });
-      if (i < 0) { chat.fenster.push({ titel: kontakt, kontakt, log: [], neu: false, omemo: false }); i = chat.fenster.length - 1; }
+      if (i < 0) {
+        // chatwin_new: ist OMEMO für den Kontakt gemerkt (omemo.policy automatic), startet es still, ohne Hinweiszeile.
+        const omemo = terminalXmppProfil().omemo[kontakt] === true;
+        chat.fenster.push({ titel: kontakt, kontakt, log: [], neu: false, omemo });
+        i = chat.fenster.length - 1;
+        if (omemo) terminalPppOmemoAufbau(chat, chat.fenster[i]);
+      }
       terminalPppFensterWechsel(chat, i);
       if (m[2]) terminalPppNachricht(chat, chat.fenster[i], m[2]);
       return;
@@ -1419,22 +1455,16 @@ async function terminalPppChatMeldung(zeile, chat) {
         terminalPppChatLog(chat, 'You must be in a regular chat window to start an OMEMO session.', fenster, still);
       } else if (unter === 'end') {
         if (!fenster.omemo) terminalPppChatLog(chat, 'You are not currently in an OMEMO session.', fenster, hinweis);
-        else { fenster.omemo = false; clearTimeout(fenster.omemoAufbau); fenster.omemoAufbau = null; terminalPppAnzeige(); }
+        else { fenster.omemo = false; clearTimeout(fenster.omemoAufbau); fenster.omemoAufbau = null; terminalOmemoMerken(fenster.kontakt, false); terminalPppAnzeige(); }
       } else if (fenster.omemo) {
         terminalPppChatLog(chat, 'You are already in an OMEMO session.', fenster, hinweis);
       } else {
         // is_omemo gilt sofort (Titel [OMEMO]); die Sitzung steht, sobald das Bundle des Kontakts über den Link da ist.
         const kontakt = fenster.kontakt;
         fenster.omemo = true;
+        terminalOmemoMerken(kontakt, true);
         terminalPppChatLog(chat, 'Initiating OMEMO session with ' + kontakt + '...', fenster, hinweis);
-        if (!TERMINAL_OMEMO_SITZUNGEN.has(kontakt)) {
-          fenster.omemoAufbau = setTimeout(function () {
-            fenster.omemoAufbau = null;
-            if (t.kanal !== chat || chat.phase === 'offline' || !terminalSatLinkAktiv(chat.link)) return;
-            TERMINAL_OMEMO_SITZUNGEN.add(kontakt);
-            terminalPppChatLog(chat, 'OMEMO session with ' + kontakt + ' (device ' + terminalPppGeraet(kontakt) + ') ready.', fenster, hinweis);
-          }, 3000);
-        }
+        terminalPppOmemoAufbau(chat, fenster);
       }
       return;
     }
