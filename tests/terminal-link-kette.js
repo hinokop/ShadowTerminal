@@ -115,12 +115,17 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
       const vorschlag = await inp.inputValue();
       assert.match(vorschlag, /^\/msg [a-z]{14}@[a-z2-7]{56}\.onion$/);
       await inp.press('Enter');
+      // Erster Chat: OMEMO starten, die Sitzung entsteht (ready). Zweiter Chat mit demselben festen Kontakt: OMEMO ist
+      // gemerkt und startet still, die Sitzung besteht (terminal-profanity-kontakt).
+      const erster = !(await p.evaluate(() => PROFIL.xmpp?.sitzungen?.length));
       await cmd('/omemo start');
-      await p.clock.runFor(2999); assert.doesNotMatch(await chat.textContent(), / ready\./);
-      await p.clock.runFor(1);
+      if (erster) {
+        await p.clock.runFor(2999); assert.doesNotMatch(await chat.textContent(), / ready\./);
+        await p.clock.runFor(1);
+      } else assert.match(await chat.textContent(), /! You are already in an OMEMO session\.$/);
       await cmd('/omemo fingerprint');
       // Gesprächsfenster des Kontakts: Befehle erscheinen nicht im Verlauf; OMEMO steht im Titel.
-      assert.match(await chat.textContent(), /OMEMO session with \S+ \(device \d+\) ready\.[\s\S]*'s OMEMO fingerprint: [0-9a-f-]{71} \(trusted\) \(active\)/);
+      assert.match(await chat.textContent(), new RegExp((erster ? 'OMEMO session with \\S+ \\(device \\d+\\) ready\\.[\\s\\S]*' : '') + "'s OMEMO fingerprint: [0-9a-f-]{71} \\(trusted\\) \\(active\\)"));
       assert.doesNotMatch(await chat.textContent(), /\d [-!~] \/(msg|omemo) /);
       assert.match(await p.locator('#profil-terminal-xmpp-titel').textContent(), /^[a-z]{14}@[a-z2-7]{56}\.onion \[OMEMO\]\[online\]$/);
     };
