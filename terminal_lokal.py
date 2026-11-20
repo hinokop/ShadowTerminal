@@ -1,4 +1,8 @@
-"""Local file bridge with narrow TXT export. No OS commands or generic file serving."""
+"""Local file bridge with narrow TXT export and a native nmap runner.
+
+No generic OS commands or file serving: the only program the bridge starts is the installed nmap,
+with the arguments as given (no shell). Its options are not restricted (decision by Shadow).
+"""
 import argparse
 import base64
 import hashlib
@@ -9,6 +13,10 @@ from pathlib import Path
 from contextlib import ExitStack, contextmanager
 import re
 import secrets
+import shutil
+import signal
+import codecs
+import locale
 import stat
 import subprocess
 import threading
@@ -357,13 +365,153 @@ def terminal_file_op(root, request):
     return {"text": text}
 
 
+NMAP_MAX_ARGS = 256
+NMAP_MAX_JOBS = 4
+NMAP_POLL = 1.0  # seconds a read waits for new output
+NMAP_IDLE = 30.0  # seconds without a read before a job is stopped (page closed or reloaded)
+
+
+def find_nmap():
+    exe = shutil.which("nmap")
+    if exe:
+        return exe
+    if os.name == "nt":
+        for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles")):
+            candidate = Path(base) / "Nmap" / "nmap.exe" if base else None
+            if candidate and candidate.is_file():
+                return str(candidate)
+    return None
+
+
+class NmapJob:
+    """One nmap process. stdout and stderr share one pipe, so their order is kept as nmap wrote it."""
+
+    def __init__(self, exe, args):
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        # argv[0] "nmap" wie aus einer Shell (Meldungen wie "nmap: unrecognized option"), gestartet wird exe.
+        self.proc = subprocess.Popen(
+            ["nmap", *args], executable=exe, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            shell=False, creationflags=flags,
+        )
+        self.text = []
+        self.code = None
+        self.seen = time.monotonic()
+        self.cond = threading.Condition()
+        threading.Thread(target=self._pump, daemon=True).start()
+
+    def _pump(self):
+        decoder = codecs.getincrementaldecoder(locale.getpreferredencoding(False) or "utf-8")(errors="replace")
+        stream = self.proc.stdout
+        while True:
+            chunk = stream.read1(65536)
+            text = decoder.decode(chunk, final=not chunk).replace("\r\n", "\n")
+            with self.cond:
+                if text:
+                    self.text.append(text)
+                if not chunk:
+                    self.code = self.proc.wait()
+                self.cond.notify_all()
+            if not chunk:
+                return
+
+    def read(self, start):
+        with self.cond:
+            self.seen = time.monotonic()
+            if start >= len(self.text) and self.code is None:
+                self.cond.wait(NMAP_POLL)
+            done = self.code is not None
+            return {"out": "".join(self.text[start:]), "next": len(self.text), "done": done,
+                    "code": self.code if done else None}
+
+    def stop(self):
+        """Ctrl+C: SIGINT where it exists (nmap ends on it), TerminateProcess on Windows."""
+        if self.proc.poll() is not None:
+            return
+        try:
+            if os.name == "nt":
+                self.proc.terminate()
+            else:
+                self.proc.send_signal(signal.SIGINT)
+                try:
+                    self.proc.wait(2)
+                except subprocess.TimeoutExpired:
+                    self.proc.kill()
+        except OSError:
+            pass
+
+
+class NmapJobs:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.jobs = {}
+        threading.Thread(target=self._watch, daemon=True).start()
+
+    def _watch(self):
+        while True:
+            time.sleep(5)
+            with self.lock:
+                for key, job in list(self.jobs.items()):
+                    if time.monotonic() - job.seen > NMAP_IDLE:
+                        job.stop()
+                        del self.jobs[key]
+
+    def stop_all(self):
+        with self.lock:
+            for job in self.jobs.values():
+                job.stop()
+            self.jobs.clear()
+
+    def op(self, request):
+        op = request.get("op")
+        if op == "nmap-start":
+            args = request.get("args")
+            if (not isinstance(args, list) or len(args) > NMAP_MAX_ARGS
+                    or not all(isinstance(a, str) and len(a) <= 4096 and "\x00" not in a for a in args)):
+                raise Refused
+            exe = find_nmap()
+            if not exe:
+                return {"missing": True}
+            with self.lock:
+                if len(self.jobs) >= NMAP_MAX_JOBS:
+                    return {"error": "nmap: too many running scans"}
+                try:
+                    job = NmapJob(exe, args)
+                except OSError as e:
+                    return {"error": f"nmap: {e.strerror or 'cannot execute'}"}
+                key = secrets.token_hex(8)
+                self.jobs[key] = job
+            return {"job": key}
+        key = request.get("job")
+        with self.lock:
+            job = self.jobs.get(key) if isinstance(key, str) else None
+        if job is None:
+            return {"error": "nmap: no such scan"}
+        if op == "nmap-stop":
+            job.stop()
+            with self.lock:
+                self.jobs.pop(key, None)
+            return {"ok": True}
+        if op == "nmap-read":
+            start = request.get("from")
+            if not isinstance(start, int) or isinstance(start, bool) or start < 0:
+                raise Refused
+            result = job.read(start)
+            if result["done"]:
+                with self.lock:
+                    self.jobs.pop(key, None)
+            return result
+        raise Refused
+
+
 def make_server(root, token, output=print):
     session_lock = threading.Lock()
     disconnected = threading.Event()
+    nmap = NmapJobs()
 
     def finish_session():
         with session_lock:
             if not disconnected.is_set():
+                nmap.stop_all()
                 output(f"successfully disconnected from {ARCHIVE_ENDPOINT}:443", flush=True)
                 disconnected.set()
 
@@ -419,7 +567,12 @@ def make_server(root, token, output=print):
                     finally:
                         finish_session()
                     return
-                result = {"error": "Lokale Sitzung getrennt"} if disconnected.is_set() else terminal_file_op(root, request)
+                if disconnected.is_set():
+                    result = {"error": "Lokale Sitzung getrennt"}
+                elif isinstance(request, dict) and str(request.get("op", "")).startswith("nmap-"):
+                    result = nmap.op(request)
+                else:
+                    result = terminal_file_op(root, request)
             except (Refused, PermissionError, ValueError):
                 result = {"error": "Permission denied"}
             except (FileNotFoundError, NotADirectoryError):
@@ -430,6 +583,7 @@ def make_server(root, token, output=print):
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     server.disconnected = disconnected
+    server.nmap = nmap
     return server
 
 
@@ -532,6 +686,7 @@ def main():
         except KeyboardInterrupt:
             pass
         finally:
+            server.nmap.stop_all()
             server.shutdown()
             thread.join()
 

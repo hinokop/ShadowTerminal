@@ -258,18 +258,21 @@ function terminalArbeitsverzeichnis() {
   return '/' + (t.ort ? [TERMINAL_DB].concat(t.ort) : t.virtuellerOrt || []).join('/');
 }
 async function terminalBruecke(op, parts, hidden, exportDaten) {
+  return terminalBrueckeSenden(op === 'export-txt' ? {
+    op: op, folder: exportDaten.ordner, kind: exportDaten.art, id: exportDaten.id, text: exportDaten.text,
+    last: exportDaten.last || undefined
+  } : { op: op, parts: parts, hidden: hidden });
+}
+async function terminalBrueckeSenden(daten) {
   const bruecke = terminalBrueckenAdresse();
   if (!bruecke) return { error: TERMINAL_BRUECKE_FEHLT };
   const controller = new AbortController();
-  const t = setTimeout(function () { controller.abort(); }, op === 'disconnect' ? 1500 : 7500);
+  const t = setTimeout(function () { controller.abort(); }, daten.op === 'disconnect' ? 1500 : 7500);
   try {
     const r = await fetch('http://127.0.0.1:' + bruecke[1] + '/db', {
       method: 'POST', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
       headers: { 'Content-Type': 'application/json', 'X-Shadow-Token': bruecke[2] },
-      body: JSON.stringify(op === 'export-txt' ? {
-        op: op, folder: exportDaten.ordner, kind: exportDaten.art, id: exportDaten.id, text: exportDaten.text,
-        last: exportDaten.last || undefined
-      } : { op: op, parts: parts, hidden: hidden }), signal: controller.signal
+      body: JSON.stringify(daten), signal: controller.signal
     });
     if (!r.ok) return { error: r.status === 403 ? 'Zugriff auf die lokale Datenbank verweigert. ' + TERMINAL_BRUECKE_START : TERMINAL_BRUECKE_FEHLER };
     const antwort = await r.json();
@@ -281,6 +284,7 @@ async function terminalBruecke(op, parts, hidden, exportDaten) {
 }
 function terminalSitzungTrennen() {
   terminalKanalAbbruch();
+  terminalNmapEnde(130);
   if (!terminalBrueckenAdresse()) return;
   TERMINAL_ZUSTAND.version++;
   terminalTransferStop();
@@ -420,7 +424,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   return 0;
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null, nmap: null };
 // Scrollback der Shell; größer als die längste Einzelausgabe (predict -f), damit nichts still verloren geht.
 const TERMINAL_PUFFER = 1000;
 function terminalAusgabe(zeile) {
@@ -1060,6 +1064,7 @@ function terminalShellSighup() {
     clearTimeout(t.wgSat.timer); terminalVordergrundEnde(t.wgSat, 1); t.wgSat = null;
   }
   terminalPlogEnde(1);
+  terminalNmapEnde(129);
   // Laufende Archivabfragen und Übertragungen der Shell werden verworfen (wie bei clear und Sitzungsende).
   TERMINAL_ZUSTAND.version++;
   terminalTransferStop();
@@ -1454,6 +1459,51 @@ async function terminalPppChatMeldung(zeile, chat) {
   }
 }
 
+/* nmap: das installierte Nmap auf dem PC über die lokale Brücke (terminal_lokal.py). Die Argumente gehen unverändert an
+   nmap (ohne Shell, Optionen nicht eingeschränkt); die Ausgabe (stdout und stderr in der Reihenfolge von Nmap) erscheint
+   laufend, Strg+C beendet den Prozess, $? ist Nmaps Rückgabewert. Es scannt die echten Schnittstellen des PCs; ppp0 und
+   wg-sat der Simulation spielen dafür keine Rolle. */
+function terminalNmapText(lauf, text) {
+  const teile = (lauf.rest + text).split('\n');
+  lauf.rest = teile.pop();
+  if (teile.length) terminalAusgabe(teile);
+}
+async function terminalNmap(args) {
+  const t = TERMINAL_ZUSTAND;
+  const start = await terminalBrueckeSenden({ op: 'nmap-start', args: args });
+  if (start.missing) { terminalAusgabe('nmap: command not found'); return 127; }
+  if (start.error) { terminalAusgabe(start.error); return 1; }
+  const lauf = { job: start.job, rest: '', fertig: null };
+  t.nmap = lauf;
+  const ende = terminalVordergrund(lauf);
+  (async function () {
+    let von = 0;
+    while (t.nmap === lauf) {
+      const a = await terminalBrueckeSenden({ op: 'nmap-read', job: lauf.job, from: von });
+      if (t.nmap !== lauf) return;
+      if (a.error) { terminalAusgabe(a.error); t.nmap = null; terminalVordergrundEnde(lauf, 1); return; }
+      von = a.next;
+      if (a.out) terminalNmapText(lauf, a.out);
+      if (a.done) {
+        if (lauf.rest) terminalAusgabe(lauf.rest);
+        t.nmap = null;
+        terminalVordergrundEnde(lauf, a.code < 0 ? 128 - a.code : a.code);
+        return;
+      }
+    }
+  })();
+  return ende;
+}
+// Abbruch (Strg+C: 130, SIGHUP: 129, Trennen): Prozess beenden, bereits gelieferte Ausgabe bleibt stehen.
+function terminalNmapEnde(code) {
+  const t = TERMINAL_ZUSTAND, lauf = t.nmap;
+  if (!lauf) return;
+  t.nmap = null;
+  if (lauf.rest) terminalAusgabe(lauf.rest);
+  void terminalBrueckeSenden({ op: 'nmap-stop', job: lauf.job });
+  terminalVordergrundEnde(lauf, code);
+}
+
 /* Shell-Kern: zerlegt eine Zeile in Befehle (Anführungszeichen, \-Escape, $?), verkettet mit &&, || und ;
    und führt nacheinander aus. Jeder Befehl liefert einen Rückgabewert; die Befehle selbst kennen keine Verkettung.
    Pipes, Umleitungen und Befehlsersetzung sind nicht vorhanden. */
@@ -1537,6 +1587,7 @@ function terminalStrgC() {
       terminalSatAnzeige();
     } else terminalAusgabe('^C');
     terminalPlogEnde(130);
+    terminalNmapEnde(130);
     return true;
   }
   terminalTabReset();
@@ -1791,6 +1842,7 @@ const TERMINAL_TABELLE = [
     }
     t.kette = null;
     terminalKanalAbbruch();
+    terminalNmapEnde(129);
     t.version++;
     terminalTransferStop();
     terminalKonsoleSchliessen();
@@ -1802,6 +1854,7 @@ const TERMINAL_TABELLE = [
     tab: { art: 'fest', werte: ['call kestrel updetach'], kette: 'call kestrel && tail -n 12 /var/log/syslog' }, aus: TERMINAL_PPP('pppd') },
   { name: 'poff', hilfe: [[1, 3, 'poff [kestrel]']], tab: { art: 'fest', werte: ['kestrel'], kette: 'kestrel && tail -n 6 /var/log/syslog' }, aus: TERMINAL_PPP('poff') },
   { name: 'plog', hilfe: [[1, 3.5, 'plog [-n N] [-f]']], tab: { art: 'optionen', werte: ['-f', '-n'] }, aus: function (args) { return terminalPlog(args); } },
+  { name: 'nmap', hilfe: [[0, 6.5, 'nmap <options> <target>']], aus: function (args) { return terminalNmap(args); } },
   { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
   { name: 'false', hilfe: [[0, 9, 'false']], aus: function (args, arg) { return arg ? terminalUsage('false') : 1; } },
