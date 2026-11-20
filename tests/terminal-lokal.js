@@ -170,15 +170,21 @@ const PF = require('./_pfad');
     assert.match(await chatText(), /Uploading '\/anderer-ordner\/aussen\.txt' failed: File not found!/);
     await zeile('/win 2');
     const netzVorSend = netz.length;
-    // 2 MiB: Slot-Anfrage, dann die Statuszeile bis done (Dauer auf 60 s gedeckelt), danach die URL als Nachricht.
-    await zeile('/sendfile "/pgcl-eu3.arch07/dossiers/datei mit Leerzeichen.pdf"');
-    await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/datei mit Leerzeichen\.pdf': 0%/);
-    assert.equal(await balken.isVisible(), false, 'kein eigener Fortschrittsbalken im Chat');
-    await p.clock.fastForward(61000);
-    await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/datei mit Leerzeichen\.pdf': done\n.* - me: http:\/\/upload\.\S+\/file_share\/[0-9a-f-]{36}\/datei%20mit%20Leerzeichen\.pdf/);
-    assert.deepEqual(netz.slice(netzVorSend), [address]);
+    // Kleine Datei: Slot-Anfrage, Statuszeile bis done, danach die URL als Nachricht.
     await zeile('/sendfile /pgcl-eu3.arch07/dossiers/probe.bin');
     await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/probe\.bin': 0%/);
+    assert.equal(await balken.isVisible(), false, 'kein eigener Fortschrittsbalken im Chat');
+    await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/probe\.bin': done\n.* - me: https:\/\/[a-z2-7]{56}\.onion\/file_share\/[\w-]{16}\/probe\.bin$/);
+    assert.deepEqual(netz.slice(netzVorSend), [address]);
+    // 2 MiB bei 2400 bit/s: knapp zwei Stunden, mehr als der Überflug. Der Upload beginnt und bricht bei LINK END ab;
+    // danach weder ein verspätetes done noch eine Dateinachricht.
+    await zeile('/sendfile "/pgcl-eu3.arch07/dossiers/datei mit Leerzeichen.pdf"');
+    await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/datei mit Leerzeichen\.pdf': 0%/);
+    await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now() + 1000));
+    await chatHat(/Uploading '\/pgcl-eu3\.arch07\/dossiers\/datei mit Leerzeichen\.pdf' failed: Failed sending data to the peer\n.* - Lost connection\.$/);
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal.uploads.length), 0, 'kein Upload steht mehr an');
+    await p.clock.fastForward(120000);
+    assert.doesNotMatch(await chatText(), /Leerzeichen\.pdf': done|Leerzeichen\.pdf$/);
     await eingabe.press('Escape');
     assert.equal(await prompt.textContent(), 'root@terminal:/pgcl-eu3.arch07#');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal), null);

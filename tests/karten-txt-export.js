@@ -159,7 +159,7 @@ const PF = require('./_pfad');
       await input.press('Enter');
       await p.waitForFunction(n => (document.querySelector('#profil-terminal-chat').textContent.match(/': done\n/g) || []).length > n, vorher, { timeout: 70000 });
       // Statuszeile bis done, danach die URL mit dem Dateinamen als Nachricht
-      assert.match(await chat.textContent(), new RegExp("Uploading '" + (arg.slice(10) + name).replace(/\./g, '\\.') + "': done\\n.* - me: http://upload\\.\\S+/file_share/[0-9a-f-]{36}/" + name.replace(/\./g, '\\.') + '$'));
+      assert.match(await chat.textContent(), new RegExp("Uploading '" + (arg.slice(10) + name).replace(/\./g, '\\.') + "': done\\n.* - me: https://[a-z2-7]{56}\\.onion/file_share/[\\w-]{16}/" + name.replace(/\./g, '\\.') + '$'));
     }
 
     const offline = await open('');

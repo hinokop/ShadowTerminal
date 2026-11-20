@@ -460,7 +460,7 @@ async function terminalPing() {
   }
 }
 // Übertragungsrate der Funkstrecke für /sendfile; Dauer gedeckelt.
-const TERMINAL_SAT_RATE = 2400, TERMINAL_SAT_CAP_MS = 60000;
+const TERMINAL_SAT_RATE = 2400;
 // Countdown HH:MM:SS, auf volle Sekunden aufgerundet: dieselbe Zeitbasis und Rundung in PREDICT, Kopfzeile und Chat.
 function terminalCountdown(bis, ms) {
   const sek = Math.max(0, Math.ceil((bis - ms) / 1000)), z = function (n) { return String(n).padStart(2, '0'); };
@@ -1490,13 +1490,10 @@ const TERMINAL_UPLOAD_DATEIFEHLER = ['Datei oder Ordner nicht gefunden', 'Permis
 function terminalPppZufallHex(bytes) {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
 }
-// UUID Version 4 (Slot-Kennung im Pfad des Upload-Dienstes)
-function terminalPppUuid() {
-  const h = terminalPppZufallHex(16).split('');
-  h[12] = '4';
-  h[16] = '89ab'[parseInt(h[16], 16) & 3];
-  const x = h.join('');
-  return x.slice(0, 8) + '-' + x.slice(8, 12) + '-' + x.slice(12, 16) + '-' + x.slice(16, 20) + '-' + x.slice(20);
+// Slot-Kennung im Pfad des Upload-Dienstes: Prosody hängt Slot und Dateiname an die Basis-URL; das Format der Kennung
+// (hier 16 Zeichen base64url aus 12 Zufallsbytes) ist angenommen.
+function terminalPppSlot() {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(12)))).replace(/\+/g, '-').replace(/\//g, '_');
 }
 async function terminalPppSendfile(chat, fenster, arg) {
   const t = TERMINAL_ZUSTAND, konsole = chat.fenster[0], datei = terminalName(arg);
@@ -1530,7 +1527,9 @@ async function terminalPppSendfile(chat, fenster, arg) {
       return;
     }
     u.status = terminalPppChatLog(chat, "Uploading '" + datei + "': 0%", fenster, { stumm: true, zeichen: '!', eintrag: true });
-    const dauer = Math.min(TERMINAL_SAT_CAP_MS, Math.max(64, bytes) * 8000 / TERMINAL_SAT_RATE), start = Date.now();
+    // Ohne Deckelung: in einem Überflug von etwa zehn Minuten passen rechnerisch höchstens rund 176 KiB; reicht die Zeit
+    // bis LINK END nicht, beginnt der Upload und bricht beim Linkende ab.
+    const dauer = Math.max(64, bytes) * 8000 / TERMINAL_SAT_RATE, start = Date.now();
     let zuletzt = 0;
     u.takt = setInterval(function () {
       const anteil = Math.min(1, (Date.now() - start) / dauer);
@@ -1542,7 +1541,8 @@ async function terminalPppSendfile(chat, fenster, arg) {
       clearInterval(u.takt);
       chat.uploads = chat.uploads.filter(function (x) { return x !== u; });
       zeile(': done');
-      const url = (omemo ? 'aesgcm' : 'http') + '://' + dienst + '/file_share/' + terminalPppUuid() + '/' +
+      // Basis-URL des Dienstes auf dem Onion-Host (https, XEP-0363); im OMEMO-Gespräch Schema aesgcm (format_alt_url).
+      const url = (omemo ? 'aesgcm' : 'https') + '://' + chat.domain + '/file_share/' + terminalPppSlot() + '/' +
         encodeURIComponent(antwort.name) + (omemo ? '#' + terminalPppZufallHex(12 + 32) : '');
       terminalPppNachricht(chat, fenster, url);
     }, 250);

@@ -74,7 +74,7 @@ const { chatBereit } = require('./_kestrel');
     const fertig = await text();
     assert.equal(fertig.match(/Uploading '/g).length, 1, 'eine Statuszeile, an derselben Stelle fortgeschrieben');
     assert.match(fertig, new RegExp("Uploading '" + name + "': done\\n"));
-    const url = new RegExp(Z + ' - me: http://upload\\.' + esc(chat.domain) + '/file_share/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/bericht%20final\\.txt$');
+    const url = new RegExp(Z + ' - me: https://' + esc(chat.domain) + '/file_share/[\\w-]{16}/bericht%20final\\.txt$');
     assert.match(fertig, url);
 
     /* OMEMO vor "ready": der Upload wird done, die URL geht aber nicht hinaus */
@@ -89,7 +89,7 @@ const { chatBereit } = require('./_kestrel');
     /* OMEMO mit Sitzung: aesgcm-URL mit 88 Hex-Zeichen (12 Byte IV, 32 Byte Schlüssel), Zeichen '~' */
     await cmd('/sendfile ' + D + 'kurz.txt');
     await p.clock.runFor(2500);
-    assert.match(await text(), new RegExp(Z + ' ~ me: aesgcm://upload\\.' + esc(chat.domain) + '/file_share/[0-9a-f-]{36}/kurz\\.txt#[0-9a-f]{88}$'));
+    assert.match(await text(), new RegExp(Z + ' ~ me: aesgcm://' + esc(chat.domain) + '/file_share/[\\w-]{16}/kurz\\.txt#[0-9a-f]{88}$'));
 
     /* Größengrenze des Upload-Dienstes (Prosody, 10 MiB): Fehler der Slot-Anfrage in der Konsole, keine Statuszeile */
     const vorher = (await text()).match(/Uploading '/g).length;
@@ -101,16 +101,20 @@ const { chatBereit } = require('./_kestrel');
     assert.match(await text(), new RegExp(Z + " - Uploading '" + esc(D) + "gross\\.bin' failed for upload\\." + esc(chat.domain) + ': File too large$'));
     await cmd('/win 2');
 
-    /* LOS mitten im Upload: Statuszeile "failed: <curl>", dieselbe Meldung in der Konsole, dann Lost connection. */
+    /* Restzeit reicht nicht (9 MiB bei 2400 bit/s: gut acht Stunden): der Upload beginnt und bricht bei LINK END ab;
+       Statuszeile "failed: <curl>", dieselbe Meldung in der Konsole, dann Lost connection. */
     await cmd('/sendfile ' + D + 'lang.bin');
     await p.clock.runFor(2000 + 5000);
-    assert.match(await text(), new RegExp("Uploading '" + esc(D) + "lang\\.bin': \\d+%$"));
-    await p.evaluate(() => terminalPppModemAus('Modem hangup (NO CARRIER)', true, true)); // wie beim LOS
-    await p.clock.runFor(800);
+    assert.match(await text(), new RegExp("Uploading '" + esc(D) + "lang\\.bin': 0%$"));
+    await p.clock.runFor(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now() - 1000));
+    assert.match(await text(), new RegExp("Uploading '" + esc(D) + "lang\\.bin': \\d+%$"), 'bis kurz vor LINK END läuft der Upload');
+    await p.clock.runFor(1000 + 800);
     assert.match(await text(), new RegExp("! Uploading '" + esc(D) + "lang\\.bin' failed: Failed sending data to the peer\\n" + Z + ' - Lost connection\\.$'));
     assert.doesNotMatch(await text(), /lang\.bin': \d+%/, 'die Statuszeile ist ersetzt, nicht ergänzt');
-    await p.clock.runFor(70000);
-    assert.doesNotMatch(await text(), /lang\.bin': done|lang\.bin\n/, 'nach dem Abbruch geht nichts mehr hinaus');
+    // Kein Upload steht mehr an (Takt und Slot-Zeitgeber beendet): ein spätes done ist damit ausgeschlossen.
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal.uploads.length), 0);
+    await p.clock.runFor(120000);
+    assert.doesNotMatch(await text(), /lang\.bin': done|lang\.bin$|lang\.bin\n/, 'kein verspätetes done, keine Dateinachricht');
 
     /* Ohne Verbindung: Datei zuerst geprüft, dann "not connected" in der Konsole; Text im Gespräch, /msg, /omemo */
     await cmd('/sendfile ' + D + 'fehlt.txt');

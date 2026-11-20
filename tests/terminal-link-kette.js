@@ -135,7 +135,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     await p.clock.runFor(2000); assert.match(await chat.textContent(), /! Uploading '\/pgcl-eu3\.arch07\/ops\/lagebericht final\.txt': 0%$/);
     await p.clock.runFor(14249); assert.doesNotMatch(await chat.textContent(), /: done/);
     await p.clock.runFor(1);
-    assert.match(await chat.textContent(), /Uploading '\/pgcl-eu3\.arch07\/ops\/lagebericht final\.txt': done\n\d\d:\d\d:\d\d ~ me: aesgcm:\/\/upload\.[a-z2-7]{56}\.onion\/file_share\/[0-9a-f-]{36}\/lagebericht%20final\.txt#[0-9a-f]{88}$/);
+    assert.match(await chat.textContent(), /Uploading '\/pgcl-eu3\.arch07\/ops\/lagebericht final\.txt': done\n\d\d:\d\d:\d\d ~ me: aesgcm:\/\/[a-z2-7]{56}\.onion\/file_share\/[\w-]{16}\/lagebericht%20final\.txt#[0-9a-f]{88}$/);
     await cmd('Auftrag erledigt.'); await p.clock.runFor(7000);
     assert.match(await chat.textContent(), /[a-z]{14}@[a-z2-7]{56}\.onion: Verstanden\./);
     assert.equal(await chat.isVisible(), true);
