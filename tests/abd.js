@@ -17,13 +17,15 @@ const a2=await p.evaluate(()=>({w:abdWert('asset'),s:abdStufe('asset'),m:abdS().
 chk(a2.m>=1,'Häufung (5+ Kontakte in 2 h) erzeugt Muster-Spur');
 chk(a2.s>=1,'Stufe mindestens bemerkbar');
 await due();
-chk((await last('handler',9)).some(t=>/Kontakte zu KIEBITZ|auf den Fersen|Kontaktsperre|Sperre/.test(t)),'ARGUS warnt wegen Asset-Kontakten');
+// Warnung: eine der zufällig gewählten Fassungen aus SCENARIO.abdruck.asset (Stufe 1 bis 3)
+chk(await p.evaluate(()=>{const f=[].concat(...Object.values(SCENARIO.abdruck.asset)).map(x=>x.split('{BIS}')[0]);return STATE.komm.kanaele.handler.nachrichten.slice(-9).some(m=>f.some(a=>m.text.startsWith(a)))}),'ARGUS warnt wegen Asset-Kontakten');
 // auf erkennbar treiben
 await p.evaluate(()=>dispatch({type:'ABDRUCK_REGIE',tr:'asset',d:60}));await due();await due();await due();
 const a3=await p.evaluate(()=>({s:abdStufe('asset'),sp:abdSperre()}));console.log(JSON.stringify(a3));
 chk(a3.s>=2&&!!a3.sp,'Asset erkennbar: Kontaktsperre gesetzt');
 chk((await last('handler',8)).some(t=>/bis \d\d:\d\dZ/.test(t)),'ARGUS verkündet Kontaktsperre mit Uhrzeit');
-chk((await last('asset',3)).some(t=>/Schulter|gefragt|nervös|draußen/.test(t)),'KIEBITZ reagiert nervös');
+// Stimme des Assets: eine der Fassungen aus SCENARIO.abdruck.assetStimme (Stufe 2 oder 3)
+chk(await p.evaluate(()=>{const f=[].concat(...Object.values(SCENARIO.abdruck.assetStimme));return STATE.komm.kanaele.asset.nachrichten.slice(-3).some(m=>f.includes(m.text))}),'KIEBITZ reagiert nervös');
 // Kontakt trotz Sperre
 const v0=await p.evaluate(()=>akteurDaten('handler').vertrauen);const w0=await p.evaluate(()=>abdWert('asset'));
 await p.evaluate(()=>dispatch({type:'NACHRICHT_GESENDET',kanal:'asset',text:'Ich muss dich trotzdem sprechen.',dringlichkeit:'Routine'}));await due();
