@@ -3316,13 +3316,7 @@ function abdAnteil(sp) { return sp.w * Math.pow(0.5, Math.max(0, Date.now() - Da
 function abdWert(tr) { let z = 0; abdS().spuren.forEach(function (sp) { if (sp.tr === tr) z += abdAnteil(sp); }); return Math.max(0, Math.min(100, z)); }
 function abdStufe(tr) { const w = abdWert(tr); for (let i = 0; i < ABD.stufen.length; i++) if (w < ABD.stufen[i][0]) return i; return ABD.stufen.length - 1; }
 function abdText(tr) { return ABD.stufen[abdStufe(tr)][1] + ' (' + Math.round(abdWert(tr)) + ')'; }
-function abdKlasse(tr) { const i = abdStufe(tr); return i === 0 ? '' : i === 1 ? 's-warn' : 's-crit'; }
-function abdTitel(tr) {
-  const l = abdS().spuren.filter(function (x) { return x.tr === tr && abdAnteil(x) >= 0.5; }).slice(-6).reverse();
-  return l.length ? l.map(function (x) { return '+' + Math.round(abdAnteil(x)) + ' ' + x.bez + ' (' + frische('F', x.t).text + ')'; }).join('\n') : 'Keine wirksamen Spuren.';
-}
 function abdSperre() { const A = abdS(); return A.sperreBis && Date.now() < Date.parse(A.sperreBis) ? A.sperreBis : null; }
-function abdFeld(tr) { return feld('Abdruck ' + ABD.name[tr], h('span', { class: 'label ' + abdKlasse(tr), title: abdTitel(tr) }, abdText(tr) + (tr === 'asset' && abdSperre() ? ', Kontaktsperre bis ' + fmtZ(abdSperre()).slice(11, 16) + 'Z' : ''))); }
 function abdTexte() { return SCENARIO.abdruck; }
 function abdWahl(l) { return l[Math.floor(Math.random() * l.length)]; }
 function abdPlan(kanal, text, sek) { planen(STATE, { typ: 'verlauf', kanal: kanal, auto: false, bedingung: null, text: text, faelligAm: new Date(Date.now() + sek * 1000).toISOString() }); }
