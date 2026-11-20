@@ -1516,42 +1516,68 @@ async function terminalPppSendfile(chat, fenster, arg) {
   }
   if (!fenster.kontakt) { fehler('Unsupported window for file transmission.'); return; }
   const omemo = fenster.omemo, dienst = 'upload.' + chat.domain;
-  const u = { fenster, datei, status: null, timer: null, takt: null };
   const bytes = antwort.error ? Infinity : antwort.bytes + (omemo ? 16 : 0);
+  const u = { fenster, datei, status: null, timer: null, bytes: Math.max(64, bytes), gesendet: 0, prozent: 0, omemo, name: antwort.name };
   (chat.uploads ||= []).push(u);
-  const zeile = function (text) { terminalPppEintragSetzen(chat, u.status, "Uploading '" + datei + "'" + text); };
   u.timer = setTimeout(function () {
+    u.timer = null;
+    // Die Antwort auf die Slot-Anfrage kommt nur über einen stehenden Link (auch wenn dieser Zeitgeber vor dem Link-Takt läuft).
+    if (!terminalSatLinkAktiv(chat.link)) return;
     if (bytes > TERMINAL_UPLOAD_GRENZE) {
       chat.uploads = chat.uploads.filter(function (x) { return x !== u; });
       fehler("Uploading '" + datei + "' failed for " + dienst + ': File too large');
       return;
     }
     u.status = terminalPppChatLog(chat, "Uploading '" + datei + "': 0%", fenster, { stumm: true, zeichen: '!', eintrag: true });
-    // Ohne Deckelung: in einem Überflug von etwa zehn Minuten passen rechnerisch höchstens rund 176 KiB; reicht die Zeit
-    // bis LINK END nicht, beginnt der Upload und bricht beim Linkende ab.
-    const dauer = Math.max(64, bytes) * 8000 / TERMINAL_SAT_RATE, start = Date.now();
-    let zuletzt = 0;
-    u.takt = setInterval(function () {
-      const anteil = Math.min(1, (Date.now() - start) / dauer);
-      if (anteil < 1) {
-        const prozent = Math.floor(anteil * 100);
-        if (prozent !== zuletzt) { zuletzt = prozent; zeile(': ' + prozent + '%'); }
-        return;
-      }
-      clearInterval(u.takt);
-      chat.uploads = chat.uploads.filter(function (x) { return x !== u; });
-      zeile(': done');
-      // Basis-URL des Dienstes auf dem Onion-Host (https, XEP-0363); im OMEMO-Gespräch Schema aesgcm (format_alt_url).
-      const url = (omemo ? 'aesgcm' : 'https') + '://' + chat.domain + '/file_share/' + terminalPppSlot() + '/' +
-        encodeURIComponent(antwort.name) + (omemo ? '#' + terminalPppZufallHex(12 + 32) : '');
-      terminalPppNachricht(chat, fenster, url);
-    }, 250);
+    terminalPppUploadTaktStarten(chat);
   }, TERMINAL_UPLOAD_SLOT_MS);
+}
+/* Gemeinsamer Upload-Takt je Chat (250 ms). Alle laufenden Uploads teilen sich die Funkrate (2400 bit/s): das Budget eines
+   Takts wird gleichmäßig verteilt, was ein fast fertiger Upload nicht braucht, geht an die übrigen. Ohne Deckelung passen in
+   einen Überflug von etwa zehn Minuten rechnerisch höchstens rund 176 KiB; reicht die Zeit nicht, bricht der Upload bei
+   LINK END ab. Jeder Takt prüft zuerst selbst, ob der Link noch steht: ein Upload kann nach LINK END nicht mehr done werden,
+   auch wenn dieser Takt vor dem Link-Takt läuft (terminalSatLinkAktiv löst dann den Abbruch aus). */
+function terminalPppUploadTaktStarten(chat) {
+  if (chat.uploadTakt) return;
+  chat.uploadZuletzt = Date.now();
+  chat.uploadTakt = setInterval(function () { terminalPppUploadSchritt(chat); }, 250);
+}
+function terminalPppUploadSchritt(chat) {
+  if (TERMINAL_ZUSTAND.kanal !== chat || !terminalSatLinkAktiv(chat.link)) return;
+  const jetzt = Date.now();
+  let budget = (jetzt - chat.uploadZuletzt) * TERMINAL_SAT_RATE / 8000;
+  chat.uploadZuletzt = jetzt;
+  const laufend = chat.uploads.filter(function (u) { return u.status && u.gesendet < u.bytes; })
+    .sort(function (a, b) { return (a.bytes - a.gesendet) - (b.bytes - b.gesendet); });
+  laufend.forEach(function (u, i) {
+    const anteil = Math.min(u.bytes - u.gesendet, budget / (laufend.length - i));
+    u.gesendet += anteil;
+    budget -= anteil;
+  });
+  // Ausgabe in der Reihenfolge, in der die Uploads begonnen haben
+  chat.uploads.filter(function (u) { return laufend.includes(u); }).forEach(function (u) {
+    const zeile = function (text) { terminalPppEintragSetzen(chat, u.status, "Uploading '" + u.datei + "'" + text); };
+    if (u.gesendet < u.bytes - 1e-6) {
+      const prozent = Math.floor(100 * u.gesendet / u.bytes);
+      if (prozent !== u.prozent) { u.prozent = prozent; zeile(': ' + prozent + '%'); }
+      return;
+    }
+    u.gesendet = u.bytes;
+    chat.uploads = chat.uploads.filter(function (x) { return x !== u; });
+    zeile(': done');
+    // Basis-URL des Dienstes auf dem Onion-Host (https, XEP-0363); im OMEMO-Gespräch Schema aesgcm (format_alt_url).
+    const url = (u.omemo ? 'aesgcm' : 'https') + '://' + chat.domain + '/file_share/' + terminalPppSlot() + '/' +
+      encodeURIComponent(u.name) + (u.omemo ? '#' + terminalPppZufallHex(12 + 32) : '');
+    terminalPppNachricht(chat, u.fenster, url);
+  });
+  if (!chat.uploads.some(function (u) { return u.status; })) { clearInterval(chat.uploadTakt); chat.uploadTakt = null; }
 }
 // Laufende Uploads und offene Slot-Anfragen anhalten (Abbruch, /quit); Rückgabe: die angehaltenen Uploads.
 function terminalPppUploadsBeenden(chat) {
   const uploads = chat.uploads || [];
-  uploads.forEach(function (u) { clearTimeout(u.timer); clearInterval(u.takt); });
+  uploads.forEach(function (u) { clearTimeout(u.timer); });
+  clearInterval(chat.uploadTakt);
+  chat.uploadTakt = null;
   chat.uploads = [];
   return uploads;
 }

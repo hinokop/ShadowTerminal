@@ -16,7 +16,7 @@ const { chatBereit } = require('./_kestrel');
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
     // Brücke: Dateien im Ordner ops; "gross.bin" über Prosodys 10 MiB; "ordner" ist ein Verzeichnis.
-    const dateien = { 'bericht final.txt': 4200, 'kurz.txt': 40, 'gross.bin': 11 * 1024 * 1024, 'lang.bin': 9 * 1024 * 1024 };
+    const dateien = { 'bericht final.txt': 4200, 'kurz.txt': 40, 'a.txt': 3000, 'b.txt': 3000, 'gross.bin': 11 * 1024 * 1024, 'lang.bin': 9 * 1024 * 1024 };
     await p.route(/^https?:/, async r => {
       const req = r.request();
       if (req.url() !== 'http://127.0.0.1:45678/db') return r.abort();
@@ -91,6 +91,15 @@ const { chatBereit } = require('./_kestrel');
     await p.clock.runFor(2500);
     assert.match(await text(), new RegExp(Z + ' ~ me: aesgcm://' + esc(chat.domain) + '/file_share/[\\w-]{16}/kurz\\.txt#[0-9a-f]{88}$'));
 
+    /* Zwei Uploads gleichzeitig teilen sich die 2400 bit/s: je 3016 B (OMEMO) allein 10 s, zusammen 20 s */
+    await cmd('/sendfile ' + D + 'a.txt');
+    await cmd('/sendfile ' + D + 'b.txt');
+    await p.clock.runFor(2000 + 15000);
+    assert.doesNotMatch(await text(), /[ab]\.txt': done/, 'nach 15 s ist keiner fertig');
+    assert.match(await text(), new RegExp("Uploading '" + esc(D) + "a\\.txt': (7[0-9])%\\n" + Z + " ! Uploading '" + esc(D) + "b\\.txt': (7[0-9])%$"));
+    await p.clock.runFor(5500);
+    assert.match(await text(), new RegExp("a\\.txt': done\\n" + Z + " ! Uploading '" + esc(D) + "b\\.txt': done\\n" + Z + ' ~ me: aesgcm://\\S+/a\\.txt#[0-9a-f]{88}\\n' + Z + ' ~ me: aesgcm://\\S+/b\\.txt#[0-9a-f]{88}$'));
+
     /* Größengrenze des Upload-Dienstes (Prosody, 10 MiB): Fehler der Slot-Anfrage in der Konsole, keine Statuszeile */
     const vorher = (await text()).match(/Uploading '/g).length;
     await cmd('/sendfile ' + D + 'gross.bin');
@@ -106,10 +115,19 @@ const { chatBereit } = require('./_kestrel');
     await cmd('/sendfile ' + D + 'lang.bin');
     await p.clock.runFor(2000 + 5000);
     assert.match(await text(), new RegExp("Uploading '" + esc(D) + "lang\\.bin': 0%$"));
-    await p.clock.runFor(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now() - 1000));
-    assert.match(await text(), new RegExp("Uploading '" + esc(D) + "lang\\.bin': \\d+%$"), 'bis kurz vor LINK END läuft der Upload');
-    await p.clock.runFor(1000 + 800);
-    assert.match(await text(), new RegExp("! Uploading '" + esc(D) + "lang\\.bin' failed: Failed sending data to the peer\\n" + Z + ' - Lost connection\\.$'));
+    /* Ein Upload, der kurz nach LINK END fertig würde, darf nicht mehr done melden, auch wenn sein Takt vor dem Link-Takt
+       läuft: der Link-Takt ist angehalten, der Upload muss LINK END selbst bemerken. */
+    await p.clock.runFor(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now() - 2100));
+    await p.evaluate(() => clearInterval(TERMINAL_ZUSTAND.satLink.timer));
+    const zaehl = async m => ((await text()).match(m) || []).length;
+    const fertigVorher = await zaehl(/kurz\.txt': done/g), linksVorher = await zaehl(/kurz\.txt#/g);
+    await cmd('/sendfile ' + D + 'kurz.txt');
+    await p.clock.runFor(2000);
+    assert.match(await text(), new RegExp("Uploading '" + esc(D) + "lang\\.bin': \\d+%\\n" + Z + " ! Uploading '" + esc(D) + "kurz\\.txt': 0%$"), 'bis kurz vor LINK END laufen beide');
+    await p.clock.runFor(100 + 250 + 800);
+    assert.deepEqual([await zaehl(/kurz\.txt': done/g), await zaehl(/kurz\.txt#/g)], [fertigVorher, linksVorher], 'kein done und kein Link nach LINK END');
+    assert.match(await text(), new RegExp("kurz\\.txt' failed: Failed sending data to the peer\\n" + Z + ' - Lost connection\\.$'));
+    assert.match(await text(), new RegExp("! Uploading '" + esc(D) + "lang\\.bin' failed: Failed sending data to the peer\\n" + Z + " ! Uploading '"));
     assert.doesNotMatch(await text(), /lang\.bin': \d+%/, 'die Statuszeile ist ersetzt, nicht ergänzt');
     // Kein Upload steht mehr an (Takt und Slot-Zeitgeber beendet): ein spätes done ist damit ausgeschlossen.
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal.uploads.length), 0);
