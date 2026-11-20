@@ -29,7 +29,8 @@ const v0=await p.evaluate(()=>akteurDaten('handler').vertrauen);const w0=await p
 await p.evaluate(()=>dispatch({type:'NACHRICHT_GESENDET',kanal:'asset',text:'Ich muss dich trotzdem sprechen.',dringlichkeit:'Routine'}));await due();
 chk(await p.evaluate(()=>abdS().spuren.some(x=>/trotz Kontaktsperre/.test(x.bez))),'Kontakt in der Sperre zählt doppelt/vermerkt');
 chk(await p.evaluate(v=>akteurDaten('handler').vertrauen<v,v0),'ARGUS-Vertrauen sinkt bei Kontakt trotz Sperre');
-chk((await last('handler',9)).some(t=>/kein Kontakt|Kontaktsperre heißt|trotz Sperre|Notfall/.test(t)),'ARGUS rügt');
+// Rüge: eine der drei Fassungen aus SCENARIO.abdruck.ruege (zufällig gewählt)
+chk(await p.evaluate(()=>STATE.komm.kanaele.handler.nachrichten.slice(-9).some(m=>SCENARIO.abdruck.ruege.includes(m.text))),'ARGUS rügt');
 const n1=(await last('handler',20)).length;
 await p.evaluate(()=>dispatch({type:'NACHRICHT_GESENDET',kanal:'asset',text:'Und noch einmal.',dringlichkeit:'Routine'}));await due();
 chk(await p.evaluate(()=>{const r=abdS().letzteRuege;return Date.now()-Date.parse(r)<1200000}),'Rüge wird gedrosselt (kein Spam in 20 min)');
@@ -69,7 +70,8 @@ const ab=(await last('handler',2)).join(' | ');console.log(ab);
 chk(/Legende bemerkbar/.test(ab)&&/Ausweichort/.test(ab)&&!/\d{2}\)/.test(ab),'ARGUS nennt Stufen und Hauptgrund, ohne Zahlen');
 // UI
 await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'profil'}));await p.waitForTimeout(400);
-chk(await p.evaluate(()=>/Abdruck Legende/i.test(document.body.innerText)&&/Abdruck Asset/i.test(document.body.innerText)),'Profil zeigt beide Abdruck-Zeilen');
+// Seit cbc12c3 (Arbeitsprofil) zeigt das Profil keine Abdruck-Zeilen mehr; der Abdruck steht in der Regie (profil-arbeitsansicht prüft das Profil).
+chk(await p.evaluate(()=>!/Abdruck Legende|Abdruck Asset/i.test($('main').innerText)),'Profil ohne Abdruck-Zeilen (Arbeitsprofil)');
 await p.evaluate(()=>oeffneRegie());await p.waitForTimeout(300);
 chk(await p.evaluate(()=>!!$('rg-abd-l')&&!!$('rg-abd-0')),'Regie: Abdruck-Schalter');
 await p.click('#rg-abd-0');await p.waitForTimeout(300);chk(await p.evaluate(()=>abdWert('legende')===0&&!abdSperre()),'Regie: Spuren löschen');
