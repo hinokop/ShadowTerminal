@@ -2323,6 +2323,20 @@ function terminalVerlaufTaste(ev) {
 }
 function terminalTabTaste(ev) {
   const offen = terminalTabAuswahl;
+  /* Strg+→ wie Oh My Zsh mit zsh-autosuggestions: forward-word (lib/key-bindings.zsh, ^[[1;5C) mit WORDCHARS=''
+     (lib/completion.zsh), also nur Buchstaben und Ziffern als Wortzeichen; forward-word überspringt Wortzeichen, dann
+     Nicht-Wortzeichen (zle_word.c). Mit Vorschlag übernimmt es ihn bis dorthin (_zsh_autosuggest_partial_accept),
+     sonst bewegt es nur den Cursor. Im Chat (profanity, eigener Zeileneditor) bleibt die Taste beim Browser. */
+  if (ev.key === 'ArrowRight' && ev.ctrlKey && !ev.shiftKey && !ev.altKey && !ev.metaKey && !offen && !ev.isComposing && !TERMINAL_ZUSTAND.kanal) {
+    const input = ev.currentTarget, rest = terminalVorschlag(), voll = input.value + rest, wort = /[\p{L}\p{N}]/u;
+    let i = input.selectionEnd;
+    while (i < voll.length && wort.test(voll[i])) i++;
+    while (i < voll.length && !wort.test(voll[i])) i++;
+    ev.preventDefault();
+    if (rest && i > input.value.length) terminalEingabeSetzen(input, voll.slice(0, i));
+    else { input.setSelectionRange(i, i); terminalVorschlagAnzeige(); }
+    return;
+  }
   if ((ev.key === 'ArrowRight' || ev.key === 'End') && !offen && !ev.isComposing && ev.keyCode !== 229 && !ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
     const rest = terminalVorschlag(), input = ev.currentTarget;
     if (rest && input.selectionStart === input.value.length) { ev.preventDefault(); terminalEingabeSetzen(input, input.value + rest); return; }
