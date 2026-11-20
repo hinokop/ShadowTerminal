@@ -5613,7 +5613,7 @@ const ACTIONS = {
     ids.forEach(function (id) { delete STATE.dossiers.entitaeten[id]; });
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];
     const alt = PROFIL.leer(), zoneZaehler = Math.max((PROFIL.seq && PROFIL.seq.zone) || 0, (PROFIL.zonen || []).reduce(function (m, y) { const k = /^ZO-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0)), pinZaehler = Math.max((PROFIL.seq && PROFIL.seq.pin) || 0, (PROFIL.pins || []).reduce(function (m, y) { const k = /^PIN-(\d+)$/.exec(y.id || ''); return k ? Math.max(m, Number(k[1])) : m; }, 0));
-    ['eigene', 'eigeneKanten', 'ausgeblendeteKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten', 'gesperrt'].forEach(function (k) { PROFIL[k] = alt[k]; });
+    ['eigene', 'eigeneKanten', 'ausgeblendeteKanten', 'daten', 'seq', 'bilder', 'galerie', 'koord', 'ausgang', 'aenderungen', 'dossierDaten', 'gesperrt', 'xmpp'].forEach(function (k) { PROFIL[k] = alt[k]; });   /* xmpp: fester Kontakt, OMEMO-Merker, Sitzungen */
     if (PROFIL.kartenProtokoll) PROFIL.kartenProtokoll.eintraege = [];
     xPinsLoesen(new Set((PROFIL.pins || []).map(function (p) { return p.id; })));
     PROFIL.recherche.faelle.forEach(function (f) { if (xDossiers(f).some(function (id) { return ids.includes(id); })) f.dossiers = xDossiers(f).filter(function (id) { return !ids.includes(id); }); });

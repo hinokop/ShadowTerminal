@@ -29,6 +29,16 @@ const { chatBereit, bis } = require('./_kestrel');
     const kontakt = await p.evaluate(() => TERMINAL_ZUSTAND.kanal.vorschlag);
     assert.match(kontakt, /^[a-z]{14}@[a-z2-7]{56}\.onion$/);
 
+    /* Neuladen gleich nach dem ersten Start, ohne OMEMO oder einen anderen Speichervorgang: derselbe Kontakt */
+    const neuLaden = async () => {
+      await p.clock.resume();
+      await p.reload(); await anmelden();
+      await chatBereit(p, { kontakt: false });
+      await p.clock.pauseAt(await p.evaluate(() => Date.now() + 1000));
+    };
+    await neuLaden();
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal.vorschlag), kontakt, 'Kontakt beim Erzeugen gespeichert');
+
     /* OMEMO einmal starten: Sitzung entsteht (ready), der Kontakt ist für OMEMO gemerkt */
     await cmd('/msg ' + kontakt);
     await cmd('/omemo start');
@@ -47,10 +57,7 @@ const { chatBereit, bis } = require('./_kestrel');
     assert.match(await verlauf.textContent(), /^\d\d:\d\d:\d\d ~ me: Lage unverändert\.$/, 'Sitzung besteht: sofort verschlüsselt, keine Hinweiszeile');
 
     /* Neu laden: Kontakt und OMEMO-Zustand bleiben (Profil) */
-    await p.clock.resume();
-    await p.reload(); await anmelden();
-    await chatBereit(p, { kontakt: false });
-    await p.clock.pauseAt(await p.evaluate(() => Date.now() + 1000));
+    await neuLaden();
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal.vorschlag), kontakt);
     await cmd('/msg ' + kontakt);
     assert.equal(await titel.textContent(), kontakt + ' [OMEMO][online]');
@@ -68,6 +75,16 @@ const { chatBereit, bis } = require('./_kestrel');
     await cmd('/omemo start');
     await p.clock.runFor(3100);
     assert.match(await verlauf.textContent(), /^\d\d:\d\d:\d\d ! Initiating OMEMO session with \S+\.\.\.$/);
+
+    /* Profil leeren: Kontakt, OMEMO-Merker und Sitzungen werden verworfen; danach ein neuer Kontakt ohne OMEMO */
+    await cmd('/quit');
+    await p.evaluate(() => dispatch({ type: 'PROFIL_LEEREN' }));
+    await neuLaden();
+    const neu = await p.evaluate(() => TERMINAL_ZUSTAND.kanal.vorschlag);
+    assert.notEqual(neu, kontakt, 'nach dem Leeren ein neuer Kontakt');
+    assert.deepEqual(await p.evaluate(() => [Object.keys(PROFIL.xmpp.omemo), PROFIL.xmpp.sitzungen]), [[], []]);
+    await cmd('/msg ' + neu);
+    assert.equal(await titel.textContent(), neu + '[online]');
     assert.deepEqual(errors, []);
     console.log('OK: fester Kontakt im Profil, OMEMO je Kontakt gemerkt, Sitzung bleibt');
   } finally { await b.close(); }

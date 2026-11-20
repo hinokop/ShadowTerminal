@@ -1372,9 +1372,12 @@ function terminalPppFensterNr(i) { return i === 9 ? 0 : i + 1; }
 function terminalXmppProfil() {
   if (!PROFIL.xmpp || typeof PROFIL.xmpp !== 'object') PROFIL.xmpp = {};
   const x = PROFIL.xmpp;
-  if (typeof x.kontakt !== 'string' || !/^[a-z]{14}$/.test(x.kontakt)) x.kontakt = terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14);
+  const neu = typeof x.kontakt !== 'string' || !/^[a-z]{14}$/.test(x.kontakt);
+  if (neu) x.kontakt = terminalKanalZeichen('abcdefghijklmnopqrstuvwxyz', 14);
   if (!x.omemo || typeof x.omemo !== 'object') x.omemo = {};
   if (!Array.isArray(x.sitzungen)) x.sitzungen = [];
+  // Ein neu erzeugter Kontakt wird sofort gespeichert, nicht erst mit dem nächsten Speichervorgang.
+  if (neu) terminalXmppSpeichern();
   return x;
 }
 function terminalXmppSpeichern() { if (typeof profilSpeichern === 'function') profilSpeichern(); }
