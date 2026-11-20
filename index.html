@@ -5609,6 +5609,9 @@ const ACTIONS = {
     return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + zr + rchText };
   },
   PROFIL_LEEREN: function () {
+    /* Eine offene Profanity-Sitzung gehört zum verworfenen Kontakt: sie endet samt Timern (OMEMO-Aufbau, Antworten,
+       Uploads) wie mit /quit, damit nichts davon später in das geleerte Profil zurückschreibt; PPP bleibt stehen. */
+    if (typeof terminalPppChatAus === 'function') terminalPppChatAus();
     const ids = STATE.dossiers.eigene.map(function (e) { return e.id; });
     ids.forEach(function (id) { delete STATE.dossiers.entitaeten[id]; });
     STATE.dossiers.eigene = []; STATE.dossiers.eigeneKanten = [];

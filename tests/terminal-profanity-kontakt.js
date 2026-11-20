@@ -76,9 +76,17 @@ const { chatBereit, bis } = require('./_kestrel');
     await p.clock.runFor(3100);
     assert.match(await verlauf.textContent(), /^\d\d:\d\d:\d\d ! Initiating OMEMO session with \S+\.\.\.$/);
 
-    /* Profil leeren: Kontakt, OMEMO-Merker und Sitzungen werden verworfen; danach ein neuer Kontakt ohne OMEMO */
-    await cmd('/quit');
+    /* Profil leeren bei offenem Chat, während eine OMEMO-Sitzung aufgebaut wird: profanity endet samt Timern (wie /quit),
+       die PPP-Verbindung bleibt; kein spätes ready, die Sitzung des verworfenen Kontakts wird nicht wieder gespeichert. */
+    const zweiter = 'zweiter@' + kontakt.split('@')[1];
+    await cmd('/msg ' + zweiter);
+    await cmd('/omemo start');
+    assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.kanal.fenster.at(-1).omemoAufbau), true);
     await p.evaluate(() => dispatch({ type: 'PROFIL_LEEREN' }));
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal), null, 'profanity beendet');
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem?.phase), 'up', 'PPP bleibt');
+    await p.clock.runFor(3100);
+    assert.equal(await p.evaluate(() => PROFIL.xmpp), null, 'nichts wieder gespeichert');
     await neuLaden();
     const neu = await p.evaluate(() => TERMINAL_ZUSTAND.kanal.vorschlag);
     assert.notEqual(neu, kontakt, 'nach dem Leeren ein neuer Kontakt');
