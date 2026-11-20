@@ -1165,7 +1165,7 @@ function idMigrieren(obj, karte) {
   })(obj);
 }
 const PROFIL = (function () {
-  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], ausgeblendeteKanten: [], daten: {}, seq: { eigen: 0, kante: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], idv: 2, idmap: {}, karteBlanko: false, gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {} }; };
+  const leer = function () { return { v: 1, eigene: [], eigeneKanten: [], ausgeblendeteKanten: [], daten: {}, seq: { eigen: 0, kante: 0, ausgang: 0 }, bilder: {}, galerie: {}, koord: {}, ausgang: [], pins: [], zonen: [], idv: 2, idmap: {}, karteBlanko: false, gesperrt: [], aenderungen: {}, dossierDaten: {}, tausch: {}, identitaet: null, dokFristen: {}, xmpp: null }; };
   let p = leer();
   try {
     const raw = window.localStorage.getItem(PROFIL_KEY);
