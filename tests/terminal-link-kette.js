@@ -129,9 +129,13 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     const ziel = '/sendfile "/pgcl-eu3.arch07/ops/lagebericht final.txt"';
     for (let i = 0; i < 100 && await inp.inputValue() !== ziel; i++) await new Promise(r => setTimeout(r, 10));
     assert.equal(await inp.inputValue(), ziel);
-    await inp.press('Enter'); await progress.waitFor({ state: 'visible' });
-    await p.clock.runFor(13999); assert.doesNotMatch(await chat.textContent(), /File sent successfully/);
-    await p.clock.runFor(1); assert.match(await chat.textContent(), /File sent successfully/);
+    // Slot-Anfrage 2 s, dann 4200 B + 16 B GCM-Tag (OMEMO) bei 2400 bit/s = 14,05 s; Statuszeile im Takt von 250 ms.
+    await inp.press('Enter'); for (let i = 0; i < 100 && await p.evaluate(() => TERMINAL_ZUSTAND.kanal.pruefung); i++) await new Promise(r => setTimeout(r, 10));
+    assert.equal(await progress.isVisible(), false, 'kein eigener Fortschrittsbalken');
+    await p.clock.runFor(2000); assert.match(await chat.textContent(), /! Uploading '\/pgcl-eu3\.arch07\/ops\/lagebericht final\.txt': 0%$/);
+    await p.clock.runFor(14249); assert.doesNotMatch(await chat.textContent(), /: done/);
+    await p.clock.runFor(1);
+    assert.match(await chat.textContent(), /Uploading '\/pgcl-eu3\.arch07\/ops\/lagebericht final\.txt': done\n\d\d:\d\d:\d\d ~ me: aesgcm:\/\/[a-z2-7]{56}\.onion\/file_share\/[\w-]{16}\/lagebericht%20final\.txt#[0-9a-f]{88}$/);
     await cmd('Auftrag erledigt.'); await p.clock.runFor(7000);
     assert.match(await chat.textContent(), /[a-z]{14}@[a-z2-7]{56}\.onion: Verstanden\./);
     assert.equal(await chat.isVisible(), true);
@@ -153,19 +157,20 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     assert.equal((await out.textContent()).split('poff kestrel && tail').at(-1).match(/Terminating on signal 15/g).length, 1, 'Abbau genau einmal, im Syslog');
 
     await bereit();
-    bytes = 20_000_000;
+    bytes = 9_000_000; // unter Prosodys 10 MiB, Dauer auf 60 s gedeckelt: der LOS bricht den Upload ab
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now() - 4000));
-    await cmd(ziel); await progress.waitFor({ state: 'visible' });
-    await p.clock.runFor(4000);
+    await cmd(ziel); for (let i = 0; i < 100 && await p.evaluate(() => TERMINAL_ZUSTAND.kanal.pruefung); i++) await new Promise(r => setTimeout(r, 10));
+    await p.clock.runFor(2000); assert.match(await chat.textContent(), /lagebericht final\.txt': 0%$/);
+    await p.clock.runFor(2000);
     // LOS: Chat offline, der KESTREL-Block verschwindet; die Ursache steht im Chatverlauf.
     assert.equal(await orbit.isVisible(), false);
     assert.doesNotMatch(await chat.textContent(), /pppd:/, 'die Modemursache steht im Syslog, nicht im Chat');
     assert.equal(await progress.isVisible(), false);
-    assert.doesNotMatch(await chat.textContent(), /Error uploading file/);
+    assert.doesNotMatch(await chat.textContent(), /failed:/);
     await p.clock.runFor(750);
-    assert.match(await chat.textContent(), /Network unreachable[\s\S]*Lost connection\./);
+    assert.match(await chat.textContent(), /! Uploading '\/pgcl-eu3\.arch07\/ops\/lagebericht final\.txt' failed: Failed sending data to the peer\n\d\d:\d\d:\d\d - Lost connection\.$/);
     await p.clock.fastForward(61000);
-    assert.doesNotMatch(await chat.textContent(), /File sent successfully/);
+    assert.doesNotMatch(await chat.textContent(), /lagebericht final\.txt': done|- me: /, 'nach dem Abbruch geht nichts hinaus');
     await cmd('/quit');
     // persist: nach dem Hangup bleibt pppd und wählt neu (ohne Verbindung); der Tunnel hat keinen Handshake mehr.
     assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.bereit && TERMINAL_ZUSTAND.wgSat.handshake === null), true);

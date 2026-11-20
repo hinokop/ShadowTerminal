@@ -68,7 +68,7 @@ const { chatBereit } = require('./_kestrel');
     assert.equal(await inp.inputValue(), '/sendfile /pgcl-eu3.arch07/dokumente/A');
     await inp.press('Tab'); assert.equal(await inp.inputValue(), '/sendfile /pgcl-eu3.arch07/dokumente/Ablaufplan.docx');
     await inp.press('Enter');
-    assert.doesNotMatch(await p.locator('#profil-terminal-chat').textContent(), /Sending file/, 'Enter wählt nur aus');
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal.uploads?.length || 0), 0, 'Enter wählt nur aus');
     const chatText = () => p.locator('#profil-terminal-chat').textContent();
     const pfad = '/sendfile /pgcl-eu3.arch07/dokumente/';
     /* Pfeiltasten bei offener Liste: ←/→ Eintrag, ↓/↑ Zeile; ohne Liste bleibt der Verlauf zuständig */
@@ -100,9 +100,9 @@ const { chatBereit } = require('./_kestrel');
     assert.deepEqual(await eintraege(), ['A', 'A.txt']);
     await inp.press('Enter');
     assert.equal(await liste.isVisible(), false); assert.equal(await inp.inputValue(), pfad + 'A');
-    assert.doesNotMatch(await chatText(), /Sending file/);
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.kanal.uploads?.length || 0), 0);
     await inp.press('Enter');
-    await p.waitForFunction(() => /Sending file: \/pgcl-eu3\.arch07\/dokumente\/A \(/.test($('profil-terminal-chat').textContent));
+    await p.waitForFunction(() => TERMINAL_ZUSTAND.kanal.uploads?.length === 1);
     await inp.fill(''); await inp.press('Escape'); // beendet profanity
     /* Ohne Liste: ↑ blättert im Verlauf */
     await inp.press('ArrowUp'); assert.match(await inp.inputValue(), /profanity|tmux|cat/);

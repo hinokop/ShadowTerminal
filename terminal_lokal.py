@@ -340,6 +340,8 @@ def terminal_file_op(root, request):
                     break
         entries.sort(key=lambda e: (not e["dir"], e["name"].casefold()))
         return {"entries": entries}
+    if op == "send" and stat.S_ISDIR(meta.st_mode):
+        return {"notfile": True}  # profanity: "Uploading '%s' failed: Not a file!"
     if not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1:
         raise Refused
     limit = MAX_DOWNLOAD if op in ("wget", "send") else MAX_TEXT
