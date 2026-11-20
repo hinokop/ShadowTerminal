@@ -484,14 +484,24 @@ function terminalTakt() {
   terminalSatAnzeige();
   if (TERMINAL_ZUSTAND.tmux?.panes.some(function (b) { return b.art === 'predict'; })) terminalTmuxPaneAnzeige();
 }
+/* Statusanzeige im Fensterkopf (Shadow Terminal, keine Ausgabe eines echten Werkzeugs), allein aus der Phase von pppd:
+   DIALING während eines Wählversuchs, gleich ob er gelingt; PPP SETUP ab CONNECT bis zur IP-Adresse (IPCP); erst mit
+   stehender PPP-Verbindung grün "<Satellit> · EST. LINK END hh:mm:ss" (geschätzt aus Bahn und Funkmaske). In holdoff
+   und vor einer Neuwahl leer, nach poff oder LINK END ebenso. PREDICT zeigt unabhängig davon den geometrischen LOS. */
 function terminalSatAnzeige() {
   const feld = $('profil-terminal-sat');
   if (!feld) return;
-  const t = TERMINAL_ZUSTAND, link = t.satLink;
-  // Ein berechneter Überflug allein belegt keine Verbindung; der Countdown gilt nur, solange die Einwahl steht.
-  const sichtbar = !!link && !link.abgelaufen && !!(t.modem || t.wgSat || t.kanal);
-  feld.hidden = !sichtbar;
-  feld.textContent = sichtbar ? link.sat.name + ' · ' + terminalSatEnde(link) + ' ' + terminalSatRest(link) : '';
+  const t = TERMINAL_ZUSTAND, modem = t.modem, link = t.satLink;
+  let text = '', aktiv = false;
+  if (modem?.phase === 'chat') text = 'DIALING';
+  else if (modem?.phase === 'seriell' || modem?.phase === 'ppp') text = 'PPP SETUP';
+  else if (modem?.phase === 'up' && link && !link.abgelaufen) {
+    text = link.sat.name + ' · EST. ' + terminalSatEnde(link) + ' ' + terminalSatRest(link);
+    aktiv = true;
+  }
+  feld.hidden = !text;
+  feld.textContent = text;
+  feld.classList.toggle('aktiv', aktiv);
   terminalPppAnzeige();
 }
 function terminalSatLinkAktiv(link) {
@@ -1024,8 +1034,8 @@ function terminalPppWahl(modem) {
     zeilen.forEach(terminalPppLog);
     if (modem.vordergrund) terminalAusgabe(zeilen);
     // Nach CONNECT ist das Connect-Skript fertig; ab "Connect: ppp0 <--> …" besteht das PPP-Interface (LCP/IPCP).
-    if (zeilen.some(function (z) { return z.endsWith('CONNECT 19200'); })) modem.phase = 'seriell';
-    if (zeilen.some(function (z) { return z.includes('Connect: ppp0 <--> '); })) modem.phase = 'ppp';
+    if (zeilen.some(function (z) { return z.endsWith('CONNECT 19200'); })) { modem.phase = 'seriell'; terminalSatAnzeige(); }
+    if (zeilen.some(function (z) { return z.includes('Connect: ppp0 <--> '); })) { modem.phase = 'ppp'; terminalSatAnzeige(); }
     if (i + 1 < schritte.length) {
       modem.timer = setTimeout(() => schritt(i + 1), schritte[i + 1][0]);
       return;
@@ -1043,6 +1053,7 @@ function terminalPppWahl(modem) {
     modem.bereit = true; modem.phase = 'up';
     modem.vordergrund = false;
     terminalKanalPromptSync();
+    terminalSatAnzeige();
     terminalVordergrundEnde(modem, 0);
   };
   schritt(0);

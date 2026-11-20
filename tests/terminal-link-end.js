@@ -43,7 +43,7 @@ const { imUeberflug, verbunden, schnelleWahl } = require('./_kestrel');
     const kopf = p.locator('#profil-terminal-sat');
     const zeile = async () => (await p.locator('.tmux-pane').textContent()).split('\n').find(z => z.startsWith(link.sat));
     const jetzt = () => p.evaluate(() => terminalZeitstand());
-    assert.equal(await kopf.textContent(), link.sat + ' · LINK END ' + await p.evaluate(b => terminalCountdown(b, terminalZeitstand()), link.bis));
+    assert.equal(await kopf.textContent(), link.sat + ' · EST. LINK END ' + await p.evaluate(b => terminalCountdown(b, terminalZeitstand()), link.bis));
     assert.ok((await zeile()).endsWith('LOS ' + await p.evaluate(ms => kestrelDatum(ms) + ' ' + terminalPppZeit(ms), link.los) + ' (' + await p.evaluate(b => terminalCountdown(b, terminalZeitstand()), link.los) + ')'), await zeile());
 
     /* Hangup zum LINK END, nicht zum LOS; PREDICT zählt weiter bis zum LOS und wechselt dann auf AOS */
@@ -65,7 +65,7 @@ const { imUeberflug, verbunden, schnelleWahl } = require('./_kestrel');
     await imUeberflug(p, { wahl: 'ok' });
     await cmd('pppd call kestrel updetach'); await verbunden(p);
     await p.clock.runFor(300);
-    assert.match(await kopf.textContent(), / · LOS \d\d:\d\d:\d\d$/);
+    assert.match(await kopf.textContent(), / · EST\. LOS \d\d:\d\d:\d\d$/);
     await cmd('poff');
     assert.deepEqual(errors, []);
     console.log('OK: LINK END aus der Funkmaske, PREDICT mit geometrischem LOS');
