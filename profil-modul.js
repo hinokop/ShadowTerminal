@@ -2190,7 +2190,9 @@ function terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format) {
 async function terminalTab(lauf, m) {
   const bisher = lauf.wert;
   const befehl = m[1], arg = m[2];
+  // lauf.nurVorschlag: nur die Treffer festhalten (grauer Vorschlag), nichts an der Eingabe ändern.
   const fertig = function (kopf, prefix, kandidaten, format) {
+    if (lauf.nurVorschlag) { lauf.ergebnis = { kopf, prefix, kandidaten, format }; return; }
     terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format);
   };
   if (arg === undefined) {
@@ -2240,8 +2242,10 @@ async function terminalTab(lauf, m) {
     return;
   }
   if (teile[0] !== TERMINAL_DB) return;
-  const antwort = await terminalBruecke('ls', teile.slice(1), prefix.startsWith('.'));
-  if (!terminalTabGueltig(lauf)) return;
+  const antwort = lauf.nurVorschlag ? await terminalVorschlagLs(teile.slice(1), prefix.startsWith('.'))
+    : await terminalBruecke('ls', teile.slice(1), prefix.startsWith('.'));
+  if (lauf.nurVorschlag) { if (antwort.entries && terminalVorschlagGueltig(lauf)) lauf.fertigLs = true; else return; }
+  else if (!terminalTabGueltig(lauf)) return;
   if (!antwort.entries) { terminalTabFehler(lauf, antwort); return; }
   terminalTabFehlerZuletzt = '';
   const namen = antwort.entries.filter(function (x) { return x.dir || befehl !== 'cd'; })
@@ -2414,7 +2418,41 @@ function terminalVorschlag() {
     const e = t.verlauf[i];
     if (e.startsWith(input.value)) return e.slice(input.value.length);
   }
+  // Zweite Quelle wie ZSH_AUTOSUGGEST_STRATEGY=(history completion): der erste Treffer der Tab-Ergänzung.
+  const k = t.vorschlagErgaenzung;
+  if (k && k.wert === input.value && k.version === t.version && k.ort === terminalArbeitsverzeichnis()) return k.rest;
+  if (!k || k.wert !== input.value) terminalVorschlagErgaenzen(input);
   return '';
+}
+/* Strategie completion von zsh-autosuggestions (src/strategies/completion.zsh): die Ergänzung läuft wie bei Tab,
+   compstate[insert]=1 fügt den ersten Treffer ein (Treffer sortiert), matcher-list '' verlangt, dass er die Eingabe
+   genau fortsetzt. Asynchron wie ZSH_AUTOSUGGEST_USE_ASYNC: das Ergebnis gilt nur, solange die Eingabe gleich bleibt. */
+function terminalVorschlagErgaenzen(input) {
+  const t = TERMINAL_ZUSTAND, wert = input.value, m = /^(\S+)(?:\s+(.*))?$/.exec(wert);
+  t.vorschlagErgaenzung = { wert, rest: '', version: t.version, ort: terminalArbeitsverzeichnis() };
+  if (!m || t.dateiLaeuft || (m[2] !== undefined && !terminalBefehlEintrag(m[1])?.tab)) return;
+  const lauf = { input, wert, version: t.version, kanal: null, ort: terminalArbeitsverzeichnis(), nurVorschlag: true };
+  terminalTab(lauf, m).then(function () {
+    const e = lauf.ergebnis, eintrag = t.vorschlagErgaenzung;
+    if (!e || eintrag?.wert !== wert || !terminalVorschlagGueltig(lauf)) return;
+    const erster = [...new Set(e.kandidaten)].filter(function (x) { return x.startsWith(e.prefix); }).sort()[0];
+    const voll = erster === undefined ? '' : e.kopf + e.format(erster);
+    if (voll.length > wert.length && voll.startsWith(wert)) { eintrag.rest = voll.slice(wert.length); terminalVorschlagAnzeige(); }
+  }).catch(function () {});
+}
+function terminalVorschlagGueltig(lauf) {
+  const t = TERMINAL_ZUSTAND, input = lauf.input, n = lauf.wert.length;
+  return t.version === lauf.version && !t.kanal && terminalArbeitsverzeichnis() === lauf.ort && input.isConnected &&
+    input.value === lauf.wert && input.selectionStart === n && input.selectionEnd === n;
+}
+// Ordnerinhalt für den Vorschlag: je Ordner eine Anfrage an die Brücke, 10 s zwischengespeichert.
+const TERMINAL_VORSCHLAG_LS = new Map();
+function terminalVorschlagLs(teile, versteckt) {
+  const schluessel = teile.join('/') + (versteckt ? '\u0000.' : ''), alt = TERMINAL_VORSCHLAG_LS.get(schluessel);
+  if (alt && Date.now() - alt.zeit < 10000) return alt.antwort;
+  const antwort = terminalBruecke('ls', teile, versteckt);
+  TERMINAL_VORSCHLAG_LS.set(schluessel, { zeit: Date.now(), antwort });
+  return antwort;
 }
 /* Einfärbung beim Tippen wie zsh-syntax-highlighting. Die Zerlegung folgt terminalZerlegen, damit die Farbe zeigt,
    was die Shell beim Ausführen tut: Befehlswort grün (bekannt) oder rot (command not found), Anführungszeichen gelb
