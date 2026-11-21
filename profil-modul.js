@@ -2047,10 +2047,10 @@ function terminalPinSperreAktualisieren() {
     t.verlauf = t.verlauf.filter(function (zeile) {
       const norm = terminalPinSuchtext(zeile);
       if (gesperrte.some(function (name) { return norm.includes(name); })) return false;
-      const m = /^(?:sudo\\s+)?(?:map|open)\\s+(?:pins\\s+)?(.+)$/i.exec(zeile.trim());
+      const m = /^(?:sudo\s+)?(?:map|open)\s+(?:pins\s+)?(.+)$/i.exec(zeile.trim());
       if (!m) return true;
       const query = terminalPinSuchtext(m[1]).replace(/^['"]|['"]$/g, '');
-      if (/^(?:pin-\\d+|[pol]-\\d+)$/.test(query) || query.length < 3) return true;
+      if (/^(?:pin-\d+|[pol]-\d+)$/.test(query) || query.length < 3) return true;
       return !gesperrte.some(function (name) { return name.includes(query) || query.includes(name); });
     });
     t.vpos = -1;
