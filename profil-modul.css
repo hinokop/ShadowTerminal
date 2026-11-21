@@ -89,6 +89,9 @@
 .profil-terminal-feld.farbig textarea{color:transparent;caret-color:#d7dce5}
 .profil-terminal-feld.farbig textarea::selection{color:transparent;background:rgba(127,168,232,.35)}
 .profil-terminal-feld.farbig #profil-terminal-vorschlag .text{color:inherit}
+/* sudo-Kennwort: kein Echo, auch nicht während einer IME-Komposition oder als Markierung */
+.profil-terminal-feld.verdeckt textarea{color:transparent;caret-color:#d7dce5}
+.profil-terminal-feld.verdeckt textarea::selection{color:transparent;background:transparent}
 #profil-terminal form[aria-busy="true"] #profil-terminal-vorschlag,.profil-terminal-kern.tmux-oben #profil-terminal-vorschlag{opacity:.5}
 #profil-terminal-vorschlag .f-befehl{color:#7fd36b}
 #profil-terminal-vorschlag .f-unbekannt,#profil-terminal-vorschlag .f-fehler{color:#e06c75}

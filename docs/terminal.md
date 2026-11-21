@@ -17,6 +17,12 @@ Die Anzeige rechts im Kopf des Terminalfensters gehört zu Shadow Terminal. Sie 
 
 `map` öffnet die Lagekarte, `map PIN-nnn` und `open PIN-nnn` springen zum Pin und öffnen sein Fenster, `open P-nnnn` (ebenso `O-`, `L-`) öffnet das Dossier. Nur exakte Kennungen; die Suche nach Namen folgt später. Der Zugang ist derselbe wie in der Oberfläche (`zielZugang`): Ist ein Dossier manuell gesperrt, gilt das auch für die mit ihm verknüpften Pins; der Aufruf meldet dann `Permission denied` und navigiert nicht. Ohne Freigabe durch den Ansprechpartner öffnet `open` die bestehende Ansicht „Zugriff beschränkt“. Zeichnet die Karte statt eines Pins seine Sichtung, wird die Sichtung gewählt. Nach dem Sprung wird das Terminal minimiert; pppd, tmux und Profanity laufen weiter.
 
+Mit `sudo` davor (`sudo open P-nnnn`, `sudo map PIN-nnn`) fragt das Terminal bei einem manuell gesperrten Ziel nach der Zugangskennung der Anmeldung, entsperrt wie die Schaltfläche „Entsperren“ dauerhaft und navigiert. Bei freien Zielen fragt es nicht. Gegenüber dem echten sudo:
+
+- Gleich: Prompt `[sudo] password for raizo:` (Form des Ubuntu-Pakets, angenommen; das Original setzt `Password: `), kein Echo, drei Versuche mit `Sorry, try again.` und `sudo: 3 incorrect password attempts`, Strg+C beendet ohne `^C` mit Rückgabewert 130, `sudo: <befehl>: command not found`, Aufruf ohne Befehl zeigt die Usage (ohne SELinux-Optionen; ob das Ubuntu-Paket sie zeigt, ungeprüft).
+- Anders: Das Original fragt vor jedem Befehl und merkt sich die Anmeldung einige Minuten; hier fragt nur ein gesperrtes Ziel, jedes Mal. `sudo` unterstützt ausschließlich `open` und `map`; andere bekannte Befehle erhalten `not supported in Shadow Terminal`. Das Kennwort ist die Zugangskennung der Oberfläche, kein Systemkennwort.
+- Die fehlende Freigabe durch den Ansprechpartner hebt sudo nicht auf. Wird die Oberfläche gesperrt, das Terminal geschlossen oder die Sitzung getrennt, wird eine laufende Kennwortabfrage abgebrochen und ihr Eingabepuffer verworfen.
+
 Die Befehle sind Teil von Shadow Terminal und keinem echten Werkzeug nachgebildet; die Meldungen folgen dem Muster der Dateibefehle (`open: P-9999: No such file or directory`).
 
 ## Echte Zugriffe
@@ -25,6 +31,7 @@ Simuliert sind Funkstrecke, pppd, WireGuard, der Onion-Server und Profanity. Ech
 
 - **Ablage:** Dateibefehle (`ls`, `cat`, `wget`, `/sendfile` liest die Datei) über die lokale Brücke `terminal_lokal.py`, nur im Archivordner.
 - **nmap:** das installierte Nmap des PCs über dieselbe Brücke, ohne Shell und ohne Einschränkung der Optionen. Es scannt die echten Schnittstellen des PCs; `ppp0` und `wg-sat` spielen dafür keine Rolle. Zeitstempel in Nmaps Ausgabe sind Ortszeit des PCs, die simulierten Teile arbeiten in UTC.
+
 ## Benutzer
 
 Die Shell läuft als gewöhnlicher Benutzer `raizo` (Prompt `raizo@terminal:/$`, `whoami` gibt `raizo` aus), nicht als root: sudo fragt root nie nach einem Kennwort (sudo, `plugins/sudoers/check.c`), ein Kennwortschutz über sudo setzt also einen anderen Benutzer voraus. Geändert sind nur Name, Prompt und die uid 1000 im tmux-Socket (`/tmp/tmux-1000/default`). Bewusst gleich geblieben:
@@ -33,4 +40,3 @@ Die Shell läuft als gewöhnlicher Benutzer `raizo` (Prompt `raizo@terminal:/$`,
 - `pon`, `poff`, `plog` und `tail /var/log/syslog` laufen wie bisher. Unter Ubuntu ist der erste angelegte Benutzer unter anderem in den Gruppen `adm` (Protokolle lesen) und `dip` (pppd starten); das ist angenommen, nicht am System geprüft.
 - `wg-quick` läuft ohne Rückfrage. Abweichung vom Original: wg-quick startet sich als Nicht-root über sudo neu und fragt nach dem Kennwort (`wg-quick/linux.bash`, Zeile 86 in wireguard-tools).
 - nmap ist ohnehin das echte Programm des PCs mit den Rechten des Windows-Benutzers.
-
