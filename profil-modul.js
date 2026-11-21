@@ -2033,6 +2033,82 @@ function terminalPinZeigen(px) {
   karteWaehlen(si.id, true);
   return true;
 }
+/* Nach einer neuen manuellen Sperre dürfen offene Tab-Listen und bereits sichtbare Terminaltexte
+   keine zuvor angezeigten Namen geschützter Pins behalten. */
+function terminalPinSperreAktualisieren() {
+  if (typeof terminalTabReset === 'function') terminalTabReset();
+  const t = TERMINAL_ZUSTAND;
+  if (t) {
+    t.vorschlagErgaenzung = null;
+    /* Die Shell-Historie darf einen zuvor benutzten Namenssuchbegriff nach dem Sperren
+       nicht erneut als grauen Vorschlag oder über Pfeil-hoch offenlegen. Kennungen bleiben. */
+    const gesperrte = (PROFIL.pins || []).filter(pinGesperrt).map(function (p) { return terminalPinSuchtext(p.name); })
+      .filter(function (name) { return name.length >= 3; });
+    t.verlauf = t.verlauf.filter(function (zeile) {
+      const norm = terminalPinSuchtext(zeile);
+      if (gesperrte.some(function (name) { return norm.includes(name); })) return false;
+      const m = /^(?:sudo\s+)?(?:map|open)\s+(?:pins\s+)?(.+)$/i.exec(zeile.trim());
+      if (!m) return true;
+      const query = terminalPinSuchtext(m[1]).replace(/^['"]|['"]$/g, '');
+      if (/^(?:pin-\d+|[pol]-\d+)$/.test(query) || query.length < 3) return true;
+      return !gesperrte.some(function (name) { return name.includes(query) || query.includes(name); });
+    });
+    t.vpos = -1;
+    t.entwurf = '';
+  }
+  const fenster = $('profil-terminal');
+  if (fenster && typeof sperreMaskieren === 'function') sperreMaskieren(fenster);
+}
+/* Live-Suche in den persistenten Profil-Pins, unabhängig von Kartenebene und gezeichneten Markern.
+   Bei gesperrten Dossiers sind ausschließlich Pin-Kennungen auffindbar; Namen und Zwecke bleiben unzugänglich. */
+function terminalPinSuchtext(text) {
+  return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+function terminalPinTreffer(suche = '') {
+  const q = terminalPinSuchtext(suche.trim());
+  return (PROFIL.pins || []).filter(function (p) {
+    if (!p || !p.id) return false;
+    if (!q) return true;
+    if (terminalPinSuchtext(p.id).includes(q)) return true;
+    if (pinGesperrt(p)) return false;
+    return terminalPinSuchtext([p.name].concat(p.zwecke || []).join(' ')).includes(q);
+  }).slice().sort(function (a, b) { return a.id.localeCompare(b.id, undefined, { numeric: true }); });
+}
+function terminalPinListe(args) {
+  const suche = args.join(' ').trim(), treffer = terminalPinTreffer(suche);
+  if (!treffer.length) {
+    terminalAusgabe(suche ? 'map: pins: No matches for ' + suche : 'map: pins: No pins found');
+    return suche ? 1 : 0;
+  }
+  terminalAusgabe(treffer.map(function (p) {
+    return p.id + '  ' + (pinGesperrt(p) ? '[LOCKED]' : p.name || p.id);
+  }));
+  return 0;
+}
+/* Einmalige Tab-Quelle für map/open und deren sudo-Varianten. Namensvorschläge setzen beim Übernehmen
+   immer die stabile Pin-Kennung ein. Gesperrte Pins tragen hier nie den Namen als Kandidat. */
+function terminalPinTab(befehl, arg, kopf, fertig) {
+  if (befehl === 'map' && /^pins(?:\s|$)/i.test(arg)) {
+    const m = /^pins\s+(.*)$/i.exec(arg);
+    if (!m) { fertig(kopf, arg, ['pins'], function () { return 'pins '; }); return; }
+    const prefix = m[1];
+    const namen = terminalPinTreffer().map(function (p) {
+      return pinGesperrt(p) ? p.id : (p.name || p.id);
+    });
+    fertig(kopf + 'pins ', prefix, namen, function (x) { return /\s/.test(x) ? '"' + x.replace(/"/g, '') + '"' : x; });
+    return;
+  }
+  const pins = terminalPinTreffer();
+  const kennungen = pins.map(function (p) { return p.id; });
+  const namen = pins.filter(function (p) { return !pinGesperrt(p) && p.name; })
+    .map(function (p) { return p.name + ' [' + p.id + ']'; });
+  const dossiers = befehl === 'open' ? pool().map(function (e) { return e.id; }) : [];
+  const kandidaten = (befehl === 'map' ? ['pins'] : []).concat(kennungen, dossiers, namen);
+  fertig(kopf, arg, kandidaten, function (x) {
+    const ref = / \[(PIN-\d{3,})\]$/.exec(x);
+    return (ref ? ref[1] : x) + (x === 'pins' ? ' ' : '');
+  });
+}
 async function terminalNavigation(befehl, args, sudo = false) {
   if (befehl === 'map' && !args.length) {
     VIEW.karte.reiter = 'karte';
@@ -2041,7 +2117,8 @@ async function terminalNavigation(befehl, args, sudo = false) {
     terminalNachNavigation();
     return 0;
   }
-  if (args.length !== 1 || (befehl === 'map' && !TERMINAL_KENNUNG_PIN.test(args[0]))) return terminalUsage(befehl === 'map' ? 'map [PIN-nnn]' : 'open <P-nnnn|O-nnnn|L-nnnn|PIN-nnn>');
+  if (befehl === 'map' && args[0] === 'pins') return terminalPinListe(args.slice(1));
+  if (args.length !== 1 || (befehl === 'map' && !TERMINAL_KENNUNG_PIN.test(args[0]))) return terminalUsage(befehl === 'map' ? 'map [pins [query]|PIN-nnn]' : 'open <P-nnnn|O-nnnn|L-nnnn|PIN-nnn>');
   let z = terminalZiel(befehl, args[0]);
   if (!z) return 1;
   if (z.gesperrt) {
@@ -2193,9 +2270,9 @@ const TERMINAL_TABELLE = [
   { name: 'poff', hilfe: [[1, 3, 'poff [kestrel]']], tab: { art: 'fest', werte: ['kestrel'], kette: 'kestrel && tail -n 6 /var/log/syslog' }, aus: TERMINAL_PPP('poff') },
   { name: 'plog', hilfe: [[1, 3.5, 'plog [-n N] [-f]']], tab: { art: 'optionen', werte: ['-f', '-n'] }, aus: function (args) { return terminalPlog(args); } },
   { name: 'nmap', hilfe: [[0, 6.5, 'nmap <options> <target>']], aus: function (args) { return terminalNmap(args); } },
-  { name: 'map', hilfe: [[0, 6.6, 'map [PIN-nnn]']], aus: function (args) { return terminalNavigation('map', args); } },
-  { name: 'open', hilfe: [[0, 6.7, 'open <id>']], aus: function (args) { return terminalNavigation('open', args); } },
-  { name: 'sudo', hilfe: [[0, 6.8, 'sudo <command>']], aus: function (args) { return terminalSudo(args); } },
+  { name: 'map', hilfe: [[0, 6.6, 'map [pins [query]|PIN-nnn]']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('map', args); } },
+  { name: 'open', hilfe: [[0, 6.7, 'open <id>']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('open', args); } },
+  { name: 'sudo', hilfe: [[0, 6.8, 'sudo <command>']], tab: { art: 'navigation' }, aus: function (args) { return terminalSudo(args); } },
   { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
   { name: 'false', hilfe: [[0, 9, 'false']], aus: function (args, arg) { return arg ? terminalUsage('false') : 1; } },
@@ -2335,6 +2412,19 @@ async function terminalTab(lauf, m) {
   }
   const tab = terminalBefehlEintrag(befehl)?.tab;
   if (!tab) return;
+  if (befehl === 'sudo') {
+    const sub = /^(map|open)(?:\s+(.*))?$/.exec(arg);
+    if (!sub || sub[2] === undefined) {
+      fertig('sudo ', arg, ['map', 'open'], function (x) { return x + ' '; });
+      return;
+    }
+    terminalPinTab(sub[1], sub[2], 'sudo ' + sub[1] + ' ', fertig);
+    return;
+  }
+  if (befehl === 'map' || befehl === 'open') {
+    terminalPinTab(befehl, arg, befehl + ' ', fertig);
+    return;
+  }
   if (tab.art === 'predict') {
     let rest = arg, kopf = 'predict ';
     const vorgabe = [['-t'], [TERMINAL_PPP_DATEI], ['-p'], kestrelSats().map(function (x) { return x.name; })];

@@ -5447,6 +5447,7 @@ const ACTIONS = {
     const e = entitaet(a.id);
     if (!e || dossierGesperrt(e)) return null;
     PROFIL.gesperrt = (PROFIL.gesperrt || []).concat([e.id]);
+    if (typeof terminalPinSperreAktualisieren === 'function') terminalPinSperreAktualisieren();
     return { modul: 'Dossier', aktion: 'Dossier gesperrt', detail: e.id };
   },
   DOSSIER_ENTSPERREN: function (a) {       /* nur nach geprüfter Zugangskennung aufrufen (Oberfläche) */
