@@ -25,6 +25,16 @@ Mit `sudo` davor (`sudo open P-nnnn`, `sudo map PIN-nnn`) fragt das Terminal bei
 
 Die Befehle sind Teil von Shadow Terminal und keinem echten Werkzeug nachgebildet; die Meldungen folgen dem Muster der Dateibefehle (`open: P-9999: No such file or directory`).
 
+## VAULT-Katalog für Kartenexporte
+
+`exports [Suchbegriff]` durchsucht vorhandene TXT-Exporte der Profil-Pins (`PIN-`) und eigenen Zonen (`ZO-`). `open export <Name|PIN-nnn|ZO-nnn>` liest den bevorzugten Datensatz direkt **im Terminal**. Namen werden exakt oder über einen eindeutigen Präfix aufgelöst; bei Mehrdeutigkeit werden nur zugängliche Objektkennungen und Namen ausgegeben. `sudo open export` erlaubt die vorhandene Kennwortauthentifizierung für manuell gesperrte Objekte. Die Sperre einer verknüpften Zone wird ebenso berücksichtigt wie bei Pins. Tab-Vervollständigung übernimmt jeweils die stabile Kennung.
+
+**Inszenierung und tatsächliche Datenhaltung:** Die Terminaloberfläche zeigt den fiktiven zentralen Katalog `VAULT :: RECORD ACCESS`, niemals einen lokalen Archivpfad, `localhost`, einen Browser-Download oder eine Dateiauswahl. Der Datensatz wird inline dargestellt. Tatsächlich existiert kein zentraler Remote-Dienst: Die Befehle lesen die lokalen Archivordner `ops` und `dokumente` durch die bereits vorhandene, beschränkte Brücke `terminal_lokal.py` (`ls` und `cat`). Bei fehlender Verbindung meldet die Terminaloberfläche lediglich `VAULT: INDEX LINK UNAVAILABLE`; ein erfolgreicher Abruf wird nie fingiert.
+
+Der Katalog erkennt `lageblatt-PIN-nnn[-vN].txt` und `zone-ZO-nnn[-vN].txt` anhand der unveränderlichen Objektkennung und der vorhandenen Datei, auch ohne alten Exportvermerk. Registrierte Exportdateien werden vor unregistrierten bevorzugt, anschließend das Änderungsdatum. Bei geöffnetem Datensatz wird der tatsächliche Text mit dem zuletzt registrierten SHA-256 verglichen und zusätzlich mit dem aktuellen Objekttext. Die Statuswerte sind `VERIFIED / CURRENT`, `VERIFIED / OUTDATED`, `INTEGRITY MISMATCH`, `UNTRACKED` und `UNVERIFIED` (falls die Hashfunktion nicht verfügbar ist). Ein später gesperrter Pin- oder Zonenexport wird vollständig aus dem Terminal-Scrollback entfernt.
+
+**Sicherheitsgrenze:** Diese virtuelle Zugangssperre schützt nur die neuen `open export`-Befehle und die Anzeige im Terminal. Direkte Dateibefehle wie `cat` sind weiterhin über die Archivbrücke zugänglich; ein echter Dateizugriffsschutz müsste zusätzlich auf Ebene der Brücke implementiert werden. Auch die simulierte zentrale Datenbank ist kein tatsächlicher Remote-Dienst.
+
 ## Echte Zugriffe
 
 Simuliert sind Funkstrecke, pppd, WireGuard, der Onion-Server und Profanity. Echt sind:
