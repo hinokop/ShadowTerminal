@@ -2387,23 +2387,44 @@ async function terminalNavigation(befehl, args, sudo = false) {
     return 0;
   }
   if (befehl === 'map' && args[0] === 'pins') return terminalPinListe(args.slice(1));
+  if (befehl === 'map' && args[0] === 'zones') return terminalZoneListe(args.slice(1));
   const eingabe = args.join(' ').trim();
   if (!eingabe || (befehl === 'map' && args.length === 1 && TERMINAL_KENNUNG_DOSSIER.test(args[0])) ||
-      (args.length > 1 && (TERMINAL_KENNUNG_DOSSIER.test(args[0]) || TERMINAL_KENNUNG_PIN.test(args[0]))))
-    return terminalUsage(befehl === 'map' ? 'map [pins [query]|PIN-nnn|name]' : 'open <id|name>');
+      (args.length > 1 && (TERMINAL_KENNUNG_DOSSIER.test(args[0]) || TERMINAL_KENNUNG_PIN.test(args[0]) || TERMINAL_KENNUNG_ZONE.test(args[0]))))
+    return terminalUsage(befehl === 'map' ? 'map [pins [query]|zones [query]|PIN-nnn|ZO-nnn|name]' : 'open <id|name|export name>');
   let z = terminalZiel(befehl, eingabe);
   if (!z) return 1;
+  /* open löst Kartenobjekte ausschließlich auf ihr Bezugsdossier auf; ohne Verknüpfung
+     gibt es keinen Dossierwechsel und auch keinen unnötigen sudo-Prompt. */
+  if (befehl === 'open' && (z.art === 'pin' || z.art === 'zone') && !z.dossier) {
+    terminalAusgabe('open: ' + z.id + ': No linked dossier');
+    return 1;
+  }
   if (z.gesperrt) {
     if (!sudo) { terminalAusgabe(befehl + ': ' + z.id + ': Permission denied'); return 1; }
-    /* sudo: Zugangskennung der Oberfläche, dann dieselbe Entsperrung wie dort (DOSSIER_ENTSPERREN); ein Pin über sein Dossier */
+    /* sudo: Zugangskennung der Oberfläche, dann dieselbe dauerhafte Dossierentsperrung */
     const ok = await terminalSudoKennwort();
     if (ok !== true) return ok === 'abbruch' ? 130 : 1;
     dispatch({ type: 'DOSSIER_ENTSPERREN', id: z.dossier });
     z = zielZugang(z.id);
-    if (!z || z.gesperrt) { terminalAusgabe(befehl + ': ' + z?.id + ': Permission denied'); return 1; }
+    if (!z || z.gesperrt) { terminalAusgabe(befehl + ': ' + (z?.id || eingabe) + ': Permission denied'); return 1; }
   }
-  if (z.art === 'pin') { if (!terminalPinZeigen(z.objekt)) { terminalAusgabe(befehl + ': ' + z.id + ': No such file or directory'); return 1; } }
-  else dispatch({ type: 'DOSSIER_GEOEFFNET', id: z.id, navigieren: true, ueber: 'Terminal' });
+  if (befehl === 'map') {
+    const ok = z.art === 'pin' ? terminalPinZeigen(z.objekt) : kartenObjektZeigen(z.id);
+    if (!ok) { terminalAusgabe('map: ' + z.id + ': No such file or directory'); return 1; }
+    if (z.art === 'zone') karteAuswahlAnzeige();
+  } else {
+    const dossier = z.art === 'dossier' ? z : zielZugang(z.dossier);
+    if (!dossier || dossier.art !== 'dossier') {
+      terminalAusgabe('open: ' + z.id + ': Linked dossier not found');
+      return 1;
+    }
+    if (dossier.gesperrt) {
+      terminalAusgabe('open: ' + z.id + ': Permission denied');
+      return 1;
+    }
+    dispatch({ type: 'DOSSIER_GEOEFFNET', id: dossier.id, navigieren: true, ueber: 'Terminal' });
+  }
   terminalNachNavigation();
   return 0;
 }
