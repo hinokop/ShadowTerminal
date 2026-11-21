@@ -24,10 +24,10 @@ const { APP } = require('./_pfad');
     assert.equal(new Set(info.namen).size, info.namen.length);
     assert.deepEqual(info.ohneAus, []);
     assert.deepEqual(info.namen, ['ls', 'cd', 'cat', 'head', 'tail', 'wget', 'help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit',
-      'predict', 'pon', 'pppd', 'poff', 'plog', 'nmap', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
-    /* Hilfe aus der Tabelle erzeugt (nmap neu) */
+      'predict', 'pon', 'pppd', 'poff', 'plog', 'nmap', 'map', 'open', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
+    /* Hilfe aus der Tabelle erzeugt (map und open neu) */
     assert.deepEqual(await nach('help'), [
-      'ls [-a|-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · nmap <options> <target> · echo · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
+      'ls [-a|-l|-la] · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · nmap <options> <target> · map [PIN-nnn] · open <id> · echo · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
       'predict · pon kestrel · pppd call kestrel [updetach] · poff [kestrel] · plog [-n N] [-f] · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
       "tmux · tmux split-window -bd predict · tmux split-window -bd plog -f · Ctrl+B ↑/↓ switch pane · tmux kill-pane -t '{up-of}'",
       'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);

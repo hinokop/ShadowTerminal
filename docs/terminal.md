@@ -13,6 +13,12 @@ Die Anzeige rechts im Kopf des Terminalfensters gehört zu Shadow Terminal. Sie 
 
 `EST. LINK END` ist geschätzt aus Bahn und Funkmaske (Wahl ab 5°, Ende unter 3°). Endet der Link erst mit dem geometrischen Untergang, steht dort `EST. LOS`. PREDICT zeigt unabhängig davon immer den geometrischen LOS.
 
+## Navigation: map und open
+
+`map` öffnet die Lagekarte, `map PIN-nnn` und `open PIN-nnn` springen zum Pin und öffnen sein Fenster, `open P-nnnn` (ebenso `O-`, `L-`) öffnet das Dossier. Nur exakte Kennungen; die Suche nach Namen folgt später. Der Zugang ist derselbe wie in der Oberfläche (`zielZugang`): Ist ein Dossier manuell gesperrt, gilt das auch für die mit ihm verknüpften Pins; der Aufruf meldet dann `Permission denied` und navigiert nicht. Ohne Freigabe durch den Ansprechpartner öffnet `open` die bestehende Ansicht „Zugriff beschränkt“. Zeichnet die Karte statt eines Pins seine Sichtung, wird die Sichtung gewählt. Nach dem Sprung wird das Terminal minimiert; pppd, tmux und Profanity laufen weiter.
+
+Die Befehle sind Teil von Shadow Terminal und keinem echten Werkzeug nachgebildet; die Meldungen folgen dem Muster der Dateibefehle (`open: P-9999: No such file or directory`).
+
 ## Echte Zugriffe
 
 Simuliert sind Funkstrecke, pppd, WireGuard, der Onion-Server und Profanity. Echt sind:
