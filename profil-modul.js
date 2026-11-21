@@ -2089,7 +2089,10 @@ function terminalPinSperreAktualisieren() {
     const dossierNamen = pool().filter(dossierGesperrt).flatMap(function (e) {
       return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []);
     });
-    const gesperrte = pinNamen.concat(dossierNamen).map(terminalPinSuchtext).filter(function (name) { return name.length >= 3; });
+    const zonenNamen = (PROFIL.zonen || []).filter(function (z) {
+      return z.dossier && (PROFIL.gesperrt || []).includes(z.dossier);
+    }).map(function (z) { return z.name; });
+    const gesperrte = pinNamen.concat(zonenNamen, dossierNamen).map(terminalPinSuchtext).filter(function (name) { return name.length >= 3; });
     t.verlauf = t.verlauf.filter(function (zeile) {
       const norm = terminalPinSuchtext(zeile);
       if (gesperrte.some(function (name) { return norm.includes(name); })) return false;
@@ -2223,12 +2226,15 @@ async function terminalVaultKatalog() {
       const teile = muster.re.exec(e.name);
       const zuordnung = terminalVaultZuordnung(teile[1]);
       if (!zuordnung || zuordnung.art !== muster.art) continue;
+      const letzter = (PROFIL.exporte || {})[muster.art + ':' + zuordnung.id + ':' + ordner];
       sammlung.push({ ...zuordnung, ordner, dateiname: e.name, revision: Number(teile[2] || 1),
+        registriert: !!(letzter && letzter.name === e.name && letzter.sha),
         mtime: Number(e.mtime) || 0, bytes: Number(e.bytes) || 0 });
     }
   }
   sammlung.sort(function (a, b) {
-    return b.mtime - a.mtime || b.revision - a.revision || a.ordner.localeCompare(b.ordner);
+    return Number(b.registriert) - Number(a.registriert) ||
+      b.mtime - a.mtime || b.revision - a.revision || a.ordner.localeCompare(b.ordner);
   });
   return { records: sammlung };
 }
