@@ -292,13 +292,16 @@ function terminalSitzungTrennen() {
   TERMINAL_ZUSTAND.virtuellerOrt = null;
   return terminalBruecke('disconnect');
 }
+/* Angemeldeter Benutzer der Shell: ein gewöhnlicher Benutzer (kein root), damit sudo ein Kennwort verlangen kann; sudo fragt
+   root nie (plugins/sudoers/check.c). Prompt wie bash unter Ubuntu, PS1 '\u@\h:\w\$': '$' für Nicht-root. */
+const TERMINAL_BENUTZER = 'raizo', TERMINAL_UID = 1000;     /* erster Benutzer unter Ubuntu; tmux legt seinen Socket unter /tmp/tmux-<uid> an (tmux.c) */
 function terminalPrompt() {
   if (TERMINAL_ZUSTAND.orbitLive) return 'predict · Ctrl+C';
   if (terminalPppWaehltVorne()) return '';
   if (TERMINAL_ZUSTAND.kette && !TERMINAL_ZUSTAND.kanal) return '';
   const kanal = TERMINAL_ZUSTAND.kanal;
   if (kanal) return '>';
-  return 'root@terminal:' + terminalArbeitsverzeichnis() + '#';
+  return TERMINAL_BENUTZER + '@terminal:' + terminalArbeitsverzeichnis() + '$';
 }
 function terminalName(arg) {
   if (!arg) return '';
@@ -1927,7 +1930,7 @@ function terminalTmuxEinzeln(args) {
     terminalTmuxPaneAnzeige();
     return 0;
   }
-  if (!t.tmux) { terminalAusgabe('no server running on /tmp/tmux-0/default'); return 1; }
+  if (!t.tmux) { terminalAusgabe('no server running on /tmp/tmux-' + TERMINAL_UID + '/default'); return 1; }
   if (unter === 'kill-server') { terminalTmuxEnde(); terminalAusgabe('[server exited]'); return 0; }
   if (unter === 'kill-pane' || unter === 'killp') {
     const i = args.indexOf('-t'), ziel = i >= 0 ? args[i + 1] : undefined;
@@ -2018,7 +2021,7 @@ const TERMINAL_TABELLE = [
   { name: 'wget', hilfe: [[0, 6, 'wget <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('wget') },
   { name: 'help', aus: function (args, arg) { if (arg) return terminalUsage('help'); terminalAusgabe(terminalHilfe()); return 0; } },
   { name: 'pwd', hilfe: [[0, 2, 'pwd']], aus: function (args, arg) { if (arg) return terminalUsage('pwd'); terminalAusgabe(terminalArbeitsverzeichnis()); return 0; } },
-  { name: 'whoami', hilfe: [[0, 10, 'whoami']], aus: function (args, arg) { if (arg) return terminalUsage('whoami'); terminalAusgabe('root'); return 0; } },
+  { name: 'whoami', hilfe: [[0, 10, 'whoami']], aus: function (args, arg) { if (arg) return terminalUsage('whoami'); terminalAusgabe(TERMINAL_BENUTZER); return 0; } },
   { name: 'uname', hilfe: [[0, 11, 'uname -a']], tab: { art: 'optionen', werte: ['-a'] },
     aus: function (args, arg) { if (arg !== '-a') return terminalUsage('uname -a'); terminalAusgabe(TERMINAL_UBUNTU); return 0; } },
   { name: 'date', hilfe: [[0, 12, 'date [+%s]']], aus: function (args, arg) {
