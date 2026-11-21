@@ -1,7 +1,11 @@
 # Field Terminal (Repo: ShadowTerminal)
 
-Lokales Recherchewerkzeug (Vanilla JS, ohne Build-Schritt), Oberfläche im Stil eines Feldterminals; früher ein Spiel, jetzt Werkzeug (README: Ist-Stand und Planung). Sprache der Oberfläche und der Arbeit: Deutsch.
+Lokales Recherchewerkzeug (Vanilla JS, ohne Build-Schritt), Oberfläche im Stil eines Feldterminals; früher ein Spiel, jetzt Werkzeug (README: Ist-Stand und Planung). Arbeitssprache und interne Dokumentation derzeit Deutsch; sichtbare Terminalmeldungen und Oberfläche werden nach Freigabe schrittweise auf Englisch umgestellt (Tests und Dokumentation synchron).
 Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmaterial; Schwächen und Widersprüche ungefragt benennen; nie halluzinieren.
+
+## Verbindlicher Entwicklungsplan (21.11.2026)
+
+Vor Änderungen und Reviews **[docs/terminal-entwicklungsplan-2026-11.md](docs/terminal-entwicklungsplan-2026-11.md)** beachten. Reihenfolge: #97-Baseline → #95-Namensnavigation (inkl. temporärem Schutz vor `infoGesperrt`-Namenslecks) → #96-Archiv/Zonen → kontrollierte Merges → Missionsaltlasten entfernen → Unix-/Linux-Realismus und Englisch. `map PIN/ZO` führt zur Karte, `open PIN/ZO` zum verknüpften Dossier. Windows-Testpakete sind für umfassende GUI-/Integrationsabnahmen vorgesehen, nicht für jeden Einzel-Fix. Keine ungeprüften Merges.
 
 ## Aufbau
 - index.html: Anwendung (dispatch -> ACTIONS -> render, Plansystem, Ablage, Karte)
@@ -24,8 +28,8 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 
 ## Arbeitsweise
 - Pro Arbeitsrunde ein Branch, kleine Commits; Historie ersetzt ZIP-Backups.
-- Reste der alten Missionsmechanik bestehen noch (docs/missionsabhaengigkeiten.md, Zweige wie wissen()/Freigabelogik sind über den Missionspfad erreichbar). Entfernung nur nach Messung und ausdrücklicher Freigabe, Produktionscode und Tests getrennt (docs/r5-kandidaten.md).
-- Ablauf je Änderung: Branch von aktuellem origin/main; bei Codeänderungen ein Regressionstest, der auf main fehlschlägt, und die volle Standardauswahl (bei reinen Dokumentationsänderungen genügt die Prüfung des Diffs); Draft-PR mit Teststand und Ungeprüftem, unabhängige Prüfung durch ChatGPT, Merge erst nach Freigabe von Shadow und ChatGPT. Nichts löschen, nichts force-pushen ohne ausdrücklichen Auftrag.
+- Reste der alten Missionsmechanik bestehen noch (docs/missionsabhaengigkeiten.md, Zweige wie wissen()/Freigabelogik sind über den Missionspfad erreichbar). **Shadow hat den Abbau des Missions-/Ansprechpartnerfreigabe-Aspekts am 2026-11-21 freigegeben**, jedoch erst in Phase 5 des Entwicklungsplans, nach Inventur der Abhängigkeiten und Tests. Manuelle Dossiersperren und Profilkompatibilität bleiben bestehen; Produktionscode und Tests getrennt nachvollziehbar ändern (docs/r5-kandidaten.md).
+- Ablauf bei Codeänderungen: passender Branch (abhängige Drafts auf ihrer dokumentierten Basis), gezielte Regression und vor Merge volle Standardauswahl; bestehende bekannte Ausfälle separat bewerten. **Reine Sichtungen/Reviews erfordern keinen Volllauf**; nur wirklich ausgeführte Tests als solche bezeichnen. Dokumentationsänderungen: Diff prüfen. Draft-PR mit Teststand und Ungeprüftem, unabhängige Prüfung durch ChatGPT, Merge erst nach Freigabe von Shadow und ChatGPT. Nichts löschen, nichts force-pushen ohne ausdrücklichen Auftrag.
 - Datenformat und Kompatibilität: Änderungen an gespeicherten Daten müssen alte Profile und den Profilimport tolerieren (Vertrag: docs/datenvertrag.md).
 - Keine spielartigen Hinweise/Zahlen in der Oberfläche; mehr Realismus.
 
