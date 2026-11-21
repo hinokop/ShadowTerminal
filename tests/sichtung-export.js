@@ -51,6 +51,50 @@ const PF = require('./_pfad');
     assert.equal(dl.suggestedFilename(), 'sichtung-' + s.d + '-' + s.si + '.txt');
     const txt = await readFile(await dl.path(), 'utf8');
     for (const f of [s.si, 'Exportperson', 'Person gesehen', 'Güte', 'Treffpunkt Nord', 'zwei Zufahrten']) assert.ok(txt.includes(f), 'TXT enthält ' + f);
+
+    /* Phase 5b1: Ein altes Ansprechpartner-/Missionsmerkmal darf die Ausgabe
+       einer vorhandenen Sichtung nicht sperren. Die manuelle Dossiersperre
+       muss denselben Export weiterhin vollständig blockieren. */
+    const historisch = await p.evaluate(() => {
+      dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' });
+      dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
+      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && wissen(x) === 'unbekannt');
+      if (!e) return null;
+      IZ()[e.id] = { status: 'bekannt' };
+      const d = STATE.dossiers.entitaeten[e.id];
+      if (!d) return null;
+      d.sichtungen = d.sichtungen || [];
+      d.sichtungen.push({ id: 'SI-090', uid: 'a5b6c7d8e9f0', t: nowIso(), ort: '52.5000, 13.4000',
+        text: 'Historischer Sichtungsbeleg ohne Ansprechpartnerfreigabe', guete: 'unbewertet', quelle: 'Eintrag' });
+      return { id: e.id, info: infoGesperrt(e), wissen: wissen(e), gesperrt: dossierGesperrt(e) };
+    });
+    assert.ok(historisch, 'historisches Standarddossier mit früherer Freigabesperre benötigt');
+    assert.deepEqual([historisch.wissen, historisch.info, historisch.gesperrt], ['bekannt', true, false],
+      'historische Beschränkung aktiv, aber manuelle Sperre nicht gesetzt');
+    const [legacyDownload] = await Promise.all([
+      p.waitForEvent('download'),
+      p.evaluate(id => kartenTxtExport('sichtung', 'SI-090', id), historisch.id)
+    ]);
+    assert.equal(legacyDownload.suggestedFilename(), 'sichtung-' + historisch.id + '-SI-090.txt',
+      'alte Ansprechpartnerfreigabe blockiert den Sichtungs-Export nicht');
+    assert.match(await readFile(await legacyDownload.path(), 'utf8'),
+      /Historischer Sichtungsbeleg ohne Ansprechpartnerfreigabe/);
+    const verboteneDownloads = [];
+    const beiDownload = d => verboteneDownloads.push(d.suggestedFilename());
+    p.on('download', beiDownload);
+    await p.evaluate(id => {
+      dispatch({ type: 'DOSSIER_SPERREN', id });
+      kartenTxtExport('sichtung', 'SI-090', id);
+    }, historisch.id);
+    await p.waitForTimeout(200);
+    assert.match(await p.locator('#sys-msg').innerText(), /TXT-Export blockiert/,
+      'manuelle Sperre blockiert weiterhin');
+    assert.deepEqual(verboteneDownloads, [], 'kein Download trotz manueller Sperre');
+    p.off('download', beiDownload);
+    await p.evaluate(id => {
+      dispatch({ type: 'DOSSIER_ENTSPERREN', id });
+      STATE.missionsbetrieb = false;
+    }, historisch.id);
     /* Pin-Popup (unbestätigter Entwurf) */
     const pin2 = await p.evaluate(() => { dispatch({ type: 'PIN_ANGELEGT', ll: [52.51, 13.41], name: 'Zweiter', notiz: 'lange Notiz '.repeat(5) }); return PROFIL.pins.at(-1).id; });
     await oeffnen(pin2); await p.locator('#pin-export').waitFor();

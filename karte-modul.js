@@ -715,7 +715,9 @@ function kartenTxtExport(art, id, entId) {
     if (x.dossier && (PROFIL.gesperrt || []).includes(x.dossier)) {
       meldung('TXT-Export blockiert. Das verknüpfte Dossier ist gesperrt.'); return null;
     }
-    if (art === 'sichtung' && (!entitaet(x.dossier) || infoGesperrt(entitaet(x.dossier)) || dossierGesperrt(entitaet(x.dossier)))) {
+    /* Phase 5b1: Die historische Ansprechpartnerfreigabe ist kein Exportrecht.
+       Das zugeordnete Dossier muss existieren und darf nicht manuell gesperrt sein. */
+    if (art === 'sichtung' && (!entitaet(x.dossier) || dossierGesperrt(entitaet(x.dossier)))) {
       meldung('TXT-Export blockiert. Das Dossier ist gesperrt.'); return null;
     }
     return x;
