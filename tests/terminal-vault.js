@@ -152,9 +152,18 @@ const { APP } = require('./_pfad');
     await inp.fill('sudo open export Treffpunkt G');
     await inp.press('Tab');
     assert.equal(await inp.inputValue(), 'sudo open export Treffpunkt G', 'gesperrter Name bleibt verborgen');
-    await inp.fill('open export ' + z.secret.slice(0, -1));
+    /* Mehrdeutiger ID-Präfix: Auswahl statt willkürlicher Vervollständigung.
+       Die geschützte Kennung bleibt auffindbar, ihr Klarname verborgen. */
+    await inp.fill('open export PIN-00');
     await inp.press('Tab');
-    assert.equal(await inp.inputValue(), 'open export ' + z.secret);
+    const kandidaten = p.locator('#profil-terminal-auswahl');
+    await kandidaten.waitFor({ state: 'visible' });
+    assert.match(await kandidaten.textContent(), new RegExp(z.secret),
+      'gesperrte Export-Kennung bleibt in der Auswahl');
+    assert.doesNotMatch(await kandidaten.textContent(), /Treffpunkt Geheim/,
+      'gesperrter Name darf nicht in der Auswahl erscheinen');
+    assert.equal(await inp.inputValue(), 'open export PIN-00',
+      'mehrdeutiger Präfix wird nicht automatisch ergänzt');
     await inp.fill('');
 
     /* Nachträgliche Bearbeitung => Export unverändert, aktueller Inhalt abweichend. */
