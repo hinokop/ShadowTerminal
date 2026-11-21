@@ -2564,7 +2564,7 @@ const TERMINAL_TABELLE = [
   { name: 'plog', hilfe: [[1, 3.5, 'plog [-n N] [-f]']], tab: { art: 'optionen', werte: ['-f', '-n'] }, aus: function (args) { return terminalPlog(args); } },
   { name: 'nmap', hilfe: [[0, 6.5, 'nmap <options> <target>']], aus: function (args) { return terminalNmap(args); } },
   { name: 'exports', hilfe: [[0, 6.55, 'exports [query]']], tab: { art: 'vault' }, aus: function (args) { return terminalVaultListe(args); } },
-  { name: 'map', hilfe: [[0, 6.6, 'map [pins [query]|PIN-nnn|name]']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('map', args); } },
+  { name: 'map', hilfe: [[0, 6.6, 'map [pins [query]|zones [query]|PIN-nnn|ZO-nnn|name]']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('map', args); } },
   { name: 'open', hilfe: [[0, 6.7, 'open <id|name|export name>']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('open', args); } },
   { name: 'sudo', hilfe: [[0, 6.8, 'sudo <command>']], tab: { art: 'navigation' }, aus: function (args) { return terminalSudo(args); } },
   { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
