@@ -1,5 +1,7 @@
 # Testpaket 04 – PIN-Tab-Baseline und Entwicklungsplan
 
+**Hinweis (Präzisierung vom 21.11.2026):** Dies ist eine bereits angelegte **optionale Einzelprüfanleitung** für die Baseline. Nach der aktuellen Projektregel werden neue nummerierte Windows-Testpakete grundsätzlich nur noch erstellt, wenn ein umfassender manueller Oberflächen-/Integrationstest unter Windows geplant ist. Für diesen reinen Test-Fix ist kein vollständiger Windows-Praxistest nötig.
+
 **Branch:** `fix/pin-tab-test-und-entwicklungsplan-20261121` (Draft-PR gegen `main`).  
 **Änderungsart:** ausschließlich Testkorrektur und Dokumentation; kein Produktcode geändert.  
 **Geprüfter Commit:** bitte beim Test mit `git rev-parse HEAD` beziehungsweise mit der GitHub-PR-Head-SHA erfassen; nicht nur den Branchnamen protokollieren.  
