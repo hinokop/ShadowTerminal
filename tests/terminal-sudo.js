@@ -45,12 +45,17 @@ const { APP } = require('./_pfad');
       assert.equal(await p.evaluate(() => document.getElementById('profil-terminal-vorschlag').textContent), '', 'kein Overlay');
     };
 
-    /* Ohne Sperre keine Abfrage; übrige Befehle laufen unter sudo unverändert */
+    /* Ohne Sperre keine Abfrage; sudo ist nur für map und open zugelassen. */
     await cmd('sudo open ' + z.frei);
     assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: z.frei });
     await zurueck();
     assert.doesNotMatch(await out.textContent(), /\[sudo\]/);
-    await cmd('sudo whoami'); assert.equal((await zeilen(1))[0], 'raizo');
+    for (const befehl of ['whoami', 'exit', 'clear', 'pon', 'sudo']) {
+      await cmd('sudo ' + befehl);
+      assert.equal((await zeilen(1))[0], 'sudo: ' + befehl + ': not supported in Shadow Terminal');
+      assert.equal(await status(), '1');
+      assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.offen), true, 'sudo ' + befehl + ' beendet die Sitzung nicht');
+    }
     await cmd('sudo'); assert.equal((await zeilen(10))[0], 'usage: sudo -h | -K | -k | -V'); assert.equal(await status(), '1');
     await cmd('sudo nope'); assert.equal((await zeilen(1))[0], 'sudo: nope: command not found'); assert.equal(await status(), '1');
     await cmd('sudo open P-9999'); assert.equal((await zeilen(1))[0], 'open: P-9999: No such file or directory');
@@ -127,6 +132,26 @@ const { APP } = require('./_pfad');
     assert.equal(await gesperrt(info.id), false);
     assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: info.id });
     assert.deepEqual(await p.evaluate(i => [wissen(entitaet(i)), infoGesperrt(entitaet(i)), (STATE.infozugang || {})[i]?.status], info.id), ['bekannt', true, 'bekannt'], 'Freigabe unverändert');
+
+    /* Schließen des Terminalfensters bricht eine offene sudo-Abfrage ab und verwirft den Puffer. */
+    await zurueck();
+    await p.evaluate(i => { dispatch({ type: 'DOSSIER_SPERREN', id: i }); dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule(); }, z.zwei);
+    await starten('sudo open ' + z.zwei);
+    await geheim('nicht-speichern');
+    await p.click('#profil-terminal-schliessen');
+    await p.waitForFunction(() => !TERMINAL_ZUSTAND.sudo && !TERMINAL_ZUSTAND.kette);
+    assert.equal(await gesperrt(z.zwei), true);
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.offen), false);
+    assert.equal(await p.evaluate(() => document.getElementById('profil-terminal-eingabe').value), '');
+    await p.evaluate(() => terminalKonsoleOeffnen());
+
+    /* Auch die automatische Oberflächensperre beendet eine laufende Kennwortabfrage vollständig. */
+    await starten('sudo open ' + z.zwei);
+    await geheim('weiteres-geheimnis');
+    await p.evaluate(() => document.body.classList.add('locked'));
+    await p.waitForFunction(() => !TERMINAL_ZUSTAND.sudo && !TERMINAL_ZUSTAND.kette);
+    assert.equal(await gesperrt(z.zwei), true);
+    assert.equal(await p.evaluate(() => document.getElementById('profil-terminal-eingabe').value), '');
     assert.deepEqual(errors, []);
     console.log('OK: sudo (Kennwort nur bei Sperre, verdeckt, drei Versuche, Strg+C, Freigabe bleibt)');
   } finally { await b.close(); }
