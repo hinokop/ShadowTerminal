@@ -21,7 +21,7 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
     await p.clock.install();
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
-    const nach = async z => { await cmd(z); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); const t = await out.textContent(); return t.slice(t.lastIndexOf('# ' + z) + z.length + 2).split('\n').filter(Boolean); };
+    const nach = async z => { await cmd(z); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); const t = await out.textContent(); return t.slice(t.lastIndexOf('$ ' + z) + z.length + 2).split('\n').filter(Boolean); };
     const status = async () => (await nach('echo $?'))[0];
     const syslog = n => p.evaluate(n => TERMINAL_ZUSTAND.syslog.filter(z => / (pppd|chat)\[/.test(z)).slice(-n), n);
 
@@ -58,7 +58,7 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
     await cmd('pon kestrel && plog -f');
     assert.equal(await p.evaluate(() => terminalBeschaeftigt()), true, 'plog -f hält die Shell im Vordergrund');
     await p.clock.runFor(3000);
-    const live = (await out.textContent()).split('# pon kestrel && plog -f\n').at(-1);
+    const live = (await out.textContent()).split('$ pon kestrel && plog -f\n').at(-1);
     assert.match(live, /^(.*\n){6}.* chat\[\d+\]: abort on \(BUSY\)\n[\s\S]* chat\[\d+\]: BUSY\n.* -- failed\n.*Failed \(BUSY\)\n.* pppd\[\d+\]: Connect script failed$/);
     assert.equal(live.split('abort on (BUSY)').length, 2, 'jede Zeile genau einmal');
     assert.deepEqual(live.split('\n').slice(-12), await syslog(12), 'live dieselben Zeilen wie im Protokoll');
@@ -66,7 +66,7 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     assert.match(await out.textContent(), /Connect script failed\n\^C$/);
     await cmd('plog -fn 0'); await p.waitForFunction(() => terminalBeschaeftigt());
-    await p.evaluate(() => terminalPppLog('pppd[1]: live')); assert.match(await out.textContent(), /# plog -fn 0\n.* pppd\[1\]: live$/);
+    await p.evaluate(() => terminalPppLog('pppd[1]: live')); assert.match(await out.textContent(), /\$ plog -fn 0\n.* pppd\[1\]: live$/);
     await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     assert.equal(await status(), '130');
     await nach('poff');
@@ -87,7 +87,7 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; TERMINAL_ZUSTAND.satLink.bis = Date.now() + 500; });
     await p.clock.runFor(1000);
     await p.waitForFunction(() => TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.bereit);
-    const los = (await out.textContent()).split('# plog -fn 0\n').at(-1).split('\n');
+    const los = (await out.textContent()).split('$ plog -fn 0\n').at(-1).split('\n');
     assert.equal(los.length, 2, 'zwei Zeilen, jede einmal: ' + JSON.stringify(los));
     assert.match(los[0], /^\w{3} \d+ [\d:]{8} terminal pppd\[\d+\]: Modem hangup \(NO CARRIER\)$/);
     assert.match(los[1], /^\w{3} \d+ [\d:]{8} terminal pppd\[\d+\]: Connection terminated\.$/);
@@ -104,11 +104,11 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'nocarrier'; TERMINAL_ZUSTAND.satLink.bis = Date.now() + 500; });
     await p.clock.runFor(1000);
     await p.waitForFunction(() => TERMINAL_ZUSTAND.modem && !TERMINAL_ZUSTAND.modem.bereit);
-    assert.deepEqual((await out.textContent()).split('# true\n').at(-1).split('\n'), [
+    assert.deepEqual((await out.textContent()).split('$ true\n').at(-1).split('\n'), [
       await p.evaluate(() => 'pppd[' + TERMINAL_SITZUNG.pppd + ']: Modem hangup (NO CARRIER)'),
       await p.evaluate(() => 'pppd[' + TERMINAL_SITZUNG.pppd + ']: Connection terminated.')]);
     await p.clock.runFor(1500);
-    assert.doesNotMatch((await out.textContent()).split('# true\n').at(-1), /abort on/, 'Neuwahl im Hintergrund schreibt nicht in die Shell');
+    assert.doesNotMatch((await out.textContent()).split('$ true\n').at(-1), /abort on/, 'Neuwahl im Hintergrund schreibt nicht in die Shell');
     await nach('poff');
 
     /* exit in tmux beendet die Shell samt plog -f; was in der Kette danach käme, läuft nicht mehr */

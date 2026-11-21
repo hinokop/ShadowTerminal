@@ -21,7 +21,7 @@ const { imUeberflug, bis, verbunden, gescheitert } = require('./_kestrel');
     await p.clock.install();
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
-    const nach = async z => { await cmd(z); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); const t = await out.textContent(); return t.slice(t.lastIndexOf('# ' + z) + z.length + 2).split('\n').filter(Boolean); };
+    const nach = async z => { await cmd(z); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); const t = await out.textContent(); return t.slice(t.lastIndexOf('$ ' + z) + z.length + 2).split('\n').filter(Boolean); };
     // Zeitstempel (Sekunden seit Mitternacht UTC) der letzten Syslog-Zeile, die das Muster enthält.
     const zeit = async muster => p.evaluate(m => {
       const z = TERMINAL_ZUSTAND.syslog.filter(x => x.includes(m)).at(-1);
