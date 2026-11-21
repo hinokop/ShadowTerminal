@@ -181,7 +181,7 @@ const { APP } = require('./_pfad');
       'Terminalzugang beruht allein auf der manuellen Sperre');
     assert.equal(historisch.recherche && historisch.nameTreffer, true,
       'Dossiername ist unabhängig von alter Freigabe auflösbar');
-    txt = await cmd('open "' + historisch.name + '"');
+    txt = await cmd('open ' + historisch.name);
     assert.equal((await modul()).dossier, historisch.id, 'historischer Name navigiert zum Dossier');
     await back();
     await input.fill('open ' + historisch.name);
