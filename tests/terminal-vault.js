@@ -190,7 +190,7 @@ const { APP } = require('./_pfad');
     getrennt = true;
     res = await cmd('open export Treffpunkt Nord');
     assert.match(res, /VAULT: INDEX LINK UNAVAILABLE/);
-    assert.doesNotMatch(res, /Lokale Datenbank|127\\.0\\.0\\.1|dokumente|ops\\//i);
+    assert.doesNotMatch(res, /Lokale Datenbank|127\.0\.0\.1|dokumente|ops\//i);
     assert.equal(await code(), '1');
     assert.deepEqual(errors, []);
     console.log('OK: VAULT-Katalog, Revision, Integrität, Name, Dossiersperren, sudo und pfadfreie Inline-Ausgabe');
