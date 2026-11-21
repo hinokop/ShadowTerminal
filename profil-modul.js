@@ -260,15 +260,20 @@ function terminalArbeitsverzeichnis() {
 /* Einheitliche Zugriffsprüfung für archivierte Kartenobjekte in der Terminal-
    Oberfläche. Die lokale Python-Brücke selbst besitzt keine Profilberechtigungen;
    direkter Dateisystemzugriff außerhalb dieser Oberfläche bleibt davon unabhängig. */
-function terminalArchivDateiGesperrt(op, parts) {
+function terminalArchivDateiId(op, parts) {
   if (!['cat', 'head', 'tail', 'wget', 'send'].includes(op) ||
       !Array.isArray(parts) || parts.length !== 2 ||
       !['ops', 'dokumente'].includes(parts[0]) || typeof parts[1] !== 'string')
-    return false;
+    return null;
   const muster = TERMINAL_VAULT_MUSTER.find(function (m) { return m.re.test(parts[1]); });
-  if (!muster) return false;
+  if (!muster) return null;
   const id = muster.re.exec(parts[1])[1];
-  const objekt = terminalVaultObjekte().find(function (p) { return p.id === id && p.art === muster.art; });
+  return terminalVaultObjekte().some(function (p) { return p.id === id && p.art === muster.art; }) ? id : null;
+}
+function terminalArchivDateiGesperrt(op, parts) {
+  const id = terminalArchivDateiId(op, parts);
+  if (!id) return false;
+  const objekt = terminalVaultObjekte().find(function (p) { return p.id === id; });
   return !!objekt && objekt.gesperrt;
 }
 async function terminalBruecke(op, parts, hidden, exportDaten) {
@@ -444,15 +449,20 @@ async function terminalDateiBefehl(befehl, arg, version) {
     terminalTransferStop();
     terminalDownload(antwort, daten);
     terminalAusgabe([fertig, 'Empfangen [' + bytes + '/' + bytes + '] · Download gestartet']);
-  } else terminalAusgabe(antwort.text);
+  } else terminalAusgabe(antwort.text, terminalArchivDateiId(befehl, pfad));
   return 0;
 }
 
 const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null, nmap: null };
 // Scrollback der Shell; größer als die längste Einzelausgabe (predict -f), damit nichts still verloren geht.
 const TERMINAL_PUFFER = 1000;
-function terminalAusgabe(zeile) {
+function terminalAusgabe(zeile, geschuetzteId = null) {
   const t = TERMINAL_ZUSTAND;
+  /* Metadaten und Text behalten dieselben Pufferpositionen. Die Kennung dient
+     nur zur späteren Entfernung geschützter Archivtexte nach einer Sperrung. */
+  const neu = [].concat(zeile);
+  const meta = t.ausgabeMeta || Array(t.ausgabe.length).fill(null);
+  t.ausgabeMeta = meta.concat(neu.map(function () { return geschuetzteId; })).slice(-TERMINAL_PUFFER);
   t.ausgabe = t.ausgabe.concat(zeile).slice(-TERMINAL_PUFFER);
   terminalPppAnzeige();
   const el = $('profil-terminal-ausgabe');
@@ -2142,12 +2152,18 @@ function terminalPinSperreAktualisieren() {
     t.entwurf = '';
     /* Bereits angezeigte Archivblätter müssen bei einer nachträglichen Sperre vollständig
        verschwinden: auch Koordinaten und Notizen, die von sperreText nicht maskiert werden. */
-    t.ausgabe = t.ausgabe.filter(function (zeile) {
+    const meta = t.ausgabeMeta || [];
+    const ausgabe = [], ausgabeMeta = [];
+    t.ausgabe.forEach(function (zeile, i) {
       const m = /^VAULT :: RECORD ACCESS\nOBJECT\s+((?:PIN|ZO)-\d{3,15})\b/.exec(zeile);
-      if (!m) return true;
-      const obj = terminalVaultObjekte().find(function (p) { return p.id === m[1]; });
-      return !obj || !obj.gesperrt;
+      const id = meta[i] || (m ? m[1] : null);
+      const obj = id ? terminalVaultObjekte().find(function (p) { return p.id === id; }) : null;
+      if (obj && obj.gesperrt) return;
+      ausgabe.push(zeile);
+      ausgabeMeta.push(meta[i] || null);
     });
+    t.ausgabe = ausgabe;
+    t.ausgabeMeta = ausgabeMeta;
   }
   const fenster = $('profil-terminal');
   const ausgabe = $('profil-terminal-ausgabe');
@@ -2416,7 +2432,7 @@ async function terminalVaultOeffnen(args, sudo = false) {
     antwort.text.replace(/\n$/, ''),
     '────────────────────────────────────────',
     'VAULT :: END OF RECORD'
-  ].join('\n'));
+  ].join('\n'), rec.id);
   return 0;
 }
 
@@ -2578,7 +2594,7 @@ const TERMINAL_TABELLE = [
   { name: 'clear', hilfe: [[0, 14, 'clear']], aus: function (args, arg) {
     const t = TERMINAL_ZUSTAND;
     if (arg) return terminalUsage('clear');
-    t.version++; terminalTransferStop(); t.ausgabe = []; terminalAusgabe([]);
+    t.version++; terminalTransferStop(); t.ausgabe = []; t.ausgabeMeta = []; terminalAusgabe([]);
     return 0;
   } },
   { name: 'exit', hilfe: [[0, 15, 'exit']], aus: function (args, arg) {
