@@ -26,7 +26,11 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Set up optional local map-key placeholder
         run: |
-          printf 'window.KARTEN_SCHLUESSEL = {};\n' > kartenschluessel.js
+          printf 'window.KARTEN_SCHLUESSEL = {carto: "cb1_ci_fixture_not_a_real_token"};\n' > kartenschluessel.js
+      - name: Assert CARTO fixture used by legacy map regression
+        env:
+          FT_PARALLEL: '1'
+        run: node tests/runall.js zn
       - name: Verify Python archive bridge
         run: python3 tests/terminal_bridge_pagination.py
       - name: Critical previously failing tests
