@@ -2038,7 +2038,24 @@ function terminalPinZeigen(px) {
 function terminalPinSperreAktualisieren() {
   if (typeof terminalTabReset === 'function') terminalTabReset();
   const t = TERMINAL_ZUSTAND;
-  if (t) t.vorschlagErgaenzung = null;
+  if (t) {
+    t.vorschlagErgaenzung = null;
+    /* Die Shell-Historie darf einen zuvor benutzten Namenssuchbegriff nach dem Sperren
+       nicht erneut als grauen Vorschlag oder über Pfeil-hoch offenlegen. Kennungen bleiben. */
+    const gesperrte = (PROFIL.pins || []).filter(pinGesperrt).map(function (p) { return terminalPinSuchtext(p.name); })
+      .filter(function (name) { return name.length >= 3; });
+    t.verlauf = t.verlauf.filter(function (zeile) {
+      const norm = terminalPinSuchtext(zeile);
+      if (gesperrte.some(function (name) { return norm.includes(name); })) return false;
+      const m = /^(?:sudo\\s+)?(?:map|open)\\s+(?:pins\\s+)?(.+)$/i.exec(zeile.trim());
+      if (!m) return true;
+      const query = terminalPinSuchtext(m[1]).replace(/^['"]|['"]$/g, '');
+      if (/^(?:pin-\\d+|[pol]-\\d+)$/.test(query) || query.length < 3) return true;
+      return !gesperrte.some(function (name) { return name.includes(query) || query.includes(name); });
+    });
+    t.vpos = -1;
+    t.entwurf = '';
+  }
   const fenster = $('profil-terminal');
   if (fenster && typeof sperreMaskieren === 'function') sperreMaskieren(fenster);
 }

@@ -141,7 +141,11 @@ const { APP } = require('./_pfad');
 
     /* Eine nachträgliche Sperre maskiert auch die bereits sichtbare Terminalausgabe. */
     await input.fill('');
+    assert.equal(await page.evaluate(() => TERMINAL_ZUSTAND.verlauf.some(z => z.includes('kühlhaus'))), true,
+      'vor Sperre existiert der Namenssuchbegriff im Verlauf');
     await page.evaluate(id => dispatch({ type: 'DOSSIER_SPERREN', id }), ziel.dossier);
+    assert.equal(await page.evaluate(() => TERMINAL_ZUSTAND.verlauf.some(z => z.includes('kühlhaus'))), false,
+      'nach Sperre enthält der Verlauf keine Namenssuchbegriffe des geschützten Pins');
     const terminalText = await ausgabe.textContent();
     assert.doesNotMatch(terminalText, /Kühlhaus Quellweg/, 'historische Ausgabe nach Sperre maskiert');
     assert.match(terminalText, new RegExp(ziel.zu), 'historischer Text darf Kennung enthalten');
