@@ -296,6 +296,7 @@ function terminalSitzungTrennen() {
    root nie (plugins/sudoers/check.c). Prompt wie bash unter Ubuntu, PS1 '\u@\h:\w\$': '$' für Nicht-root. */
 const TERMINAL_BENUTZER = 'raizo';
 function terminalPrompt() {
+  if (TERMINAL_ZUSTAND.sudo) return TERMINAL_ZUSTAND.sudo.pruefen ? '' : terminalSudoPrompt();
   if (TERMINAL_ZUSTAND.orbitLive) return 'predict · Ctrl+C';
   if (terminalPppWaehltVorne()) return '';
   if (TERMINAL_ZUSTAND.kette && !TERMINAL_ZUSTAND.kanal) return '';
@@ -1780,12 +1781,14 @@ function terminalOrbitEnde() {
 // pppd fängt SIGINT ab und endet mit 5 (pppd(8)), andere Programme enden durch das Signal (128 + 2).
 function terminalKetteAbbrechen(code = 130) {
   const kette = TERMINAL_ZUSTAND.kette;
+  if (kette && TERMINAL_ZUSTAND.sudo) terminalSudoEnde('abbruch');
   if (kette && !kette.abgebrochen) { kette.abgebrochen = true; kette.code = code; }
 }
 function terminalStrgC() {
   const t = TERMINAL_ZUSTAND, input = $('profil-terminal-eingabe');
   if (t.orbitLive || terminalPppWaehltVorne()) { terminalKonsoleEscape(); return true; }
   if (t.kanal) return false;
+  if (t.sudo) { terminalKetteAbbrechen(130); return true; }      /* Kennwortabfrage: kein ^C (kein Echo), nur der Zeilenumbruch */
   if (t.kette) {
     terminalKetteAbbrechen(130);
     const wg = t.wgSat;
@@ -2003,10 +2006,9 @@ async function terminalDateiAusfuehren(befehl, arg) {
    Wortlaut der Meldungen nach dem Muster der Dateibefehle (Simulationsentscheidung). Nach dem Sprung wird das Terminal
    minimiert; Shell, pppd, Profanity und tmux laufen weiter (das Fenster liegt außerhalb der beim Modulwechsel ersetzten Oberfläche). */
 const TERMINAL_KENNUNG_DOSSIER = /^[POL]-\d{4}$/, TERMINAL_KENNUNG_PIN = /^PIN-\d{3,}$/;
-function terminalZielPruefen(befehl, id) {
+function terminalZiel(befehl, id) {
   const z = TERMINAL_KENNUNG_DOSSIER.test(id) || TERMINAL_KENNUNG_PIN.test(id) ? zielZugang(id) : null;
-  if (!z) { terminalAusgabe(befehl + ': ' + id + ': No such file or directory'); return null; }
-  if (z.gesperrt) { terminalAusgabe(befehl + ': ' + id + ': Permission denied'); return null; }
+  if (!z) terminalAusgabe(befehl + ': ' + id + ': No such file or directory');
   return z;
 }
 function terminalNachNavigation() {
@@ -2030,7 +2032,7 @@ function terminalPinZeigen(px) {
   karteWaehlen(si.id, true);
   return true;
 }
-function terminalNavigation(befehl, args) {
+async function terminalNavigation(befehl, args, sudo = false) {
   if (befehl === 'map' && !args.length) {
     VIEW.karte.reiter = 'karte';
     dispatch({ type: 'NAVIGATION', modul: 'karte' });
@@ -2039,12 +2041,86 @@ function terminalNavigation(befehl, args) {
     return 0;
   }
   if (args.length !== 1 || (befehl === 'map' && !TERMINAL_KENNUNG_PIN.test(args[0]))) return terminalUsage(befehl === 'map' ? 'map [PIN-nnn]' : 'open <P-nnnn|O-nnnn|L-nnnn|PIN-nnn>');
-  const z = terminalZielPruefen(befehl, args[0]);
+  let z = terminalZiel(befehl, args[0]);
   if (!z) return 1;
+  if (z.gesperrt) {
+    if (!sudo) { terminalAusgabe(befehl + ': ' + z.id + ': Permission denied'); return 1; }
+    /* sudo: Zugangskennung der Oberfläche, dann dieselbe Entsperrung wie dort (DOSSIER_ENTSPERREN); ein Pin über sein Dossier */
+    const ok = await terminalSudoKennwort();
+    if (ok !== true) return ok === 'abbruch' ? 130 : 1;
+    dispatch({ type: 'DOSSIER_ENTSPERREN', id: z.dossier });
+    z = zielZugang(z.id);
+    if (!z || z.gesperrt) { terminalAusgabe(befehl + ': ' + args[0] + ': Permission denied'); return 1; }
+  }
   if (z.art === 'pin') { if (!terminalPinZeigen(z.objekt)) { terminalAusgabe(befehl + ': ' + z.id + ': No such file or directory'); return 1; } }
   else dispatch({ type: 'DOSSIER_GEOEFFNET', id: z.id, navigieren: true, ueber: 'Terminal' });
   terminalNachNavigation();
   return 0;
+}
+/* sudo: führt den Befehl aus. Ein Kennwort verlangt es nur, wenn map oder open ein manuell gesperrtes Ziel treffen
+   (Entscheidung Shadow; das Original fragt vor jedem Befehl, ohne Zwischenspeicher). Prompt wie das Ubuntu-Paket (angenommen;
+   das Original setzt "Password: ", configure.ac), kein Echo, nicht im Verlauf, kein Vorschlag. Drei Versuche
+   (passwd_tries, configure.ac), Meldungen "Sorry, try again." und "sudo: 3 incorrect password attempts" (logging.c).
+   Strg+C: Zeilenumbruch, dann SIGINT (tgetpass.c), Rückgabewert 130. Die Missionsfreigabe hebt sudo nicht auf. */
+const TERMINAL_SUDO_VERSUCHE = 3;
+const TERMINAL_SUDO_USAGE = ['usage: sudo -h | -K | -k | -V', 'usage: sudo -v [-ABkNnS] [-g group] [-h host] [-p prompt] [-u user]',
+  'usage: sudo -l [-ABkNnS] [-g group] [-h host] [-p prompt] [-U user]', '            [-u user] [command [arg ...]]',
+  'usage: sudo [-ABbEHkNnPS] [-C num] [-D directory]', '            [-g group] [-h host] [-p prompt] [-R directory] [-T timeout]',
+  '            [-u user] [VAR=value] [-i | -s] [command [arg ...]]', 'usage: sudo -e [-ABkNnS] [-C num] [-D directory]',
+  '            [-g group] [-h host] [-p prompt] [-R directory] [-T timeout]', '            [-u user] file ...'];
+function terminalSudoPrompt() { return '[sudo] password for ' + TERMINAL_BENUTZER + ':'; }
+async function terminalSudo(args) {
+  if (!args.length) { terminalAusgabe(TERMINAL_SUDO_USAGE); return 1; }
+  const befehl = args[0], eintrag = terminalBefehlEintrag(befehl), rest = args.slice(1);
+  if (!eintrag) { terminalAusgabe('sudo: ' + befehl + ': command not found'); return 1; }
+  if (befehl === 'map' || befehl === 'open') return terminalNavigation(befehl, rest, true);
+  return eintrag.aus(rest, terminalArgText(rest));
+}
+/* Verdeckte Eingabe: die Zeichen landen nur in TERMINAL_ZUSTAND.sudo.puffer, nie im Eingabefeld, im Verlauf oder in der Ausgabe. */
+function terminalSudoKennwort() {
+  return new Promise(function (fertig) {
+    TERMINAL_ZUSTAND.sudo = { puffer: '', versuche: 0, pruefen: false, fertig };
+    const input = $('profil-terminal-eingabe');
+    if (input) { terminalEingabeSetzen(input, ''); input.setAttribute('aria-label', 'Kennwort'); input.parentElement?.classList.add('verdeckt'); }
+    terminalKanalPromptSync();
+  });
+}
+function terminalSudoEnde(ergebnis) {
+  const s = TERMINAL_ZUSTAND.sudo;
+  if (!s) return;
+  TERMINAL_ZUSTAND.sudo = null;
+  s.puffer = '';
+  const input = $('profil-terminal-eingabe');
+  if (input) { terminalEingabeSetzen(input, ''); input.setAttribute('aria-label', 'Terminalbefehl'); input.parentElement?.classList.remove('verdeckt'); }
+  if (ergebnis === 'abbruch' && !s.pruefen) terminalAusgabe(terminalSudoPrompt() + ' ');
+  terminalKanalPromptSync();
+  s.fertig(ergebnis);
+}
+async function terminalSudoEingabe() {
+  const s = TERMINAL_ZUSTAND.sudo;
+  if (!s || s.pruefen) return;
+  const kennwort = s.puffer;
+  s.puffer = ''; s.pruefen = true;
+  terminalAusgabe(terminalSudoPrompt() + ' ');
+  terminalKanalPromptSync();
+  const ok = await kennungPruefen(kennwort);
+  if (TERMINAL_ZUSTAND.sudo !== s) return;
+  s.pruefen = false;
+  if (ok) { terminalSudoEnde(true); return; }
+  if (++s.versuche >= TERMINAL_SUDO_VERSUCHE) { terminalAusgabe('sudo: ' + s.versuche + ' incorrect password attempts'); terminalSudoEnde(false); return; }
+  terminalAusgabe('Sorry, try again.');
+  terminalKanalPromptSync();
+}
+function terminalSudoTaste(ev) {
+  const s = TERMINAL_ZUSTAND.sudo, strg = ev.ctrlKey && !ev.altKey && !ev.metaKey, k = ev.key.toLowerCase();   /* AltGr meldet Strg+Alt */
+  if (ev.isComposing) return;
+  if (strg && (k === 'c' || k === 'v')) return;      /* Strg+C: SIGINT über den Dokument-Handler; Strg+V: oninput übernimmt */
+  ev.preventDefault();
+  if (s.pruefen) return;
+  if (ev.key === 'Enter') { if (!ev.repeat) void terminalSudoEingabe(); return; }
+  if (ev.key === 'Backspace') { s.puffer = Array.from(s.puffer).slice(0, -1).join(''); return; }
+  if (strg && k === 'u') { s.puffer = ''; return; }
+  if (Array.from(ev.key).length === 1 && !strg && !ev.metaKey) s.puffer += ev.key;
 }
 function terminalHilfe() {
   const zeilen = [[], [], []];
@@ -2115,6 +2191,7 @@ const TERMINAL_TABELLE = [
   { name: 'nmap', hilfe: [[0, 6.5, 'nmap <options> <target>']], aus: function (args) { return terminalNmap(args); } },
   { name: 'map', hilfe: [[0, 6.6, 'map [PIN-nnn]']], aus: function (args) { return terminalNavigation('map', args); } },
   { name: 'open', hilfe: [[0, 6.7, 'open <id>']], aus: function (args) { return terminalNavigation('open', args); } },
+  { name: 'sudo', hilfe: [[0, 6.8, 'sudo <command>']], aus: function (args) { return terminalSudo(args); } },
   { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
   { name: 'false', hilfe: [[0, 9, 'false']], aus: function (args, arg) { return arg ? terminalUsage('false') : 1; } },
@@ -2379,6 +2456,7 @@ function terminalVerlaufTaste(ev) {
   return true;
 }
 function terminalTabTaste(ev) {
+  if (TERMINAL_ZUSTAND.sudo) { terminalSudoTaste(ev); return; }
   const offen = terminalTabAuswahl;
   /* Strg+→ wie Oh My Zsh mit zsh-autosuggestions: forward-word (lib/key-bindings.zsh, ^[[1;5C) mit WORDCHARS=''
      (lib/completion.zsh), also nur Buchstaben und Ziffern als Wortzeichen; forward-word überspringt Wortzeichen, dann
@@ -2591,6 +2669,8 @@ function terminalKonsoleBauen() {
     maxlength: 1024, autocomplete: 'off', spellcheck: 'false', onkeydown: terminalTabTaste,
     onblur: terminalTabReset, onpointerdown: terminalTabReset,
     oninput: function (ev) {
+      const sudo = TERMINAL_ZUSTAND.sudo;
+      if (sudo) { if (!ev.isComposing) { if (!sudo.pruefen) sudo.puffer += input.value.replace(/\n/g, ''); input.value = ''; } return; }   /* Einfügen, IME */
       terminalTabReset();
       if (ev.isComposing) return;
       if (input.value.includes('\n')) {
@@ -2616,6 +2696,7 @@ function terminalKonsoleBauen() {
       h('pre', { id: 'profil-terminal-transfer', class: 'mono', hidden: !t.fortschritt }, t.fortschritt),
       h('form', { onsubmit: function (ev) {
         ev.preventDefault();
+        if (TERMINAL_ZUSTAND.sudo) { void terminalSudoEingabe(); return; }      /* Schaltfläche während der Kennwortabfrage */
         terminalTabReset();
         const zeile = input.value.replace(/\n/g, ' ').trim();
         if (TERMINAL_ZUSTAND.tmux?.fokus === 'oben') return;

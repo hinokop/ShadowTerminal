@@ -17,6 +17,12 @@ Die Anzeige rechts im Kopf des Terminalfensters gehört zu Shadow Terminal. Sie 
 
 `map` öffnet die Lagekarte, `map PIN-nnn` und `open PIN-nnn` springen zum Pin und öffnen sein Fenster, `open P-nnnn` (ebenso `O-`, `L-`) öffnet das Dossier. Nur exakte Kennungen; die Suche nach Namen folgt später. Der Zugang ist derselbe wie in der Oberfläche (`zielZugang`): Ist ein Dossier manuell gesperrt, gilt das auch für die mit ihm verknüpften Pins; der Aufruf meldet dann `Permission denied` und navigiert nicht. Ohne Freigabe durch den Ansprechpartner öffnet `open` die bestehende Ansicht „Zugriff beschränkt“. Zeichnet die Karte statt eines Pins seine Sichtung, wird die Sichtung gewählt. Nach dem Sprung wird das Terminal minimiert; pppd, tmux und Profanity laufen weiter.
 
+Mit `sudo` davor (`sudo open P-nnnn`, `sudo map PIN-nnn`) fragt das Terminal bei einem manuell gesperrten Ziel nach der Zugangskennung der Anmeldung, entsperrt wie die Schaltfläche „Entsperren“ dauerhaft und navigiert. Bei freien Zielen fragt es nicht. Gegenüber dem echten sudo:
+
+- Gleich: Prompt `[sudo] password for raizo:` (Form des Ubuntu-Pakets, angenommen; das Original setzt `Password: `), kein Echo, drei Versuche mit `Sorry, try again.` und `sudo: 3 incorrect password attempts`, Strg+C beendet ohne `^C` mit Rückgabewert 130, `sudo: <befehl>: command not found`, Aufruf ohne Befehl zeigt die Usage (ohne SELinux-Optionen; ob das Ubuntu-Paket sie zeigt, ungeprüft).
+- Anders: Das Original fragt vor jedem Befehl und merkt sich die Anmeldung einige Minuten; hier fragt nur ein gesperrtes Ziel, jedes Mal. Andere Befehle laufen unter sudo ohne Abfrage. Das Kennwort ist die Zugangskennung der Oberfläche, kein Systemkennwort.
+- Die fehlende Freigabe durch den Ansprechpartner hebt sudo nicht auf.
+
 Die Befehle sind Teil von Shadow Terminal und keinem echten Werkzeug nachgebildet; die Meldungen folgen dem Muster der Dateibefehle (`open: P-9999: No such file or directory`).
 
 ## Echte Zugriffe
