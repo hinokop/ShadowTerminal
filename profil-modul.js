@@ -2101,6 +2101,14 @@ function terminalPinSperreAktualisieren() {
     });
     t.vpos = -1;
     t.entwurf = '';
+    /* Bereits angezeigte Archivblätter müssen bei einer nachträglichen Sperre vollständig
+       verschwinden: auch Koordinaten und Notizen, die von sperreText nicht maskiert werden. */
+    t.ausgabe = t.ausgabe.filter(function (zeile) {
+      const m = /^VAULT :: RECORD ACCESS\nOBJECT\s+(PIN-\d{3,15})\b/.exec(zeile);
+      if (!m) return true;
+      const px = (PROFIL.pins || []).find(function (p) { return p.id === m[1]; });
+      return !px || !pinGesperrt(px);
+    });
   }
   const fenster = $('profil-terminal');
   const ausgabe = $('profil-terminal-ausgabe');
@@ -2318,16 +2326,18 @@ async function terminalVaultOeffnen(args, sudo = false) {
     istHash !== vermerk.sha ? 'INTEGRITY MISMATCH' :
     !sollHash ? 'VERIFIED' : sollHash === istHash ? 'VERIFIED / CURRENT' : 'VERIFIED / OUTDATED';
   /* Ausschließlich fiktive Datenbanksemantik in der Oberfläche, kein Transferprotokoll oder Dateisystempfad. */
+  const zuletzt = terminalVaultObjekte().find(function (x) { return x.id === rec.id; });
+  if (!zuletzt || zuletzt.gesperrt) { terminalAusgabe('VAULT: access revoked'); return 1; }
   terminalAusgabe([
     'VAULT :: RECORD ACCESS',
-    'OBJECT     ' + jetzt.id + ' · ' + jetzt.name,
+    'OBJECT     ' + zuletzt.id + ' · ' + zuletzt.name,
     'REVISION   ' + rec.revision.toString().padStart(2, '0'),
     'INTEGRITY  ' + integritaet,
     '────────────────────────────────────────',
     antwort.text.replace(/\n$/, ''),
     '────────────────────────────────────────',
     'VAULT :: END OF RECORD'
-  ]);
+  ].join('\n'));
   return 0;
 }
 
