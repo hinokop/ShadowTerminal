@@ -1,7 +1,16 @@
 # Field Terminal (Repo: ShadowTerminal)
 
-Lokales Recherchewerkzeug (Vanilla JS, ohne Build-Schritt), Oberfläche im Stil eines Feldterminals; früher ein Spiel, jetzt Werkzeug (README: Ist-Stand und Planung). Sprache der Oberfläche und der Arbeit: Deutsch.
+Lokales Recherchewerkzeug (Vanilla JS, ohne Build-Schritt), Oberfläche im Stil eines Feldterminals; früher ein Spiel, jetzt Werkzeug (README: Ist-Stand und Planung). Arbeitssprache und interne Dokumentation derzeit Deutsch; sichtbare Terminalmeldungen und Oberfläche werden nach Freigabe schrittweise auf Englisch umgestellt (Tests und Dokumentation synchron).
 Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmaterial; Schwächen und Widersprüche ungefragt benennen; nie halluzinieren.
+
+## Verbindliche Entwicklungsreihenfolge – Stand 2026-11-21
+
+**Vor der nächsten Änderung vollständig lesen:** [docs/terminal-entwicklungsplan-2026-11.md](docs/terminal-entwicklungsplan-2026-11.md).
+Von Shadow freigegeben: **(1)** falschen Tab-Test auf `main` korrigieren; **(2)** Draft #95 (Namensnavigation) reparieren und abnehmen; **(3)** Draft #96 (Archiv/Kartenzonen) reparieren und abnehmen; **(4)** #95, dann #96 kontrolliert mergen; **(5)** verbleibende Missions-/Ansprechpartnerfreigabe entfernen; **(6)** Realismus und Englisch schrittweise verbessern. Ein neuer Abschnitt beginnt erst, wenn der vorherige geprüft ist oder Shadow die Priorität ausdrücklich ändert.
+
+Realismus-Leitbild: existierende Unix-/Linux-Werkzeuge und deren konsistente Semantik bevorzugen; Sonderbefehle reduzieren, statt neue fiktive Terminalsysteme anzuhäufen. Den Host nicht zur freien Shell öffnen. `map PIN/ZO` navigiert zur Karte; `open PIN/ZO` öffnet das verknüpfte Dossier; `map pins` und `map zones` bleiben getrennt. Manuelle Sperren und Profilkompatibilität bleiben erhalten. Die fiktive VAULT-Oberfläche ist ein Zwischenstand, kein neues dauerndes Leitbild.
+
+**Jede Windows-relevante Änderung erhält im selben Draft-PR ein versioniertes Testpaket.** Befehle, konkrete erwartete UI-Ausgaben, Testdaten, Branch/Commit, gezielte und vollständige Tests sowie ungetestete Aspekte dokumentieren. Kein Merge ohne Abnahme durch Shadow und ChatGPT; ältere Review-Kommentare stets gegen den aktuellen Head prüfen.
 
 ## Aufbau
 - index.html: Anwendung (dispatch -> ACTIONS -> render, Plansystem, Ablage, Karte)
@@ -24,7 +33,7 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 
 ## Arbeitsweise
 - Pro Arbeitsrunde ein Branch, kleine Commits; Historie ersetzt ZIP-Backups.
-- Reste der alten Missionsmechanik bestehen noch (docs/missionsabhaengigkeiten.md, Zweige wie wissen()/Freigabelogik sind über den Missionspfad erreichbar). Entfernung nur nach Messung und ausdrücklicher Freigabe, Produktionscode und Tests getrennt (docs/r5-kandidaten.md).
+- Reste der alten Missionsmechanik bestehen noch (docs/missionsabhaengigkeiten.md, Zweige wie wissen()/Freigabelogik sind über den Missionspfad erreichbar). **Shadow hat den Abbau des Missions-/Ansprechpartnerfreigabe-Aspekts am 2026-11-21 freigegeben**, jedoch erst in Phase 5 des Entwicklungsplans, nach Inventur der Abhängigkeiten und Tests. Manuelle Dossiersperren und Profilkompatibilität bleiben bestehen; Produktionscode und Tests getrennt nachvollziehbar ändern (docs/r5-kandidaten.md).
 - Ablauf je Änderung: Branch von aktuellem origin/main; bei Codeänderungen ein Regressionstest, der auf main fehlschlägt, und die volle Standardauswahl (bei reinen Dokumentationsänderungen genügt die Prüfung des Diffs); Draft-PR mit Teststand und Ungeprüftem, unabhängige Prüfung durch ChatGPT, Merge erst nach Freigabe von Shadow und ChatGPT. Nichts löschen, nichts force-pushen ohne ausdrücklichen Auftrag.
 - Datenformat und Kompatibilität: Änderungen an gespeicherten Daten müssen alte Profile und den Profilimport tolerieren (Vertrag: docs/datenvertrag.md).
 - Keine spielartigen Hinweise/Zahlen in der Oberfläche; mehr Realismus.
