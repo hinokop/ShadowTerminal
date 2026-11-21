@@ -142,6 +142,13 @@ const { APP } = require('./_pfad');
     assert.deepEqual(await ansicht(), { modul: 'karte', id: z.zoneZu }); await back();
     await p.evaluate(id => dispatch({ type: 'DOSSIER_SPERREN', id }), z.geheim);
     assert.equal(await p.evaluate(id => !!karteZoneFinden(id), z.zoneZu), false);
+    await inp.fill('sudo map ' + z.zoneZu); await inp.press('Enter');
+    await p.waitForFunction(() => TERMINAL_ZUSTAND.sudo && !TERMINAL_ZUSTAND.sudo.pruefen);
+    await inp.focus(); await p.keyboard.type('pw-test-123'); await inp.press('Enter');
+    await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
+    assert.deepEqual(await ansicht(), { modul: 'karte', id: z.zoneZu });
+    assert.equal(await p.evaluate(id => PROFIL.gesperrt.includes(id), z.geheim), false);
+    await back();
     assert.deepEqual(errors, []);
     console.log('OK: PIN/ZO map vs. open, separate search, zone lock and sudo');
   } finally { await browser.close(); }
