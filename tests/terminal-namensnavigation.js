@@ -155,6 +155,10 @@ const { APP } = require('./_pfad');
     await p.evaluate(id => dispatch({ type: 'DOSSIER_SPERREN', id }), z.zu);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.some(s => s.includes('Geheime Quellakte'))), false,
       'Verlauf enthält nach Sperre keinen Dossier-Klarnamen');
+    assert.doesNotMatch(await out.textContent(), /Geheime Quellakte/, 'sichtbarer Scrollback sofort maskiert');
+    await cmd('echo maskierung-aktiv');
+    assert.doesNotMatch(await out.textContent(), /Geheime Quellakte/,
+      'nach weiterer Terminalausgabe keine kurzzeitig unmaskierten Namen');
     assert.deepEqual(errors, []);
     console.log('OK: direkte Namen, Präfix, Alias, Mehrdeutigkeit, Sperren und Dossier-Tab');
   } finally { await browser.close(); }
