@@ -26,7 +26,7 @@ Stand: 2026-11-21. Durch Shadow („Master Wayne“) freigegebene **Reihenfolge 
 - Sichtbarkeit und Rechte müssen für Navigation, Vorschläge, Trefferlisten und Verlauf dieselbe Entscheidung verwenden. Solange alte `infoGesperrt`-Mechanik noch tatsächlich wirkt, darf die Namensnavigation keinen alternativen Offenlegungsweg schaffen. Die spätere Entfernung der Missionsmechanik ist **kein Vorwand**, die aktuelle Lücke ungeprüft zu übernehmen.
 - Kollision „gesperrter exakter Name“ vs. „sichtbarer längerer Präfix“ explizit behandeln; keine stille falsche Navigation.
 - Maskierung des bereits angezeigten Scrollbacks und Verhalten bei erneuter Entsperrung testen. Keine ungezielte Löschung anderer Befehlsausgaben.
-- Regressionstests, aktuelle Dokumentation und Windows-Testpaket auf denselben Commit abstimmen. #95 bleibt Draft bis zur Abnahme.
+- Regressionstests und Dokumentation auf denselben Commit abstimmen. Ein umfassendes Windows-GUI-Testpaket erst an einem geeigneten Integrations-Meilenstein erstellen, nicht verpflichtend für jeden isolierten #95-Fix. #95 bleibt Draft bis zur Abnahme.
 
 ### 3. PR #96: Archiv und getrennte Objektnavigation kontrolliert fertigstellen
 
@@ -40,7 +40,7 @@ Stand: 2026-11-21. Durch Shadow („Master Wayne“) freigegebene **Reihenfolge 
 ### 4. Abnahme und Merge-Reihenfolge
 
 1. Baseline-Fix auf `main` nach Prüfung.
-2. #95 nach technischem Review, vollständiger Standardauswahl und erforderlichem Windows-Praxistest mergen.
+2. #95 nach technischem Review, gezielten Tests und vollständiger Standardauswahl mergen; einen gebündelten Windows-Oberflächentest ansetzen, sobald der integrierte Stand insgesamt praxisreif ist oder eine konkrete Änderung das verlangt.
 3. #96 auf den aktuellen `main` rebasen/aktualisieren; erst dann erneut vollständig prüfen und nach gesonderter Abnahme mergen.
 
 Ein erfolgreiches isoliertes Testskript ersetzt keinen vollständigen Regressionstest. Ergebnisstatus jeweils **bestätigt / fehlgeschlagen / nicht ausgeführt** dokumentieren, inklusive Branch-Commit, Testumgebung und bekannten Ausnahmen. Keine ungeprüfte Merge-Freigabe.
@@ -51,7 +51,7 @@ Ein erfolgreiches isoliertes Testskript ersetzt keinen vollständigen Regression
 - Ehemals missionsabhängige „Freigabe durch Ansprechpartner“ soll nicht beibehalten werden.
 - **Beibehalten:** manuelle Dossiersperren, konsistente PIN-/ZO-Zugriffsregeln, Benutzeridentitäten, beabsichtigte Passwortabfragen und Prüfsummen.
 - Gespeicherte Profile, Fallpakete und Altbestände rückwärtskompatibel lesen. Keine übergreifende Funktionsentfernung allein wegen ähnlicher Namen.
-- Eigener PR mit differenziertem Windows-Testpaket und Tests für Altdaten.
+- Eigener PR mit gezielten automatisierten Tests für Altdaten; umfassende Windows-Oberflächenabnahme erst als gebündelter Integrationsschritt.
 
 ### 6. Realismus- und Sprachphase in kleinen PRs
 
@@ -61,15 +61,19 @@ Ein erfolgreiches isoliertes Testskript ersetzt keinen vollständigen Regression
 - Oberfläche/Terminal in nachvollziehbaren Etappen Englisch übersetzen, jede Etappe mitsamt Dokumentation und wortlautabhängigen Tests.
 - Kein echter Host-Befehlsinterpreter, kein freier Zugriff auf das Betriebssystem und keine zusätzlichen Netz-/Dateirechte als unbeabsichtigter „Realismus“-Effekt.
 
-## Windows-Testpaket-Regel
+## Windows-Testpaket-Regel – präzisiert durch Shadow am 2026-11-21
 
-Wenn eine Änderung Bedienung, Browser/Terminal, Dateibrücke, Speicherdaten, Rechte oder Kartendarstellung auf Windows beeinflussen könnte, **mit derselben PR ein eindeutig versioniertes Testpaket** (z. B. `TESTPAKET_05_....md`) liefern:
-- exakter Branch und Commit; separater Testordner/ggf. Testprofil und Backup, lokale `kartenschluessel.js` übernehmen (niemals committen), Starter `START_TERMINAL.bat`;
-- konkrete, reproduzierbare Testdaten, Tasteneingaben/Befehle und erwartete Resultate; positive, negative und regressionsrelevante Fälle;
-- gezielte Playwright-Kommandos, Standardtestauswahl, mögliche externe Voraussetzungen, Ergebnisformular und bekannte Einschränkungen;
-- getrennt dokumentieren, was statisch geprüft, automatisiert ausgeführt und tatsächlich auf Windows bestätigt wurde.
+**Ein versioniertes Windows-Testpaket wird erstellt, wenn Shadow die gesamte Oberfläche bzw. einen umfassenden integrierten Anwendungsstand unter Windows testen soll.** Gemeint ist ein zusammenhängender manueller Abnahmedurchlauf durch Navigation, Terminal, Karte (einschließlich 3D, soweit relevant), Dossiers, Profil, Archiv und lokale Dateibrücke. Der Umfang wird je Meilenstein ausdrücklich festgelegt.
 
-Auch bei kleinen Änderungen ohne zwingenden Windows-Praxistest kurz festhalten, warum ein lokaler Test entbehrlich erscheint; ein freiwilliges kompaktes Testpaket ist zulässig. Die verantwortliche Person entscheidet über Abnahme und Merge.
+Für kleine isolierte Codeänderungen oder Testkorrekturen **kein obligatorisches neues Testpaket**. Stattdessen gezielte automatische Regressionen, dokumentierter Test-/Review-Stand und, soweit sinnvoll, eine kurze manuelle Einzelprüfung im PR. Ein Windows-spezifischer Fehler kann ausnahmsweise auch zwischen den großen Meilensteinen einen kurzen Praxistest erforderlich machen; dies ist keine Pflicht zur vollständigen Oberflächeabnahme.
+
+Ein umfassendes Windows-Testpaket enthält:
+- exakten Branch/Commit, separaten Testordner und Testprofil/Backup, lokale `kartenschluessel.js` (niemals committen) und `START_TERMINAL.bat`;
+- reproduzierbare Testdaten und eine geordnete Schrittfolge durch die zu prüfenden UI-Bereiche; Eingaben/Befehle, Sollzustände, Fehlerfälle und Regressionsfälle;
+- relevante Playwright-Kommandos und Standardauswahl, Voraussetzungen, Ergebnisvorlage und bekannte Einschränkungen;
+- klare Trennung zwischen statischer Prüfung, ausgeführten Automatentests und tatsächlich unter Windows bestätigter Bedienung.
+
+Das für den vorbereitenden Test-Fix bereits angelegte `TESTPAKET_04_PIN_TAB_BASELINE.md` ist eine **optionale gezielte Prüfanleitung**, kein Präzedenzfall für ein Testpaket pro Commit. Über Abnahme und Merge entscheidet Shadow nach ChatGPT-Prüfung.
 
 ## Kontrollpunkte für Claude und ChatGPT
 
