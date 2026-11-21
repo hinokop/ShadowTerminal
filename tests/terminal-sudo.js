@@ -91,7 +91,7 @@ const { APP } = require('./_pfad');
 
     /* Rücktaste und Strg+U wirken auf das verdeckte Kennwort; richtig: entsperrt, Pin angesprungen */
     await starten('sudo map ' + z.pin);
-    await geheim('xyz'); await inp.press('Control+u');
+    await geheim('SUDO_DISCARD_SENTINEL_5F83B2'); await inp.press('Control+u');
     await geheim('pw-test-12X'); await inp.press('Backspace'); await geheim('3');
     await inp.press('Enter');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
@@ -114,7 +114,8 @@ const { APP } = require('./_pfad');
     /* Das Kennwort steht nirgends: Ausgabe, Verlauf, Seite, Speicher */
     const spuren = await p.evaluate(() => JSON.stringify([document.getElementById('profil-terminal-ausgabe').textContent, TERMINAL_ZUSTAND.verlauf, document.body.innerText,
       Object.keys(localStorage).map(k => localStorage.getItem(k)), Object.keys(sessionStorage).map(k => sessionStorage.getItem(k))]));
-    assert.doesNotMatch(spuren, /geheim1|falsch2|falsch3|pw-test-12|xyz/);
+    /* Kein Kurzfragment verwenden: eine zufällige .onion-Adresse kann 'xyz' enthalten. */
+    assert.doesNotMatch(spuren, /geheim1|falsch2|falsch3|pw-test-12|SUDO_DISCARD_SENTINEL_5F83B2/);
     assert.deepEqual(await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.filter(x => x.startsWith('sudo open') || x.startsWith('sudo map')).length > 0), true);
 
     /* Freigabe durch den Ansprechpartner bleibt: sudo hebt nur die manuelle Sperre auf */
