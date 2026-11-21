@@ -42,6 +42,12 @@ const { imUeberflug, bis, schnelleWahl } = require('./_kestrel');
     const ansicht = () => p.evaluate(() => ({ modul: STATE.ui.modul, auswahl: STATE.ui.modul === 'karte' ? VIEW.karte.auswahl : STATE.dossiers.auswahl }));
     const popup = () => p.evaluate(() => { const x = document.getElementById('k-auswahl'); return x && !x.hidden ? (x.querySelector('#pin-name')?.value || x.innerText) : null; });
 
+    /* Erster Sprung, bevor die Karte je geöffnet war: Mitte und Zoom des Pins bleiben (keine Grundansicht darüber) */
+    await cmd('map ' + z.offen);
+    assert.deepEqual(await p.evaluate(() => [VIEW.karte.lat, VIEW.karte.lon, VIEW.karte.zoom >= 15]), [52.52, 13.405, true]);
+    await zurueck();
+    await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule(); });
+
     /* map: Lagekarte */
     await cmd('map');
     assert.equal((await ansicht()).modul, 'karte');

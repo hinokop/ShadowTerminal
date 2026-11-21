@@ -1124,6 +1124,7 @@ function kartenObjektZeigen(id) {
   const K = VIEW.karte, ziel = (PROFIL.zonen || []).concat(PROFIL.pins || []).find(function (x) { return x.id === id; });
   if (!ziel || !ziel.ll || (/^PIN-/.test(id) && zielZugang(id).gesperrt)) return false;
   K.pick = null; K.lat = ziel.ll[0]; K.lon = ziel.ll[1]; K.zoom = Math.max(K.zoom, 15); K.reiter = 'karte'; K.auswahl = id; K.popupVersatz = null;
+  K.init = true;                  /* der Sprung legt die Ansicht fest; sonst ersetzte die Grundansicht beim ersten Öffnen der Karte Mitte und Zoom */
   dispatch({ type: 'NAVIGATION', modul: 'karte' });
   if (typeof karteBezugSetzen === 'function') karteBezugSetzen(id);
   renderModule();
