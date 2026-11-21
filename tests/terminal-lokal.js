@@ -46,7 +46,7 @@ const PF = require('./_pfad');
     if (link) for (const op of ['wget', 'send']) {
       assert.equal((await (await call(op, ['dossiers','fremd.txt'])).json()).error, 'Permission denied');
     }
-    assert.deepEqual(await (await call('send', ['dossiers','probe.bin'])).json(), {name:'probe.bin', bytes:3});
+    assert.deepEqual(await (await call('send', ['dossiers','probe.bin'])).json(), {name:'probe.bin', file:'probe.bin', bytes:3});   /* file: echter Dateiname für die Zugriffsprüfung im Browser */
     b = await chromium.launch();
     const p = await b.newPage();
     const errors = [];

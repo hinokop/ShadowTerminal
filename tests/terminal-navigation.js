@@ -1,6 +1,7 @@
-/* map und open: Navigation nach Kennung über zielZugang. map öffnet die Lagekarte, map PIN-nnn und open PIN-nnn springen
-   zum Pin (kartenObjektZeigen), open P-/O-/L-nnnn öffnet das Dossier (DOSSIER_GEOEFFNET wie dossierLink). Manuell gesperrte
-   Ziele: Permission denied, keine Navigation; Pins nur über ihr verknüpftes Dossier gesperrt. Zeichnet die Karte statt
+/* map und open: map PIN-/ZO- zeigt Karte; open PIN-/ZO- öffnet nur das verknüpfte Dossier,
+   open P-/O-/L-nnnn öffnet das Dossier direkt. Ohne Dossier meldet open einen Fehler.
+   Manuell gesperrte Kartenobjekte: Permission denied; Pin und Zone erben die Dossiersperre.
+   Zeichnet die Karte statt
    des Pins seine Sichtung, wird die Sichtung gewählt. Nach dem Sprung ist das Terminal minimiert; pppd, tmux und Profanity
    laufen weiter, auch über Modulwechsel der Oberfläche. */
 const assert = require('node:assert/strict');
@@ -27,10 +28,15 @@ const { imUeberflug, bis, schnelleWahl } = require('./_kestrel');
       const frei = neu('Quellner Ida'), gesperrt = neu('Quarzfeld Testmann');
       const pin = (name, dossier) => { dispatch({ type: 'PIN_ANGELEGT', ll: [52.52 + PROFIL.pins.length * 0.001, 13.405], name, dossier }); return PROFIL.pins.at(-1).id; };
       const offen = pin('Parkplatz Nord'), zu = pin('Kühlhaus Quellweg', gesperrt), entwurf = pin('Hofeinfahrt West', frei);
+      dispatch({ type: 'OZONE_ANGELEGT', ll: [52.548, 13.426], name: 'Zone Nord' });
+      const zone = PROFIL.zonen.at(-1).id;
+      dispatch({ type: 'OZONE_ANGELEGT', ll: [52.549, 13.428], name: 'Zone Gesperrt' });
+      const zoneZu = PROFIL.zonen.at(-1).id;
+      dispatch({ type: 'OZONE_GEAENDERT', id: zoneZu, dossier: gesperrt });
       dispatch({ type: 'SICHTUNG_HINZU', id: frei, ort: '52.5301, 13.4101', text: 'am Tor', pin: entwurf });
       dispatch({ type: 'DOSSIER_SPERREN', id: gesperrt });
       dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule();
-      return { frei, gesperrt, offen, zu, entwurf, si: PROFIL.pins.find(x => x.id === entwurf).sichtung };
+      return { frei, gesperrt, offen, zu, entwurf, zone, zoneZu, si: PROFIL.pins.find(x => x.id === entwurf).sichtung };
     });
     assert.match(z.frei, /^P-\d{4}$/); assert.match(z.offen, /^PIN-\d{3}$/); assert.ok(z.si);
     await p.click('#profil-terminal-oeffnen');
@@ -53,17 +59,29 @@ const { imUeberflug, bis, schnelleWahl } = require('./_kestrel');
     assert.equal((await ansicht()).modul, 'karte');
     await zurueck(); assert.equal(await status(), '0');
 
-    /* open: Dossier; Pin über open und map */
+    /* map bleibt geometrische Navigation für Pin oder Zone. */
     await cmd('open ' + z.frei);
     assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: z.frei });
     await zurueck(); assert.equal(await status(), '0');
-    for (const befehl of ['open', 'map']) {
-      await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule(); });
-      await cmd(befehl + ' ' + z.offen);
-      assert.deepEqual(await ansicht(), { modul: 'karte', auswahl: z.offen });
-      assert.equal(await popup(), 'Parkplatz Nord', 'Informationsfenster des Pins');
-      await zurueck(); assert.equal(await status(), '0');
-    }
+    await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule(); });
+    await cmd('map ' + z.offen);
+    assert.deepEqual(await ansicht(), { modul: 'karte', auswahl: z.offen });
+    assert.equal(await popup(), 'Parkplatz Nord', 'Informationsfenster des Pins');
+    await zurueck(); assert.equal(await status(), '0');
+    await cmd('map ' + z.zone);
+    assert.deepEqual(await ansicht(), { modul: 'karte', auswahl: z.zone });
+    assert.match(await popup(), /Zone Nord/, 'Informationsfenster der Zone');
+    await zurueck(); assert.equal(await status(), '0');
+    /* open eines verknüpften Pins führt in das Dossier, unabhängig von der Sichtung auf der Karte. */
+    await cmd('open ' + z.entwurf);
+    assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: z.frei });
+    await zurueck(); assert.equal(await status(), '0');
+    /* open eines verknüpften Zonenobjekts führt ebenfalls zum Dossier. */
+    await p.evaluate(({ id, dossier }) => dispatch({ type: 'OZONE_GEAENDERT', id, dossier }), { id: z.zone, dossier: z.frei });
+    await cmd('open ' + z.zone);
+    assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: z.frei });
+    await zurueck(); assert.equal(await status(), '0');
+    await p.evaluate(id => dispatch({ type: 'OZONE_GEAENDERT', id, dossier: null }), z.zone);
 
     /* Pin, den die Karte zugunsten seiner Sichtung ausblendet: die Sichtung wird gewählt, ihr Fenster zeigt den Pin */
     assert.equal(await p.evaluate(i => karteMarker().some(m => m.id === i), z.entwurf), false);
@@ -76,7 +94,12 @@ const { imUeberflug, bis, schnelleWahl } = require('./_kestrel');
     await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule(); });
     for (const [zeile, meldung] of [['open ' + z.gesperrt, 'open: ' + z.gesperrt + ': Permission denied'], ['map ' + z.zu, 'map: ' + z.zu + ': Permission denied'],
       ['open ' + z.zu, 'open: ' + z.zu + ': Permission denied'], ['open P-9999', 'open: P-9999: No such file or directory'],
-      ['open PIN-999', 'open: PIN-999: No such file or directory'], ['open unbekannter name', 'open: unbekannter name: No such file or directory']]) {
+      ['open PIN-999', 'open: PIN-999: No such file or directory'],
+      ['open ' + z.offen, 'open: ' + z.offen + ': No linked dossier'],
+      ['open ' + z.zone, 'open: ' + z.zone + ': No linked dossier'],
+      ['map ' + z.zoneZu, 'map: ' + z.zoneZu + ': Permission denied'],
+      ['open ' + z.zoneZu, 'open: ' + z.zoneZu + ': Permission denied'],
+      ['open unbekannter name', 'open: unbekannter name: No such file or directory']]) {
       await cmd(zeile);
       assert.equal((await out.textContent()).trim().split('\n').at(-1), meldung);
       assert.equal(await status(), '1');
@@ -85,7 +108,7 @@ const { imUeberflug, bis, schnelleWahl } = require('./_kestrel');
     }
     for (const zeile of ['open', 'map ' + z.frei, 'map ' + z.offen + ' x']) {
       await cmd(zeile);
-      assert.match((await out.textContent()).trim().split('\n').at(-1), /^usage: (map \[pins \[query\]\|PIN-nnn\|name\]|open <id\|name>)$/);
+      assert.match((await out.textContent()).trim().split('\n').at(-1), /^usage: (map \[pins \[query\]\|zones \[query\]\|PIN-nnn\|ZO-nnn\|name\]|open <id\|name\|export name>)$/);
       assert.equal(await status(), '2');
     }
 

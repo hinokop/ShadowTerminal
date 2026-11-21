@@ -797,7 +797,9 @@ function karteZonen(def = karteAuftragsansicht()) {
     zonenEigene(def).forEach(function (zn) { out.push(Object.assign({ auto: false }, zn)); });
   }
   /* Eigene Zonen des Profils (ZO-nnn): unabhängig vom Auftrag, ohne Bewertung, Zeitgeber und Meldungen */
-  (PROFIL.zonen || []).forEach(function (zn) { out.push(Object.assign({}, zn, { auto: false, profil: true, art: 'ort' })); });
+  (PROFIL.zonen || []).forEach(function (zn) {
+    if (!zoneGesperrt(zn)) out.push(Object.assign({}, zn, { auto: false, profil: true, art: 'ort' }));
+  });
   return out;
 }
 function karteZoneFinden(id, def) { return id ? (karteZonen(def).find(function (x) { return x.id === id; }) || null) : null; }
@@ -1122,7 +1124,7 @@ function dossierOptionen(gewaehlt) {
    Position oder Pin eines gesperrten Dossiers (zielZugang) */
 function kartenObjektZeigen(id) {
   const K = VIEW.karte, ziel = (PROFIL.zonen || []).concat(PROFIL.pins || []).find(function (x) { return x.id === id; });
-  if (!ziel || !ziel.ll || (/^PIN-/.test(id) && zielZugang(id).gesperrt)) return false;
+  if (!ziel || !ziel.ll || !zielZugang(id) || zielZugang(id).gesperrt) return false;
   K.pick = null; K.lat = ziel.ll[0]; K.lon = ziel.ll[1]; K.zoom = Math.max(K.zoom, 15); K.reiter = 'karte'; K.auswahl = id; K.popupVersatz = null;
   K.init = true;                  /* der Sprung legt die Ansicht fest; sonst ersetzte die Grundansicht beim ersten Öffnen der Karte Mitte und Zoom */
   dispatch({ type: 'NAVIGATION', modul: 'karte' });

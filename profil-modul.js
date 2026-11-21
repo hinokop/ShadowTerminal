@@ -257,12 +257,86 @@ function terminalArbeitsverzeichnis() {
   const t = TERMINAL_ZUSTAND;
   return '/' + (t.ort ? [TERMINAL_DB].concat(t.ort) : t.virtuellerOrt || []).join('/');
 }
+/* Einheitliche Zugriffsprüfung für archivierte Kartenobjekte in der Terminal-Oberfläche (Pin, Zone, Sichtung).
+   Die lokale Python-Brücke selbst besitzt keine Profilberechtigungen; direkter Dateisystemzugriff außerhalb dieser
+   Oberfläche bleibt davon unabhängig. Geprüft wird nach dem Dateinamen in jedem Ordner, ohne Beachtung der Großschreibung
+   (Windows), ohne Endpunkte und Leerzeichen am Ende und ohne Datenstrom nach ':'. Zusätzlich gilt der echte Name, den die
+   Brücke meldet (Kurznamen). Eine nachträgliche Sperre entfernt gelesene Texte wieder (terminalSchutzBereinigen). */
+const TERMINAL_ARCHIV_MUSTER = [
+  { art: 'pin', re: /^lageblatt-(PIN-\d{3,15})(?:-v\d{1,2})?\.txt$/i },
+  { art: 'zone', re: /^zone-(ZO-\d{3,15})(?:-v\d{1,2})?\.txt$/i },
+  { art: 'sichtung', re: /^sichtung-([POL]-\d{4,15})-(SI-\d{3,15})(?:-v\d{1,2})?\.txt$/i }
+];
+function terminalArchivNameZiel(name) {
+  if (typeof name !== 'string') return null;
+  const n = name.split(':')[0].replace(/[. ]+$/, '');
+  for (const m of TERMINAL_ARCHIV_MUSTER) {
+    const t = m.re.exec(n);
+    if (!t) continue;
+    return m.art === 'sichtung' ? { art: 'sichtung', id: (t[1] + '-' + t[2]).toUpperCase(), dossier: t[1].toUpperCase() }
+      : { art: m.art, id: t[1].toUpperCase() };
+  }
+  return null;
+}
+/* Zuordnungen einer Dateianfrage: getippter Name und, nach der Antwort, der echte Name der Brücke (zuletzt der maßgebliche) */
+function terminalArchivZiele(op, parts, antwort) {
+  if (!['cat', 'head', 'tail', 'wget', 'send'].includes(op) || !Array.isArray(parts) || !parts.length) return [];
+  return [parts[parts.length - 1], antwort && antwort.file].map(terminalArchivNameZiel).filter(Boolean);
+}
+function terminalArchivZielGesperrt(z) {
+  if (!z) return false;
+  if (z.art === 'sichtung') return (PROFIL.gesperrt || []).includes(z.dossier);
+  const objekt = terminalVaultObjekte().find(function (p) { return p.id === z.id && p.art === z.art; });
+  return !!objekt && objekt.gesperrt;
+}
 async function terminalBruecke(op, parts, hidden, exportDaten) {
-  return terminalBrueckeSenden(op === 'export-txt' ? {
+  if (op === 'ls' && Array.isArray(parts)) return terminalBrueckeLsAlle(parts, hidden);
+  /* Vor UND nach dem asynchronen Lesezugriff prüfen: die Sperre könnte
+     während einer laufenden Anfrage aktiviert worden sein. */
+  if (terminalArchivZiele(op, parts).some(terminalArchivZielGesperrt)) return { error: 'Permission denied' };
+  const antwort = await terminalBrueckeSenden(op === 'export-txt' ? {
     op: op, folder: exportDaten.ordner, kind: exportDaten.art, id: exportDaten.id, text: exportDaten.text,
     last: exportDaten.last || undefined
   } : { op: op, parts: parts, hidden: hidden });
+  if (terminalArchivZiele(op, parts, antwort).some(terminalArchivZielGesperrt)) return { error: 'Permission denied' };
+  return antwort;
 }
+/* ls über alle Seiten der Brücke (je 500 Einträge, nach Namen sortiert): kein stilles Abschneiden. Eine fehlerhafte
+   Seitenfolge ergibt einen Fehler statt einer unvollständigen Liste. */
+async function terminalBrueckeLsAlle(parts, hidden) {
+  const alle = [];
+  let offset = 0;
+  for (let seite = 0; seite < 1000; seite++) {
+    const antwort = await terminalBrueckeSenden({ op: 'ls', parts: parts, hidden: hidden, offset: offset, limit: 500 });
+    if (antwort.error || !Array.isArray(antwort.entries)) return antwort.error ? antwort : { error: TERMINAL_BRUECKE_FEHLER };
+    for (const e of antwort.entries) alle.push(e);
+    if (antwort.next === null || antwort.next === undefined) return Object.assign({}, antwort, { entries: alle, next: null });
+    if (!Number.isSafeInteger(antwort.next) || antwort.next <= offset || antwort.next > 10000000 || antwort.entries.length === 0)
+      return { error: TERMINAL_BRUECKE_FEHLER };
+    offset = antwort.next;
+  }
+  return { error: TERMINAL_BRUECKE_FEHLER };
+}
+/* Gelesene geschützte Archivtexte stehen im Scrollback mit ihrer Zuordnung (ausgabeMeta, gleiche Positionen wie ausgabe).
+   Wird die Zuordnung gesperrt, auch durch eine spätere Verknüpfung mit einem gesperrten Dossier, verschwinden sie samt
+   Koordinaten und Notizen, gleich über welchen Befehl sie gelesen wurden; übrige Ausgaben bleiben. */
+function terminalSchutzBereinigen() {
+  const t = TERMINAL_ZUSTAND;
+  if (!t || !t.ausgabe || !t.ausgabe.length || !PROFIL) return false;
+  const meta = t.ausgabeMeta || [], ausgabe = [], neueMeta = [];
+  t.ausgabe.forEach(function (zeile, i) {
+    let ziel = meta[i] || null;
+    const m = !ziel && /^VAULT :: RECORD ACCESS\nOBJECT\s+((PIN|ZO)-\d{3,15})\b/.exec(zeile);
+    if (m) ziel = { art: m[2] === 'PIN' ? 'pin' : 'zone', id: m[1] };
+    if (ziel && terminalArchivZielGesperrt(ziel)) return;
+    ausgabe.push(zeile); neueMeta.push(meta[i] || null);
+  });
+  if (ausgabe.length === t.ausgabe.length) return false;
+  t.ausgabe = ausgabe; t.ausgabeMeta = neueMeta;
+  return true;
+}
+/* Nach jeder Zustandsänderung (index.html, dispatch) */
+function terminalSchutzPruefen() { if (terminalSchutzBereinigen()) terminalAusgabe([]); }
 async function terminalBrueckeSenden(daten) {
   const bruecke = terminalBrueckenAdresse();
   if (!bruecke) return { error: TERMINAL_BRUECKE_FEHLT };
@@ -425,15 +499,20 @@ async function terminalDateiBefehl(befehl, arg, version) {
     terminalTransferStop();
     terminalDownload(antwort, daten);
     terminalAusgabe([fertig, 'Empfangen [' + bytes + '/' + bytes + '] · Download gestartet']);
-  } else terminalAusgabe(antwort.text);
+  } else terminalAusgabe(antwort.text, terminalArchivZiele(befehl, pfad, antwort).at(-1) || null);
   return 0;
 }
 
 const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null, nmap: null };
 // Scrollback der Shell; größer als die längste Einzelausgabe (predict -f), damit nichts still verloren geht.
 const TERMINAL_PUFFER = 1000;
-function terminalAusgabe(zeile) {
+function terminalAusgabe(zeile, schutzZiel = null) {
   const t = TERMINAL_ZUSTAND;
+  /* Metadaten und Text behalten dieselben Pufferpositionen. Die Kennung dient
+     nur zur späteren Entfernung geschützter Archivtexte nach einer Sperrung. */
+  const neu = [].concat(zeile);
+  const meta = t.ausgabeMeta || Array(t.ausgabe.length).fill(null);
+  t.ausgabeMeta = meta.concat(neu.map(function () { return schutzZiel; })).slice(-TERMINAL_PUFFER);
   t.ausgabe = t.ausgabe.concat(zeile).slice(-TERMINAL_PUFFER);
   terminalPppAnzeige();
   const el = $('profil-terminal-ausgabe');
@@ -2011,7 +2090,8 @@ async function terminalDateiAusfuehren(befehl, arg) {
    gesperrte Ziele verweigert (Permission denied), die Missionsfreigabe zeigt die bestehende Ansicht "Zugriff beschränkt".
    Wortlaut der Meldungen nach dem Muster der Dateibefehle (Simulationsentscheidung). Nach dem Sprung wird das Terminal
    minimiert; Shell, pppd, Profanity und tmux laufen weiter (das Fenster liegt außerhalb der beim Modulwechsel ersetzten Oberfläche). */
-const TERMINAL_KENNUNG_DOSSIER = /^[POL]-\d{4}$/, TERMINAL_KENNUNG_PIN = /^PIN-\d{3,}$/;
+const TERMINAL_KENNUNG_DOSSIER = /^[POL]-\d{4}$/, TERMINAL_KENNUNG_PIN = /^PIN-\d{3,}$/,
+  TERMINAL_KENNUNG_ZONE = /^ZO-\d{3,15}$/;
 /* Auflösung einer direkten Namenseingabe. Nur im UI lesbare Ziele werden angeboten:
    manuell gesperrte Pins/Dossiers bleiben ausschließlich über ihre Kennung erreichbar.
    Die Namensauflösung arbeitet exakt oder mit eindeutigem Namensanfang, nie als unscharfe
@@ -2030,6 +2110,11 @@ function terminalZielNamen(befehl, text) {
     const ziel = { id: p.id, name: p.name, suchnamen: [p.name] };
     (pinGesperrt(p) ? verborgen : namen).push(ziel);
   });
+  (PROFIL.zonen || []).forEach(function (z) {
+    if (!z || !z.id || !z.name) return;
+    const ziel = { id: z.id, name: z.name, suchnamen: [z.name] };
+    (zoneGesperrt(z) ? verborgen : namen).push(ziel);
+  });
   if (befehl === 'open') pool().forEach(function (e) {
     const alias = Array.isArray(e.aliase) ? e.aliase : [];
     const ziel = { id: e.id, name: e.name, suchnamen: [e.name].concat(alias) };
@@ -2037,8 +2122,8 @@ function terminalZielNamen(befehl, text) {
   });
   const norm = function (n) { return terminalPinSuchtext(n).replace(/\s+/g, ' ').trim(); };
   const exakt = namen.filter(function (n) { return n.suchnamen.some(function (x) { return norm(x) === q; }); });
-  /* Ein nicht lesbarer exakter Name darf nicht still auf einen sichtbaren
-     längeren Präfixtreffer umgeleitet werden. Der verdeckte Name wird nicht ausgegeben. */
+  /* Geschützte exakte Namen dürfen nicht still auf einen längeren
+     sichtbaren Präfixtreffer umgeleitet werden. */
   if (!exakt.length && verborgen.some(function (n) {
     return n.suchnamen.some(function (x) { return norm(x) === q; });
   })) return [];
@@ -2049,11 +2134,11 @@ function terminalZielNamen(befehl, text) {
 }
 function terminalZiel(befehl, eingabe) {
   const text = String(eingabe || '').trim();
-  if (TERMINAL_KENNUNG_DOSSIER.test(text) || TERMINAL_KENNUNG_PIN.test(text)) {
+  if (TERMINAL_KENNUNG_DOSSIER.test(text) || TERMINAL_KENNUNG_PIN.test(text) || TERMINAL_KENNUNG_ZONE.test(text)) {
     const ziel = zielZugang(text);
-    if (!ziel || (befehl === 'map' && ziel.art !== 'pin'))
+    if (!ziel || (befehl === 'map' && ziel.art !== 'pin' && ziel.art !== 'zone'))
       terminalAusgabe(befehl + ': ' + text + ': No such file or directory');
-    return ziel && (befehl !== 'map' || ziel.art === 'pin') ? ziel : null;
+    return ziel && (befehl !== 'map' || ziel.art === 'pin' || ziel.art === 'zone') ? ziel : null;
   }
   const treffer = terminalZielNamen(befehl, text);
   if (treffer.length > 1) {
@@ -2100,11 +2185,14 @@ function terminalPinSperreAktualisieren() {
     const dossierNamen = pool().filter(dossierGesperrt).flatMap(function (e) {
       return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []);
     });
-    const gesperrte = pinNamen.concat(dossierNamen).map(terminalPinSuchtext).filter(function (name) { return name.length >= 3; });
+    const zonenNamen = (PROFIL.zonen || []).filter(function (z) {
+      return z.dossier && (PROFIL.gesperrt || []).includes(z.dossier);
+    }).map(function (z) { return z.name; });
+    const gesperrte = pinNamen.concat(zonenNamen, dossierNamen).map(terminalPinSuchtext).filter(function (name) { return name.length >= 3; });
     t.verlauf = t.verlauf.filter(function (zeile) {
       const norm = terminalPinSuchtext(zeile);
       if (gesperrte.some(function (name) { return norm.includes(name); })) return false;
-      const m = /^(?:sudo\s+)?(?:map|open)\s+(?:pins\s+)?(.+)$/i.exec(zeile.trim());
+      const m = /^(?:sudo\s+)?(?:map|open)\s+(?:(?:pins|zones)\s+)?(.+)$/i.exec(zeile.trim());
       if (!m) return true;
       const query = terminalPinSuchtext(m[1]).replace(/^['"]|['"]$/g, '');
       if (/^(?:pin-\d+|[pol]-\d+)$/.test(query) || query.length < 3) return true;
@@ -2112,6 +2200,8 @@ function terminalPinSperreAktualisieren() {
     });
     t.vpos = -1;
     t.entwurf = '';
+    /* Bereits angezeigte Archivtexte müssen bei einer nachträglichen Sperre vollständig verschwinden */
+    terminalSchutzBereinigen();
   }
   const fenster = $('profil-terminal');
   const ausgabe = $('profil-terminal-ausgabe');
@@ -2144,36 +2234,235 @@ function terminalPinListe(args) {
   }));
   return 0;
 }
+/* Eigene Profilzonen besitzen separate Kennungen (ZO-nnn) und werden niemals als Pins gelistet. */
+function terminalZoneTreffer(suche = '') {
+  const q = terminalPinSuchtext(suche.trim());
+  return (PROFIL.zonen || []).filter(function (z) {
+    if (!z || !TERMINAL_KENNUNG_ZONE.test(z.id)) return false;
+    if (!q || terminalPinSuchtext(z.id).includes(q)) return true;
+    if (zoneGesperrt(z)) return false;
+    return terminalPinSuchtext(z.name).includes(q);
+  }).slice().sort(function (a, b) { return a.id.localeCompare(b.id, undefined, { numeric: true }); });
+}
+function terminalZoneListe(args) {
+  const suche = args.join(' ').trim(), treffer = terminalZoneTreffer(suche);
+  if (!treffer.length) {
+    terminalAusgabe(suche ? 'map: zones: No matches for ' + suche : 'map: zones: No zones found');
+    return suche ? 1 : 0;
+  }
+  terminalAusgabe(treffer.map(function (z) {
+    return z.id + '  ' + (zoneGesperrt(z) ? '[LOCKED]' : z.name || z.id);
+  }));
+  return 0;
+}
 /* Einmalige Tab-Quelle für map/open und deren sudo-Varianten. Namensvorschläge setzen beim Übernehmen
    immer die stabile Pin-Kennung ein. Gesperrte Pins tragen hier nie den Namen als Kandidat. */
 function terminalPinTab(befehl, arg, kopf, fertig) {
-  if (befehl === 'map' && /^pins(?:\s|$)/i.test(arg)) {
-    const m = /^pins\s+(.*)$/i.exec(arg);
-    if (!m) { fertig(kopf, arg, ['pins'], function () { return 'pins '; }); return; }
-    const prefix = m[1];
-    const namen = terminalPinTreffer().map(function (p) {
-      return pinGesperrt(p) ? p.id : (p.name || p.id);
-    });
-    fertig(kopf + 'pins ', prefix, namen, function (x) { return /\s/.test(x) ? '"' + x.replace(/"/g, '') + '"' : x; });
+  if (befehl === 'open' && /^export(?:\s|$)/i.test(arg)) {
+    const m = /^export\s+(.*)$/i.exec(arg);
+    if (!m) { fertig(kopf, arg, ['export'], function () { return 'export '; }); return; }
+    terminalVaultTab(befehl, m[1], kopf + 'export ', fertig);
     return;
   }
-  const pins = terminalPinTreffer();
-  const kennungen = pins.map(function (p) { return p.id; });
+  if (befehl === 'map' && /^(pins|zones)(?:\s|$)/i.test(arg)) {
+    const m = /^(pins|zones)\s+(.*)$/i.exec(arg);
+    const art = m ? m[1].toLowerCase() : arg.toLowerCase();
+    if (!m) { fertig(kopf, arg, [art], function () { return art + ' '; }); return; }
+    const liste = art === 'zones' ? terminalZoneTreffer() : terminalPinTreffer();
+    const prefix = m[2];
+    const namen = liste.map(function (x) {
+      return (art === 'zones' ? zoneGesperrt(x) : pinGesperrt(x)) ? x.id : (x.name || x.id);
+    });
+    fertig(kopf + art + ' ', prefix, namen, function (x) { return /\s/.test(x) ? '"' + x.replace(/"/g, '') + '"' : x; });
+    return;
+  }
+  const pins = terminalPinTreffer(), zonen = terminalZoneTreffer();
+  const kennungen = pins.map(function (p) { return p.id; }).concat(zonen.map(function (z) { return z.id; }));
   const namen = pins.filter(function (p) { return !pinGesperrt(p) && p.name; })
-    .map(function (p) { return p.name + ' [' + p.id + ']'; });
+    .map(function (p) { return p.name + ' [' + p.id + ']'; })
+    .concat(zonen.filter(function (z) { return !zoneGesperrt(z) && z.name; })
+      .map(function (z) { return z.name + ' [' + z.id + ']'; }));
   const lesbareDossiers = befehl === 'open' ? pool() : [];
   const dossiers = lesbareDossiers.map(function (e) { return e.id; });
   const dossierNamen = lesbareDossiers.filter(terminalDossierNameLesbar).flatMap(function (e) {
     return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []).filter(Boolean)
       .map(function (n) { return n + ' [' + e.id + ']'; });
   });
-  const kandidaten = (befehl === 'map' ? ['pins'] : []).concat(kennungen, dossiers, namen, dossierNamen);
+  const kandidaten = (befehl === 'map' ? ['pins', 'zones'] : []).concat(kennungen, dossiers, namen, dossierNamen);
   fertig(kopf, arg, kandidaten, function (x) {
-    const ref = / \[(PIN-\d{3,}|[POL]-\d{4})\]$/.exec(x);
-    return (ref ? ref[1] : x) + (x === 'pins' ? ' ' : '');
+    const ref = / \[(PIN-\d{3,}|ZO-\d{3,15}|[POL]-\d{4})\]$/.exec(x);
+    return (ref ? ref[1] : x) + (x === 'pins' || x === 'zones' ? ' ' : '');
   });
 }
+
+/* VAULT ist die simulierte Katalogschicht der Shell. Die Daten stammen weiterhin nur aus der
+   zugriffsbeschränkten lokalen Archivbrücke; keine Dateipfade, Ports oder Host-Adressen in der UI.
+   Der technische Speicherweg bleibt ausschließlich in der Entwicklerdokumentation sichtbar. */
+const TERMINAL_VAULT_MUSTER = [
+  { art: 'pin', re: /^lageblatt-(PIN-\d{3,15})(?:-v(\d{1,2}))?\.txt$/ },
+  { art: 'zone', re: /^zone-(ZO-\d{3,15})(?:-v(\d{1,2}))?\.txt$/ }
+];
+function terminalVaultObjekte() {
+  return (PROFIL.pins || []).filter(function (p) { return p && p.id; }).map(function (p) {
+    return { id: p.id, name: p.name || p.id, art: 'pin', objekt: p, gesperrt: pinGesperrt(p) };
+  }).concat((PROFIL.zonen || []).filter(function (z) { return z && z.id && /^ZO-\d{3,15}$/.test(z.id); }).map(function (z) {
+    return { id: z.id, name: z.name || z.id, art: 'zone', objekt: z, gesperrt: zoneGesperrt(z) };
+  }));
+}
+function terminalVaultFinden(text, bestand, praefix) {
+  const q = terminalPinSuchtext(text).replace(/\s+/g, ' ').trim();
+  if (!q) return praefix ? bestand : [];
+  const sichtbar = bestand.filter(function (x) {
+    return terminalPinSuchtext(x.id) === q || (!x.gesperrt && terminalPinSuchtext(x.name) === q);
+  });
+  if (praefix && sichtbar.length) return sichtbar;
+  const passende = bestand.filter(function (x) {
+    const id = terminalPinSuchtext(x.id), name = x.gesperrt ? '' : terminalPinSuchtext(x.name);
+    return praefix ? id.startsWith(q) || name.startsWith(q) : id.includes(q) || name.includes(q);
+  });
+  return passende;
+}
+function terminalVaultZuordnung(basis) {
+  const pin = terminalVaultObjekte();
+  return pin.find(function (x) { return x.id === basis; }) || null;
+}
+async function terminalVaultKatalog() {
+  if (!terminalBrueckenAdresse()) return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
+  const sammlung = [];
+  for (const ordner of ['ops', 'dokumente']) {
+    const antwort = await terminalBrueckeLsAlle([ordner], false);
+    if (antwort.error || !Array.isArray(antwort.entries)) return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
+    for (const e of antwort.entries) {
+      if (!e || e.dir || typeof e.name !== 'string') continue;
+      const muster = TERMINAL_VAULT_MUSTER.find(function (m) { return m.re.test(e.name); });
+      if (!muster) continue;
+      const teile = muster.re.exec(e.name);
+      const zuordnung = terminalVaultZuordnung(teile[1]);
+      if (!zuordnung || zuordnung.art !== muster.art) continue;
+      const letzter = (PROFIL.exporte || {})[muster.art + ':' + zuordnung.id + ':' + ordner];
+      sammlung.push({ ...zuordnung, ordner, dateiname: e.name, revision: Number(teile[2] || 1),
+        registriert: !!(letzter && letzter.name === e.name && letzter.sha),
+        mtime: Number(e.mtime) || 0, bytes: Number(e.bytes) || 0 });
+    }
+  }
+  sammlung.sort(function (a, b) {
+    return Number(b.registriert) - Number(a.registriert) ||
+      b.mtime - a.mtime || b.revision - a.revision || a.ordner.localeCompare(b.ordner);
+  });
+  return { records: sammlung };
+}
+function terminalVaultEintraege(records) {
+  const gruppen = new Map();
+  records.forEach(function (r) {
+    if (!gruppen.has(r.id)) gruppen.set(r.id, []);
+    gruppen.get(r.id).push(r);
+  });
+  return [...gruppen.values()].sort(function (a, b) {
+    return a[0].id.localeCompare(b[0].id, undefined, { numeric: true });
+  });
+}
+async function terminalVaultListe(args) {
+  const suchtext = args.join(' ').trim(), katalog = await terminalVaultKatalog();
+  if (katalog.error) { terminalAusgabe(katalog.error); return 1; }
+  const eintraege = terminalVaultEintraege(katalog.records).filter(function (gruppe) {
+    return !suchtext || terminalVaultFinden(suchtext, [gruppe[0]], false).length;
+  });
+  terminalAusgabe('VAULT :: RECORD INDEX');
+  if (!eintraege.length) {
+    terminalAusgabe(suchtext ? 'No indexed records matching query' : 'Index empty');
+    return suchtext ? 1 : 0;
+  }
+  terminalAusgabe(eintraege.map(function (gruppe) {
+    const p = gruppe[0];
+    return p.id + '  ' + (p.gesperrt ? '[LOCKED]' : p.name) +
+      (p.gesperrt ? '' : '  [RECORDS ' + gruppe.length + ']');
+  }));
+  terminalAusgabe('INDEX :: ' + eintraege.length + ' OBJECTS');
+  return 0;
+}
+function terminalVaultAufloesen(text) {
+  const alle = terminalVaultObjekte();
+  const genau = terminalVaultFinden(text, alle, true);
+  return genau;
+}
+function terminalVaultTab(befehl, arg, kopf, fertig) {
+  const eintraege = terminalVaultObjekte(), werte = eintraege.map(function (e) { return e.id; })
+    .concat(eintraege.filter(function (e) { return !e.gesperrt; }).map(function (e) { return e.name + ' [' + e.id + ']'; }));
+  fertig(kopf, arg, werte, function (s) {
+    const m = / \[((?:PIN|ZO)-\d{3,15})\]$/.exec(s);
+    return m ? m[1] : s;
+  });
+}
+async function terminalVaultHash(text) {
+  if (typeof crypto === 'undefined' || !crypto.subtle || typeof TextEncoder === 'undefined') return null;
+  try {
+    const data = new TextEncoder().encode(text);
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
+    return [...digest].map(function (n) { return n.toString(16).padStart(2, '0'); }).join('');
+  } catch (_) { return null; }
+}
+async function terminalVaultOeffnen(args, sudo = false) {
+  const suchtext = args.join(' ').trim();
+  if (!suchtext) return terminalUsage('open export <name|PIN-nnn|ZO-nnn>');
+  const kandidaten = terminalVaultAufloesen(suchtext);
+  if (!kandidaten.length) { terminalAusgabe('VAULT: record not found'); return 1; }
+  if (kandidaten.length > 1) {
+    terminalAusgabe('VAULT: ambiguous name (' + kandidaten.length + ' matches)');
+    terminalAusgabe(kandidaten.slice(0, 12).map(function (p) {
+      return '  ' + p.id + '  ' + (p.gesperrt ? '[LOCKED]' : p.name);
+    }));
+    return 1;
+  }
+  let objekt = kandidaten[0];
+  if (objekt.gesperrt) {
+    if (!sudo) { terminalAusgabe('VAULT: ' + objekt.id + ': Permission denied'); return 1; }
+    const ok = await terminalSudoKennwort();
+    if (ok !== true) return ok === 'abbruch' ? 130 : 1;
+    dispatch({ type: 'DOSSIER_ENTSPERREN', id: objekt.objekt.dossier });
+    objekt = terminalVaultObjekte().find(function (x) { return x.id === objekt.id; });
+    if (!objekt || objekt.gesperrt) { terminalAusgabe('VAULT: access denied'); return 1; }
+  }
+  const katalog = await terminalVaultKatalog();
+  if (katalog.error) { terminalAusgabe(katalog.error); return 1; }
+  const records = katalog.records.filter(function (x) { return x.id === objekt.id; });
+  if (!records.length) { terminalAusgabe('VAULT: record not indexed'); return 1; }
+  const rec = records[0]; /* katalog ist nach letztem Änderungszeitpunkt, Revision und Sammlung sortiert */
+  const version = TERMINAL_ZUSTAND.version;
+  const antwort = await terminalBruecke('cat', [rec.ordner, rec.dateiname], false);
+  if (TERMINAL_ZUSTAND.version !== version) return 1;
+  if (antwort.error || typeof antwort.text !== 'string') {
+    terminalAusgabe('VAULT: record stream unavailable');
+    return 1;
+  }
+  /* Die Daten könnten während der Anfrage erneut gesperrt worden sein. */
+  const jetzt = terminalVaultObjekte().find(function (x) { return x.id === rec.id; });
+  if (!jetzt || jetzt.gesperrt) { terminalAusgabe('VAULT: access revoked'); return 1; }
+  const vermerk = (PROFIL.exporte || {})[rec.art + ':' + rec.id + ':' + rec.ordner];
+  const registriert = !!(vermerk && vermerk.name === rec.dateiname && vermerk.sha);
+  const istHash = await terminalVaultHash(antwort.text);
+  const aktText = rec.art === 'pin' ? pinText(jetzt.objekt) + '\n' : eigeneZoneText(jetzt.objekt) + '\n';
+  const sollHash = await terminalVaultHash(aktText);
+  const integritaet = !registriert ? 'UNTRACKED' : !istHash ? 'UNVERIFIED' :
+    istHash !== vermerk.sha ? 'INTEGRITY MISMATCH' :
+    !sollHash ? 'VERIFIED' : sollHash === istHash ? 'VERIFIED / CURRENT' : 'VERIFIED / OUTDATED';
+  /* Ausschließlich fiktive Datenbanksemantik in der Oberfläche, kein Transferprotokoll oder Dateisystempfad. */
+  const zuletzt = terminalVaultObjekte().find(function (x) { return x.id === rec.id; });
+  if (!zuletzt || zuletzt.gesperrt) { terminalAusgabe('VAULT: access revoked'); return 1; }
+  terminalAusgabe([
+    'VAULT :: RECORD ACCESS',
+    'OBJECT     ' + zuletzt.id + ' · ' + zuletzt.name,
+    'REVISION   ' + rec.revision.toString().padStart(2, '0'),
+    'INTEGRITY  ' + integritaet,
+    '────────────────────────────────────────',
+    antwort.text.replace(/\n$/, ''),
+    '────────────────────────────────────────',
+    'VAULT :: END OF RECORD'
+  ].join('\n'), { art: rec.art, id: rec.id });
+  return 0;
+}
+
 async function terminalNavigation(befehl, args, sudo = false) {
+  if (befehl === 'open' && args[0] === 'export') return terminalVaultOeffnen(args.slice(1), sudo);
   if (befehl === 'map' && !args.length) {
     VIEW.karte.reiter = 'karte';
     dispatch({ type: 'NAVIGATION', modul: 'karte' });
@@ -2182,23 +2471,44 @@ async function terminalNavigation(befehl, args, sudo = false) {
     return 0;
   }
   if (befehl === 'map' && args[0] === 'pins') return terminalPinListe(args.slice(1));
+  if (befehl === 'map' && args[0] === 'zones') return terminalZoneListe(args.slice(1));
   const eingabe = args.join(' ').trim();
   if (!eingabe || (befehl === 'map' && args.length === 1 && TERMINAL_KENNUNG_DOSSIER.test(args[0])) ||
-      (args.length > 1 && (TERMINAL_KENNUNG_DOSSIER.test(args[0]) || TERMINAL_KENNUNG_PIN.test(args[0]))))
-    return terminalUsage(befehl === 'map' ? 'map [pins [query]|PIN-nnn|name]' : 'open <id|name>');
+      (args.length > 1 && (TERMINAL_KENNUNG_DOSSIER.test(args[0]) || TERMINAL_KENNUNG_PIN.test(args[0]) || TERMINAL_KENNUNG_ZONE.test(args[0]))))
+    return terminalUsage(befehl === 'map' ? 'map [pins [query]|zones [query]|PIN-nnn|ZO-nnn|name]' : 'open <id|name|export name>');
   let z = terminalZiel(befehl, eingabe);
   if (!z) return 1;
+  /* open löst Kartenobjekte ausschließlich auf ihr Bezugsdossier auf; ohne Verknüpfung
+     gibt es keinen Dossierwechsel und auch keinen unnötigen sudo-Prompt. */
+  if (befehl === 'open' && (z.art === 'pin' || z.art === 'zone') && !z.dossier) {
+    terminalAusgabe('open: ' + z.id + ': No linked dossier');
+    return 1;
+  }
   if (z.gesperrt) {
     if (!sudo) { terminalAusgabe(befehl + ': ' + z.id + ': Permission denied'); return 1; }
-    /* sudo: Zugangskennung der Oberfläche, dann dieselbe Entsperrung wie dort (DOSSIER_ENTSPERREN); ein Pin über sein Dossier */
+    /* sudo: Zugangskennung der Oberfläche, dann dieselbe dauerhafte Dossierentsperrung */
     const ok = await terminalSudoKennwort();
     if (ok !== true) return ok === 'abbruch' ? 130 : 1;
     dispatch({ type: 'DOSSIER_ENTSPERREN', id: z.dossier });
     z = zielZugang(z.id);
-    if (!z || z.gesperrt) { terminalAusgabe(befehl + ': ' + z?.id + ': Permission denied'); return 1; }
+    if (!z || z.gesperrt) { terminalAusgabe(befehl + ': ' + (z?.id || eingabe) + ': Permission denied'); return 1; }
   }
-  if (z.art === 'pin') { if (!terminalPinZeigen(z.objekt)) { terminalAusgabe(befehl + ': ' + z.id + ': No such file or directory'); return 1; } }
-  else dispatch({ type: 'DOSSIER_GEOEFFNET', id: z.id, navigieren: true, ueber: 'Terminal' });
+  if (befehl === 'map') {
+    const ok = z.art === 'pin' ? terminalPinZeigen(z.objekt) : kartenObjektZeigen(z.id);
+    if (!ok) { terminalAusgabe('map: ' + z.id + ': No such file or directory'); return 1; }
+    if (z.art === 'zone') karteAuswahlAnzeige();
+  } else {
+    const dossier = z.art === 'dossier' ? z : zielZugang(z.dossier);
+    if (!dossier || dossier.art !== 'dossier') {
+      terminalAusgabe('open: ' + z.id + ': Linked dossier not found');
+      return 1;
+    }
+    if (dossier.gesperrt) {
+      terminalAusgabe('open: ' + z.id + ': Permission denied');
+      return 1;
+    }
+    dispatch({ type: 'DOSSIER_GEOEFFNET', id: dossier.id, navigieren: true, ueber: 'Terminal' });
+  }
   terminalNachNavigation();
   return 0;
 }
@@ -2309,7 +2619,7 @@ const TERMINAL_TABELLE = [
   { name: 'clear', hilfe: [[0, 14, 'clear']], aus: function (args, arg) {
     const t = TERMINAL_ZUSTAND;
     if (arg) return terminalUsage('clear');
-    t.version++; terminalTransferStop(); t.ausgabe = []; terminalAusgabe([]);
+    t.version++; terminalTransferStop(); t.ausgabe = []; t.ausgabeMeta = []; terminalAusgabe([]);
     return 0;
   } },
   { name: 'exit', hilfe: [[0, 15, 'exit']], aus: function (args, arg) {
@@ -2337,8 +2647,9 @@ const TERMINAL_TABELLE = [
   { name: 'poff', hilfe: [[1, 3, 'poff [kestrel]']], tab: { art: 'fest', werte: ['kestrel'], kette: 'kestrel && tail -n 6 /var/log/syslog' }, aus: TERMINAL_PPP('poff') },
   { name: 'plog', hilfe: [[1, 3.5, 'plog [-n N] [-f]']], tab: { art: 'optionen', werte: ['-f', '-n'] }, aus: function (args) { return terminalPlog(args); } },
   { name: 'nmap', hilfe: [[0, 6.5, 'nmap <options> <target>']], aus: function (args) { return terminalNmap(args); } },
-  { name: 'map', hilfe: [[0, 6.6, 'map [pins [query]|PIN-nnn|name]']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('map', args); } },
-  { name: 'open', hilfe: [[0, 6.7, 'open <id|name>']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('open', args); } },
+  { name: 'exports', hilfe: [[0, 6.55, 'exports [query]']], tab: { art: 'vault' }, aus: function (args) { return terminalVaultListe(args); } },
+  { name: 'map', hilfe: [[0, 6.6, 'map [pins [query]|zones [query]|PIN-nnn|ZO-nnn|name]']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('map', args); } },
+  { name: 'open', hilfe: [[0, 6.7, 'open <id|name|export name>']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('open', args); } },
   { name: 'sudo', hilfe: [[0, 6.8, 'sudo <command>']], tab: { art: 'navigation' }, aus: function (args) { return terminalSudo(args); } },
   { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
@@ -2486,6 +2797,10 @@ async function terminalTab(lauf, m) {
       return;
     }
     terminalPinTab(sub[1], sub[2], 'sudo ' + sub[1] + ' ', fertig);
+    return;
+  }
+  if (befehl === 'exports') {
+    terminalVaultTab(befehl, arg, befehl + ' ', fertig);
     return;
   }
   if (befehl === 'map' || befehl === 'open') {

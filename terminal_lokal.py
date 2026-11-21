@@ -67,6 +67,15 @@ def resolve_inside(root, parts):
     return path, meta
 
 
+def real_name(path):
+    """Name der Datei, wie ihn das Dateisystem führt (Großschreibung, lange Namen statt 8.3-Kurzname). Der Browser prüft damit
+    Zugriffsregeln gegen den echten Namen und nicht gegen die getippte Schreibweise."""
+    try:
+        return Path(os.path.realpath(path)).name or path.name
+    except OSError:
+        return path.name
+
+
 def read_inside(root, parts, path, limit):
     # On Unix, resolve relative to directory descriptors without following links.
     if hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd:
@@ -326,6 +335,11 @@ def terminal_file_op(root, request):
         if op == "cd":
             return {"ok": True}
         hidden = request.get("hidden") is True
+        # Eine Seite wird erst NACH der deterministischen Sortierung gebildet.
+        # Die frühere willkürliche Grenze von 500 Einträgen konnte Archivdateien verschlucken.
+        offset, limit = request.get("offset", 0), request.get("limit", 500)
+        if type(offset) is not int or offset < 0 or offset > 10000000 or type(limit) is not int or not 1 <= limit <= 500:
+            raise Refused
         entries = []
         for child in path.iterdir():
             if not clean_name(child.name) or (not hidden and child.name.startswith(".")):
@@ -336,10 +350,9 @@ def terminal_file_op(root, request):
                 continue
             if stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode):
                 entries.append({"name": child.name, "dir": stat.S_ISDIR(info.st_mode), "bytes": info.st_size, "mtime": info.st_mtime})
-                if len(entries) >= 500:
-                    break
-        entries.sort(key=lambda e: (not e["dir"], e["name"].casefold()))
-        return {"entries": entries}
+        entries.sort(key=lambda e: (not e["dir"], e["name"].casefold(), e["name"]))
+        end = offset + limit
+        return {"entries": entries[offset:end], "next": end if end < len(entries) else None}
     if op == "send" and stat.S_ISDIR(meta.st_mode):
         return {"notfile": True}  # profanity: "Uploading '%s' failed: Not a file!"
     if not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1:
@@ -351,9 +364,9 @@ def terminal_file_op(root, request):
     if len(data) > limit:
         return {"error": "Datei zu groß"}
     if op == "send":
-        return {"name": path.name, "bytes": len(data)}
+        return {"name": path.name, "file": real_name(path), "bytes": len(data)}
     if op == "wget":
-        return {"name": path.name, "data": base64.b64encode(data).decode("ascii"), "endpoint": ARCHIVE_ENDPOINT}
+        return {"name": path.name, "file": real_name(path), "data": base64.b64encode(data).decode("ascii"), "endpoint": ARCHIVE_ENDPOINT}
     try:
         text = data.decode("utf-8-sig")
     except UnicodeError:
@@ -364,7 +377,7 @@ def terminal_file_op(root, request):
         text = "\n".join(text.splitlines()[:10])
     if op == "tail":
         text = "\n".join(text.splitlines()[-10:])
-    return {"text": text}
+    return {"text": text, "file": real_name(path)}
 
 
 NMAP_MAX_ARGS = 256

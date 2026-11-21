@@ -1,0 +1,72 @@
+# Testpaket 03 – VAULT-Archivzugriff
+
+**Entwicklungsstand:** Draft-PR #96 auf Basis von `main` nach dem Merge von #95. #96 bleibt bis zu gezielten Linux-/Playwright- und Brückentests ungeprüft. Dieses bereits vorhandene Windows-Testpaket ist eine **optionale Integrationsanleitung**; die vollständige Windows-Oberflächenabnahme wird separat zu einem Gesamtmeilenstein organisiert.
+
+## Vorbereitung auf Windows
+
+1. Den Branch `feat/archive-vault-lookup` als ZIP beziehen und in einen separaten Testordner entpacken.
+2. Die lokale, nicht versionierte `kartenschluessel.js` aus der vorhandenen Installation übernehmen. Danach `START_TERMINAL.bat` starten.
+3. Ein Testprofil mit mehreren Pins und mindestens einer eigenen Zone verwenden. Zur Kontrolle einen Pin `Treffpunkt Nord`, eine Zone `Treffpunkt Reserve` und einen Pin `Treffpunkt Geheim` anlegen; den letzten Pin einem Dossier zuordnen.
+4. Diese Kartenobjekte über die vorhandenen Schaltflächen als TXT in `ops` beziehungsweise `dokumente` exportieren. Die Daten im Browserprofil und im normalen Archiv nicht versehentlich überschreiben.
+
+## Prüfsequenz
+
+| Eingabe / Handlung | Erwartetes Verhalten |
+|---|---|
+| `exports treffpunkt` | Alle passenden **tatsächlich vorhandenen** Kartenexporte, gruppiert nach Pin/Zone |
+| `open export "Treffpunkt Nord"` | Direkte Ausgabe des richtigen Archivdatensatzes im Terminal |
+| `open export Treffpunkt` | Bei mehreren Treffern: Mehrdeutigkeit, kein zufälliger Abruf |
+| `open export PIN-...` bzw. `ZO-...` | Zugriff über stabile Objektkennung |
+| `open export Treff<Tab>` | Namensvorschläge, bei eindeutiger Wahl Einsetzen der Kennung |
+| `exports PIN-...` bei gesperrtem Dossier | Nur die Kennung mit `[LOCKED]`; kein Name |
+| `open export "Treffpunkt Geheim"` | Kein Zugriff über gesperrten Namen |
+| `open export PIN-...` bei gesperrtem Dossier | `Permission denied`, keine Inhaltsausgabe |
+| `sudo open export PIN-...` | Verdeckte Kennwortabfrage; danach derselbe Datensatz lesbar |
+| Dossier nach dem Abruf erneut sperren | Vollständiger archivierter Text wird aus dem Scrollback entfernt |
+| Keine lokale Archivbrücke | `VAULT: INDEX LINK UNAVAILABLE`, ohne lokale Pfade oder vermeintlichen Abruf |
+
+## Ergänzende Zugriffskontrollen und Archivgröße
+
+Vor und nach der Entsperrung eines verknüpften Dossiers dieselbe Exportdatei über `cat`, `head`, `tail` und `wget` aus dem virtuellen Archivpfad abrufen. **Gesperrt:** `Permission denied`, kein Inhalt/Download. **Entsperrt:** Lesebefehle funktionieren. Nach erneuter Sperre dürfen zuvor über `cat` gelesene Notizen und Koordinaten nicht im Terminal-Scrollback verbleiben. Für `/sendfile` gilt dieselbe Berechtigungsentscheidung.
+
+Für die Archivgrenze über 500 Dateien in einem **separaten Testarchiv** anlegen und mit `exports` auf eine nach der ersten Seite liegende Datei zugreifen; sie muss auffindbar sein. Den normalen `ls`-Befehl weiterhin als derzeit auf höchstens 500 Einträge begrenzt behandeln. Kein Test an produktiven Benutzerarchiven.
+
+## Ergänzung – PIN- und Zonennavigation
+
+Die direkte Objekt-Navigation wurde im selben Draft-PR überarbeitet. Dafür gilt zusätzlich:
+
+- `map pins` listet ausschließlich Pins, `map zones` ausschließlich Profilzonen. Verknüpfte, gesperrte Zonen erscheinen ausschließlich mit `ZO-... [LOCKED]`.
+- `map zones Treffpunkt` findet passende Zonen. `map ZO-...` und `map "Treffpunkt Reserve"` zentrieren die Zone und öffnen deren Kartenfenster.
+- `open PIN-...` beziehungsweise `open ZO-...` öffnen ausschließlich das **verknüpfte Dossier**. Ohne Bezug: `No linked dossier`, Exit-Code 1, keine Navigation.
+- `sudo open ZO-...` und `sudo map ZO-...` verwenden die bereits vorhandene Kennwortprüfung für gesperrte Bezugsdossiers.
+- Tab ergänzt sichtbare Zonennamen sowie `ZO-`-Kennungen. `open export` bleibt die separate VAULT-Operation; keine Änderung des tatsächlichen Speicherwegs.
+- Gesperrte Zonennamen dürfen weder auf der Karte noch in den Suchtreffern oder den Objektpopups erscheinen.
+
+## Inszenierung gezielt prüfen
+
+Die Terminalausgabe zeigt `VAULT :: RECORD INDEX` und `VAULT :: RECORD ACCESS` samt Kennung, Revision, Integritätsstatus und archiviertem Inhalt. **Nicht** sichtbar sein dürfen physische Pfade wie `ops/lageblatt-PIN-...`, `dokumente/...`, `127.0.0.1`, Browser-Download-Dialoge oder Hinweise auf eine lokal gelesene Datei. Der Terminalzustand (PPP, Profanity, tmux) darf durch `exports` und `open export` nicht verändert werden.
+
+## Versionen und Integrität
+
+1. Einen Pin exportieren und mit `open export <Name>` öffnen. Erwartet: `VERIFIED / CURRENT`, sofern WebCrypto verfügbar ist.
+2. Den Pin nach dem Export verändern und erneut öffnen. Erwartet: `VERIFIED / OUTDATED`.
+3. Die archivierte Datei **im Testordner** extern ändern und erneut öffnen. Erwartet: `INTEGRITY MISMATCH`.
+4. Ein bereits vorhandenes Lageblatt ohne Exportvermerk im aktuellen Profil öffnen. Erwartet: `UNTRACKED`, sofern die Objektkennung noch existiert.
+5. Mehrere Versionen desselben Objekts prüfen. Eine gültig registrierte Version wird bevorzugt; andernfalls die neueste Dateiversion.
+6. Eigene Zone mit Dossier verknüpfen, sperren und Export über Namen und Kennung prüfen: gleiche Sperrregeln wie beim Pin.
+
+**Hinweis:** `VAULT` ist die vorläufige fiktive Darstellung. Direkte terminalinterne Dateibefehle (`cat`, `head`, `tail`, `wget`, `/sendfile`) prüfen bei PIN-/ZO-Exporten dieselbe Dossiersperre; auch nachträgliche Sperrungen entfernen zugeordnete Textausgaben aus dem Scrollback. Die lokale Python-Brücke selbst führt keine Profil-/Dossierautorisierung durch: Außerhalb der Oberfläche bleiben Dateien lokal lesbar.
+
+## Automatische Regression
+
+Im Ordner `tests`:
+
+```powershell
+$env:FT_PARALLEL = "2"
+node runall.js terminal-objektnavigation terminal-vault terminal-namensnavigation terminal-pin-suche terminal-navigation terminal-sudo terminal-befehlstabelle karte-sperre-pins
+node runall.js
+```
+
+`terminal-vault` ist Teil der Standardauswahl. Zusätzlich aus dem Projektstamm `python tests/terminal_bridge_pagination.py` ausführen (echte lokale Brückenlogik, über 500 temporäre Dateien). Historisch bekannte Problemtests bleiben getrennt zu bewerten.
+
+**Status:** Quellcode und Syntax geprüft; automatischer Playwright-/Windows-Praxistest muss nach dem gemeinsamen Stand von #95 und #96 erfolgen. Erst danach Merge-Freigabe.
