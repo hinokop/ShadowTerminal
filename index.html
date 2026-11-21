@@ -3676,7 +3676,8 @@ function kennungPruefen(pw) {
 let SPERRE_MASKE = { stand: '', re: null, ids: {} };
 function sperreMaske() {
   const ids = (PROFIL && PROFIL.gesperrt) || [], pins = (PROFIL.pins || []).filter(pinGesperrt),
-    stand = ids.join(',') + '|' + (STATE && STATE.dossiers ? STATE.dossiers.eigene.length : 0) + '|' + pins.map(function (p) { return p.id + ':' + p.name; }).join('|');
+    zonen = (PROFIL.zonen || []).filter(function (z) { return z.dossier && ids.includes(z.dossier); }),
+    stand = ids.join(',') + '|' + (STATE && STATE.dossiers ? STATE.dossiers.eigene.length : 0) + '|' + pins.concat(zonen).map(function (p) { return p.id + ':' + p.name; }).join('|');
   if (SPERRE_MASKE.stand === stand) return SPERRE_MASKE;
   const map = {}, namen = [];
   ids.forEach(function (id) {
@@ -3685,7 +3686,7 @@ function sperreMaske() {
   });
   /* Auch bisherige Freitext-Ausgaben (Kommunikationsplan, Meldungsverlauf, Protokoll) dürfen Namen
      inzwischen gesperrter Pins nicht weiter zeigen. Daten und Kennungen bleiben unverändert. */
-  pins.forEach(function (p) {
+  pins.concat(zonen).forEach(function (p) {
     const name = String(p.name || ''), key = name.toLowerCase();
     if (name.length >= 3 && !Object.prototype.hasOwnProperty.call(map, key)) { map[key] = p.id; namen.push(name); }
   });

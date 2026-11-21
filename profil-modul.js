@@ -2104,10 +2104,10 @@ function terminalPinSperreAktualisieren() {
     /* Bereits angezeigte Archivblätter müssen bei einer nachträglichen Sperre vollständig
        verschwinden: auch Koordinaten und Notizen, die von sperreText nicht maskiert werden. */
     t.ausgabe = t.ausgabe.filter(function (zeile) {
-      const m = /^VAULT :: RECORD ACCESS\nOBJECT\s+(PIN-\d{3,15})\b/.exec(zeile);
+      const m = /^VAULT :: RECORD ACCESS\nOBJECT\s+((?:PIN|ZO)-\d{3,15})\b/.exec(zeile);
       if (!m) return true;
-      const px = (PROFIL.pins || []).find(function (p) { return p.id === m[1]; });
-      return !px || !pinGesperrt(px);
+      const obj = terminalVaultObjekte().find(function (p) { return p.id === m[1]; });
+      return !obj || !obj.gesperrt;
     });
   }
   const fenster = $('profil-terminal');
@@ -2188,7 +2188,8 @@ function terminalVaultObjekte() {
   return (PROFIL.pins || []).filter(function (p) { return p && p.id; }).map(function (p) {
     return { id: p.id, name: p.name || p.id, art: 'pin', objekt: p, gesperrt: pinGesperrt(p) };
   }).concat((PROFIL.zonen || []).filter(function (z) { return z && z.id && /^ZO-\d{3,15}$/.test(z.id); }).map(function (z) {
-    return { id: z.id, name: z.name || z.id, art: 'zone', objekt: z, gesperrt: false };
+    return { id: z.id, name: z.name || z.id, art: 'zone', objekt: z,
+      gesperrt: !!z.dossier && (PROFIL.gesperrt || []).includes(z.dossier) };
   }));
 }
 function terminalVaultFinden(text, bestand, praefix) {
