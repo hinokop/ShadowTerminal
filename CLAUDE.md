@@ -19,6 +19,7 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 - arbeitsstand-modul.js: Arbeitsstand (Stand sichern/laden in der Navigation; PROFIL.arbeitsstand: Bereich, Dossier, Fall, Kartenmitte, Zoom, Ebenen, Kartenobjekt); nach dem Hauptskript geladen, nur auf Klick, kein Autosprung, nicht Teil des Fallpakets; prüft beim Laden die Identität von Fall (Nummer und Erfassungszeitpunkt) und eigenem Dossier (Registernummer), setzt Platziermodi der Karte zurück
 - docs/terminal.md: Statusanzeigen im Fensterkopf (DIALING, PPP SETUP, EST. LINK END) und Grenze Simulation / echte Zugriffe.
 - nmap im Terminal: echtes installiertes Nmap über terminal_lokal.py (nmap-start/-read/-stop), Argumente ohne Shell und ohne Einschränkung (Entscheidung Shadow), scannt die echten Schnittstellen des PCs, nicht die Simulation; Test tests/terminal-nmap.js mit Ersatz-nmap (nur POSIX), Windows-Abnahme lokal bei Shadow.
+- Terminalbenutzer: raizo (Prompt raizo@terminal:/$, whoami), kein root, damit sudo ein Kennwort verlangen kann; Abweichungen in docs/terminal.md.
 - karte3d.html: MapLibre-3D-Ansicht (eingebettet in die Karte; eigenständig nutzt sie szenario.js)
 
 ## Arbeitsweise

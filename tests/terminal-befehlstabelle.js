@@ -17,7 +17,7 @@ const { APP } = require('./_pfad');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); };
-    const nach = async z => { await cmd(z); const t = await out.textContent(); return t.slice(t.lastIndexOf('# ' + z) + z.length + 2).split('\n').filter(Boolean); };
+    const nach = async z => { await cmd(z); const t = await out.textContent(); return t.slice(t.lastIndexOf('$ ' + z) + z.length + 2).split('\n').filter(Boolean); };
 
     /* Tabelle vollständig: jeder Name eindeutig, jede Zeile ausführbar */
     const info = await p.evaluate(() => ({ namen: TERMINAL_BEFEHLE, ohneAus: TERMINAL_TABELLE.filter(e => typeof e.aus !== 'function').map(e => e.name) }));

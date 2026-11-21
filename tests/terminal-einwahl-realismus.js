@@ -21,7 +21,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     const pass = await imUeberflug(p);
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
-    const nach = async z => { await cmd(z); const t = await out.textContent(); return t.slice(t.lastIndexOf('# ' + z) + z.length + 2).split('\n').filter(Boolean); };
+    const nach = async z => { await cmd(z); const t = await out.textContent(); return t.slice(t.lastIndexOf('$ ' + z) + z.length + 2).split('\n').filter(Boolean); };
     const status = async () => { await cmd('echo $?'); return (await out.textContent()).split('\n').at(-1); };
     const F = '/var/cache/tle/kestrel.tle', S = pass.name;
     const spalte = (z, i) => Number(z.trim().split(/\s+/)[i]);

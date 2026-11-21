@@ -23,7 +23,7 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
     await p.clock.pauseAt(await p.evaluate(() => Date.now() + 1000));
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
-    const nach = async z => { await cmd(z); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); const t = await out.textContent(); return t.slice(t.lastIndexOf('# ' + z) + z.length + 2).split('\n').filter(Boolean); };
+    const nach = async z => { await cmd(z); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); const t = await out.textContent(); return t.slice(t.lastIndexOf('$ ' + z) + z.length + 2).split('\n').filter(Boolean); };
     const status = async () => (await nach('echo $?'))[0];
     const log = () => p.evaluate(() => TERMINAL_ZUSTAND.syslog.join('\n'));
     const anzahl = async (muster) => ((await log()).match(muster) || []).length;
