@@ -8,6 +8,7 @@ Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmate
 - szenario.js: Szenario/Dossier/Ablage-Dokumente; dialog.js + klassifikator.js: Dialogmaschine
   (Absichten in DIALOG.absichten, Antwortgruppen MÜSSEN in DIALOG.antworten[kat][kanal] liegen)
 - karte-modul.js: Modul Karte (Reiter 3; interne Registrierung 6) Lagekarte (2D-Renderer, Kachelspeicher, Zonen, Pins, Messen, 3D-Brücke); klassisches Skript, wird NACH dem Hauptskript geladen, App startet im load-Ereignis. Tabellen im Hauptskript müssen Karten-Funktionen lazy referenzieren.
+- Zugang zu Zielen: zielZugang(id) (index.html, bei dossierGesperrt) für Dossiers und Pins, gemeinsam für Oberfläche und Terminal; Pin gesperrt genau dann, wenn sein verknüpftes Dossier manuell gesperrt ist (pinGesperrt), dann wie dessen Sichtungen nicht auf der Karte. infoGesperrt wird nur gemeldet, die Zugangskennung hebt es nicht auf.
 - akten-modul.js: Modul Ablage (Reiter 4; interne Registrierung 7) (Aktenliste, Dokumentenansicht, Schwärzungen, Einsichtsanträge); wie karte-modul.js nach dem Hauptskript geladen, in der Tabelle der Render-Funktionen lazy referenziert.
 - profil-modul.js: Modul Profil (Arbeitsprofil, Identitäten mit lokalen Anlagen, Ausgangsorte); fall-modul.js: Modul X (Fälle, Verknüpfung mit Dossiers und Pins, Löschen eines Falls, Fallverweise im Dossier); beide nach dem Hauptskript geladen.
 - terminal_lokal.py: lokale Dateibrücke (Archivordner neben dem Starter, Exportarten pin, zone, sichtung; Ersetzen nur eigener unveränderter Dateien); wird von START_TERMINAL.bat gestartet.

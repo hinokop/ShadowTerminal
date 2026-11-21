@@ -3656,6 +3656,18 @@ function infoGesperrt(e) { return !infoFrei(e); }
 /* Sperre durch den Nutzer (unabhängig von der Missionsfreigabe): ein gesperrtes Dossier erscheint nur mit seiner Nummer;
    Entsperren verlangt die Zugangskennung der Anmeldung. Reine Oberflächensperre, die Daten bleiben unverändert gespeichert. */
 function dossierGesperrt(e) { return !!e && (PROFIL.gesperrt || []).indexOf(e.id) >= 0; }
+/* Manuelle Sperre eines Pins: ausschließlich die seines verknüpften Dossiers; unverknüpfte Pins sind frei. */
+function pinGesperrt(px) { return !!px && !!px.dossier && (PROFIL.gesperrt || []).indexOf(px.dossier) >= 0; }
+/* Zugang zu einem Ziel nach Kennung, gemeinsam für Oberfläche und Terminal: null = kein solches Ziel (Dossier im Bestand oder Pin);
+   gesperrt = manuelle Sperre (aufzuheben mit der Zugangskennung); info = Freigabe durch den Ansprechpartner fehlt (nur Dossiers,
+   die Zugangskennung ersetzt sie nicht). */
+function zielZugang(id) {
+  const px = (PROFIL.pins || []).find(function (x) { return x.id === id; });
+  if (px) return { art: 'pin', id: id, objekt: px, dossier: px.dossier || null, gesperrt: pinGesperrt(px), info: false };
+  const e = pool().find(function (x) { return x.id === id; });
+  if (!e) return null;
+  return { art: 'dossier', id: id, objekt: e, dossier: e.id, gesperrt: dossierGesperrt(e), info: infoGesperrt(e) };
+}
 function kennungPruefen(pw) {
   const rec = typeof authLaden === 'function' ? authLaden() : null;
   if (!rec || !pw) return Promise.resolve(false);
