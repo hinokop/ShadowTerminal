@@ -23,7 +23,7 @@ Stand: 2026-11-21. Durch Shadow („Master Wayne“) freigegebene **Reihenfolge 
 ### 2. PR #95: Namensnavigation kontrolliert fertigstellen
 
 - Direktes `map <Name>` / `open <Name>`, Aliase und Tab-Ergänzung prüfen: exakter Treffer vor Präfix; bei Mehrdeutigkeit keine automatische Navigation.
-- Sichtbarkeit und Rechte müssen für Navigation, Vorschläge, Trefferlisten und Verlauf dieselbe Entscheidung verwenden. Solange alte `infoGesperrt`-Mechanik noch tatsächlich wirkt, darf die Namensnavigation keinen alternativen Offenlegungsweg schaffen. Die spätere Entfernung der Missionsmechanik ist **kein Vorwand**, die aktuelle Lücke ungeprüft zu übernehmen.
+- **Verbindlicher Merge-Blocker für #95:** Die noch wirksame Altlogik `infoGesperrt` darf keine Dossier-Klarnamen über direkte Namensauflösung, Tab-Ergänzung oder Mehrdeutigkeits-/Trefferlisten preisgeben. Bis Phase 5 nur vollständig freigegebene Dossiers in solche Namensindizes aufnehmen; vorhandene Kennungs-/Sperrregeln beachten. Dafür gezielten Regressionstest mit einem durch `infoGesperrt` beschränkten Dossier ergänzen. **#95 nicht vor diesem Fix mergen.** Der Missionsaspekt ist als Produktentscheidung entfallen, aber noch im Code; Phase 5 entfernt die Altlogik rückwärtskompatibel. Das ist kein akzeptiertes Übergangsleck.
 - Kollision „gesperrter exakter Name“ vs. „sichtbarer längerer Präfix“ explizit behandeln; keine stille falsche Navigation.
 - Maskierung des bereits angezeigten Scrollbacks und Verhalten bei erneuter Entsperrung testen. Keine ungezielte Löschung anderer Befehlsausgaben.
 - Regressionstests und Dokumentation auf denselben Commit abstimmen. Ein umfassendes Windows-GUI-Testpaket erst an einem geeigneten Integrations-Meilenstein erstellen, nicht verpflichtend für jeden isolierten #95-Fix. #95 bleibt Draft bis zur Abnahme.
@@ -35,15 +35,17 @@ Stand: 2026-11-21. Durch Shadow („Master Wayne“) freigegebene **Reihenfolge 
 - Der vorläufige `exports` / `open export`-Katalog darf keinen zweiten Berechtigungspfad schaffen: `cat` über die lokale Archivbrücke und andere Wege auf dieselben geschützten Dateien gehören in die Sicherheitsprüfung. Technische Grenze klar benennen: Eine Terminal-UI-Sperre allein ist kein Schutz gegenüber direktem Dateisystemzugriff.
 - Die derzeitige 500-Einträge-Grenze der `ls`-Brücke darf keine still ausgelassenen archivierten Datensätze verursachen. Vollständige/deterministische Erfassung oder eine überprüfbare paginierte Lösung.
 - SHA-256, Auswahl registrierter Fassung, Revisionen, nachträgliche Sperrung und Scrollback mit echten Brückenoperationen sowie Windows testen. Mocks allein belegen keine echte Archivbrücke.
+- Die widersprüchlichen Annahmen über eindeutige Präfixergänzung in `tests/terminal-vault.js` und `tests/terminal-objektnavigation.js` nach dem Baseline-Fix anhand der tatsächlich vorhandenen Mehrfachtreffer korrigieren; Auswahllisten- und Sperrprüfungen erhalten. Testfehler nicht durch fehlerhafte Produktlogik beheben.
 - Test-/Dokumentationsabweichungen nach jedem Commit korrigieren. #96 hängt von #95 ab; nach dessen Merge Basis kontrolliert aktualisieren.
 
 ### 4. Abnahme und Merge-Reihenfolge
 
-1. Baseline-Fix auf `main` nach Prüfung.
-2. #95 nach technischem Review, gezielten Tests und vollständiger Standardauswahl mergen; einen gebündelten Windows-Oberflächentest ansetzen, sobald der integrierte Stand insgesamt praxisreif ist oder eine konkrete Änderung das verlangt.
-3. #96 auf den aktuellen `main` rebasen/aktualisieren; erst dann erneut vollständig prüfen und nach gesonderter Abnahme mergen.
+1. PR #97: Baseline-Fix gezielt testen und nach dokumentierter Freigabe nach `main` integrieren.
+2. PR #95: Die Änderung aus #97 übernehmen, temporären `infoGesperrt`-Namensfilter samt Regressionstest ergänzen, anschließend gezielte Tests und vollständige Standardauswahl; erst nach separater Abnahme mergen. Kein neues Namensleck auf `main` zulassen.
+3. PR #96: Zuerst #95-Stand übernehmen; die beiden verbliebenen widersprüchlichen Tab-Testzeilen korrigieren und Archiv-/Brückenbefunde prüfen, dann gezielte und vollständige Tests; nach gesonderter Abnahme mergen. Keine vorgezogenen Extra-Branches für eng gekoppelte Änderungen erforderlich.
+4. Gebündelten Windows-Oberflächentest ansetzen, sobald der integrierte Anwendungsstand praxisreif ist oder ein konkreter Eingriff ihn erfordert.
 
-Ein erfolgreiches isoliertes Testskript ersetzt keinen vollständigen Regressionstest. Ergebnisstatus jeweils **bestätigt / fehlgeschlagen / nicht ausgeführt** dokumentieren, inklusive Branch-Commit, Testumgebung und bekannten Ausnahmen. Keine ungeprüfte Merge-Freigabe.
+**Sichtungen/PR-Reviews** benötigen keinen automatischen Volltest; Quelltextbefunde sind ausdrücklich als nicht ausgeführt bzw. statisch geprüft zu kennzeichnen. Bei **Merge-Freigaben** genügt ein erfolgreicher Einzeltest nicht: gezielte Regressionen und die volle Standardauswahl sind mit Branch-SHA und bekannten unabhängigen Fehlern zu dokumentieren. Ergebnisstatus **bestätigt / fehlgeschlagen / nicht ausgeführt**; keine ungeprüfte Merge-Freigabe.
 
 ### 5. Alte Missions-/Ansprechpartnerlogik ausbauen
 
