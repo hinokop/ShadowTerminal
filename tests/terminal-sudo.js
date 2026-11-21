@@ -2,7 +2,7 @@
    "[sudo] password for raizo:", kein Echo, nichts im Eingabefeld, Verlauf, Vorschlag, in der Ausgabe oder im Speicher.
    Drei Versuche (sudo: passwd_tries), "Sorry, try again." und "sudo: 3 incorrect password attempts"; das Ziel bleibt
    gesperrt. Strg+C: nur der Zeilenumbruch, Rückgabewert 130. Richtiges Kennwort: entsperrt wie die Oberfläche
-   (DOSSIER_ENTSPERREN), dann Navigation. Die Freigabe durch den Ansprechpartner ersetzt sudo nicht. */
+   (DOSSIER_ENTSPERREN), dann Navigation. Historische Freigaben bleiben für Alttests erhalten, werden vom Terminalzugang aber nicht ausgewertet. */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
@@ -91,7 +91,7 @@ const { APP } = require('./_pfad');
 
     /* Rücktaste und Strg+U wirken auf das verdeckte Kennwort; richtig: entsperrt, Pin angesprungen */
     await starten('sudo map ' + z.pin);
-    await geheim('xyz'); await inp.press('Control+u');
+    await geheim('SUDO_DISCARD_SENTINEL_5F83B2'); await inp.press('Control+u');
     await geheim('pw-test-12X'); await inp.press('Backspace'); await geheim('3');
     await inp.press('Enter');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
@@ -114,7 +114,8 @@ const { APP } = require('./_pfad');
     /* Das Kennwort steht nirgends: Ausgabe, Verlauf, Seite, Speicher */
     const spuren = await p.evaluate(() => JSON.stringify([document.getElementById('profil-terminal-ausgabe').textContent, TERMINAL_ZUSTAND.verlauf, document.body.innerText,
       Object.keys(localStorage).map(k => localStorage.getItem(k)), Object.keys(sessionStorage).map(k => sessionStorage.getItem(k))]));
-    assert.doesNotMatch(spuren, /geheim1|falsch2|falsch3|pw-test-12|xyz/);
+    /* Kein Kurzfragment verwenden: eine zufällige .onion-Adresse kann 'xyz' enthalten. */
+    assert.doesNotMatch(spuren, /geheim1|falsch2|falsch3|pw-test-12|SUDO_DISCARD_SENTINEL_5F83B2/);
     assert.deepEqual(await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.filter(x => x.startsWith('sudo open') || x.startsWith('sudo map')).length > 0), true);
 
     /* Freigabe durch den Ansprechpartner bleibt: sudo hebt nur die manuelle Sperre auf */
@@ -126,12 +127,23 @@ const { APP } = require('./_pfad');
       return { id: e.id, wissen: wissen(e), info: infoGesperrt(e) };
     });
     assert.deepEqual([info.wissen, info.info], ['bekannt', true]);
+    /* Historische Kenntnisstufen bleiben für alte Tests korrekt; die aktuelle
+       Terminalzugangsentscheidung bewertet ausschließlich die manuelle Sperre. */
+    assert.deepEqual(await p.evaluate(i => {
+      const z = zielZugang(i);
+      return [z && z.id, z && z.gesperrt, z && z.info,
+        dossierRechercheBestand().some(e => e.id === i)];
+    }, info.id), [info.id, true, false, true], 'manuelle Zugangskontrolle von Missionsstatus getrennt');
     await starten('sudo open ' + info.id);
     await geheim('pw-test-123'); await inp.press('Enter');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     assert.equal(await gesperrt(info.id), false);
     assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: info.id });
-    assert.deepEqual(await p.evaluate(i => [wissen(entitaet(i)), infoGesperrt(entitaet(i)), (STATE.infozugang || {})[i]?.status], info.id), ['bekannt', true, 'bekannt'], 'Freigabe unverändert');
+    assert.deepEqual(await p.evaluate(i => [wissen(entitaet(i)), infoGesperrt(entitaet(i)), (STATE.infozugang || {})[i]?.status], info.id), ['bekannt', true, 'bekannt'], 'historischer Erkenntnisstand unverändert');
+    assert.deepEqual(await p.evaluate(i => {
+      const z = zielZugang(i);
+      return [z.id, z.gesperrt, z.info];
+    }, info.id), [info.id, false, false], 'sudo ändert ausschließlich die manuelle Sperre');
 
     /* Schließen des Terminalfensters bricht eine offene sudo-Abfrage ab und verwirft den Puffer. */
     await zurueck();

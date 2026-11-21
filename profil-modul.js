@@ -2099,7 +2099,9 @@ const TERMINAL_KENNUNG_DOSSIER = /^[POL]-\d{4}$/, TERMINAL_KENNUNG_PIN = /^PIN-\
 /* Temporärer Namensschutz bis zur Entfernung der alten Missionsfreigaben.
    Direkte Kennungsnavigation bleibt von diesem Filter unberührt. */
 function terminalDossierNameLesbar(e) {
-  return !!e && !dossierGesperrt(e) && !infoGesperrt(e);
+  /* Die manuelle Sperre bleibt; historische Ansprechpartnerstatuswerte steuern
+     die aktuelle Recherche- und Namensnavigation nicht mehr. */
+  return !!e && !dossierGesperrt(e);
 }
 function terminalZielNamen(befehl, text) {
   const q = terminalPinSuchtext(text).replace(/\s+/g, ' ').trim();
@@ -2115,7 +2117,7 @@ function terminalZielNamen(befehl, text) {
     const ziel = { id: z.id, name: z.name, suchnamen: [z.name] };
     (zoneGesperrt(z) ? verborgen : namen).push(ziel);
   });
-  if (befehl === 'open') pool().forEach(function (e) {
+  if (befehl === 'open') dossierRechercheBestand().forEach(function (e) {
     const alias = Array.isArray(e.aliase) ? e.aliase : [];
     const ziel = { id: e.id, name: e.name, suchnamen: [e.name].concat(alias) };
     (terminalDossierNameLesbar(e) ? namen : verborgen).push(ziel);
@@ -2182,7 +2184,7 @@ function terminalPinSperreAktualisieren() {
     /* Die Shell-Historie darf einen zuvor benutzten Namenssuchbegriff nach dem Sperren
        nicht erneut als grauen Vorschlag oder über Pfeil-hoch offenlegen. Kennungen bleiben. */
     const pinNamen = (PROFIL.pins || []).filter(pinGesperrt).map(function (p) { return p.name; });
-    const dossierNamen = pool().filter(dossierGesperrt).flatMap(function (e) {
+    const dossierNamen = dossierRechercheBestand().filter(dossierGesperrt).flatMap(function (e) {
       return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []);
     });
     const zonenNamen = (PROFIL.zonen || []).filter(function (z) {
@@ -2282,7 +2284,7 @@ function terminalPinTab(befehl, arg, kopf, fertig) {
     .map(function (p) { return p.name + ' [' + p.id + ']'; })
     .concat(zonen.filter(function (z) { return !zoneGesperrt(z) && z.name; })
       .map(function (z) { return z.name + ' [' + z.id + ']'; }));
-  const lesbareDossiers = befehl === 'open' ? pool() : [];
+  const lesbareDossiers = befehl === 'open' ? dossierRechercheBestand() : [];
   const dossiers = lesbareDossiers.map(function (e) { return e.id; });
   const dossierNamen = lesbareDossiers.filter(terminalDossierNameLesbar).flatMap(function (e) {
     return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []).filter(Boolean)

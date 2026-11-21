@@ -947,6 +947,9 @@ function dossierOffen(mid) { return !missionsbetrieb() || freigeschaltet(mid); }
 function poolAlle() { return alleEntitaeten().filter(function (e) { return dossierOffen(e.mission); }); }
 /* Sichtbare Entitäten: unbekannte Personen und Organisationen tauchen in keiner Liste, Auswahl oder Verbindung auf */
 function pool() { return poolAlle().filter(function (e) { return wissen(e) !== 'unbekannt'; }); }
+/* Phase 5a: Der Recherchebestand ist unabhängig von alten Missionen und Ansprechpartnerfreigaben.
+   pool()/wissen() bleiben bis 5b für den historischen Missionsablauf unverändert. */
+function dossierRechercheBestand() { return alleEntitaeten(); }
 function dossierKantenBestand() {
   const entfernt = Array.isArray(PROFIL.ausgeblendeteKanten) ? PROFIL.ausgeblendeteKanten : [];
   return SCENARIO.verbindungen.concat(SCENARIO.standard.verbindungen).filter(function (v) { return entfernt.indexOf(v.id) < 0; })
@@ -3668,9 +3671,11 @@ function zielZugang(id) {
   if (px) return { art: 'pin', id: id, objekt: px, dossier: px.dossier || null, gesperrt: pinGesperrt(px), info: false };
   const zn = (PROFIL.zonen || []).find(function (x) { return x.id === id && /^ZO-\d{3,15}$/.test(id); });
   if (zn) return { art: 'zone', id: id, objekt: zn, dossier: zn.dossier || null, gesperrt: zoneGesperrt(zn), info: false };
-  const e = pool().find(function (x) { return x.id === id; });
+  const e = dossierRechercheBestand().find(function (x) { return x.id === id; });
   if (!e) return null;
-  return { art: 'dossier', id: id, objekt: e, dossier: e.id, gesperrt: dossierGesperrt(e), info: infoGesperrt(e) };
+  /* Terminal-/Rechercheberechtigung: ausschließlich die manuelle Sperre. Ein altes
+     infozugang-Feld darf keine zweite Zugriffsentscheidung erzeugen. */
+  return { art: 'dossier', id: id, objekt: e, dossier: e.id, gesperrt: dossierGesperrt(e), info: false };
 }
 function kennungPruefen(pw) {
   const rec = typeof authLaden === 'function' ? authLaden() : null;
@@ -6955,7 +6960,7 @@ function eigenesPanel(e) {
 }
 function dossierListe() {
   const F = VIEW.dossier, q = F.q.trim().toLowerCase();
-  const alle = pool();
+  const alle = dossierRechercheBestand();
   const treffer = alle.filter(function (e) {
     const st = STATE.dossiers.entitaeten[e.id];
     if (F.typ !== 'Alle' && e.typ !== F.typ) return false;
@@ -7623,7 +7628,7 @@ function profilImportieren(file) {
 }
 function renderDossier(m) {
   let e = entitaet(STATE.dossiers.auswahl);
-  if (!e || !dossierOffen(e.mission) || wissen(e) === 'unbekannt') e = pool()[0];
+  if (!e || !dossierRechercheBestand().some(function (x) { return x.id === e.id; })) e = dossierRechercheBestand()[0];
   return [modKopf(m),
     h('div', { class: 'split' }, dossierListe(), h('div', null, dossierAnsicht(e), infoGesperrt(e) || dossierGesperrt(e) || typeof rechercheDossier !== 'function' ? null : rechercheDossier(e), infoGesperrt(e) || dossierGesperrt(e) ? null : beziehungsansicht(e), profilPanel()))];
 }
