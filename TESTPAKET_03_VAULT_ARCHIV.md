@@ -25,6 +25,17 @@
 | Dossier nach dem Abruf erneut sperren | Vollständiger archivierter Text wird aus dem Scrollback entfernt |
 | Keine lokale Archivbrücke | `VAULT: INDEX LINK UNAVAILABLE`, ohne lokale Pfade oder vermeintlichen Abruf |
 
+## Ergänzung – PIN- und Zonennavigation
+
+Die direkte Objekt-Navigation wurde im selben Draft-PR überarbeitet. Dafür gilt zusätzlich:
+
+- `map pins` listet ausschließlich Pins, `map zones` ausschließlich Profilzonen. Verknüpfte, gesperrte Zonen erscheinen ausschließlich mit `ZO-... [LOCKED]`.
+- `map zones Treffpunkt` findet passende Zonen. `map ZO-...` und `map "Treffpunkt Reserve"` zentrieren die Zone und öffnen deren Kartenfenster.
+- `open PIN-...` beziehungsweise `open ZO-...` öffnen ausschließlich das **verknüpfte Dossier**. Ohne Bezug: `No linked dossier`, Exit-Code 1, keine Navigation.
+- `sudo open ZO-...` und `sudo map ZO-...` verwenden die bereits vorhandene Kennwortprüfung für gesperrte Bezugsdossiers.
+- Tab ergänzt sichtbare Zonennamen sowie `ZO-`-Kennungen. `open export` bleibt die separate VAULT-Operation; keine Änderung des tatsächlichen Speicherwegs.
+- Gesperrte Zonennamen dürfen weder auf der Karte noch in den Suchtreffern oder den Objektpopups erscheinen.
+
 ## Inszenierung gezielt prüfen
 
 Die Terminalausgabe zeigt `VAULT :: RECORD INDEX` und `VAULT :: RECORD ACCESS` samt Kennung, Revision, Integritätsstatus und archiviertem Inhalt. **Nicht** sichtbar sein dürfen physische Pfade wie `ops/lageblatt-PIN-...`, `dokumente/...`, `127.0.0.1`, Browser-Download-Dialoge oder Hinweise auf eine lokal gelesene Datei. Der Terminalzustand (PPP, Profanity, tmux) darf durch `exports` und `open export` nicht verändert werden.
@@ -46,7 +57,7 @@ Im Ordner `tests`:
 
 ```powershell
 $env:FT_PARALLEL = "2"
-node runall.js terminal-vault terminal-namensnavigation terminal-pin-suche terminal-navigation terminal-sudo terminal-befehlstabelle karte-sperre-pins
+node runall.js terminal-objektnavigation terminal-vault terminal-namensnavigation terminal-pin-suche terminal-navigation terminal-sudo terminal-befehlstabelle karte-sperre-pins
 node runall.js
 ```
 
