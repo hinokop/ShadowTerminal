@@ -2,7 +2,7 @@
    "[sudo] password for raizo:", kein Echo, nichts im Eingabefeld, Verlauf, Vorschlag, in der Ausgabe oder im Speicher.
    Drei Versuche (sudo: passwd_tries), "Sorry, try again." und "sudo: 3 incorrect password attempts"; das Ziel bleibt
    gesperrt. Strg+C: nur der Zeilenumbruch, Rückgabewert 130. Richtiges Kennwort: entsperrt wie die Oberfläche
-   (DOSSIER_ENTSPERREN), dann Navigation. Die Freigabe durch den Ansprechpartner ersetzt sudo nicht. */
+   (DOSSIER_ENTSPERREN), dann Navigation. Historische Ansprechpartnerdaten begrenzen den Zugang nicht mehr; die manuelle Sperre bleibt. */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
@@ -117,21 +117,32 @@ const { APP } = require('./_pfad');
     assert.doesNotMatch(spuren, /geheim1|falsch2|falsch3|pw-test-12|xyz/);
     assert.deepEqual(await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.filter(x => x.startsWith('sudo open') || x.startsWith('sudo map')).length > 0), true);
 
-    /* Freigabe durch den Ansprechpartner bleibt: sudo hebt nur die manuelle Sperre auf */
+    /* Phase 5a: Eine alte Ansprechpartner-Einstufung darf keinen zweiten
+       Freigabeweg mehr erzeugen; sudo entsperrt ausschließlich manuelle Sperren. */
     const info = await p.evaluate(() => {
-      dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
-      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && wissen(x) === 'unbekannt');
-      IZ()[e.id] = { status: 'bekannt' };
-      dispatch({ type: 'DOSSIER_SPERREN', id: e.id }); dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule();
-      return { id: e.id, wissen: wissen(e), info: infoGesperrt(e) };
+      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person');
+      if (!e) return null;
+      IZ()[e.id] = { status: 'bekannt' }; /* historische Profildaten bleiben erhalten */
+      dispatch({ type: 'DOSSIER_SPERREN', id: e.id });
+      dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule();
+      const vorigerBetrieb = STATE.missionsbetrieb;
+      STATE.missionsbetrieb = true;
+      try {
+        return { id: e.id, wissen: wissen(e), info: infoGesperrt(e),
+          sichtbar: pool().some(x => x.id === e.id) };
+      } finally { STATE.missionsbetrieb = vorigerBetrieb; }
     });
-    assert.deepEqual([info.wissen, info.info], ['bekannt', true]);
+    assert.ok(info, 'altes Dossier muss existieren');
+    assert.deepEqual([info.wissen, info.info, info.sichtbar], ['frei', false, true],
+      'alte Missions-/Ansprechpartnerfreigabe begrenzt keine Dossieransicht mehr');
+    assert.equal(await gesperrt(info.id), true, 'manuelle Sperre bleibt gültig');
     await starten('sudo open ' + info.id);
     await geheim('pw-test-123'); await inp.press('Enter');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     assert.equal(await gesperrt(info.id), false);
     assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: info.id });
-    assert.deepEqual(await p.evaluate(i => [wissen(entitaet(i)), infoGesperrt(entitaet(i)), (STATE.infozugang || {})[i]?.status], info.id), ['bekannt', true, 'bekannt'], 'Freigabe unverändert');
+    assert.deepEqual(await p.evaluate(i => [wissen(entitaet(i)), infoGesperrt(entitaet(i)), (STATE.infozugang || {})[i]?.status], info.id),
+      ['frei', false, 'bekannt'], 'historischer Zugriffsstatus bleibt als Altdatum erhalten');
 
     /* Schließen des Terminalfensters bricht eine offene sudo-Abfrage ab und verwirft den Puffer. */
     await zurueck();
@@ -153,6 +164,6 @@ const { APP } = require('./_pfad');
     assert.equal(await gesperrt(z.zwei), true);
     assert.equal(await p.evaluate(() => document.getElementById('profil-terminal-eingabe').value), '');
     assert.deepEqual(errors, []);
-    console.log('OK: sudo (Kennwort nur bei Sperre, verdeckt, drei Versuche, Strg+C, Freigabe bleibt)');
+    console.log('OK: sudo (Kennwort nur bei Sperre, verdeckt, drei Versuche, Strg+C, Altfreigabe ignoriert)');
   } finally { await b.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
