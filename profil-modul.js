@@ -294,7 +294,7 @@ function terminalSitzungTrennen() {
 }
 /* Angemeldeter Benutzer der Shell: ein gewöhnlicher Benutzer (kein root), damit sudo ein Kennwort verlangen kann; sudo fragt
    root nie (plugins/sudoers/check.c). Prompt wie bash unter Ubuntu, PS1 '\u@\h:\w\$': '$' für Nicht-root. */
-const TERMINAL_BENUTZER = 'raizo';
+const TERMINAL_BENUTZER = 'raizo', TERMINAL_UID = 1000;     /* erster Benutzer unter Ubuntu; tmux legt seinen Socket unter /tmp/tmux-<uid> an (tmux.c) */
 function terminalPrompt() {
   if (TERMINAL_ZUSTAND.sudo) return TERMINAL_ZUSTAND.sudo.pruefen ? '' : terminalSudoPrompt();
   if (TERMINAL_ZUSTAND.orbitLive) return 'predict · Ctrl+C';
@@ -1933,7 +1933,7 @@ function terminalTmuxEinzeln(args) {
     terminalTmuxPaneAnzeige();
     return 0;
   }
-  if (!t.tmux) { terminalAusgabe('no server running on /tmp/tmux-0/default'); return 1; }
+  if (!t.tmux) { terminalAusgabe('no server running on /tmp/tmux-' + TERMINAL_UID + '/default'); return 1; }
   if (unter === 'kill-server') { terminalTmuxEnde(); terminalAusgabe('[server exited]'); return 0; }
   if (unter === 'kill-pane' || unter === 'killp') {
     const i = args.indexOf('-t'), ziel = i >= 0 ? args[i + 1] : undefined;

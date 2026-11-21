@@ -28,7 +28,7 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
 
     /* ohne Sitzung */
     await cmd('tmux split-window -bd predict');
-    assert.equal(await letzte(), 'no server running on /tmp/tmux-0/default');
+    assert.equal(await letzte(), 'no server running on /tmp/tmux-1000/default');
     await cmd('tmux attach'); assert.equal(await letzte(), 'unknown command: attach');
     /* Sitzung mit Statuszeile; verschachtelt abgewiesen */
     await cmd('tmux');
