@@ -257,11 +257,30 @@ function terminalArbeitsverzeichnis() {
   const t = TERMINAL_ZUSTAND;
   return '/' + (t.ort ? [TERMINAL_DB].concat(t.ort) : t.virtuellerOrt || []).join('/');
 }
+/* Einheitliche Zugriffsprüfung für archivierte Kartenobjekte in der Terminal-
+   Oberfläche. Die lokale Python-Brücke selbst besitzt keine Profilberechtigungen;
+   direkter Dateisystemzugriff außerhalb dieser Oberfläche bleibt davon unabhängig. */
+function terminalArchivDateiGesperrt(op, parts) {
+  if (!['cat', 'head', 'tail', 'wget', 'send'].includes(op) ||
+      !Array.isArray(parts) || parts.length !== 2 ||
+      !['ops', 'dokumente'].includes(parts[0]) || typeof parts[1] !== 'string')
+    return false;
+  const muster = TERMINAL_VAULT_MUSTER.find(function (m) { return m.re.test(parts[1]); });
+  if (!muster) return false;
+  const id = muster.re.exec(parts[1])[1];
+  const objekt = terminalVaultObjekte().find(function (p) { return p.id === id && p.art === muster.art; });
+  return !!objekt && objekt.gesperrt;
+}
 async function terminalBruecke(op, parts, hidden, exportDaten) {
-  return terminalBrueckeSenden(op === 'export-txt' ? {
+  /* Vor UND nach dem asynchronen Lesezugriff prüfen: die Sperre könnte
+     während einer laufenden Anfrage aktiviert worden sein. */
+  if (terminalArchivDateiGesperrt(op, parts)) return { error: 'Permission denied' };
+  const antwort = await terminalBrueckeSenden(op === 'export-txt' ? {
     op: op, folder: exportDaten.ordner, kind: exportDaten.art, id: exportDaten.id, text: exportDaten.text,
     last: exportDaten.last || undefined
   } : { op: op, parts: parts, hidden: hidden });
+  if (terminalArchivDateiGesperrt(op, parts)) return { error: 'Permission denied' };
+  return antwort;
 }
 async function terminalBrueckeSenden(daten) {
   const bruecke = terminalBrueckenAdresse();
