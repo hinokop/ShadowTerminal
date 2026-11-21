@@ -124,9 +124,18 @@ const { APP } = require('./_pfad');
     await inp.fill('map Sperrzone');
     await inp.press('Tab');
     assert.equal(await inp.inputValue(), 'map Sperrzone', 'kein geschützter Name');
-    await inp.fill('map ' + z.zoneZu.slice(0, -1));
+    /* Mehrere ZO-00-Kennungen müssen eine Auswahl öffnen. Gesperrte Zone
+       bleibt per Kennung auffindbar, ihr Name bleibt geschützt. */
+    await inp.fill('map ZO-00');
     await inp.press('Tab');
-    assert.equal(await inp.inputValue(), 'map ' + z.zoneZu);
+    const kandidaten = p.locator('#profil-terminal-auswahl');
+    await kandidaten.waitFor({ state: 'visible' });
+    assert.match(await kandidaten.textContent(), new RegExp(z.zoneZu),
+      'gesperrte Zonenkennung bleibt in der Auswahlliste');
+    assert.doesNotMatch(await kandidaten.textContent(), /Sperrzone West/,
+      'geschützter Zonenname darf nicht ergänzt werden');
+    assert.equal(await inp.inputValue(), 'map ZO-00',
+      'mehrdeutiger Zonenpräfix wird nicht eindeutig ergänzt');
     await inp.fill('');
 
     /* sudo open / map ZO: vorhandenes Dossier entsperren, gleiche Oberfläche wie bisher. */
