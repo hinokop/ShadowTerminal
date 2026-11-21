@@ -3656,6 +3656,18 @@ function infoGesperrt(e) { return !infoFrei(e); }
 /* Sperre durch den Nutzer (unabhängig von der Missionsfreigabe): ein gesperrtes Dossier erscheint nur mit seiner Nummer;
    Entsperren verlangt die Zugangskennung der Anmeldung. Reine Oberflächensperre, die Daten bleiben unverändert gespeichert. */
 function dossierGesperrt(e) { return !!e && (PROFIL.gesperrt || []).indexOf(e.id) >= 0; }
+/* Manuelle Sperre eines Pins: ausschließlich die seines verknüpften Dossiers; unverknüpfte Pins sind frei. */
+function pinGesperrt(px) { return !!px && !!px.dossier && (PROFIL.gesperrt || []).indexOf(px.dossier) >= 0; }
+/* Zugang zu einem Ziel nach Kennung, gemeinsam für Oberfläche und Terminal: null = kein solches Ziel (Dossier im Bestand oder Pin);
+   gesperrt = manuelle Sperre (aufzuheben mit der Zugangskennung); info = Freigabe durch den Ansprechpartner fehlt (nur Dossiers,
+   die Zugangskennung ersetzt sie nicht). */
+function zielZugang(id) {
+  const px = (PROFIL.pins || []).find(function (x) { return x.id === id; });
+  if (px) return { art: 'pin', id: id, objekt: px, dossier: px.dossier || null, gesperrt: pinGesperrt(px), info: false };
+  const e = pool().find(function (x) { return x.id === id; });
+  if (!e) return null;
+  return { art: 'dossier', id: id, objekt: e, dossier: e.id, gesperrt: dossierGesperrt(e), info: infoGesperrt(e) };
+}
 function kennungPruefen(pw) {
   const rec = typeof authLaden === 'function' ? authLaden() : null;
   if (!rec || !pw) return Promise.resolve(false);
@@ -3663,12 +3675,19 @@ function kennungPruefen(pw) {
 }
 let SPERRE_MASKE = { stand: '', re: null, ids: {} };
 function sperreMaske() {
-  const ids = (PROFIL && PROFIL.gesperrt) || [], stand = ids.join(',') + '|' + (STATE && STATE.dossiers ? STATE.dossiers.eigene.length : 0);
+  const ids = (PROFIL && PROFIL.gesperrt) || [], pins = (PROFIL.pins || []).filter(pinGesperrt),
+    stand = ids.join(',') + '|' + (STATE && STATE.dossiers ? STATE.dossiers.eigene.length : 0) + '|' + pins.map(function (p) { return p.id + ':' + p.name; }).join('|');
   if (SPERRE_MASKE.stand === stand) return SPERRE_MASKE;
   const map = {}, namen = [];
   ids.forEach(function (id) {
     const e = entitaet(id); if (!e) return;
     [e.name].concat((e.aliase || []).filter(function (a) { return String(a).length >= 5; })).forEach(function (n) { if (n && String(n).length >= 3) { map[String(n).toLowerCase()] = id; namen.push(String(n)); } });
+  });
+  /* Auch bisherige Freitext-Ausgaben (Kommunikationsplan, Meldungsverlauf, Protokoll) dürfen Namen
+     inzwischen gesperrter Pins nicht weiter zeigen. Daten und Kennungen bleiben unverändert. */
+  pins.forEach(function (p) {
+    const name = String(p.name || ''), key = name.toLowerCase();
+    if (name.length >= 3 && !Object.prototype.hasOwnProperty.call(map, key)) { map[key] = p.id; namen.push(name); }
   });
   namen.sort(function (a, b) { return b.length - a.length; });
   SPERRE_MASKE = { stand: stand, ids: map, re: namen.length ? new RegExp(namen.map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|'), 'gi') : null };
@@ -5105,14 +5124,14 @@ const ACTIONS = {
     const ms = MS(def.id), W = ['p', 'a', 'c', 'e'].map(function (k) { return a[k] || ''; }), ab = String(a.abbruch || '').trim();
     if (W.some(function (x) { return PACE_WEGE.indexOf(x) < 0; })) { meldung('Plan nicht eingereicht: Für jede Stufe einen Weg wählen.'); return null; }
     if (ab.length < 20) { meldung('Plan nicht eingereicht: Abbruchkriterium mit mindestens 20 Zeichen angeben.'); return null; }
-    const pin = (PROFIL.pins || []).some(function (x) { return x.id === a.pin; }) ? a.pin : '';
+    const pinObj = (PROFIL.pins || []).find(function (x) { return x.id === a.pin; }), pin = pinObj ? pinObj.id : '';
     let grund = '';
     if (W.some(function (x, i) { return W.indexOf(x) !== i; })) grund = 'Zwei Stufen laufen über denselben Weg. Fällt er aus, fällt der Plan mit ihm. Jede Stufe braucht einen eigenen.';
     else if (W[3] === 'Kontakt über KIEBITZ' || W[0] === 'Kontakt über KIEBITZ') grund = 'KIEBITZ ist weder Melde- noch Rettungsweg. Er bleibt ein Werkzeug, und wer ihn als Notfallweg nutzt, verbrennt ihn.';
     else if (W[3] === 'Ablage am toten Briefkasten') grund = 'Eine Ablage kommt im Notfall zu spät. Für den Notfall brauche ich einen Weg, der sofort ankommt.';
     const iso = nowIso();
     ms.pace = { p: W[0], a: W[1], c: W[2], e: W[3], pin: pin, abbruch: ab, t: iso, stand: grund ? 'zurueck' : 'angenommen', antwort: '' };
-    const txt = grund ? 'Zum Kommunikationsplan: ' + grund + ' Bitte überarbeiten.' : 'Kommunikationsplan eingegangen. Primär ' + W[0] + ', Notfall ' + W[3] + (pin ? ', Sammelpunkt ' + ((PROFIL.pins || []).find(function (x) { return x.id === pin; }) || {}).name : '') + '. Passt. Er gilt für diesen Auftrag.';
+    const txt = grund ? 'Zum Kommunikationsplan: ' + grund + ' Bitte überarbeiten.' : 'Kommunikationsplan eingegangen. Primär ' + W[0] + ', Notfall ' + W[3] + (pin ? ', Sammelpunkt ' + (pinGesperrt(pinObj) ? pin : pinObj.name) : '') + '. Passt. Er gilt für diesen Auftrag.';
     ms.pace.antwort = txt;
     planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, text: txt, faelligAm: new Date(Date.now() + (6 + Math.round(Math.random() * 6)) * 1000).toISOString() });
     return { modul: 'Mission', aktion: 'Kommunikationsplan eingereicht', detail: 'Primär ' + W[0] + ' · Alternativ ' + W[1] + ' · Ausweichweg ' + W[2] + ' · Notfall ' + W[3] + '; ' + (grund ? 'zurückgewiesen' : 'angenommen') };
@@ -6720,7 +6739,7 @@ function planPanel(def, ms) {
      h('div', { class: 'pad' },
        h('div', { class: 'row' },
          h('label', { for: 'pace-pin' }, 'Sammelpunkt'),
-         h('select', { id: 'pace-pin', disabled: fest }, [h('option', { value: '' }, 'keiner')].concat(pins.map(function (x) { return h('option', { value: x.id, selected: !!(P && P.pin === x.id) }, x.name + (x.zwecke && x.zwecke.length ? ' (' + x.zwecke.join(', ') + ')' : '')); })))),
+         h('select', { id: 'pace-pin', disabled: fest }, [h('option', { value: '' }, 'keiner')].concat(pins.map(function (x) { return h('option', { value: x.id, selected: !!(P && P.pin === x.id) }, pinGesperrt(x) ? x.id : x.name + (x.zwecke && x.zwecke.length ? ' (' + x.zwecke.join(', ') + ')' : '')); })))),
        h('div', { class: 'row' },
          entwurf('input', 'pace-abbruch', 'pace-abbruch', { type: 'text', 'aria-label': 'Abbruchkriterium', placeholder: 'Abbruchkriterium: Woran erkennst du, dass du abbrechen musst? (mindestens 20 Zeichen)', maxlength: '300', style: 'min-width:420px', spellcheck: 'false', value: P ? P.abbruch : '' }),
          h('button', { type: 'button', id: 'btn-pace', disabled: fest || STATE.agent.status === 'Ruhend', onclick: function () {

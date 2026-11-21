@@ -125,7 +125,7 @@ function karteMarker() {
     if (ll) out.push({ id: st.id, kat: 'standort', name: st.name, ll: ll, land: st.land });
   });
   if (def && Z.route !== false) MS(def.id).zugriff.forEach(function (z) { if (z.ll) out.push({ id: z.id, kat: 'zugriff', name: z.typ + ' ' + z.id, ll: z.ll, r: z.r || 0, zp: z }); });
-  if (Z.pins !== false) (PROFIL.pins || []).forEach(function (x) { if (x.ll) out.push({ id: x.id, kat: 'pin', name: x.name, ll: x.ll }); });
+  if (Z.pins !== false) (PROFIL.pins || []).forEach(function (x) { if (x.ll && !pinGesperrt(x)) out.push({ id: x.id, kat: 'pin', name: x.name, ll: x.ll }); });   /* Pin eines gesperrten Dossiers wie dessen Sichtungen: nicht gezeichnet */
   const fokus = VIEW.karte.sichtungFokus || null;             /* gezielt angesprungene Sichtung: auch wenn älter als die letzten drei oder die Ebene ausgeblendet ist */
   if (Z.sichtungen !== false || fokus) pool().forEach(function (e) {
     if (infoGesperrt(e) || dossierGesperrt(e)) return;
@@ -930,7 +930,7 @@ function karteBezugVon(id) {
   const zn = typeof karteZoneFinden === 'function' ? karteZoneFinden(id) : null;
   if (zn) return { id: id, typ: zn.art === 'zugriff' ? 'Zugriffspunkt' : 'Zone', name: zn.profil ? zn.name : (zn.name || zn.id), ll: zn.ll, stand: zn.profil ? (zn.stand || zn.t) : null, filter: !!zn.profil };
   const pn = (PROFIL.pins || []).find(function (x) { return x.id === id; });
-  if (pn && pn.ll) return { id: id, typ: 'Pin', name: pn.name, ll: pn.ll, stand: null, filter: true };
+  if (pn) return pn.ll && !pinGesperrt(pn) ? { id: id, typ: 'Pin', name: pn.name, ll: pn.ll, stand: null, filter: true } : null;
   const ao = (PROFIL.ausgang || []).find(function (x) { return x.id === id; });
   if (ao && ao.ll) return { id: id, typ: 'Ausgangsort', name: ao.name, ll: ao.ll, stand: null, filter: false };
   const m = karteMarker().find(function (x) { return x.id === id; });
@@ -1033,7 +1033,7 @@ function karteAuswahlAnzeige() {
     return;
   }
   const pin = (PROFIL.pins || []).find(function (y) { return y.id === id; });
-  if (pin) { pinPopup(pin, fertig); return; }
+  if (pin) { if (pinGesperrt(pin)) { box.hidden = true; box.replaceChildren(); } else pinPopup(pin, fertig); return; }
   const zn = karteZoneFinden(id);
   if (zn) { zonePopup(zn, fertig); return; }
   const m = karteMarker().find(function (x) { return x.id === id; });
@@ -1118,15 +1118,17 @@ function dossierOptionen(gewaehlt) {
   const liste = typeof pool === 'function' ? pool().slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'de'); }) : [];
   return liste.map(function (e) { return h('option', { value: e.id, selected: e.id === gewaehlt }, kuerzen(e.name, 40) + ' (' + e.id + ')'); });
 }
-/* Zone oder Pin auf der Karte zeigen (aus Dossier und Unterlage); wählt das Objekt und zentriert */
+/* Zone oder Pin auf der Karte zeigen (aus Dossier, Unterlage und Terminal); wählt das Objekt und zentriert. false: kein Ziel mit
+   Position oder Pin eines gesperrten Dossiers (zielZugang) */
 function kartenObjektZeigen(id) {
   const K = VIEW.karte, ziel = (PROFIL.zonen || []).concat(PROFIL.pins || []).find(function (x) { return x.id === id; });
-  if (!ziel || !ziel.ll) return;
+  if (!ziel || !ziel.ll || (/^PIN-/.test(id) && zielZugang(id).gesperrt)) return false;
   K.pick = null; K.lat = ziel.ll[0]; K.lon = ziel.ll[1]; K.zoom = Math.max(K.zoom, 15); K.reiter = 'karte'; K.auswahl = id; K.popupVersatz = null;
   dispatch({ type: 'NAVIGATION', modul: 'karte' });
   if (typeof karteBezugSetzen === 'function') karteBezugSetzen(id);
   renderModule();
   if (K.ansicht3d) karteFlug(ziel.ll[0], ziel.ll[1], K.zoom, null, id);
+  return true;
 }
 /* Eigene Zone (Profil): neutrale Darstellung ohne Bewertung, Handler und Zeitgeber; Schaltflächen benennen ihre tatsächliche Wirkung */
 function eigeneZonePopup(zn, fertig) {
@@ -1616,7 +1618,8 @@ function kartenProtokollAnsicht() {
   const P = PROFIL.kartenProtokoll, K = VIEW.karte, filter = KP_ARTEN.indexOf(K.kpFilter) >= 0 ? K.kpFilter : '';
   kpAufraeumen();
   /* Anzeigename: aktueller Name des Objekts, solange es besteht, sonst der beim Eintrag festgehaltene */
-  const objName = function (x) { const z = (PROFIL.zonen || []).find(function (y) { return y.id === x.objekt; }), pn = (PROFIL.pins || []).find(function (y) { return y.id === x.objekt; }); return (z || pn || {}).name || x.objektName || x.objekt; };
+  const objName = function (x) { const z = (PROFIL.zonen || []).find(function (y) { return y.id === x.objekt; }), pn = (PROFIL.pins || []).find(function (y) { return y.id === x.objekt; }); return pinGesperrt(pn) ? x.objekt : (z || pn || {}).name || x.objektName || x.objekt; };
+  const gesperrt = function (x) { return pinGesperrt((PROFIL.pins || []).find(function (y) { return y.id === x.objekt; })); };   /* Pin eines gesperrten Dossiers: nur Kennung, keine Einzelheiten (Name, Position) */
   const objekte = {}; P.eintraege.forEach(function (x) { if (x.objekt) objekte[x.objekt] = objName(x); });
   const objFilter = K.kpObjekt && objekte[K.kpObjekt] ? K.kpObjekt : '';
   const liste = P.eintraege.filter(function (x) { return (!filter || x.art === filter) && (!objFilter || x.objekt === objFilter); }).slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
@@ -1639,7 +1642,7 @@ function kartenProtokollAnsicht() {
         bestaetigen('Kartenprotokoll leeren', 'Alle ' + P.eintraege.length + ' Einträge des Kartenprotokolls werden entfernt. Sichtungen, Zonen und Pins bleiben bestehen.', 'Protokoll leeren', function () { dispatch({ type: 'KARTENPROTOKOLL_LEEREN' }); });
       } }, 'Protokoll leeren')),
     tabelle(['Zeit (UTC)', 'Art', 'Objekt', 'Vorgang', 'Einzelheiten', 'Verfällt (UTC)'], liste.map(function (x) {
-      return [td('nw', fmtZ(x.t)), td('nw', x.art), td('nw', x.objekt ? objName(x) : '–'), td('nw', x.aktion), td('txt', x.text || '–'), td('nw', P.frist ? fmtZ(new Date(Date.parse(x.t) + P.frist * 3600000).toISOString()) : 'nie')];
+      return [td('nw', fmtZ(x.t)), td('nw', x.art), td('nw', x.objekt ? objName(x) : '–'), td('nw', x.aktion), td('txt', gesperrt(x) ? '–' : x.text || '–'), td('nw', P.frist ? fmtZ(new Date(Date.parse(x.t) + P.frist * 3600000).toISOString()) : 'nie')];
     }), filter || objFilter ? 'Keine Einträge dieser Auswahl.' : 'Noch keine Einträge.'));
 }
 function renderKarte(m) {
