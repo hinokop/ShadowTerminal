@@ -2257,21 +2257,33 @@ async function terminalVaultKatalog() {
   if (!terminalBrueckenAdresse()) return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
   const sammlung = [];
   for (const ordner of ['ops', 'dokumente']) {
-    const antwort = await terminalBruecke('ls', [ordner], false);
-    if (antwort.error || !Array.isArray(antwort.entries))
-      return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
-    for (const e of antwort.entries) {
-      if (!e || e.dir || typeof e.name !== 'string') continue;
-      const muster = TERMINAL_VAULT_MUSTER.find(function (m) { return m.re.test(e.name); });
-      if (!muster) continue;
-      const teile = muster.re.exec(e.name);
-      const zuordnung = terminalVaultZuordnung(teile[1]);
-      if (!zuordnung || zuordnung.art !== muster.art) continue;
-      const letzter = (PROFIL.exporte || {})[muster.art + ':' + zuordnung.id + ':' + ordner];
-      sammlung.push({ ...zuordnung, ordner, dateiname: e.name, revision: Number(teile[2] || 1),
-        registriert: !!(letzter && letzter.name === e.name && letzter.sha),
-        mtime: Number(e.mtime) || 0, bytes: Number(e.bytes) || 0 });
+    let offset = 0, fertig = false;
+    for (let seite = 0; seite < 1000; seite++) {
+      /* Der Archivkatalog liest sämtliche Seiten der sortierten lokalen Brücke.
+         Bei einer fehlerhaften Pagination abbrechen statt lückenhafte Erfolge melden. */
+      const antwort = await terminalBrueckeSenden({ op: 'ls', parts: [ordner], hidden: false,
+        offset: offset, limit: 500 });
+      if (antwort.error || !Array.isArray(antwort.entries))
+        return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
+      for (const e of antwort.entries) {
+        if (!e || e.dir || typeof e.name !== 'string') continue;
+        const muster = TERMINAL_VAULT_MUSTER.find(function (m) { return m.re.test(e.name); });
+        if (!muster) continue;
+        const teile = muster.re.exec(e.name);
+        const zuordnung = terminalVaultZuordnung(teile[1]);
+        if (!zuordnung || zuordnung.art !== muster.art) continue;
+        const letzter = (PROFIL.exporte || {})[muster.art + ':' + zuordnung.id + ':' + ordner];
+        sammlung.push({ ...zuordnung, ordner, dateiname: e.name, revision: Number(teile[2] || 1),
+          registriert: !!(letzter && letzter.name === e.name && letzter.sha),
+          mtime: Number(e.mtime) || 0, bytes: Number(e.bytes) || 0 });
+      }
+      if (antwort.next === null || antwort.next === undefined) { fertig = true; break; }
+      if (!Number.isSafeInteger(antwort.next) || antwort.next <= offset ||
+          antwort.next > 10000000 || antwort.entries.length === 0)
+        return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
+      offset = antwort.next;
     }
+    if (!fertig) return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
   }
   sammlung.sort(function (a, b) {
     return Number(b.registriert) - Number(a.registriert) ||
