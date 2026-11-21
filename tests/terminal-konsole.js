@@ -73,7 +73,7 @@ const PF = require('./_pfad'), { chatBereit } = require('./_kestrel');
     await p.waitForFunction(() => document.activeElement === $('profil-terminal'));
     assert.equal(await panel.count(), 1);
     assert.equal(await input.inputValue(), 't');
-    assert.match(await p.locator('#profil-terminal-ausgabe').textContent(), /# pwd/);
+    assert.match(await p.locator('#profil-terminal-ausgabe').textContent(), /\$ pwd/);
     await input.press('ArrowUp'); assert.equal(await input.inputValue(), 'pwd');
     await input.press('Escape'); assert.equal(await input.inputValue(), 't');
     await chatBereit(p, { kontakt: false });

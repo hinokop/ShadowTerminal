@@ -76,7 +76,7 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   const cmd = async z => { await p.locator('#profil-terminal-eingabe').fill(z); await p.locator('#profil-terminal-eingabe').press('Enter'); };
   await cmd('whoami'); await cmd('pwd'); await p.waitForTimeout(300);
   const aus = await p.locator('#profil-terminal-ausgabe').textContent();
-  ok.diagnoseterminal = /\nroot\n/.test(aus) && /pgcl-eu3\.arch07\//.test(aus) || /root/.test(aus);
+  ok.diagnoseterminal = /\nraizo\n/.test(aus) && /pgcl-eu3\.arch07\//.test(aus) || /raizo/.test(aus);
   /* Nach der Recherche weiterhin nichts im Hintergrund */
   await p.waitForTimeout(4000);
   const spaet = await messen();
