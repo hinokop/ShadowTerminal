@@ -2136,6 +2136,12 @@ function terminalPinListe(args) {
 /* Einmalige Tab-Quelle für map/open und deren sudo-Varianten. Namensvorschläge setzen beim Übernehmen
    immer die stabile Pin-Kennung ein. Gesperrte Pins tragen hier nie den Namen als Kandidat. */
 function terminalPinTab(befehl, arg, kopf, fertig) {
+  if (befehl === 'open' && /^export(?:\s|$)/i.test(arg)) {
+    const m = /^export\s+(.*)$/i.exec(arg);
+    if (!m) { fertig(kopf, arg, ['export'], function () { return 'export '; }); return; }
+    terminalVaultTab(befehl, m[1], kopf + 'export ', fertig);
+    return;
+  }
   if (befehl === 'map' && /^pins(?:\s|$)/i.test(arg)) {
     const m = /^pins\s+(.*)$/i.exec(arg);
     if (!m) { fertig(kopf, arg, ['pins'], function () { return 'pins '; }); return; }
@@ -2162,7 +2168,171 @@ function terminalPinTab(befehl, arg, kopf, fertig) {
     return (ref ? ref[1] : x) + (x === 'pins' ? ' ' : '');
   });
 }
+
+/* VAULT ist die simulierte Katalogschicht der Shell. Die Daten stammen weiterhin nur aus der
+   zugriffsbeschränkten lokalen Archivbrücke; keine Dateipfade, Ports oder Host-Adressen in der UI.
+   Der technische Speicherweg bleibt ausschließlich in der Entwicklerdokumentation sichtbar. */
+const TERMINAL_VAULT_MUSTER = [
+  { art: 'pin', re: /^lageblatt-(PIN-\d{3,15})(?:-v(\d{1,2}))?\.txt$/ },
+  { art: 'zone', re: /^zone-(ZO-\d{3,15})(?:-v(\d{1,2}))?\.txt$/ }
+];
+function terminalVaultObjekte() {
+  return (PROFIL.pins || []).filter(function (p) { return p && p.id; }).map(function (p) {
+    return { id: p.id, name: p.name || p.id, art: 'pin', objekt: p, gesperrt: pinGesperrt(p) };
+  }).concat((PROFIL.zonen || []).filter(function (z) { return z && z.id && /^ZO-\d{3,15}$/.test(z.id); }).map(function (z) {
+    return { id: z.id, name: z.name || z.id, art: 'zone', objekt: z, gesperrt: false };
+  }));
+}
+function terminalVaultFinden(text, bestand, praefix) {
+  const q = terminalPinSuchtext(text).replace(/\s+/g, ' ').trim();
+  if (!q) return praefix ? bestand : [];
+  const sichtbar = bestand.filter(function (x) {
+    return terminalPinSuchtext(x.id) === q || (!x.gesperrt && terminalPinSuchtext(x.name) === q);
+  });
+  if (praefix && sichtbar.length) return sichtbar;
+  const passende = bestand.filter(function (x) {
+    const id = terminalPinSuchtext(x.id), name = x.gesperrt ? '' : terminalPinSuchtext(x.name);
+    return praefix ? id.startsWith(q) || name.startsWith(q) : id.includes(q) || name.includes(q);
+  });
+  return passende;
+}
+function terminalVaultZuordnung(basis) {
+  const pin = terminalVaultObjekte();
+  return pin.find(function (x) { return x.id === basis; }) || null;
+}
+async function terminalVaultKatalog() {
+  if (!terminalBrueckenAdresse()) return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
+  const sammlung = [];
+  for (const ordner of ['ops', 'dokumente']) {
+    const antwort = await terminalBruecke('ls', [ordner], false);
+    if (antwort.error || !Array.isArray(antwort.entries))
+      return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
+    for (const e of antwort.entries) {
+      if (!e || e.dir || typeof e.name !== 'string') continue;
+      const muster = TERMINAL_VAULT_MUSTER.find(function (m) { return m.re.test(e.name); });
+      if (!muster) continue;
+      const teile = muster.re.exec(e.name);
+      const zuordnung = terminalVaultZuordnung(teile[1]);
+      if (!zuordnung || zuordnung.art !== muster.art) continue;
+      sammlung.push({ ...zuordnung, ordner, dateiname: e.name, revision: Number(teile[2] || 1),
+        mtime: Number(e.mtime) || 0, bytes: Number(e.bytes) || 0 });
+    }
+  }
+  sammlung.sort(function (a, b) {
+    return b.mtime - a.mtime || b.revision - a.revision || a.ordner.localeCompare(b.ordner);
+  });
+  return { records: sammlung };
+}
+function terminalVaultEintraege(records) {
+  const gruppen = new Map();
+  records.forEach(function (r) {
+    if (!gruppen.has(r.id)) gruppen.set(r.id, []);
+    gruppen.get(r.id).push(r);
+  });
+  return [...gruppen.values()].sort(function (a, b) {
+    return a[0].id.localeCompare(b[0].id, undefined, { numeric: true });
+  });
+}
+async function terminalVaultListe(args) {
+  const suchtext = args.join(' ').trim(), katalog = await terminalVaultKatalog();
+  if (katalog.error) { terminalAusgabe(katalog.error); return 1; }
+  const eintraege = terminalVaultEintraege(katalog.records).filter(function (gruppe) {
+    return !suchtext || terminalVaultFinden(suchtext, [gruppe[0]], false).length;
+  });
+  terminalAusgabe('VAULT :: RECORD INDEX');
+  if (!eintraege.length) {
+    terminalAusgabe(suchtext ? 'No indexed records matching query' : 'Index empty');
+    return suchtext ? 1 : 0;
+  }
+  terminalAusgabe(eintraege.map(function (gruppe) {
+    const p = gruppe[0];
+    return p.id + '  ' + (p.gesperrt ? '[LOCKED]' : p.name) +
+      (p.gesperrt ? '' : '  [RECORDS ' + gruppe.length + ']');
+  }));
+  terminalAusgabe('INDEX :: ' + eintraege.length + ' OBJECTS');
+  return 0;
+}
+function terminalVaultAufloesen(text) {
+  const alle = terminalVaultObjekte();
+  const genau = terminalVaultFinden(text, alle, true);
+  return genau;
+}
+function terminalVaultTab(befehl, arg, kopf, fertig) {
+  const eintraege = terminalVaultObjekte(), werte = eintraege.map(function (e) { return e.id; })
+    .concat(eintraege.filter(function (e) { return !e.gesperrt; }).map(function (e) { return e.name + ' [' + e.id + ']'; }));
+  fertig(kopf, arg, werte, function (s) {
+    const m = / \[((?:PIN|ZO)-\d{3,15})\]$/.exec(s);
+    return m ? m[1] : s;
+  });
+}
+async function terminalVaultHash(text) {
+  if (typeof crypto === 'undefined' || !crypto.subtle || typeof TextEncoder === 'undefined') return null;
+  try {
+    const data = new TextEncoder().encode(text);
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
+    return [...digest].map(function (n) { return n.toString(16).padStart(2, '0'); }).join('');
+  } catch (_) { return null; }
+}
+async function terminalVaultOeffnen(args, sudo = false) {
+  const suchtext = args.join(' ').trim();
+  if (!suchtext) return terminalUsage('open export <name|PIN-nnn|ZO-nnn>');
+  const kandidaten = terminalVaultAufloesen(suchtext);
+  if (!kandidaten.length) { terminalAusgabe('VAULT: record not found'); return 1; }
+  if (kandidaten.length > 1) {
+    terminalAusgabe('VAULT: ambiguous name (' + kandidaten.length + ' matches)');
+    terminalAusgabe(kandidaten.slice(0, 12).map(function (p) {
+      return '  ' + p.id + '  ' + (p.gesperrt ? '[LOCKED]' : p.name);
+    }));
+    return 1;
+  }
+  let objekt = kandidaten[0];
+  if (objekt.gesperrt) {
+    if (!sudo) { terminalAusgabe('VAULT: ' + objekt.id + ': Permission denied'); return 1; }
+    const ok = await terminalSudoKennwort();
+    if (ok !== true) return ok === 'abbruch' ? 130 : 1;
+    dispatch({ type: 'DOSSIER_ENTSPERREN', id: objekt.objekt.dossier });
+    objekt = terminalVaultObjekte().find(function (x) { return x.id === objekt.id; });
+    if (!objekt || objekt.gesperrt) { terminalAusgabe('VAULT: access denied'); return 1; }
+  }
+  const katalog = await terminalVaultKatalog();
+  if (katalog.error) { terminalAusgabe(katalog.error); return 1; }
+  const records = katalog.records.filter(function (x) { return x.id === objekt.id; });
+  if (!records.length) { terminalAusgabe('VAULT: record not indexed'); return 1; }
+  const rec = records[0]; /* katalog ist nach letztem Änderungszeitpunkt, Revision und Sammlung sortiert */
+  const version = TERMINAL_ZUSTAND.version;
+  const antwort = await terminalBruecke('cat', [rec.ordner, rec.dateiname], false);
+  if (TERMINAL_ZUSTAND.version !== version) return 1;
+  if (antwort.error || typeof antwort.text !== 'string') {
+    terminalAusgabe('VAULT: record stream unavailable');
+    return 1;
+  }
+  /* Die Daten könnten während der Anfrage erneut gesperrt worden sein. */
+  const jetzt = terminalVaultObjekte().find(function (x) { return x.id === rec.id; });
+  if (!jetzt || jetzt.gesperrt) { terminalAusgabe('VAULT: access revoked'); return 1; }
+  const vermerk = (PROFIL.exporte || {})[rec.art + ':' + rec.id + ':' + rec.ordner];
+  const registriert = !!(vermerk && vermerk.name === rec.dateiname && vermerk.sha);
+  const istHash = await terminalVaultHash(antwort.text);
+  const aktText = rec.art === 'pin' ? pinText(jetzt.objekt) + '\n' : eigeneZoneText(jetzt.objekt) + '\n';
+  const sollHash = await terminalVaultHash(aktText);
+  const integritaet = !registriert ? 'UNTRACKED' : !istHash ? 'UNVERIFIED' :
+    istHash !== vermerk.sha ? 'INTEGRITY MISMATCH' :
+    !sollHash ? 'VERIFIED' : sollHash === istHash ? 'VERIFIED / CURRENT' : 'VERIFIED / OUTDATED';
+  /* Ausschließlich fiktive Datenbanksemantik in der Oberfläche, kein Transferprotokoll oder Dateisystempfad. */
+  terminalAusgabe([
+    'VAULT :: RECORD ACCESS',
+    'OBJECT     ' + jetzt.id + ' · ' + jetzt.name,
+    'REVISION   ' + rec.revision.toString().padStart(2, '0'),
+    'INTEGRITY  ' + integritaet,
+    '────────────────────────────────────────',
+    antwort.text.replace(/\n$/, ''),
+    '────────────────────────────────────────',
+    'VAULT :: END OF RECORD'
+  ]);
+  return 0;
+}
+
 async function terminalNavigation(befehl, args, sudo = false) {
+  if (befehl === 'open' && args[0] === 'export') return terminalVaultOeffnen(args.slice(1), sudo);
   if (befehl === 'map' && !args.length) {
     VIEW.karte.reiter = 'karte';
     dispatch({ type: 'NAVIGATION', modul: 'karte' });
@@ -2326,8 +2496,9 @@ const TERMINAL_TABELLE = [
   { name: 'poff', hilfe: [[1, 3, 'poff [kestrel]']], tab: { art: 'fest', werte: ['kestrel'], kette: 'kestrel && tail -n 6 /var/log/syslog' }, aus: TERMINAL_PPP('poff') },
   { name: 'plog', hilfe: [[1, 3.5, 'plog [-n N] [-f]']], tab: { art: 'optionen', werte: ['-f', '-n'] }, aus: function (args) { return terminalPlog(args); } },
   { name: 'nmap', hilfe: [[0, 6.5, 'nmap <options> <target>']], aus: function (args) { return terminalNmap(args); } },
+  { name: 'exports', hilfe: [[0, 6.55, 'exports [query]']], tab: { art: 'vault' }, aus: function (args) { return terminalVaultListe(args); } },
   { name: 'map', hilfe: [[0, 6.6, 'map [pins [query]|PIN-nnn|name]']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('map', args); } },
-  { name: 'open', hilfe: [[0, 6.7, 'open <id|name>']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('open', args); } },
+  { name: 'open', hilfe: [[0, 6.7, 'open <id|name|export name>']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('open', args); } },
   { name: 'sudo', hilfe: [[0, 6.8, 'sudo <command>']], tab: { art: 'navigation' }, aus: function (args) { return terminalSudo(args); } },
   { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
@@ -2475,6 +2646,10 @@ async function terminalTab(lauf, m) {
       return;
     }
     terminalPinTab(sub[1], sub[2], 'sudo ' + sub[1] + ' ', fertig);
+    return;
+  }
+  if (befehl === 'exports') {
+    terminalVaultTab(befehl, arg, befehl + ' ', fertig);
     return;
   }
   if (befehl === 'map' || befehl === 'open') {
