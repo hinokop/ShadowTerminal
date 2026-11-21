@@ -10,7 +10,7 @@ Von Shadow freigegeben: **(1)** falschen Tab-Test auf `main` korrigieren; **(2)*
 
 Realismus-Leitbild: existierende Unix-/Linux-Werkzeuge und deren konsistente Semantik bevorzugen; Sonderbefehle reduzieren, statt neue fiktive Terminalsysteme anzuhäufen. Den Host nicht zur freien Shell öffnen. `map PIN/ZO` navigiert zur Karte; `open PIN/ZO` öffnet das verknüpfte Dossier; `map pins` und `map zones` bleiben getrennt. Manuelle Sperren und Profilkompatibilität bleiben erhalten. Die fiktive VAULT-Oberfläche ist ein Zwischenstand, kein neues dauerndes Leitbild.
 
-**Jede Windows-relevante Änderung erhält im selben Draft-PR ein versioniertes Testpaket.** Befehle, konkrete erwartete UI-Ausgaben, Testdaten, Branch/Commit, gezielte und vollständige Tests sowie ungetestete Aspekte dokumentieren. Kein Merge ohne Abnahme durch Shadow und ChatGPT; ältere Review-Kommentare stets gegen den aktuellen Head prüfen.
+**Windows-Testpakete nur für geplante umfassende Oberflächen-/Integrationsabnahmen unter Windows** (z. B. wenn Shadow die gesamte Oberfläche, Navigation, Terminal, Karte, Profil und lokale Brücke im Zusammenspiel prüfen soll). Dafür ein versioniertes Testpaket mit konkretem Gesamttest-Ablauf, Erwartungen, Branch/Commit und dokumentiertem Prüfstand erstellen. **Kleine isolierte Code-/Testkorrekturen erhalten kein obligatorisches Windows-Testpaket**; sie benötigen stattdessen gezielte automatisierte Regressionstests und einen präzisen PR-Prüfbericht. Bereits angelegte Testpakete bleiben als optionale Anleitungen bestehen. Kein Merge ohne Abnahme durch Shadow und ChatGPT; ältere Review-Kommentare stets gegen den aktuellen Head prüfen.
 
 ## Aufbau
 - index.html: Anwendung (dispatch -> ACTIONS -> render, Plansystem, Ablage, Karte)
