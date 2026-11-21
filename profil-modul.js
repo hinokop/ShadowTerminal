@@ -2011,7 +2011,8 @@ async function terminalDateiAusfuehren(befehl, arg) {
    gesperrte Ziele verweigert (Permission denied), die Missionsfreigabe zeigt die bestehende Ansicht "Zugriff beschränkt".
    Wortlaut der Meldungen nach dem Muster der Dateibefehle (Simulationsentscheidung). Nach dem Sprung wird das Terminal
    minimiert; Shell, pppd, Profanity und tmux laufen weiter (das Fenster liegt außerhalb der beim Modulwechsel ersetzten Oberfläche). */
-const TERMINAL_KENNUNG_DOSSIER = /^[POL]-\d{4}$/, TERMINAL_KENNUNG_PIN = /^PIN-\d{3,}$/;
+const TERMINAL_KENNUNG_DOSSIER = /^[POL]-\d{4}$/, TERMINAL_KENNUNG_PIN = /^PIN-\d{3,}$/,
+  TERMINAL_KENNUNG_ZONE = /^ZO-\d{3,15}$/;
 /* Auflösung einer direkten Namenseingabe. Nur im UI lesbare Ziele werden angeboten:
    manuell gesperrte Pins/Dossiers bleiben ausschließlich über ihre Kennung erreichbar.
    Die Namensauflösung arbeitet exakt oder mit eindeutigem Namensanfang, nie als unscharfe
@@ -2023,6 +2024,10 @@ function terminalZielNamen(befehl, text) {
   (PROFIL.pins || []).forEach(function (p) {
     if (p && p.id && p.name && !pinGesperrt(p))
       namen.push({ id: p.id, name: p.name, suchnamen: [p.name] });
+  });
+  (PROFIL.zonen || []).forEach(function (z) {
+    if (z && z.id && z.name && !zoneGesperrt(z))
+      namen.push({ id: z.id, name: z.name, suchnamen: [z.name] });
   });
   if (befehl === 'open') pool().forEach(function (e) {
     if (dossierGesperrt(e)) return;
@@ -2038,11 +2043,11 @@ function terminalZielNamen(befehl, text) {
 }
 function terminalZiel(befehl, eingabe) {
   const text = String(eingabe || '').trim();
-  if (TERMINAL_KENNUNG_DOSSIER.test(text) || TERMINAL_KENNUNG_PIN.test(text)) {
+  if (TERMINAL_KENNUNG_DOSSIER.test(text) || TERMINAL_KENNUNG_PIN.test(text) || TERMINAL_KENNUNG_ZONE.test(text)) {
     const ziel = zielZugang(text);
-    if (!ziel || (befehl === 'map' && ziel.art !== 'pin'))
+    if (!ziel || (befehl === 'map' && ziel.art !== 'pin' && ziel.art !== 'zone'))
       terminalAusgabe(befehl + ': ' + text + ': No such file or directory');
-    return ziel && (befehl !== 'map' || ziel.art === 'pin') ? ziel : null;
+    return ziel && (befehl !== 'map' || ziel.art === 'pin' || ziel.art === 'zone') ? ziel : null;
   }
   const treffer = terminalZielNamen(befehl, text);
   if (treffer.length > 1) {
@@ -2096,7 +2101,7 @@ function terminalPinSperreAktualisieren() {
     t.verlauf = t.verlauf.filter(function (zeile) {
       const norm = terminalPinSuchtext(zeile);
       if (gesperrte.some(function (name) { return norm.includes(name); })) return false;
-      const m = /^(?:sudo\s+)?(?:map|open)\s+(?:pins\s+)?(.+)$/i.exec(zeile.trim());
+      const m = /^(?:sudo\s+)?(?:map|open)\s+(?:(?:pins|zones)\s+)?(.+)$/i.exec(zeile.trim());
       if (!m) return true;
       const query = terminalPinSuchtext(m[1]).replace(/^['"]|['"]$/g, '');
       if (/^(?:pin-\d+|[pol]-\d+)$/.test(query) || query.length < 3) return true;
@@ -2144,6 +2149,27 @@ function terminalPinListe(args) {
   }));
   return 0;
 }
+/* Eigene Profilzonen besitzen separate Kennungen (ZO-nnn) und werden niemals als Pins gelistet. */
+function terminalZoneTreffer(suche = '') {
+  const q = terminalPinSuchtext(suche.trim());
+  return (PROFIL.zonen || []).filter(function (z) {
+    if (!z || !TERMINAL_KENNUNG_ZONE.test(z.id)) return false;
+    if (!q || terminalPinSuchtext(z.id).includes(q)) return true;
+    if (zoneGesperrt(z)) return false;
+    return terminalPinSuchtext(z.name).includes(q);
+  }).slice().sort(function (a, b) { return a.id.localeCompare(b.id, undefined, { numeric: true }); });
+}
+function terminalZoneListe(args) {
+  const suche = args.join(' ').trim(), treffer = terminalZoneTreffer(suche);
+  if (!treffer.length) {
+    terminalAusgabe(suche ? 'map: zones: No matches for ' + suche : 'map: zones: No zones found');
+    return suche ? 1 : 0;
+  }
+  terminalAusgabe(treffer.map(function (z) {
+    return z.id + '  ' + (zoneGesperrt(z) ? '[LOCKED]' : z.name || z.id);
+  }));
+  return 0;
+}
 /* Einmalige Tab-Quelle für map/open und deren sudo-Varianten. Namensvorschläge setzen beim Übernehmen
    immer die stabile Pin-Kennung ein. Gesperrte Pins tragen hier nie den Namen als Kandidat. */
 function terminalPinTab(befehl, arg, kopf, fertig) {
@@ -2153,30 +2179,34 @@ function terminalPinTab(befehl, arg, kopf, fertig) {
     terminalVaultTab(befehl, m[1], kopf + 'export ', fertig);
     return;
   }
-  if (befehl === 'map' && /^pins(?:\s|$)/i.test(arg)) {
-    const m = /^pins\s+(.*)$/i.exec(arg);
-    if (!m) { fertig(kopf, arg, ['pins'], function () { return 'pins '; }); return; }
-    const prefix = m[1];
-    const namen = terminalPinTreffer().map(function (p) {
-      return pinGesperrt(p) ? p.id : (p.name || p.id);
+  if (befehl === 'map' && /^(pins|zones)(?:\s|$)/i.test(arg)) {
+    const m = /^(pins|zones)\s+(.*)$/i.exec(arg);
+    const art = m ? m[1].toLowerCase() : arg.toLowerCase();
+    if (!m) { fertig(kopf, arg, [art], function () { return art + ' '; }); return; }
+    const liste = art === 'zones' ? terminalZoneTreffer() : terminalPinTreffer();
+    const prefix = m[2];
+    const namen = liste.map(function (x) {
+      return (art === 'zones' ? zoneGesperrt(x) : pinGesperrt(x)) ? x.id : (x.name || x.id);
     });
-    fertig(kopf + 'pins ', prefix, namen, function (x) { return /\s/.test(x) ? '"' + x.replace(/"/g, '') + '"' : x; });
+    fertig(kopf + art + ' ', prefix, namen, function (x) { return /\s/.test(x) ? '"' + x.replace(/"/g, '') + '"' : x; });
     return;
   }
-  const pins = terminalPinTreffer();
-  const kennungen = pins.map(function (p) { return p.id; });
+  const pins = terminalPinTreffer(), zonen = terminalZoneTreffer();
+  const kennungen = pins.map(function (p) { return p.id; }).concat(zonen.map(function (z) { return z.id; }));
   const namen = pins.filter(function (p) { return !pinGesperrt(p) && p.name; })
-    .map(function (p) { return p.name + ' [' + p.id + ']'; });
+    .map(function (p) { return p.name + ' [' + p.id + ']'; })
+    .concat(zonen.filter(function (z) { return !zoneGesperrt(z) && z.name; })
+      .map(function (z) { return z.name + ' [' + z.id + ']'; }));
   const lesbareDossiers = befehl === 'open' ? pool() : [];
   const dossiers = lesbareDossiers.map(function (e) { return e.id; });
   const dossierNamen = lesbareDossiers.filter(function (e) { return !dossierGesperrt(e); }).flatMap(function (e) {
     return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []).filter(Boolean)
       .map(function (n) { return n + ' [' + e.id + ']'; });
   });
-  const kandidaten = (befehl === 'map' ? ['pins'] : []).concat(kennungen, dossiers, namen, dossierNamen);
+  const kandidaten = (befehl === 'map' ? ['pins', 'zones'] : []).concat(kennungen, dossiers, namen, dossierNamen);
   fertig(kopf, arg, kandidaten, function (x) {
-    const ref = / \[(PIN-\d{3,}|[POL]-\d{4})\]$/.exec(x);
-    return (ref ? ref[1] : x) + (x === 'pins' ? ' ' : '');
+    const ref = / \[(PIN-\d{3,}|ZO-\d{3,15}|[POL]-\d{4})\]$/.exec(x);
+    return (ref ? ref[1] : x) + (x === 'pins' || x === 'zones' ? ' ' : '');
   });
 }
 
@@ -2191,8 +2221,7 @@ function terminalVaultObjekte() {
   return (PROFIL.pins || []).filter(function (p) { return p && p.id; }).map(function (p) {
     return { id: p.id, name: p.name || p.id, art: 'pin', objekt: p, gesperrt: pinGesperrt(p) };
   }).concat((PROFIL.zonen || []).filter(function (z) { return z && z.id && /^ZO-\d{3,15}$/.test(z.id); }).map(function (z) {
-    return { id: z.id, name: z.name || z.id, art: 'zone', objekt: z,
-      gesperrt: !!z.dossier && (PROFIL.gesperrt || []).includes(z.dossier) };
+    return { id: z.id, name: z.name || z.id, art: 'zone', objekt: z, gesperrt: zoneGesperrt(z) };
   }));
 }
 function terminalVaultFinden(text, bestand, praefix) {
