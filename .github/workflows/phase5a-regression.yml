@@ -31,6 +31,37 @@ jobs:
         env:
           FT_PARALLEL: '1'
         run: node tests/runall.js zn
+      - name: Reproduce zone-event popup in six isolated runs
+        env:
+          FT_PARALLEL: '1'
+        run: |
+          mkdir -p /tmp/ft-zone-probe
+          failed=0
+          for i in 1 2 3 4 5 6; do
+            echo "::group::zev isolated repetition $i"
+            if node tests/runall.js zev; then
+              echo "ZEV repetition $i: PASS"
+            else
+              echo "ZEV repetition $i: FAIL"
+              failed=$((failed + 1))
+            fi
+            cp /tmp/ft-out/zev.txt "/tmp/ft-zone-probe/zev-$i.txt"
+            echo "::endgroup::"
+          done
+          echo "ZEV isolated repeats failed: $failed / 6"
+          test "$failed" -eq 0
+      - name: Preserve isolated zone-event evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zone-event-repetitions
+          path: /tmp/ft-zone-probe/*.txt
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Exercise zone-event popup with parallel browser load
+        env:
+          FT_PARALLEL: '4'
+        run: node tests/runall.js zev zn terminal-sudo missionstrennung
       - name: Verify Python archive bridge
         run: python3 tests/terminal_bridge_pagination.py
       - name: Critical previously failing tests
