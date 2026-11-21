@@ -138,6 +138,13 @@ const { APP } = require('./_pfad');
     await input.fill('map Kühl');
     await input.press('Tab');
     assert.equal(await input.inputValue(), 'map ' + ziel.zu);
+
+    /* Eine nachträgliche Sperre maskiert auch die bereits sichtbare Terminalausgabe. */
+    await input.fill('');
+    await page.evaluate(id => dispatch({ type: 'DOSSIER_SPERREN', id }), ziel.dossier);
+    const terminalText = await ausgabe.textContent();
+    assert.doesNotMatch(terminalText, /Kühlhaus Quellweg/, 'historische Ausgabe nach Sperre maskiert');
+    assert.match(terminalText, new RegExp(ziel.zu), 'historischer Text darf Kennung enthalten');
     assert.deepEqual(fehler, []);
     console.log('OK: Terminal-Pinsuche, Maskierung, Live-Daten, ID- und Namens-Tab, sudo-Navigation');
   } finally { await browser.close(); }

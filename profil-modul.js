@@ -2033,6 +2033,15 @@ function terminalPinZeigen(px) {
   karteWaehlen(si.id, true);
   return true;
 }
+/* Nach einer neuen manuellen Sperre dürfen offene Tab-Listen und bereits sichtbare Terminaltexte
+   keine zuvor angezeigten Namen geschützter Pins behalten. */
+function terminalPinSperreAktualisieren() {
+  if (typeof terminalTabReset === 'function') terminalTabReset();
+  const t = TERMINAL_ZUSTAND;
+  if (t) t.vorschlagErgaenzung = null;
+  const fenster = $('profil-terminal');
+  if (fenster && typeof sperreMaskieren === 'function') sperreMaskieren(fenster);
+}
 /* Live-Suche in den persistenten Profil-Pins, unabhängig von Kartenebene und gezeichneten Markern.
    Bei gesperrten Dossiers sind ausschließlich Pin-Kennungen auffindbar; Namen und Zwecke bleiben unzugänglich. */
 function terminalPinSuchtext(text) {
