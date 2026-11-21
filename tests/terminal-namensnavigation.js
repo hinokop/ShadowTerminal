@@ -120,7 +120,7 @@ const { APP } = require('./_pfad');
       assert.match(txt, /No such file or directory/, zeile);
       assert.equal(await status(), '1', zeile);
       assert.equal((await modul()).name, 'profil', zeile);
-      assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.sudo), null, 'keine Kennwortabfrage via Namen');
+      assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.sudo), false, 'keine Kennwortabfrage via Namen');
     }
     txt = await cmd('map ' + z.zuPin);
     assert.match(txt, new RegExp(z.zuPin + ': Permission denied'));
