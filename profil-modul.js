@@ -438,7 +438,11 @@ function terminalAusgabe(zeile) {
   terminalPppAnzeige();
   const el = $('profil-terminal-ausgabe');
   if (!el) return;
-  el.textContent = t.ausgabe.join('\n');
+  /* Bei gesperrten Objekten die Ausgabe schon vor dem DOM-Update maskieren. Der gespeicherte
+     Scrollback bleibt unverändert; bei Entsperrung werden Klarnamen wieder korrekt angezeigt. */
+  const gesperrt = typeof PROFIL !== 'undefined' && PROFIL && (PROFIL.gesperrt || []).length &&
+    typeof sperreText === 'function';
+  el.textContent = (gesperrt ? t.ausgabe.map(sperreText) : t.ausgabe).join('\n');
   el.scrollTop = el.scrollHeight;
 }
 async function terminalPing() {
@@ -2002,7 +2006,8 @@ async function terminalDateiAusfuehren(befehl, arg) {
     return 1;
   } finally { t.dateiLaeuft = false; }
 }
-/* map und open: Navigation der Oberfläche nach Kennung. Zugang wie in der Oberfläche über zielZugang (index.html): manuell
+/* map und open: Navigation der Oberfläche nach Kennung oder lesbarem Namen. Zugang wie in der Oberfläche
+   über zielZugang (index.html): manuell
    gesperrte Ziele verweigert (Permission denied), die Missionsfreigabe zeigt die bestehende Ansicht "Zugriff beschränkt".
    Wortlaut der Meldungen nach dem Muster der Dateibefehle (Simulationsentscheidung). Nach dem Sprung wird das Terminal
    minimiert; Shell, pppd, Profanity und tmux laufen weiter (das Fenster liegt außerhalb der beim Modulwechsel ersetzten Oberfläche). */
@@ -2098,6 +2103,8 @@ function terminalPinSperreAktualisieren() {
     t.entwurf = '';
   }
   const fenster = $('profil-terminal');
+  const ausgabe = $('profil-terminal-ausgabe');
+  if (ausgabe && t && typeof sperreText === 'function') ausgabe.textContent = t.ausgabe.map(sperreText).join('\n');
   if (fenster && typeof sperreMaskieren === 'function') sperreMaskieren(fenster);
 }
 /* Live-Suche in den persistenten Profil-Pins, unabhängig von Kartenebene und gezeichneten Markern.
