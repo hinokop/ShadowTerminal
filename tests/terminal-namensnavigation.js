@@ -1,5 +1,5 @@
-/* Direkte Namensnavigation: exakt vor Präfix, Mehrdeutigkeit, Alias, Sperren,
-   Namens-Tab für Dossiers sowie weiterhin stabile IDs und sudo-Schutz. */
+/* Direkte Namensnavigation: exakt vor Präfix, Mehrdeutigkeit, Alias, manuelle Sperren,
+   Altdossier ohne Missionsfreigabe, Dossier-Tab, stabile IDs und sudo-Schutz. */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
@@ -159,52 +159,40 @@ const { APP } = require('./_pfad');
     await cmd('echo maskierung-aktiv');
     assert.doesNotMatch(await out.textContent(), /Geheime Quellakte/,
       'nach weiterer Terminalausgabe keine kurzzeitig unmaskierten Namen');
-    /* Übergangsschutz: In der alten Missionslogik teilweise freigegebene Dossiers
-       dürfen weder via Name noch via Tab gefunden werden. Kennungszugriffe
-       behalten die bereits vorhandene beschränkte Dossieransicht. */
-    const beschraenkt = await p.evaluate(() => {
-      dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' });
-      dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
-      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' &&
-        wissen(x) === 'unbekannt' && x.name);
+    /* Phase 5a: Alte Ansprechpartnerdaten dürfen selbst bei einem gespeicherten
+       Missionszustand die Dossier-Namensnavigation nicht mehr beeinflussen. */
+    const altprofil = await p.evaluate(() => {
+      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.name &&
+        !dossierGesperrt(x) && poolAlle().filter(y => y.name === x.name).length === 1);
       if (!e) return null;
       IZ()[e.id] = { status: 'bekannt' };
-      const aktuell = pool().find(x => x.id === e.id);
-      return { id: e.id, name: e.name, status: wissen(aktuell), info: infoGesperrt(aktuell) };
+      const urspruenglich = STATE.missionsbetrieb;
+      STATE.missionsbetrieb = true;
+      try {
+        return { id: e.id, name: e.name, status: wissen(e), info: infoGesperrt(e),
+          gefunden: terminalZielNamen('open', e.name).some(x => x.id === e.id),
+          inListe: pool().some(x => x.id === e.id) };
+      } finally { STATE.missionsbetrieb = urspruenglich; }
     });
-    assert.ok(beschraenkt && beschraenkt.info && beschraenkt.status === 'bekannt',
-      'Testdossier muss tatsächlich infoGesperrt sein');
-
-    txt = await cmd('open ' + beschraenkt.name);
-    assert.match(txt, /No such file or directory/, 'gesperrter Dossiername darf nicht auflösen');
-    assert.equal(await status(), '1');
-    assert.equal((await modul()).name, 'profil');
-    assert.equal(await p.evaluate(n => terminalZielNamen('open', n).length, beschraenkt.name), 0,
-      'exakter beschränkter Name fehlt im Namensindex');
-    await input.fill('open ' + beschraenkt.name);
-    await input.press('Tab');
-    assert.notEqual(await input.inputValue(), 'open ' + beschraenkt.id,
-      'Tab darf den beschränkten Namen nicht in die Kennung auflösen');
-
-    /* Verdeckter exakter Name darf sichtbaren längeren Präfix nicht kapern. */
-    const kollisionsziel = await p.evaluate(name => {
-      dispatch({ type: 'DOSSIER_ANGELEGT', name, typ: 'Person' });
-      const e = STATE.dossiers.eigene.find(x => x.name === name);
-      return { id: e.id, info: infoGesperrt(e) };
-    }, beschraenkt.name + ' Annex');
-    assert.equal(kollisionsziel.info, false, 'sichtbares Kontroll-Dossier muss frei sein');
-    txt = await cmd('open ' + beschraenkt.name);
-    assert.match(txt, /No such file or directory/,
-      'exakter geschützter Name darf nicht auf sichtbaren Präfixtreffer umleiten');
-    assert.equal((await modul()).name, 'profil');
-    await cmd('open ' + beschraenkt.name + ' Annex');
-    assert.equal((await modul()).dossier, kollisionsziel.id,
-      'vollständiger sichtbarer Name navigiert weiterhin');
+    assert.ok(altprofil, 'Test benötigt ein vorhandenes, nicht manuell gesperrtes Altdossier');
+    assert.deepEqual([altprofil.status, altprofil.info, altprofil.gefunden, altprofil.inListe],
+      ['frei', false, true, true], 'alte Missionsfreigaben werden auch im Namensindex ignoriert');
+    await cmd('open "' + altprofil.name + '"');
+    assert.equal((await modul()).dossier, altprofil.id, 'Altdossier per Namen erreichbar');
     await back();
 
-    await cmd('open ' + beschraenkt.id);
-    assert.equal((await modul()).dossier, beschraenkt.id,
-      'Kennungsnavigation bleibt für eingeschränkte Dossiers erhalten');
+    /* Bereits vorhandene manuelle Sperre und exakter Name vor sichtbarem Präfix
+       bleiben auch nach Entfernung der Missionsfreigabe geschützt. */
+    const kollisionsziel = await p.evaluate(() => {
+      dispatch({ type: 'DOSSIER_ANGELEGT', name: 'Geheime Quellakte Annex', typ: 'Person' });
+      return STATE.dossiers.eigene.find(e => e.name === 'Geheime Quellakte Annex').id;
+    });
+    txt = await cmd('open Geheime Quellakte');
+    assert.match(txt, /No such file or directory/,
+      'exakter manuell gesperrter Name darf nicht auf längeren Präfix umleiten');
+    assert.equal((await modul()).name, 'profil');
+    await cmd('open Geheime Quellakte Annex');
+    assert.equal((await modul()).dossier, kollisionsziel);
     await back();
 
     assert.deepEqual(errors, []);
