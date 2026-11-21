@@ -1,6 +1,6 @@
 # Testpaket 03 – VAULT-Archivzugriff
 
-**Entwicklungsstand:** PR #96 auf Basis von PR #95. Separat testen; weder #95 noch #96 ist automatisch gemergt.
+**Entwicklungsstand:** Draft-PR #96 auf Basis von `main` nach dem Merge von #95. #96 bleibt bis zu gezielten Linux-/Playwright- und Brückentests ungeprüft. Dieses bereits vorhandene Windows-Testpaket ist eine **optionale Integrationsanleitung**; die vollständige Windows-Oberflächenabnahme wird separat zu einem Gesamtmeilenstein organisiert.
 
 ## Vorbereitung auf Windows
 
@@ -24,6 +24,12 @@
 | `sudo open export PIN-...` | Verdeckte Kennwortabfrage; danach derselbe Datensatz lesbar |
 | Dossier nach dem Abruf erneut sperren | Vollständiger archivierter Text wird aus dem Scrollback entfernt |
 | Keine lokale Archivbrücke | `VAULT: INDEX LINK UNAVAILABLE`, ohne lokale Pfade oder vermeintlichen Abruf |
+
+## Ergänzende Zugriffskontrollen und Archivgröße
+
+Vor und nach der Entsperrung eines verknüpften Dossiers dieselbe Exportdatei über `cat`, `head`, `tail` und `wget` aus dem virtuellen Archivpfad abrufen. **Gesperrt:** `Permission denied`, kein Inhalt/Download. **Entsperrt:** Lesebefehle funktionieren. Nach erneuter Sperre dürfen zuvor über `cat` gelesene Notizen und Koordinaten nicht im Terminal-Scrollback verbleiben. Für `/sendfile` gilt dieselbe Berechtigungsentscheidung.
+
+Für die Archivgrenze über 500 Dateien in einem **separaten Testarchiv** anlegen und mit `exports` auf eine nach der ersten Seite liegende Datei zugreifen; sie muss auffindbar sein. Den normalen `ls`-Befehl weiterhin als derzeit auf höchstens 500 Einträge begrenzt behandeln. Kein Test an produktiven Benutzerarchiven.
 
 ## Ergänzung – PIN- und Zonennavigation
 
@@ -49,7 +55,7 @@ Die Terminalausgabe zeigt `VAULT :: RECORD INDEX` und `VAULT :: RECORD ACCESS` s
 5. Mehrere Versionen desselben Objekts prüfen. Eine gültig registrierte Version wird bevorzugt; andernfalls die neueste Dateiversion.
 6. Eigene Zone mit Dossier verknüpfen, sperren und Export über Namen und Kennung prüfen: gleiche Sperrregeln wie beim Pin.
 
-**Hinweis:** `VAULT` ist die fiktive Datenbankdarstellung der lokalen Archivbrücke. Eine echte serverseitige Sperre für direkte Dateibefehle ist damit nicht eingeführt.
+**Hinweis:** `VAULT` ist die vorläufige fiktive Darstellung. Direkte terminalinterne Dateibefehle (`cat`, `head`, `tail`, `wget`, `/sendfile`) prüfen bei PIN-/ZO-Exporten dieselbe Dossiersperre; auch nachträgliche Sperrungen entfernen zugeordnete Textausgaben aus dem Scrollback. Die lokale Python-Brücke selbst führt keine Profil-/Dossierautorisierung durch: Außerhalb der Oberfläche bleiben Dateien lokal lesbar.
 
 ## Automatische Regression
 
@@ -61,6 +67,6 @@ node runall.js terminal-objektnavigation terminal-vault terminal-namensnavigatio
 node runall.js
 ```
 
-`terminal-vault` ist Teil der Standardauswahl. Historisch bekannte Problemtests bleiben getrennt zu bewerten.
+`terminal-vault` ist Teil der Standardauswahl. Zusätzlich aus dem Projektstamm `python tests/terminal_bridge_pagination.py` ausführen (echte lokale Brückenlogik, über 500 temporäre Dateien). Historisch bekannte Problemtests bleiben getrennt zu bewerten.
 
 **Status:** Quellcode und Syntax geprüft; automatischer Playwright-/Windows-Praxistest muss nach dem gemeinsamen Stand von #95 und #96 erfolgen. Erst danach Merge-Freigabe.
