@@ -283,6 +283,7 @@ async function terminalBrueckeSenden(daten) {
   } finally { clearTimeout(t); }
 }
 function terminalSitzungTrennen() {
+  if (TERMINAL_ZUSTAND.sudo) terminalKetteAbbrechen(130); /* keine offene Kennwortabfrage nach Sitzungsende */
   terminalKanalAbbruch();
   terminalNmapEnde(130);
   if (!terminalBrueckenAdresse()) return;
@@ -2057,7 +2058,7 @@ async function terminalNavigation(befehl, args, sudo = false) {
   terminalNachNavigation();
   return 0;
 }
-/* sudo: führt den Befehl aus. Ein Kennwort verlangt es nur, wenn map oder open ein manuell gesperrtes Ziel treffen
+/* sudo: für die eingebauten Navigationsbefehle map und open. Ein Kennwort verlangt es nur, wenn diese ein manuell gesperrtes Ziel treffen
    (Entscheidung Shadow; das Original fragt vor jedem Befehl, ohne Zwischenspeicher). Prompt wie das Ubuntu-Paket (angenommen;
    das Original setzt "Password: ", configure.ac), kein Echo, nicht im Verlauf, kein Vorschlag. Drei Versuche
    (passwd_tries, configure.ac), Meldungen "Sorry, try again." und "sudo: 3 incorrect password attempts" (logging.c).
@@ -2073,8 +2074,11 @@ async function terminalSudo(args) {
   if (!args.length) { terminalAusgabe(TERMINAL_SUDO_USAGE); return 1; }
   const befehl = args[0], eintrag = terminalBefehlEintrag(befehl), rest = args.slice(1);
   if (!eintrag) { terminalAusgabe('sudo: ' + befehl + ': command not found'); return 1; }
-  if (befehl === 'map' || befehl === 'open') return terminalNavigation(befehl, rest, true);
-  return eintrag.aus(rest, terminalArgText(rest));
+  if (befehl !== 'map' && befehl !== 'open') {
+    terminalAusgabe('sudo: ' + befehl + ': not supported in Shadow Terminal');
+    return 1;
+  }
+  return terminalNavigation(befehl, rest, true);
 }
 /* Verdeckte Eingabe: die Zeichen landen nur in TERMINAL_ZUSTAND.sudo.puffer, nie im Eingabefeld, im Verlauf oder in der Ausgabe. */
 function terminalSudoKennwort() {
@@ -2813,6 +2817,7 @@ function terminalKonsoleOeffnen() {
 }
 function terminalKonsoleSchliessen(fokus = true) {
   if (!TERMINAL_ZUSTAND.offen) return;
+  if (TERMINAL_ZUSTAND.sudo) terminalKetteAbbrechen(130); /* Schließen verwirft Kennwort und offenen Auftrag */
   TERMINAL_ZUSTAND.offen = false;
   $('profil-terminal').hidden = true;
   if (fokus) {
@@ -2900,6 +2905,7 @@ document.addEventListener('keydown', function (ev) {
 // Locking the app drops the temporary dialogue even when the window stays open.
 new MutationObserver(function () {
   if (!document.body.classList.contains('locked')) return;
+  if (TERMINAL_ZUSTAND.sudo) terminalKetteAbbrechen(130); /* erst Promise/Puffer beenden, dann Sitzung löschen */
   TERMINAL_ZUSTAND.kette = null; terminalKanalAbbruch(); terminalTmuxEnde(); terminalVerlaufLeeren();
   const input = $('profil-terminal-eingabe');
   if (input) terminalEingabeSetzen(input, '');
