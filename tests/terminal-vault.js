@@ -18,13 +18,18 @@ const { APP } = require('./_pfad');
       const req = route.request();
       if (req.url() !== 'http://127.0.0.1:45674/db') return route.abort();
       const data = req.postDataJSON();
-      calls.push({ op: data.op, parts: data.parts });
+      calls.push({ op: data.op, parts: data.parts, offset: data.offset });
       if (getrennt) return route.fulfill({ json: { error: 'Lokale Datenbank getrennt' } });
       if (data.op === 'ls') {
         const folder = data.parts.join('');
-        return route.fulfill({ json: { entries: (archiv[folder] || []).map(x => ({
+        const alle = (archiv[folder] || []).map(x => ({
           name: x.name, dir: false, bytes: Buffer.byteLength(x.text), mtime: x.mtime
-        })) } });
+        })).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.name.localeCompare(b.name));
+        const offset = data.offset || 0, limit = data.limit || 500;
+        return route.fulfill({ json: {
+          entries: alle.slice(offset, offset + limit),
+          next: offset + limit < alle.length ? offset + limit : null
+        } });
       }
       if (data.op === 'cat') {
         const [folder, file] = data.parts;
@@ -140,6 +145,24 @@ const { APP } = require('./_pfad');
     assert.ok(!calls.some(x => x.op === 'cat' && x.parts[1] === 'lageblatt-' + z.secret + '.txt'),
       'ohne Authentifizierung kein Lesezugriff auf gesperrten Export');
 
+    /* Derselbe Export darf auch über direkte Dateibefehle nicht gelesen oder
+       heruntergeladen werden. Die Brücke selbst kennt keine Dossier-Sperren. */
+    const db = await p.evaluate(() => TERMINAL_DB);
+    const geschuetzt = '/' + db + '/ops/lageblatt-' + z.secret + '.txt';
+    const leseVorher = calls.filter(x => x.op === 'cat' &&
+      x.parts && x.parts[1] === 'lageblatt-' + z.secret + '.txt').length;
+    for (const befehl of ['cat', 'head', 'tail', 'wget']) {
+      res = await cmd(befehl + ' ' + geschuetzt);
+      assert.match(res, /Permission denied/, befehl + ' darf geschützten Export nicht öffnen');
+      assert.equal(await code(), '1');
+    }
+    const send = await p.evaluate(id => terminalBruecke('send',
+      ['ops', 'lageblatt-' + id + '.txt']), z.secret);
+    assert.equal(send.error, 'Permission denied', '/sendfile muss dieselbe Sperre beachten');
+    assert.equal(calls.filter(x => x.op === 'cat' &&
+      x.parts && x.parts[1] === 'lageblatt-' + z.secret + '.txt').length, leseVorher,
+      'gesperrte Datei wird nicht über die lokale Brücke angefragt');
+
     /* Auch sudo löst gesperrte Objektnamen nicht auf, sondern nur die Kennung. */
     res = await cmd('sudo open export "Treffpunkt Geheim"');
     assert.match(res, /record not found/);
@@ -194,6 +217,16 @@ const { APP } = require('./_pfad');
     assert.doesNotMatch(terminalText, /Zone Gesperrt/, 'gesperrter Zonenname maskiert');
     await cmd('echo SAFE');
     assert.doesNotMatch(await out.textContent(), /Treffpunkt Geheim/);
+
+    /* Auch nach mehr als 500 Dateien pro Ordner muss die registrierte Fassung
+       in der zweiten Listenseite auffindbar bleiben. */
+    archiv.ops.push(...Array.from({ length: 520 }, (_, i) => ({
+      name: 'aaa-test-' + String(i).padStart(4, '0') + '.txt', text: '', mtime: 1
+    })));
+    res = await cmd('exports Treffpunkt Nord');
+    assert.match(res, new RegExp(z.nord), 'Katalog erfasst Datensatz nach Seite 1');
+    assert.ok(calls.some(x => x.op === 'ls' && x.offset >= 500),
+      'Brücke wurde nach der ersten Seite erneut abgefragt');
 
     /* Kein Datenbankkontakt: keine fingierte Erfolgsantwort und keine lokale Diagnose im Terminal. */
     getrennt = true;
