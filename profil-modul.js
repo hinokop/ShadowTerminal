@@ -2080,8 +2080,11 @@ function terminalPinSperreAktualisieren() {
     t.vorschlagErgaenzung = null;
     /* Die Shell-Historie darf einen zuvor benutzten Namenssuchbegriff nach dem Sperren
        nicht erneut als grauen Vorschlag oder über Pfeil-hoch offenlegen. Kennungen bleiben. */
-    const gesperrte = (PROFIL.pins || []).filter(pinGesperrt).map(function (p) { return terminalPinSuchtext(p.name); })
-      .filter(function (name) { return name.length >= 3; });
+    const pinNamen = (PROFIL.pins || []).filter(pinGesperrt).map(function (p) { return p.name; });
+    const dossierNamen = pool().filter(dossierGesperrt).flatMap(function (e) {
+      return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []);
+    });
+    const gesperrte = pinNamen.concat(dossierNamen).map(terminalPinSuchtext).filter(function (name) { return name.length >= 3; });
     t.verlauf = t.verlauf.filter(function (zeile) {
       const norm = terminalPinSuchtext(zeile);
       if (gesperrte.some(function (name) { return norm.includes(name); })) return false;
@@ -2162,7 +2165,8 @@ async function terminalNavigation(befehl, args, sudo = false) {
   }
   if (befehl === 'map' && args[0] === 'pins') return terminalPinListe(args.slice(1));
   const eingabe = args.join(' ').trim();
-  if (!eingabe || (args.length > 1 && (TERMINAL_KENNUNG_DOSSIER.test(args[0]) || TERMINAL_KENNUNG_PIN.test(args[0]))))
+  if (!eingabe || (befehl === 'map' && args.length === 1 && TERMINAL_KENNUNG_DOSSIER.test(args[0])) ||
+      (args.length > 1 && (TERMINAL_KENNUNG_DOSSIER.test(args[0]) || TERMINAL_KENNUNG_PIN.test(args[0]))))
     return terminalUsage(befehl === 'map' ? 'map [pins [query]|PIN-nnn|name]' : 'open <id|name>');
   let z = terminalZiel(befehl, eingabe);
   if (!z) return 1;
