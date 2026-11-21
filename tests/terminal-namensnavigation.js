@@ -159,6 +159,54 @@ const { APP } = require('./_pfad');
     await cmd('echo maskierung-aktiv');
     assert.doesNotMatch(await out.textContent(), /Geheime Quellakte/,
       'nach weiterer Terminalausgabe keine kurzzeitig unmaskierten Namen');
+    /* Übergangsschutz: In der alten Missionslogik teilweise freigegebene Dossiers
+       dürfen weder via Name noch via Tab gefunden werden. Kennungszugriffe
+       behalten die bereits vorhandene beschränkte Dossieransicht. */
+    const beschraenkt = await p.evaluate(() => {
+      dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' });
+      dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
+      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' &&
+        wissen(x) === 'unbekannt' && x.name);
+      if (!e) return null;
+      IZ()[e.id] = { status: 'bekannt' };
+      const aktuell = pool().find(x => x.id === e.id);
+      return { id: e.id, name: e.name, status: wissen(aktuell), info: infoGesperrt(aktuell) };
+    });
+    assert.ok(beschraenkt && beschraenkt.info && beschraenkt.status === 'bekannt',
+      'Testdossier muss tatsächlich infoGesperrt sein');
+
+    txt = await cmd('open ' + beschraenkt.name);
+    assert.match(txt, /No such file or directory/, 'gesperrter Dossiername darf nicht auflösen');
+    assert.equal(await status(), '1');
+    assert.equal((await modul()).name, 'profil');
+    assert.equal(await p.evaluate(n => terminalZielNamen('open', n).length, beschraenkt.name), 0,
+      'exakter beschränkter Name fehlt im Namensindex');
+    await input.fill('open ' + beschraenkt.name);
+    await input.press('Tab');
+    assert.notEqual(await input.inputValue(), 'open ' + beschraenkt.id,
+      'Tab darf den beschränkten Namen nicht in die Kennung auflösen');
+
+    /* Verdeckter exakter Name darf sichtbaren längeren Präfix nicht kapern. */
+    const kollisionsziel = await p.evaluate(name => {
+      dispatch({ type: 'DOSSIER_ANGELEGT', name, typ: 'Person' });
+      const e = STATE.dossiers.eigene.find(x => x.name === name);
+      return { id: e.id, info: infoGesperrt(e) };
+    }, beschraenkt.name + ' Annex');
+    assert.equal(kollisionsziel.info, false, 'sichtbares Kontroll-Dossier muss frei sein');
+    txt = await cmd('open ' + beschraenkt.name);
+    assert.match(txt, /No such file or directory/,
+      'exakter geschützter Name darf nicht auf sichtbaren Präfixtreffer umleiten');
+    assert.equal((await modul()).name, 'profil');
+    await cmd('open ' + beschraenkt.name + ' Annex');
+    assert.equal((await modul()).dossier, kollisionsziel.id,
+      'vollständiger sichtbarer Name navigiert weiterhin');
+    await back();
+
+    await cmd('open ' + beschraenkt.id);
+    assert.equal((await modul()).dossier, beschraenkt.id,
+      'Kennungsnavigation bleibt für eingeschränkte Dossiers erhalten');
+    await back();
+
     assert.deepEqual(errors, []);
     console.log('OK: direkte Namen, Präfix, Alias, Mehrdeutigkeit, Sperren und Dossier-Tab');
   } finally { await browser.close(); }
