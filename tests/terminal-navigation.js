@@ -76,7 +76,7 @@ const { imUeberflug, bis, schnelleWahl } = require('./_kestrel');
     await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule(); });
     for (const [zeile, meldung] of [['open ' + z.gesperrt, 'open: ' + z.gesperrt + ': Permission denied'], ['map ' + z.zu, 'map: ' + z.zu + ': Permission denied'],
       ['open ' + z.zu, 'open: ' + z.zu + ': Permission denied'], ['open P-9999', 'open: P-9999: No such file or directory'],
-      ['open PIN-999', 'open: PIN-999: No such file or directory'], ['open quellner', 'open: quellner: No such file or directory']]) {
+      ['open PIN-999', 'open: PIN-999: No such file or directory'], ['open unbekannter name', 'open: unbekannter name: No such file or directory']]) {
       await cmd(zeile);
       assert.equal((await out.textContent()).trim().split('\n').at(-1), meldung);
       assert.equal(await status(), '1');
@@ -85,7 +85,7 @@ const { imUeberflug, bis, schnelleWahl } = require('./_kestrel');
     }
     for (const zeile of ['open', 'map ' + z.frei, 'map ' + z.offen + ' x']) {
       await cmd(zeile);
-      assert.match((await out.textContent()).trim().split('\n').at(-1), /^usage: (map \[pins \[query\]\|PIN-nnn\]|open <P-nnnn\|O-nnnn\|L-nnnn\|PIN-nnn>)$/);
+      assert.match((await out.textContent()).trim().split('\n').at(-1), /^usage: (map \[pins \[query\]\|PIN-nnn\|name\]|open <id\|name>)$/);
       assert.equal(await status(), '2');
     }
 

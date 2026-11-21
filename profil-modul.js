@@ -438,7 +438,11 @@ function terminalAusgabe(zeile) {
   terminalPppAnzeige();
   const el = $('profil-terminal-ausgabe');
   if (!el) return;
-  el.textContent = t.ausgabe.join('\n');
+  /* Bei gesperrten Objekten die Ausgabe schon vor dem DOM-Update maskieren. Der gespeicherte
+     Scrollback bleibt unverändert; bei Entsperrung werden Klarnamen wieder korrekt angezeigt. */
+  const gesperrt = typeof PROFIL !== 'undefined' && PROFIL && (PROFIL.gesperrt || []).length &&
+    typeof sperreText === 'function';
+  el.textContent = (gesperrt ? t.ausgabe.map(sperreText) : t.ausgabe).join('\n');
   el.scrollTop = el.scrollHeight;
 }
 async function terminalPing() {
@@ -2002,15 +2006,65 @@ async function terminalDateiAusfuehren(befehl, arg) {
     return 1;
   } finally { t.dateiLaeuft = false; }
 }
-/* map und open: Navigation der Oberfläche nach Kennung. Zugang wie in der Oberfläche über zielZugang (index.html): manuell
+/* map und open: Navigation der Oberfläche nach Kennung oder lesbarem Namen. Zugang wie in der Oberfläche
+   über zielZugang (index.html): manuell
    gesperrte Ziele verweigert (Permission denied), die Missionsfreigabe zeigt die bestehende Ansicht "Zugriff beschränkt".
    Wortlaut der Meldungen nach dem Muster der Dateibefehle (Simulationsentscheidung). Nach dem Sprung wird das Terminal
    minimiert; Shell, pppd, Profanity und tmux laufen weiter (das Fenster liegt außerhalb der beim Modulwechsel ersetzten Oberfläche). */
 const TERMINAL_KENNUNG_DOSSIER = /^[POL]-\d{4}$/, TERMINAL_KENNUNG_PIN = /^PIN-\d{3,}$/;
-function terminalZiel(befehl, id) {
-  const z = TERMINAL_KENNUNG_DOSSIER.test(id) || TERMINAL_KENNUNG_PIN.test(id) ? zielZugang(id) : null;
-  if (!z) terminalAusgabe(befehl + ': ' + id + ': No such file or directory');
-  return z;
+/* Auflösung einer direkten Namenseingabe. Nur im UI lesbare Ziele werden angeboten:
+   manuell gesperrte Pins/Dossiers bleiben ausschließlich über ihre Kennung erreichbar.
+   Die Namensauflösung arbeitet exakt oder mit eindeutigem Namensanfang, nie als unscharfe
+   Suche im Hintergrund. Für Teilstrings bleibt "map pins <query>" zuständig. */
+/* Temporärer Namensschutz bis zur Entfernung der alten Missionsfreigaben.
+   Direkte Kennungsnavigation bleibt von diesem Filter unberührt. */
+function terminalDossierNameLesbar(e) {
+  return !!e && !dossierGesperrt(e) && !infoGesperrt(e);
+}
+function terminalZielNamen(befehl, text) {
+  const q = terminalPinSuchtext(text).replace(/\s+/g, ' ').trim();
+  if (!q) return [];
+  const namen = [], verborgen = [];
+  (PROFIL.pins || []).forEach(function (p) {
+    if (!p || !p.id || !p.name) return;
+    const ziel = { id: p.id, name: p.name, suchnamen: [p.name] };
+    (pinGesperrt(p) ? verborgen : namen).push(ziel);
+  });
+  if (befehl === 'open') pool().forEach(function (e) {
+    const alias = Array.isArray(e.aliase) ? e.aliase : [];
+    const ziel = { id: e.id, name: e.name, suchnamen: [e.name].concat(alias) };
+    (terminalDossierNameLesbar(e) ? namen : verborgen).push(ziel);
+  });
+  const norm = function (n) { return terminalPinSuchtext(n).replace(/\s+/g, ' ').trim(); };
+  const exakt = namen.filter(function (n) { return n.suchnamen.some(function (x) { return norm(x) === q; }); });
+  /* Ein nicht lesbarer exakter Name darf nicht still auf einen sichtbaren
+     längeren Präfixtreffer umgeleitet werden. Der verdeckte Name wird nicht ausgegeben. */
+  if (!exakt.length && verborgen.some(function (n) {
+    return n.suchnamen.some(function (x) { return norm(x) === q; });
+  })) return [];
+  const passend = exakt.length ? exakt : namen.filter(function (n) {
+    return n.suchnamen.some(function (x) { return norm(x).startsWith(q); });
+  });
+  return passend.sort(function (a, b) { return a.id.localeCompare(b.id, undefined, { numeric: true }); });
+}
+function terminalZiel(befehl, eingabe) {
+  const text = String(eingabe || '').trim();
+  if (TERMINAL_KENNUNG_DOSSIER.test(text) || TERMINAL_KENNUNG_PIN.test(text)) {
+    const ziel = zielZugang(text);
+    if (!ziel || (befehl === 'map' && ziel.art !== 'pin'))
+      terminalAusgabe(befehl + ': ' + text + ': No such file or directory');
+    return ziel && (befehl !== 'map' || ziel.art === 'pin') ? ziel : null;
+  }
+  const treffer = terminalZielNamen(befehl, text);
+  if (treffer.length > 1) {
+    terminalAusgabe(befehl + ': ' + text + ': ambiguous name (' + treffer.length + ' matches)');
+    terminalAusgabe(treffer.slice(0, 12).map(function (z) { return '  ' + z.id + '  ' + z.name; }));
+    if (treffer.length > 12) terminalAusgabe('  ... ' + (treffer.length - 12) + ' more');
+    return null;
+  }
+  const ziel = treffer.length === 1 ? zielZugang(treffer[0].id) : null;
+  if (!ziel) terminalAusgabe(befehl + ': ' + text + ': No such file or directory');
+  return ziel;
 }
 function terminalNachNavigation() {
   const fenster = $('profil-terminal');
@@ -2042,8 +2096,11 @@ function terminalPinSperreAktualisieren() {
     t.vorschlagErgaenzung = null;
     /* Die Shell-Historie darf einen zuvor benutzten Namenssuchbegriff nach dem Sperren
        nicht erneut als grauen Vorschlag oder über Pfeil-hoch offenlegen. Kennungen bleiben. */
-    const gesperrte = (PROFIL.pins || []).filter(pinGesperrt).map(function (p) { return terminalPinSuchtext(p.name); })
-      .filter(function (name) { return name.length >= 3; });
+    const pinNamen = (PROFIL.pins || []).filter(pinGesperrt).map(function (p) { return p.name; });
+    const dossierNamen = pool().filter(dossierGesperrt).flatMap(function (e) {
+      return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []);
+    });
+    const gesperrte = pinNamen.concat(dossierNamen).map(terminalPinSuchtext).filter(function (name) { return name.length >= 3; });
     t.verlauf = t.verlauf.filter(function (zeile) {
       const norm = terminalPinSuchtext(zeile);
       if (gesperrte.some(function (name) { return norm.includes(name); })) return false;
@@ -2057,6 +2114,8 @@ function terminalPinSperreAktualisieren() {
     t.entwurf = '';
   }
   const fenster = $('profil-terminal');
+  const ausgabe = $('profil-terminal-ausgabe');
+  if (ausgabe && t && typeof sperreText === 'function') ausgabe.textContent = t.ausgabe.map(sperreText).join('\n');
   if (fenster && typeof sperreMaskieren === 'function') sperreMaskieren(fenster);
 }
 /* Live-Suche in den persistenten Profil-Pins, unabhängig von Kartenebene und gezeichneten Markern.
@@ -2102,10 +2161,15 @@ function terminalPinTab(befehl, arg, kopf, fertig) {
   const kennungen = pins.map(function (p) { return p.id; });
   const namen = pins.filter(function (p) { return !pinGesperrt(p) && p.name; })
     .map(function (p) { return p.name + ' [' + p.id + ']'; });
-  const dossiers = befehl === 'open' ? pool().map(function (e) { return e.id; }) : [];
-  const kandidaten = (befehl === 'map' ? ['pins'] : []).concat(kennungen, dossiers, namen);
+  const lesbareDossiers = befehl === 'open' ? pool() : [];
+  const dossiers = lesbareDossiers.map(function (e) { return e.id; });
+  const dossierNamen = lesbareDossiers.filter(terminalDossierNameLesbar).flatMap(function (e) {
+    return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []).filter(Boolean)
+      .map(function (n) { return n + ' [' + e.id + ']'; });
+  });
+  const kandidaten = (befehl === 'map' ? ['pins'] : []).concat(kennungen, dossiers, namen, dossierNamen);
   fertig(kopf, arg, kandidaten, function (x) {
-    const ref = / \[(PIN-\d{3,})\]$/.exec(x);
+    const ref = / \[(PIN-\d{3,}|[POL]-\d{4})\]$/.exec(x);
     return (ref ? ref[1] : x) + (x === 'pins' ? ' ' : '');
   });
 }
@@ -2118,8 +2182,11 @@ async function terminalNavigation(befehl, args, sudo = false) {
     return 0;
   }
   if (befehl === 'map' && args[0] === 'pins') return terminalPinListe(args.slice(1));
-  if (args.length !== 1 || (befehl === 'map' && !TERMINAL_KENNUNG_PIN.test(args[0]))) return terminalUsage(befehl === 'map' ? 'map [pins [query]|PIN-nnn]' : 'open <P-nnnn|O-nnnn|L-nnnn|PIN-nnn>');
-  let z = terminalZiel(befehl, args[0]);
+  const eingabe = args.join(' ').trim();
+  if (!eingabe || (befehl === 'map' && args.length === 1 && TERMINAL_KENNUNG_DOSSIER.test(args[0])) ||
+      (args.length > 1 && (TERMINAL_KENNUNG_DOSSIER.test(args[0]) || TERMINAL_KENNUNG_PIN.test(args[0]))))
+    return terminalUsage(befehl === 'map' ? 'map [pins [query]|PIN-nnn|name]' : 'open <id|name>');
+  let z = terminalZiel(befehl, eingabe);
   if (!z) return 1;
   if (z.gesperrt) {
     if (!sudo) { terminalAusgabe(befehl + ': ' + z.id + ': Permission denied'); return 1; }
@@ -2128,7 +2195,7 @@ async function terminalNavigation(befehl, args, sudo = false) {
     if (ok !== true) return ok === 'abbruch' ? 130 : 1;
     dispatch({ type: 'DOSSIER_ENTSPERREN', id: z.dossier });
     z = zielZugang(z.id);
-    if (!z || z.gesperrt) { terminalAusgabe(befehl + ': ' + args[0] + ': Permission denied'); return 1; }
+    if (!z || z.gesperrt) { terminalAusgabe(befehl + ': ' + z?.id + ': Permission denied'); return 1; }
   }
   if (z.art === 'pin') { if (!terminalPinZeigen(z.objekt)) { terminalAusgabe(befehl + ': ' + z.id + ': No such file or directory'); return 1; } }
   else dispatch({ type: 'DOSSIER_GEOEFFNET', id: z.id, navigieren: true, ueber: 'Terminal' });
@@ -2270,8 +2337,8 @@ const TERMINAL_TABELLE = [
   { name: 'poff', hilfe: [[1, 3, 'poff [kestrel]']], tab: { art: 'fest', werte: ['kestrel'], kette: 'kestrel && tail -n 6 /var/log/syslog' }, aus: TERMINAL_PPP('poff') },
   { name: 'plog', hilfe: [[1, 3.5, 'plog [-n N] [-f]']], tab: { art: 'optionen', werte: ['-f', '-n'] }, aus: function (args) { return terminalPlog(args); } },
   { name: 'nmap', hilfe: [[0, 6.5, 'nmap <options> <target>']], aus: function (args) { return terminalNmap(args); } },
-  { name: 'map', hilfe: [[0, 6.6, 'map [pins [query]|PIN-nnn]']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('map', args); } },
-  { name: 'open', hilfe: [[0, 6.7, 'open <id>']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('open', args); } },
+  { name: 'map', hilfe: [[0, 6.6, 'map [pins [query]|PIN-nnn|name]']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('map', args); } },
+  { name: 'open', hilfe: [[0, 6.7, 'open <id|name>']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('open', args); } },
   { name: 'sudo', hilfe: [[0, 6.8, 'sudo <command>']], tab: { art: 'navigation' }, aus: function (args) { return terminalSudo(args); } },
   { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
