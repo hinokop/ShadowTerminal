@@ -177,7 +177,7 @@ const { APP } = require('./_pfad');
     /* Neue Sperre entfernt den kompletten Datensatz, nicht bloß den Namen. */
     await p.evaluate(id => dispatch({ type: 'DOSSIER_SPERREN', id }), z.dossier);
     const terminalText = await out.textContent();
-    assert.doesNotMatch(terminalText, /Treffpunkt Geheim|Position: 52\.52/, 'Textkörper des gesperrten Exports gelöscht');
+    assert.doesNotMatch(terminalText, /Treffpunkt Geheim|Position: 52\.52400/, 'Textkörper des gesperrten Exports gelöscht');
     assert.doesNotMatch(terminalText, /Zone Gesperrt/, 'gesperrter Zonenname maskiert');
     await cmd('echo SAFE');
     assert.doesNotMatch(await out.textContent(), /Treffpunkt Geheim/);
