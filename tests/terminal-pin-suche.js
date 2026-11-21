@@ -101,7 +101,7 @@ const { APP } = require('./_pfad');
     assert.equal(await input.inputValue(), 'map ' + ziel.zu, 'gesperrte Kennung ergänzbar');
 
     /* Mehrere Treffer: bestehender Tab-Auswahldialog, Enter übernimmt ohne auszuführen. */
-    await input.fill('map PIN-');
+    await input.fill('map PIN-00');
     await input.press('Tab');
     await liste.waitFor({ state: 'visible' });
     assert.ok((await liste.textContent()).includes(ziel.nord));
