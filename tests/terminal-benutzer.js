@@ -24,6 +24,8 @@ const { APP } = require('./_pfad');
     await cmd('whoami');
     assert.match(await out.textContent(), /raizo@terminal:\/\$ whoami\nraizo$/);
     /* Arbeitsverzeichnis im Prompt: terminal-lokal (mit Brücke) */
+    await cmd('tmux split-window -bd predict');
+    assert.match(await out.textContent(), /\nno server running on \/tmp\/tmux-1000\/default$/, 'tmux-Socket mit der uid des Benutzers');
     assert.doesNotMatch(await out.textContent(), /root/);
     assert.deepEqual(errors, []);
     console.log('OK: Terminalbenutzer raizo (Prompt mit $, whoami)');
