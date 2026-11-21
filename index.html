@@ -942,8 +942,9 @@ function LM() { const m = KM(); return m && MS(m.id).status === 'laufend' ? m : 
 function zugewiesene() { return SCENARIO.missionen.find(function (m) { return MS(m.id).status === 'zugewiesen'; }) || null; }
 
 function freigeschaltet(mid) { return mid === 'STD' || !!(STATE.missionen[mid] && STATE.missionen[mid].angenommenAm); }
-/* Dossiers sind im Recherchebetrieb unabhängig von einem angenommenen Auftrag sichtbar (alle Beispiele); im Missionsbetrieb gilt die alte Freischaltung */
-function dossierOffen(mid) { return !missionsbetrieb() || freigeschaltet(mid); }
+/* Phase 5a: Missionsfreigaben begrenzen die Dossierliste auch bei alten Missionsständen nicht mehr.
+   Die gespeicherten Auftragsfelder bleiben für die spätere Altprofil-Migration unverändert erhalten. */
+function dossierOffen(mid) { return true; }
 function poolAlle() { return alleEntitaeten().filter(function (e) { return dossierOffen(e.mission); }); }
 /* Sichtbare Entitäten: unbekannte Personen und Organisationen tauchen in keiner Liste, Auswahl oder Verbindung auf */
 function pool() { return poolAlle().filter(function (e) { return wissen(e) !== 'unbekannt'; }); }
@@ -3618,20 +3619,10 @@ function schluesselIds() {
   SCENARIO.missionen.forEach(function (m) { if (freigeschaltet(m.id)) (m.schluessel || []).forEach(function (id) { if (o.indexOf(id) < 0) o.push(id); }); });
   return o;
 }
-/* Wissensstand einer Entität: 'frei' (Vollzugriff), 'bekannt' (nur Rudiment: Name, Rolle, Bedrohungsbewertung) oder 'unbekannt' (nirgends sichtbar) */
-function wissen(e) {
-  if (!e || typeof STATE === 'undefined' || !STATE) return 'frei';
-  if (e.eigen || e.typ === 'Ort') return 'frei';
-  if (!missionsbetrieb()) return 'frei';                  /* Recherchebetrieb: alle Dossiers voll zugänglich, keine Freigabe */
-  const x = (STATE.infozugang || {})[e.id];
-  if (x && x.status === 'frei') return 'frei';
-  const def = LM();
-  if (def && (MS(def.id).zusatz || []).some(function (z) { return z.id === e.id && z.urteil !== 'abgelehnt'; })) return 'frei';
-  const key = schluesselIds().indexOf(e.id) >= 0;
-  if (e.mission !== 'STD' && !key) return 'frei';
-  if (x && x.status === 'bekannt') return 'bekannt';
-  return key ? 'bekannt' : 'unbekannt';
-}
+/* Phase 5a: Die historische Ansprechpartnerfreigabe wird nicht mehr ausgewertet.
+   Frühere infozugang-Daten bleiben gespeichert und importierbar, sperren aber keine Dossiers.
+   Manuelle Sperren über dossierGesperrt, pinGesperrt und zoneGesperrt bleiben separat bestehen. */
+function wissen(e) { return 'frei'; }
 /* Kennungen nicht freigegebener Entitäten in Fließtexten ersetzen: bekannt gibt den Namen, unbekannt eine neutrale Umschreibung */
 function schutz(t) {
   return String(t == null ? '' : t).replace(/\b([PO])-(\d{4})\b/g, function (m) {
