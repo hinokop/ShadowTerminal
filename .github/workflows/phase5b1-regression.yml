@@ -1,0 +1,47 @@
+name: Phase 5b1 - Sighting export regression (draft only)
+
+on:
+  push:
+    branches:
+      - refactor/phase5b1-legacy-ui-isolation-20261122
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Sighting export, access and full suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test dependencies
+        working-directory: tests
+        run: |
+          npm install --no-save --no-package-lock playwright@1.57.0 maplibre-gl@4.7.1
+          npx playwright install --with-deps chromium
+      - name: Set up non-secret map fixture
+        run: |
+          printf 'window.KARTEN_SCHLUESSEL = {carto: "cb1_ci_fixture_not_a_real_token"};\n' > kartenschluessel.js
+      - name: Python archive bridge tests
+        run: python3 tests/terminal_bridge_pagination.py
+      - name: Focused sighting, authorization and historical regressions
+        env:
+          FT_PARALLEL: '3'
+        run: |
+          node tests/runall.js sichtung-export terminal-archiv-zugriff karte-sperre-pins terminal-sudo al zb ds2
+      - name: Full standard selection
+        env:
+          FT_PARALLEL: '4'
+        run: node tests/runall.js
+      - name: Upload diagnostics when tests fail
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5b1-test-logs
+          path: /tmp/ft-out/*.txt
+          if-no-files-found: ignore
+          retention-days: 3
