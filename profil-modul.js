@@ -2016,21 +2016,32 @@ const TERMINAL_KENNUNG_DOSSIER = /^[POL]-\d{4}$/, TERMINAL_KENNUNG_PIN = /^PIN-\
    manuell gesperrte Pins/Dossiers bleiben ausschließlich über ihre Kennung erreichbar.
    Die Namensauflösung arbeitet exakt oder mit eindeutigem Namensanfang, nie als unscharfe
    Suche im Hintergrund. Für Teilstrings bleibt "map pins <query>" zuständig. */
+/* Temporärer Namensschutz bis zur Entfernung der alten Missionsfreigaben.
+   Direkte Kennungsnavigation bleibt von diesem Filter unberührt. */
+function terminalDossierNameLesbar(e) {
+  return !!e && !dossierGesperrt(e) && !infoGesperrt(e);
+}
 function terminalZielNamen(befehl, text) {
   const q = terminalPinSuchtext(text).replace(/\s+/g, ' ').trim();
   if (!q) return [];
-  const namen = [];
+  const namen = [], verborgen = [];
   (PROFIL.pins || []).forEach(function (p) {
-    if (p && p.id && p.name && !pinGesperrt(p))
-      namen.push({ id: p.id, name: p.name, suchnamen: [p.name] });
+    if (!p || !p.id || !p.name) return;
+    const ziel = { id: p.id, name: p.name, suchnamen: [p.name] };
+    (pinGesperrt(p) ? verborgen : namen).push(ziel);
   });
   if (befehl === 'open') pool().forEach(function (e) {
-    if (dossierGesperrt(e)) return;
     const alias = Array.isArray(e.aliase) ? e.aliase : [];
-    namen.push({ id: e.id, name: e.name, suchnamen: [e.name].concat(alias) });
+    const ziel = { id: e.id, name: e.name, suchnamen: [e.name].concat(alias) };
+    (terminalDossierNameLesbar(e) ? namen : verborgen).push(ziel);
   });
   const norm = function (n) { return terminalPinSuchtext(n).replace(/\s+/g, ' ').trim(); };
   const exakt = namen.filter(function (n) { return n.suchnamen.some(function (x) { return norm(x) === q; }); });
+  /* Ein nicht lesbarer exakter Name darf nicht still auf einen sichtbaren
+     längeren Präfixtreffer umgeleitet werden. Der verdeckte Name wird nicht ausgegeben. */
+  if (!exakt.length && verborgen.some(function (n) {
+    return n.suchnamen.some(function (x) { return norm(x) === q; });
+  })) return [];
   const passend = exakt.length ? exakt : namen.filter(function (n) {
     return n.suchnamen.some(function (x) { return norm(x).startsWith(q); });
   });
@@ -2152,7 +2163,7 @@ function terminalPinTab(befehl, arg, kopf, fertig) {
     .map(function (p) { return p.name + ' [' + p.id + ']'; });
   const lesbareDossiers = befehl === 'open' ? pool() : [];
   const dossiers = lesbareDossiers.map(function (e) { return e.id; });
-  const dossierNamen = lesbareDossiers.filter(function (e) { return !dossierGesperrt(e); }).flatMap(function (e) {
+  const dossierNamen = lesbareDossiers.filter(terminalDossierNameLesbar).flatMap(function (e) {
     return [e.name].concat(Array.isArray(e.aliase) ? e.aliase : []).filter(Boolean)
       .map(function (n) { return n + ' [' + e.id + ']'; });
   });
