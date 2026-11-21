@@ -12,13 +12,14 @@ const { APP } = require('./_pfad');
     const p = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
     p.setDefaultTimeout(15000);
     const errors = [], calls = [];
-    let archiv = { ops: [], dokumente: [] };
+    let archiv = { ops: [], dokumente: [] }, getrennt = false;
     const sha = x => createHash('sha256').update(x, 'utf8').digest('hex');
     await p.route(/^https?:/, async route => {
       const req = route.request();
       if (req.url() !== 'http://127.0.0.1:45674/db') return route.abort();
       const data = req.postDataJSON();
       calls.push({ op: data.op, parts: data.parts });
+      if (getrennt) return route.fulfill({ json: { error: 'Lokale Datenbank getrennt' } });
       if (data.op === 'ls') {
         const folder = data.parts.join('');
         return route.fulfill({ json: { entries: (archiv[folder] || []).map(x => ({
@@ -133,6 +134,9 @@ const { APP } = require('./_pfad');
     res = await cmd('open export ' + z.zoneLock);
     assert.match(res, /Permission denied/, 'mit Dossier verknüpfte Zone bleibt gesperrt');
     assert.equal(await code(), '1');
+    res = await cmd('exports ' + z.zoneLock);
+    assert.match(res, new RegExp(z.zoneLock + '\\s+\\[LOCKED\\]'), 'gesperrte Zone nur nach Kennung');
+    assert.doesNotMatch(res, /Zone Gesperrt/);
     assert.ok(!calls.some(x => x.op === 'cat' && x.parts[1] === 'lageblatt-' + z.secret + '.txt'),
       'ohne Authentifizierung kein Lesezugriff auf gesperrten Export');
 
@@ -181,6 +185,13 @@ const { APP } = require('./_pfad');
     assert.doesNotMatch(terminalText, /Zone Gesperrt/, 'gesperrter Zonenname maskiert');
     await cmd('echo SAFE');
     assert.doesNotMatch(await out.textContent(), /Treffpunkt Geheim/);
+
+    /* Kein Datenbankkontakt: keine fingierte Erfolgsantwort und keine lokale Diagnose im Terminal. */
+    getrennt = true;
+    res = await cmd('open export Treffpunkt Nord');
+    assert.match(res, /VAULT: INDEX LINK UNAVAILABLE/);
+    assert.doesNotMatch(res, /Lokale Datenbank|127\\.0\\.0\\.1|dokumente|ops\\//i);
+    assert.equal(await code(), '1');
     assert.deepEqual(errors, []);
     console.log('OK: VAULT-Katalog, Revision, Integrität, Name, Dossiersperren, sudo und pfadfreie Inline-Ausgabe');
   } finally { await browser.close(); }
