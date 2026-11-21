@@ -2021,7 +2021,7 @@ function terminalPinZeigen(px) {
     return true;
   }
   const K = VIEW.karte;
-  K.pick = null; K.reiter = 'karte'; K.sichtungFokus = si.id; K.zoom = Math.max(K.zoom, 15);
+  K.pick = null; K.reiter = 'karte'; K.sichtungFokus = si.id; K.zoom = Math.max(K.zoom, 15); K.init = true;
   dispatch({ type: 'NAVIGATION', modul: 'karte' });
   renderModule();
   karteWaehlen(si.id, true);
