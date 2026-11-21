@@ -3658,12 +3658,16 @@ function infoGesperrt(e) { return !infoFrei(e); }
 function dossierGesperrt(e) { return !!e && (PROFIL.gesperrt || []).indexOf(e.id) >= 0; }
 /* Manuelle Sperre eines Pins: ausschließlich die seines verknüpften Dossiers; unverknüpfte Pins sind frei. */
 function pinGesperrt(px) { return !!px && !!px.dossier && (PROFIL.gesperrt || []).indexOf(px.dossier) >= 0; }
+/* Eigene Profilzone: dieselbe abgeleitete manuelle Sperre wie bei einem dossiergebundenen Pin. */
+function zoneGesperrt(zn) { return !!zn && !!zn.dossier && (PROFIL.gesperrt || []).includes(zn.dossier); }
 /* Zugang zu einem Ziel nach Kennung, gemeinsam für Oberfläche und Terminal: null = kein solches Ziel (Dossier im Bestand oder Pin);
    gesperrt = manuelle Sperre (aufzuheben mit der Zugangskennung); info = Freigabe durch den Ansprechpartner fehlt (nur Dossiers,
    die Zugangskennung ersetzt sie nicht). */
 function zielZugang(id) {
   const px = (PROFIL.pins || []).find(function (x) { return x.id === id; });
   if (px) return { art: 'pin', id: id, objekt: px, dossier: px.dossier || null, gesperrt: pinGesperrt(px), info: false };
+  const zn = (PROFIL.zonen || []).find(function (x) { return x.id === id && /^ZO-\d{3,15}$/.test(id); });
+  if (zn) return { art: 'zone', id: id, objekt: zn, dossier: zn.dossier || null, gesperrt: zoneGesperrt(zn), info: false };
   const e = pool().find(function (x) { return x.id === id; });
   if (!e) return null;
   return { art: 'dossier', id: id, objekt: e, dossier: e.id, gesperrt: dossierGesperrt(e), info: infoGesperrt(e) };
@@ -3676,7 +3680,7 @@ function kennungPruefen(pw) {
 let SPERRE_MASKE = { stand: '', re: null, ids: {} };
 function sperreMaske() {
   const ids = (PROFIL && PROFIL.gesperrt) || [], pins = (PROFIL.pins || []).filter(pinGesperrt),
-    zonen = (PROFIL.zonen || []).filter(function (z) { return z.dossier && ids.includes(z.dossier); }),
+    zonen = (PROFIL.zonen || []).filter(zoneGesperrt),
     stand = ids.join(',') + '|' + (STATE && STATE.dossiers ? STATE.dossiers.eigene.length : 0) + '|' + pins.concat(zonen).map(function (p) { return p.id + ':' + p.name; }).join('|');
   if (SPERRE_MASKE.stand === stand) return SPERRE_MASKE;
   const map = {}, namen = [];
