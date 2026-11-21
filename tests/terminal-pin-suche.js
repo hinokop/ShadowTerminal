@@ -96,10 +96,9 @@ const { APP } = require('./_pfad');
     await input.press('Tab');
     assert.equal(await input.inputValue(), 'map Kühl', 'gesperrter Name nicht ergänzbar');
     assert.equal(await liste.isVisible(), false);
-    await input.fill('map ' + ziel.zu.slice(0, -1));
-    await input.press('Tab');
-    assert.equal(await input.inputValue(), 'map ' + ziel.zu, 'gesperrte Kennung ergänzbar');
-
+    /* PIN-00 ist bei mehreren PIN-00x-Kennungen mehrdeutig.
+       Die Kennung des gesperrten Pins muss über die Auswahlliste auffindbar bleiben;
+       eine willkürliche eindeutige Ergänzung wird ausdrücklich nicht erwartet. */
     /* Mehrere Treffer: bestehender Tab-Auswahldialog, Enter übernimmt ohne auszuführen. */
     await input.fill('map PIN-00');
     await input.press('Tab');
