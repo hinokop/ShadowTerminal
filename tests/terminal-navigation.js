@@ -85,7 +85,7 @@ const { imUeberflug, bis, schnelleWahl } = require('./_kestrel');
     }
     for (const zeile of ['open', 'map ' + z.frei, 'map ' + z.offen + ' x']) {
       await cmd(zeile);
-      assert.match((await out.textContent()).trim().split('\n').at(-1), /^usage: (map \[pins \[query\]\|PIN-nnn\|name\]|open <id\|name>)$/);
+      assert.match((await out.textContent()).trim().split('\n').at(-1), /^usage: (map \[pins \[query\]\|PIN-nnn\|name\]|open <id\|name\|export name>)$/);
       assert.equal(await status(), '2');
     }
 
