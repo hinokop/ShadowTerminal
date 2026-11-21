@@ -77,7 +77,7 @@ const { imUeberflug, bis, schnelleWahl } = require('./_kestrel');
     assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: z.frei });
     await zurueck(); assert.equal(await status(), '0');
     /* open eines verknüpften Zonenobjekts führt ebenfalls zum Dossier. */
-    await p.evaluate(id => dispatch({ type: 'OZONE_GEAENDERT', id, dossier: z.frei }), z.zone);
+    await p.evaluate(({ id, dossier }) => dispatch({ type: 'OZONE_GEAENDERT', id, dossier }), { id: z.zone, dossier: z.frei });
     await cmd('open ' + z.zone);
     assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: z.frei });
     await zurueck(); assert.equal(await status(), '0');
