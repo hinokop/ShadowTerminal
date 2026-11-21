@@ -210,6 +210,12 @@ const { APP } = require('./_pfad');
     assert.match(await out.textContent(), /Treffpunkt Geheim/);
     assert.equal(await code(), '0');
 
+    /* Nach Freigabe liest cat denselben Export, und bei erneuter Sperre muss
+       auch DESSEN Inhalt mitsamt Koordinaten aus dem Scrollback verschwinden. */
+    res = await cmd('cat ' + geschuetzt);
+    assert.match(res, /Treffpunkt Geheim/, 'cat liest nach Entsperrung');
+    assert.equal(await code(), '0');
+
     /* Neue Sperre entfernt den kompletten Datensatz, nicht bloß den Namen. */
     await p.evaluate(id => dispatch({ type: 'DOSSIER_SPERREN', id }), z.dossier);
     const terminalText = await out.textContent();
