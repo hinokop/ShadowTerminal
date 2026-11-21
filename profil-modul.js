@@ -1998,6 +1998,54 @@ async function terminalDateiAusfuehren(befehl, arg) {
     return 1;
   } finally { t.dateiLaeuft = false; }
 }
+/* map und open: Navigation der Oberfläche nach Kennung. Zugang wie in der Oberfläche über zielZugang (index.html): manuell
+   gesperrte Ziele verweigert (Permission denied), die Missionsfreigabe zeigt die bestehende Ansicht "Zugriff beschränkt".
+   Wortlaut der Meldungen nach dem Muster der Dateibefehle (Simulationsentscheidung). Nach dem Sprung wird das Terminal
+   minimiert; Shell, pppd, Profanity und tmux laufen weiter (das Fenster liegt außerhalb der beim Modulwechsel ersetzten Oberfläche). */
+const TERMINAL_KENNUNG_DOSSIER = /^[POL]-\d{4}$/, TERMINAL_KENNUNG_PIN = /^PIN-\d{3,}$/;
+function terminalZielPruefen(befehl, id) {
+  const z = TERMINAL_KENNUNG_DOSSIER.test(id) || TERMINAL_KENNUNG_PIN.test(id) ? zielZugang(id) : null;
+  if (!z) { terminalAusgabe(befehl + ': ' + id + ': No such file or directory'); return null; }
+  if (z.gesperrt) { terminalAusgabe(befehl + ': ' + id + ': Permission denied'); return null; }
+  return z;
+}
+function terminalNachNavigation() {
+  const fenster = $('profil-terminal');
+  if (fenster && !fenster.classList.contains('minimiert')) $('profil-terminal-minimieren')?.click();
+}
+/* Pin auf der Karte zeigen. Zeichnet die Karte statt des Pins seine Sichtung (karteMarker), wird die Sichtung gewählt wie mit
+   "Sichtung auf der Karte" im Dossier; deren Fenster enthält das Formular des Pins. */
+function terminalPinZeigen(px) {
+  const si = px.sichtung && px.dossier && typeof pinSichtung === 'function' ? pinSichtung(px) : null;
+  const ueberSichtung = si && karteMarker().some(function (m) { return m.kat === 'sichtung' && m.entId === px.dossier && m.id === si.id; });
+  if (!ueberSichtung) {           /* kartenObjektZeigen wählt und zentriert, öffnet das Fenster aber nicht */
+    if (!kartenObjektZeigen(px.id)) return false;
+    karteAuswahlAnzeige();
+    return true;
+  }
+  const K = VIEW.karte;
+  K.pick = null; K.reiter = 'karte'; K.sichtungFokus = si.id; K.zoom = Math.max(K.zoom, 15); K.init = true;
+  dispatch({ type: 'NAVIGATION', modul: 'karte' });
+  renderModule();
+  karteWaehlen(si.id, true);
+  return true;
+}
+function terminalNavigation(befehl, args) {
+  if (befehl === 'map' && !args.length) {
+    VIEW.karte.reiter = 'karte';
+    dispatch({ type: 'NAVIGATION', modul: 'karte' });
+    renderModule();
+    terminalNachNavigation();
+    return 0;
+  }
+  if (args.length !== 1 || (befehl === 'map' && !TERMINAL_KENNUNG_PIN.test(args[0]))) return terminalUsage(befehl === 'map' ? 'map [PIN-nnn]' : 'open <P-nnnn|O-nnnn|L-nnnn|PIN-nnn>');
+  const z = terminalZielPruefen(befehl, args[0]);
+  if (!z) return 1;
+  if (z.art === 'pin') { if (!terminalPinZeigen(z.objekt)) { terminalAusgabe(befehl + ': ' + z.id + ': No such file or directory'); return 1; } }
+  else dispatch({ type: 'DOSSIER_GEOEFFNET', id: z.id, navigieren: true, ueber: 'Terminal' });
+  terminalNachNavigation();
+  return 0;
+}
 function terminalHilfe() {
   const zeilen = [[], [], []];
   TERMINAL_TABELLE.forEach(function (e) { (e.hilfe || []).forEach(function (h) { zeilen[h[0]].push(h); }); });
@@ -2065,6 +2113,8 @@ const TERMINAL_TABELLE = [
   { name: 'poff', hilfe: [[1, 3, 'poff [kestrel]']], tab: { art: 'fest', werte: ['kestrel'], kette: 'kestrel && tail -n 6 /var/log/syslog' }, aus: TERMINAL_PPP('poff') },
   { name: 'plog', hilfe: [[1, 3.5, 'plog [-n N] [-f]']], tab: { art: 'optionen', werte: ['-f', '-n'] }, aus: function (args) { return terminalPlog(args); } },
   { name: 'nmap', hilfe: [[0, 6.5, 'nmap <options> <target>']], aus: function (args) { return terminalNmap(args); } },
+  { name: 'map', hilfe: [[0, 6.6, 'map [PIN-nnn]']], aus: function (args) { return terminalNavigation('map', args); } },
+  { name: 'open', hilfe: [[0, 6.7, 'open <id>']], aus: function (args) { return terminalNavigation('open', args); } },
   { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
   { name: 'false', hilfe: [[0, 9, 'false']], aus: function (args, arg) { return arg ? terminalUsage('false') : 1; } },
