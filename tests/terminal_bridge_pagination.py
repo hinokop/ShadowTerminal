@@ -41,6 +41,18 @@ class BridgePaginationTests(unittest.TestCase):
                 with self.subTest(limit=invalid), self.assertRaises(Refused):
                     terminal_file_op(root, {"op": "ls", "parts": ["ops"], "limit": invalid})
 
+    def test_responses_carry_the_real_file_name(self):
+        """Der Browser prüft Zugriffsregeln gegen den echten Namen (unter Windows kann die getippte Schreibweise abweichen)."""
+        with tempfile.TemporaryDirectory() as root_dir:
+            root = Path(root_dir)
+            (root / "ops").mkdir()
+            name = "lageblatt-PIN-001.txt"
+            (root / "ops" / name).write_text("Zeile 1\nZeile 2\n", encoding="utf-8")
+            for op in ("cat", "head", "tail", "wget", "send"):
+                with self.subTest(op=op):
+                    antwort = terminal_file_op(root, {"op": op, "parts": ["ops", name]})
+                    self.assertEqual(antwort["file"], name)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -257,36 +257,86 @@ function terminalArbeitsverzeichnis() {
   const t = TERMINAL_ZUSTAND;
   return '/' + (t.ort ? [TERMINAL_DB].concat(t.ort) : t.virtuellerOrt || []).join('/');
 }
-/* Einheitliche Zugriffsprüfung für archivierte Kartenobjekte in der Terminal-
-   Oberfläche. Die lokale Python-Brücke selbst besitzt keine Profilberechtigungen;
-   direkter Dateisystemzugriff außerhalb dieser Oberfläche bleibt davon unabhängig. */
-function terminalArchivDateiId(op, parts) {
-  if (!['cat', 'head', 'tail', 'wget', 'send'].includes(op) ||
-      !Array.isArray(parts) || parts.length !== 2 ||
-      !['ops', 'dokumente'].includes(parts[0]) || typeof parts[1] !== 'string')
-    return null;
-  const muster = TERMINAL_VAULT_MUSTER.find(function (m) { return m.re.test(parts[1]); });
-  if (!muster) return null;
-  const id = muster.re.exec(parts[1])[1];
-  return terminalVaultObjekte().some(function (p) { return p.id === id && p.art === muster.art; }) ? id : null;
+/* Einheitliche Zugriffsprüfung für archivierte Kartenobjekte in der Terminal-Oberfläche (Pin, Zone, Sichtung).
+   Die lokale Python-Brücke selbst besitzt keine Profilberechtigungen; direkter Dateisystemzugriff außerhalb dieser
+   Oberfläche bleibt davon unabhängig. Geprüft wird nach dem Dateinamen in jedem Ordner, ohne Beachtung der Großschreibung
+   (Windows), ohne Endpunkte und Leerzeichen am Ende und ohne Datenstrom nach ':'. Zusätzlich gilt der echte Name, den die
+   Brücke meldet (Kurznamen). Eine nachträgliche Sperre entfernt gelesene Texte wieder (terminalSchutzBereinigen). */
+const TERMINAL_ARCHIV_MUSTER = [
+  { art: 'pin', re: /^lageblatt-(PIN-\d{3,15})(?:-v\d{1,2})?\.txt$/i },
+  { art: 'zone', re: /^zone-(ZO-\d{3,15})(?:-v\d{1,2})?\.txt$/i },
+  { art: 'sichtung', re: /^sichtung-([POL]-\d{4,15})-(SI-\d{3,15})(?:-v\d{1,2})?\.txt$/i }
+];
+function terminalArchivNameZiel(name) {
+  if (typeof name !== 'string') return null;
+  const n = name.split(':')[0].replace(/[. ]+$/, '');
+  for (const m of TERMINAL_ARCHIV_MUSTER) {
+    const t = m.re.exec(n);
+    if (!t) continue;
+    return m.art === 'sichtung' ? { art: 'sichtung', id: (t[1] + '-' + t[2]).toUpperCase(), dossier: t[1].toUpperCase() }
+      : { art: m.art, id: t[1].toUpperCase() };
+  }
+  return null;
 }
-function terminalArchivDateiGesperrt(op, parts) {
-  const id = terminalArchivDateiId(op, parts);
-  if (!id) return false;
-  const objekt = terminalVaultObjekte().find(function (p) { return p.id === id; });
+/* Zuordnungen einer Dateianfrage: getippter Name und, nach der Antwort, der echte Name der Brücke (zuletzt der maßgebliche) */
+function terminalArchivZiele(op, parts, antwort) {
+  if (!['cat', 'head', 'tail', 'wget', 'send'].includes(op) || !Array.isArray(parts) || !parts.length) return [];
+  return [parts[parts.length - 1], antwort && antwort.file].map(terminalArchivNameZiel).filter(Boolean);
+}
+function terminalArchivZielGesperrt(z) {
+  if (!z) return false;
+  if (z.art === 'sichtung') return (PROFIL.gesperrt || []).includes(z.dossier);
+  const objekt = terminalVaultObjekte().find(function (p) { return p.id === z.id && p.art === z.art; });
   return !!objekt && objekt.gesperrt;
 }
 async function terminalBruecke(op, parts, hidden, exportDaten) {
+  if (op === 'ls' && Array.isArray(parts)) return terminalBrueckeLsAlle(parts, hidden);
   /* Vor UND nach dem asynchronen Lesezugriff prüfen: die Sperre könnte
      während einer laufenden Anfrage aktiviert worden sein. */
-  if (terminalArchivDateiGesperrt(op, parts)) return { error: 'Permission denied' };
+  if (terminalArchivZiele(op, parts).some(terminalArchivZielGesperrt)) return { error: 'Permission denied' };
   const antwort = await terminalBrueckeSenden(op === 'export-txt' ? {
     op: op, folder: exportDaten.ordner, kind: exportDaten.art, id: exportDaten.id, text: exportDaten.text,
     last: exportDaten.last || undefined
   } : { op: op, parts: parts, hidden: hidden });
-  if (terminalArchivDateiGesperrt(op, parts)) return { error: 'Permission denied' };
+  if (terminalArchivZiele(op, parts, antwort).some(terminalArchivZielGesperrt)) return { error: 'Permission denied' };
   return antwort;
 }
+/* ls über alle Seiten der Brücke (je 500 Einträge, nach Namen sortiert): kein stilles Abschneiden. Eine fehlerhafte
+   Seitenfolge ergibt einen Fehler statt einer unvollständigen Liste. */
+async function terminalBrueckeLsAlle(parts, hidden) {
+  const alle = [];
+  let offset = 0;
+  for (let seite = 0; seite < 1000; seite++) {
+    const antwort = await terminalBrueckeSenden({ op: 'ls', parts: parts, hidden: hidden, offset: offset, limit: 500 });
+    if (antwort.error || !Array.isArray(antwort.entries)) return antwort.error ? antwort : { error: TERMINAL_BRUECKE_FEHLER };
+    for (const e of antwort.entries) alle.push(e);
+    if (antwort.next === null || antwort.next === undefined) return Object.assign({}, antwort, { entries: alle, next: null });
+    if (!Number.isSafeInteger(antwort.next) || antwort.next <= offset || antwort.next > 10000000 || antwort.entries.length === 0)
+      return { error: TERMINAL_BRUECKE_FEHLER };
+    offset = antwort.next;
+  }
+  return { error: TERMINAL_BRUECKE_FEHLER };
+}
+/* Gelesene geschützte Archivtexte stehen im Scrollback mit ihrer Zuordnung (ausgabeMeta, gleiche Positionen wie ausgabe).
+   Wird die Zuordnung gesperrt, auch durch eine spätere Verknüpfung mit einem gesperrten Dossier, verschwinden sie samt
+   Koordinaten und Notizen, gleich über welchen Befehl sie gelesen wurden; übrige Ausgaben bleiben. */
+function terminalSchutzBereinigen() {
+  const t = TERMINAL_ZUSTAND;
+  if (!t || !t.ausgabe || !t.ausgabe.length || !PROFIL) return false;
+  const meta = t.ausgabeMeta || [], ausgabe = [], neueMeta = [];
+  t.ausgabe.forEach(function (zeile, i) {
+    let ziel = meta[i] || null;
+    const m = !ziel && /^VAULT :: RECORD ACCESS\nOBJECT\s+((PIN|ZO)-\d{3,15})\b/.exec(zeile);
+    if (m) ziel = { art: m[2] === 'PIN' ? 'pin' : 'zone', id: m[1] };
+    if (ziel && terminalArchivZielGesperrt(ziel)) return;
+    ausgabe.push(zeile); neueMeta.push(meta[i] || null);
+  });
+  if (ausgabe.length === t.ausgabe.length) return false;
+  t.ausgabe = ausgabe; t.ausgabeMeta = neueMeta;
+  return true;
+}
+/* Nach jeder Zustandsänderung (index.html, dispatch) */
+function terminalSchutzPruefen() { if (terminalSchutzBereinigen()) terminalAusgabe([]); }
 async function terminalBrueckeSenden(daten) {
   const bruecke = terminalBrueckenAdresse();
   if (!bruecke) return { error: TERMINAL_BRUECKE_FEHLT };
@@ -449,20 +499,20 @@ async function terminalDateiBefehl(befehl, arg, version) {
     terminalTransferStop();
     terminalDownload(antwort, daten);
     terminalAusgabe([fertig, 'Empfangen [' + bytes + '/' + bytes + '] · Download gestartet']);
-  } else terminalAusgabe(antwort.text, terminalArchivDateiId(befehl, pfad));
+  } else terminalAusgabe(antwort.text, terminalArchivZiele(befehl, pfad, antwort).at(-1) || null);
   return 0;
 }
 
 const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null, nmap: null };
 // Scrollback der Shell; größer als die längste Einzelausgabe (predict -f), damit nichts still verloren geht.
 const TERMINAL_PUFFER = 1000;
-function terminalAusgabe(zeile, geschuetzteId = null) {
+function terminalAusgabe(zeile, schutzZiel = null) {
   const t = TERMINAL_ZUSTAND;
   /* Metadaten und Text behalten dieselben Pufferpositionen. Die Kennung dient
      nur zur späteren Entfernung geschützter Archivtexte nach einer Sperrung. */
   const neu = [].concat(zeile);
   const meta = t.ausgabeMeta || Array(t.ausgabe.length).fill(null);
-  t.ausgabeMeta = meta.concat(neu.map(function () { return geschuetzteId; })).slice(-TERMINAL_PUFFER);
+  t.ausgabeMeta = meta.concat(neu.map(function () { return schutzZiel; })).slice(-TERMINAL_PUFFER);
   t.ausgabe = t.ausgabe.concat(zeile).slice(-TERMINAL_PUFFER);
   terminalPppAnzeige();
   const el = $('profil-terminal-ausgabe');
@@ -2150,20 +2200,8 @@ function terminalPinSperreAktualisieren() {
     });
     t.vpos = -1;
     t.entwurf = '';
-    /* Bereits angezeigte Archivblätter müssen bei einer nachträglichen Sperre vollständig
-       verschwinden: auch Koordinaten und Notizen, die von sperreText nicht maskiert werden. */
-    const meta = t.ausgabeMeta || [];
-    const ausgabe = [], ausgabeMeta = [];
-    t.ausgabe.forEach(function (zeile, i) {
-      const m = /^VAULT :: RECORD ACCESS\nOBJECT\s+((?:PIN|ZO)-\d{3,15})\b/.exec(zeile);
-      const id = meta[i] || (m ? m[1] : null);
-      const obj = id ? terminalVaultObjekte().find(function (p) { return p.id === id; }) : null;
-      if (obj && obj.gesperrt) return;
-      ausgabe.push(zeile);
-      ausgabeMeta.push(meta[i] || null);
-    });
-    t.ausgabe = ausgabe;
-    t.ausgabeMeta = ausgabeMeta;
+    /* Bereits angezeigte Archivtexte müssen bei einer nachträglichen Sperre vollständig verschwinden */
+    terminalSchutzBereinigen();
   }
   const fenster = $('profil-terminal');
   const ausgabe = $('profil-terminal-ausgabe');
@@ -2292,33 +2330,20 @@ async function terminalVaultKatalog() {
   if (!terminalBrueckenAdresse()) return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
   const sammlung = [];
   for (const ordner of ['ops', 'dokumente']) {
-    let offset = 0, fertig = false;
-    for (let seite = 0; seite < 1000; seite++) {
-      /* Der Archivkatalog liest sämtliche Seiten der sortierten lokalen Brücke.
-         Bei einer fehlerhaften Pagination abbrechen statt lückenhafte Erfolge melden. */
-      const antwort = await terminalBrueckeSenden({ op: 'ls', parts: [ordner], hidden: false,
-        offset: offset, limit: 500 });
-      if (antwort.error || !Array.isArray(antwort.entries))
-        return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
-      for (const e of antwort.entries) {
-        if (!e || e.dir || typeof e.name !== 'string') continue;
-        const muster = TERMINAL_VAULT_MUSTER.find(function (m) { return m.re.test(e.name); });
-        if (!muster) continue;
-        const teile = muster.re.exec(e.name);
-        const zuordnung = terminalVaultZuordnung(teile[1]);
-        if (!zuordnung || zuordnung.art !== muster.art) continue;
-        const letzter = (PROFIL.exporte || {})[muster.art + ':' + zuordnung.id + ':' + ordner];
-        sammlung.push({ ...zuordnung, ordner, dateiname: e.name, revision: Number(teile[2] || 1),
-          registriert: !!(letzter && letzter.name === e.name && letzter.sha),
-          mtime: Number(e.mtime) || 0, bytes: Number(e.bytes) || 0 });
-      }
-      if (antwort.next === null || antwort.next === undefined) { fertig = true; break; }
-      if (!Number.isSafeInteger(antwort.next) || antwort.next <= offset ||
-          antwort.next > 10000000 || antwort.entries.length === 0)
-        return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
-      offset = antwort.next;
+    const antwort = await terminalBrueckeLsAlle([ordner], false);
+    if (antwort.error || !Array.isArray(antwort.entries)) return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
+    for (const e of antwort.entries) {
+      if (!e || e.dir || typeof e.name !== 'string') continue;
+      const muster = TERMINAL_VAULT_MUSTER.find(function (m) { return m.re.test(e.name); });
+      if (!muster) continue;
+      const teile = muster.re.exec(e.name);
+      const zuordnung = terminalVaultZuordnung(teile[1]);
+      if (!zuordnung || zuordnung.art !== muster.art) continue;
+      const letzter = (PROFIL.exporte || {})[muster.art + ':' + zuordnung.id + ':' + ordner];
+      sammlung.push({ ...zuordnung, ordner, dateiname: e.name, revision: Number(teile[2] || 1),
+        registriert: !!(letzter && letzter.name === e.name && letzter.sha),
+        mtime: Number(e.mtime) || 0, bytes: Number(e.bytes) || 0 });
     }
-    if (!fertig) return { error: 'VAULT: INDEX LINK UNAVAILABLE' };
   }
   sammlung.sort(function (a, b) {
     return Number(b.registriert) - Number(a.registriert) ||
@@ -2432,7 +2457,7 @@ async function terminalVaultOeffnen(args, sudo = false) {
     antwort.text.replace(/\n$/, ''),
     '────────────────────────────────────────',
     'VAULT :: END OF RECORD'
-  ].join('\n'), rec.id);
+  ].join('\n'), { art: rec.art, id: rec.id });
   return 0;
 }
 

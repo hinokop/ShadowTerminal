@@ -67,6 +67,15 @@ def resolve_inside(root, parts):
     return path, meta
 
 
+def real_name(path):
+    """Name der Datei, wie ihn das Dateisystem führt (Großschreibung, lange Namen statt 8.3-Kurzname). Der Browser prüft damit
+    Zugriffsregeln gegen den echten Namen und nicht gegen die getippte Schreibweise."""
+    try:
+        return Path(os.path.realpath(path)).name or path.name
+    except OSError:
+        return path.name
+
+
 def read_inside(root, parts, path, limit):
     # On Unix, resolve relative to directory descriptors without following links.
     if hasattr(os, "O_NOFOLLOW") and os.open in os.supports_dir_fd:
@@ -355,9 +364,9 @@ def terminal_file_op(root, request):
     if len(data) > limit:
         return {"error": "Datei zu groß"}
     if op == "send":
-        return {"name": path.name, "bytes": len(data)}
+        return {"name": path.name, "file": real_name(path), "bytes": len(data)}
     if op == "wget":
-        return {"name": path.name, "data": base64.b64encode(data).decode("ascii"), "endpoint": ARCHIVE_ENDPOINT}
+        return {"name": path.name, "file": real_name(path), "data": base64.b64encode(data).decode("ascii"), "endpoint": ARCHIVE_ENDPOINT}
     try:
         text = data.decode("utf-8-sig")
     except UnicodeError:
@@ -368,7 +377,7 @@ def terminal_file_op(root, request):
         text = "\n".join(text.splitlines()[:10])
     if op == "tail":
         text = "\n".join(text.splitlines()[-10:])
-    return {"text": text}
+    return {"text": text, "file": real_name(path)}
 
 
 NMAP_MAX_ARGS = 256
