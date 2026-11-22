@@ -3764,7 +3764,7 @@ function renderDossier(m) {
 function aktualisiereSchreibt() {
   document.querySelectorAll('[data-schreibt]').forEach(function (el) {
     const kanal = el.getAttribute('data-schreibt');
-    const offen = STATE.plan.some(function (p) { const n = p.typ === 'antwort' && p.kanal === kanal ? nachricht(p.zu) : null; return !!n && n.msg.status === 'gelesen'; });
+    const offen = (ALT().plan || []).some(function (p) { const n = p.typ === 'antwort' && p.kanal === kanal ? nachricht(p.zu) : null; return !!n && n.msg.status === 'gelesen'; });
     const war = el.hidden;
     el.hidden = !offen;
     el.textContent = offen ? kanalDef(kanal).gegenstelle + ' schreibt …' : '';
