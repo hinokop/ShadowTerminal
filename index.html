@@ -6037,14 +6037,14 @@ const ACTIONS = {
 /* Missionsbetrieb: Die Missionsautomatik (Sekundentakt, Planeinträge, Ereignisregeln, Zustands- und Spurenmodell, Rückstau beim Start) läuft nur,
    wenn in diesem Zustand eine Missionsaktion ausgeführt wurde. Recherche (Dossiers, Unterlagen, Fallpakete, Kartenobjekte, Diagnoseterminal)
    und geladene Altprofile lösen sie nicht aus. Die gespeicherten Missionsfelder bleiben unverändert erhalten. */
-const MISSIONS_AKTIONEN = { STATUS_GESETZT: 1, MISSION_ZUGEWIESEN: 1, MISSION_ANGENOMMEN: 1, MISSION_BEGINN_JETZT: 1, MISSIONSSTATUS_GESETZT: 1, AUTOMATIK_GESETZT: 1 };
-function missionsbetrieb() { return !!STATE && STATE.missionsbetrieb === true; }
+/* Phase 5b7: Der alte Missionsbetrieb ist stillgelegt. Ein gespeichertes Feld STATE.missionsbetrieb
+   bleibt als Altfeld unverändert erhalten, hat aber keine Wirkung mehr; Missionsaktionen setzen es nicht. */
+function missionsbetrieb() { return false; }
 function dispatch(action) {
   const handler = ACTIONS[action.type];
   if (!handler) return;
   const ergebnis = handler(action);                      /* (1) */
   if (!ergebnis) return;
-  if (MISSIONS_AKTIONEN[action.type]) STATE.missionsbetrieb = true;
   /* Nur eine ausdrückliche Annahme in dieser Sitzung öffnet die historische Kartenansicht.
      Ein gespeicherter Missionsbetrieb allein reicht dafür nicht. */
   if (action.type === 'MISSION_ANGENOMMEN') VIEW.missionsansicht = STATE;
