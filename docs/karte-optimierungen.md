@@ -1,6 +1,6 @@
 # Karte – Beobachtungen und vorgemerkte Optimierungen
 
-Stand: 23.11.2026. Sammeldokument, keine Umsetzung ohne eigenen Draft-PR und Freigabe durch Master Wayne.
+Stand: 22.11.2026. Sammeldokument, keine Umsetzung ohne eigenen Draft-PR und Freigabe durch Master Wayne.
 
 **Produktentscheidung (Übergabe 22.11.2026):** Der Stand der Karte gilt als sehr gut. Nicht vereinfachen, keine Ebenen, Funktionen oder Interaktionen reduzieren. Pins, Profilzonen (ZO sind keine Pins), Messung, Kachelwahl, Protokolle, Dossierbezüge und 2D/3D-Parität erhalten. Vor Änderungen aktuelles Rendering und reale Windows-Bedienung prüfen.
 

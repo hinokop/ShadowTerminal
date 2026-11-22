@@ -1,7 +1,7 @@
 # Phase 5 – Inventar der alten Mission und Abbau in kleinen Schritten
 
-Stand: 23.11.2026. Basis: `main` nach Merge von #104 (`7e21bc2`).
-**Arbeitsdokument für Phase 5; Phasen 5a bis 5b8 in `main`, Phase 5b9 als Draft.**
+Stand: 22.11.2026. Basis: `main` nach Merge von #108 (`3e4d82b`).
+**Arbeitsdokument für Phase 5; Phasen 5a bis 5b9 in `main`. Fortsetzung: `docs/phase5c-schemainventar.md`.**
 Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische Bestandsaufnahme: [missionsabhaengigkeiten.md](missionsabhaengigkeiten.md).
 
 ## Trennlinien
@@ -135,7 +135,7 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Nebenbefund `dp`:** Die bekannte Instabilität hat eine feste Ursache. Der Test wählt die Meldung über `/informieren/`, der Knopf verlangt `/bitte (den )?(Ansprechpartner|Handler) informieren/`; die zufällige Variante `szenario.js:1031` erfüllt nur das erste Muster. Mit 5b7 ist `dp` historisch.
 
-**Bewusst offen:** Der Missionscode selbst ist noch vorhanden. Er wird über Aktionen aus Tests teilweise noch ausgeführt (`freigeschaltet`, `LM()`), ist aus der Oberfläche aber nicht erreichbar. Entfernung in getrennten Schritten (5b8 ff.), siehe Erreichbarkeitsanalyse.
+**Bewusst offen (Stand 5b7):** Der Missionscode selbst ist noch vorhanden. Er wird über Aktionen aus Tests teilweise noch ausgeführt (`freigeschaltet`, `LM()`), ist aus der Oberfläche aber nicht erreichbar. Entfernung in getrennten Schritten (5b8 ff.), siehe Erreichbarkeitsanalyse.
 
 ## Phase 5b8 – Unerreichbaren Code entfernen, erste Tranche (PR #106 integriert, Windows-Abnahme bestanden)
 
@@ -151,9 +151,9 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Werkzeugfehler im ersten Anlauf (behoben, vor jedem Commit):** Die Erkennung angehängter Kommentare hat bei einer Codezeile mit Zeilenendkommentar rückwärts bis zum nächsten Kommentaranfang gegriffen und dabei die Zugangskonstanten (`KENNUNG_MIN`, `PBKDF2_RUNDEN` u. a.) mitentfernt; der Volllauf war vollständig rot (Anmeldung unmöglich). Korrigiert und um zwei Gegenkontrollen ergänzt: (1) jede nicht als tot markierte Deklaration existiert danach noch, (2) jede lebende Top-Level-Anweisung des alten Stands steht wortgleich im neuen Stand (1.118 Einheiten; einzige Abweichungen die beabsichtigten Änderungen an `NAVIGATION` und `renderModule`).
 
-## Phase 5b9 – Missionskern entfernen (Draft)
+## Phase 5b9 – Missionskern entfernen (PR #108 integriert, Windows-Abnahme bestanden)
 
-**Freigabe:** Master Wayne, 23.11.2026, einschließlich des Missionszonen-Pfads der Karte unter der Bedingung, dass sich für Profilzonen, Pins und Popups nachweislich nichts ändert.
+**Freigabe:** Master Wayne, 22.11.2026, einschließlich des Missionszonen-Pfads der Karte unter der Bedingung, dass sich für Profilzonen, Pins und Popups nachweislich nichts ändert.
 
 **Ausgangslage nach 5b8:** Die statische Analyse fand nichts Totes mehr; der Missionskern war nur noch über Laufzeitbedingungen erreichbar. `tick()` filterte fällige Planeinträge über `missionsbetrieb()` (stets leer), deren Abarbeitung galt statisch aber als lebendig. Der Dialogkern hing über `zonePopup → ZONE_ERFRAGT → nachrichtSenden → DIALOG` am Popup der Missionszonen.
 
@@ -172,6 +172,8 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 | `klassifikator.js` | 18.618 | entfällt |
 
 Gegenüber dem Stand vor 5b8 ist `index.html` damit von 677.152 auf 305.840 Byte geschrumpft (−54,8 %).
+
+**Einschränkung (Nachtrag nach der Bestandsaufnahme 5c):** Entfernt ist der statisch unerreichbare Missionscode. Funktionen, die Missionsfelder lesen und ohne Missionsdaten nichts bewirken, sind noch vorhanden (Befund B3 in `docs/phase5c-schemainventar.md`) und werden mit dem Schemawechsel in 5c behandelt.
 
 **Bewusst behalten:** `missionsbetrieb()` und `karteOhneMission()` (Einzeiler, im Produkt unerreichbar, aber von den Schutztests zur Prüfung der Invariante genutzt), `dokZeile`, `legendeListe` (Test `identitaeten`). Gespeicherte Felder in Zustand und Profil unverändert.
 
