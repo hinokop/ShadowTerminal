@@ -68,20 +68,21 @@ const { APP } = require('./_pfad');
     assert.match(geschrieben.kurzlage, /Recherchenotiz ohne Missionsfreigabe/);
     assert.ok(geschrieben.kante && geschrieben.sichtbareKante, 'Verbindung zwischen früher beschränkten Dossiers');
 
-    /* Historisches Rudiment bleibt für Alt-Szenarioprüfungen erreichbar;
-       die unabhängig freigegebenen Recherche- und Graph-Panels daneben ebenfalls. */
+    /* Phase 5b3: Der produktive Dossier-Renderer zeigt bei historischem
+       Ansprechpartnerstatus jetzt die vollständige Dossieransicht. */
     const panel = await p.evaluate(({ alt }) => {
       STATE.dossiers.auswahl = alt;
       dispatch({ type: 'NAVIGATION', modul: 'dossier' });
       renderModule();
       const el = document.querySelector('.split');
-      return { rudiment: !!document.querySelector('#btn-einreichen'),
+      return { voll: !!document.querySelector('#btn-dbearb') && !!document.querySelector('#dtab-sichtungen'),
+        rudiment: !!document.querySelector('#btn-einreichen'),
         recherche: !!document.querySelector('#rch-dossier-unterlagen'),
         graph: !!el && !!el.querySelector('svg[aria-label^="Beziehungsansicht um"]') && !!el.querySelector('#dossier-verbindungen'),
         kante: dossierRechercheKanten().some(v => v.von === alt || v.nach === alt) };
     }, zuerst);
-    assert.ok(panel.rudiment && panel.recherche && panel.graph && panel.kante,
-      'Alte Rudimentansicht plus Recherche und Graph: ' + JSON.stringify(panel));
+    assert.ok(panel.voll && !panel.rudiment && panel.recherche && panel.graph && panel.kante,
+      'Vollständige Dossieransicht ohne Altfreigabe, mit Recherche und Graph: ' + JSON.stringify(panel));
 
     const block = await p.evaluate(({ alt, zweite }) => {
       dispatch({ type: 'DOSSIER_SPERREN', id: alt });

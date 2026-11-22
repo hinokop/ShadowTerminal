@@ -3,6 +3,16 @@ const {chromium}=require('playwright');const fs=require('fs');
 await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});});
+/* Historische Formular-/Rückfrage-Regression: nur dieser isolierte Browser
+   montiert vorübergehend den ehemaligen Rudiment-Renderer. Die reale
+   Dossieroberfläche zeigt seit 5b3 ausschließlich das vollständige Dossier.
+   Rückfragen, Upload und Missionszustände werden weiterhin unverändert geprüft. */
+await p.evaluate(()=>{
+  const produktiv=window.dossierAnsicht;
+  window.dossierAnsicht=function(e){
+    return wissen(e)==='bekannt' && !dossierGesperrt(e) ? rudimentAnsicht(e) : produktiv(e);
+  };
+});
 let fail=0;const chk=(ok,t)=>{if(!ok)fail++;console.log((ok?'OK  ':'FAIL')+' '+t)};
 const ids=await p.evaluate(()=>pool().filter(e=>wissen(e)==='bekannt').map(e=>e.id));console.log('bekannt:',ids.join());
 const id=ids[0];

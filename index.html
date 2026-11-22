@@ -7323,14 +7323,10 @@ function dossierAnsicht(e) {
         h('button', { type: 'button', id: 'dg-auf', onclick: pruefen }, 'Entsperren')),
         h('p', { class: 'note', id: 'dg-fehler', role: 'alert' }, '')));
   }
-  if (wissen(e) === 'bekannt') return rudimentAnsicht(e);
-  if (infoGesperrt(e)) {
-    const B = SCENARIO.abfragen.info;
-    return panel('Dossier ' + e.id, [h('span', { class: 'label s-warn' }, 'Zugriff beschränkt')],
-      h('div', { class: 'pad' },
-        h('dl', { class: 'fields' }, feld('Kennung', e.id), feld('Typ', e.typ), feld('Name', infoMaske(e)), feld('Zugriffsstufe', B.stufen[infoStufe(e)]), feld('Verteilerbeschränkung', 'Einsicht nur nach Freigabe durch den Ansprechpartner', 'full')),
-        h('p', { class: 'note' }, 'Inhalt, Bewertung und Verbindungen sind nicht einsehbar. Freigabe beantragen über Modul 4, Kanal Ansprechpartner: Anfrage mit Kennung und Begründung (Anlass, Beleg, Nutzen).')));
-  }
+  /* Phase 5b3: Auch bei importierter oder testweise aktivierter Altmission
+     bleibt das reguläre Dossier mit Übersicht, Sichtungen und Chronik sichtbar.
+     Die alte Kontaktfreigabe beeinflusst nur noch die isolierte historische
+     Missionslogik, nicht den Produkt-Renderer. Die manuelle Sperre oben bleibt. */
   if (VIEW.dtab === 'chronik') return panel('Dossier ' + e.id + ' · ' + e.name, [h('span', { class: 'label' }, 'Chronik')], dossierTabs(e), chronikBlock(e));
   if (VIEW.dtab === 'sichtungen') return panel('Dossier ' + e.id + ' · ' + e.name, [h('span', { class: 'label' }, 'Sichtungen')], dossierTabs(e), sichtungenBlock(e));
   return panel('Dossier ' + e.id, [istBeispiel(e) ? h('span', { class: 'label' }, 'Beispiel') : null,

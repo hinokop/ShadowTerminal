@@ -1,0 +1,50 @@
+name: Phase 5b3 - Visible dossier legacy mask removal (draft only)
+
+on:
+  push:
+    branches:
+      - refactor/phase5b3-dossier-ui-legacy-mask-20261122
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Full dossier UI, legacy protocols and regression suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser dependencies
+        working-directory: tests
+        run: |
+          npm install --no-save --no-package-lock playwright@1.57.0 maplibre-gl@4.7.1
+          npx playwright install --with-deps chromium
+      - name: Create non-secret CARTO fixture
+        run: |
+          printf 'window.KARTEN_SCHLUESSEL = {carto: "cb1_ci_fixture_not_a_real_token"};\n' > kartenschluessel.js
+      - name: Python archive bridge regression
+        run: python3 tests/terminal_bridge_pagination.py
+      - name: New visible UI and legacy form migration (isolated)
+        env:
+          FT_PARALLEL: '1'
+        run: node tests/runall.js phase5b3-dossieroberflaeche phase5b2-recherchezugang al ds2
+      - name: Related dossier, mission and terminal regressions
+        env:
+          FT_PARALLEL: '3'
+        run: node tests/runall.js phase5b3-dossieroberflaeche dossier-einheitlich dossier-kurzlage dossier-maske missionstrennung zb terminal-sudo terminal-namensnavigation
+      - name: Complete standard suite
+        env:
+          FT_PARALLEL: '4'
+        run: node tests/runall.js
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5b3-test-logs
+          path: /tmp/ft-out/*.txt
+          if-no-files-found: ignore
+          retention-days: 3
