@@ -22,17 +22,20 @@ const { APP } = require('./_pfad');
     const ids = await p.evaluate(() => {
       STATE.missionsbetrieb = true;  /* Nur der historische Sonderfall, keine Missions-Timer */
       const known = SCENARIO.standard.dossiers.find(e => e.typ === 'Person');
-      const unknown = SCENARIO.entitaeten.find(e => e.typ === 'Person' && e.mission !== 'STD' && !dossierOffen(e.mission));
-      if (!known || !unknown) return null;
+      if (!known) return null;
       IZ()[known.id] = { status: 'bekannt' };
-      return { known: known.id, unknown: unknown.id, knownW: wissen(known),
-        knownInfo: infoGesperrt(known), unknownW: wissen(unknown),
-        unknownOffen: dossierOffen(unknown.mission) };
+      const unknown = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && e.id !== known.id && wissen(e) === 'unbekannt');
+      const unaccepted = SCENARIO.entitaeten.find(e => e.typ === 'Person' && e.mission !== 'STD' && !dossierOffen(e.mission));
+      if (!unknown || !unaccepted) return null;
+      return { known: known.id, unknown: unknown.id, unaccepted: unaccepted.id,
+        knownW: wissen(known), knownInfo: infoGesperrt(known),
+        unknownW: wissen(unknown), unknownInfo: infoGesperrt(unknown),
+        unacceptedW: wissen(unaccepted), unacceptedOffen: dossierOffen(unaccepted.mission) };
     });
-    assert.ok(ids, 'Altmissions-/Standarddossier verfügbar');
-    assert.deepEqual([ids.knownW, ids.knownInfo, ids.unknownW, ids.unknownOffen],
-      ['bekannt', true, 'unbekannt', false],
-      'zwei historische Freigabestufen sind tatsächlich aktiv');
+    assert.ok(ids, 'historisch bekanntes, unbekanntes und nicht freigeschaltetes Dossier verfügbar');
+    assert.deepEqual([ids.knownW, ids.knownInfo, ids.unknownW, ids.unknownInfo, ids.unacceptedW, ids.unacceptedOffen],
+      ['bekannt', true, 'unbekannt', true, 'frei', false],
+      'alle drei alten Wissens-/Missionsfreigabezustände korrekt identifiziert');
 
     const oeffnen = id => p.evaluate(i => {
       STATE.dossiers.auswahl = i;
@@ -67,6 +70,10 @@ const { APP } = require('./_pfad');
       'Chronik-Tab nutzbar');
 
     await oeffnen(ids.unknown);
+    v = await sicht();
+    assert.ok(v.tabs && v.status && v.edit && v.kurzlage && v.recherche && v.graph && !v.legacy && !v.lock,
+      'vollständige Dossierübersicht trotz historisch unbekanntem Standarddossier: ' + JSON.stringify(v));
+    await oeffnen(ids.unaccepted);
     v = await sicht();
     assert.ok(v.tabs && v.status && v.edit && v.kurzlage && v.recherche && v.graph && !v.legacy && !v.lock,
       'vollständige Dossierübersicht trotz nicht angenommener Altmission: ' + JSON.stringify(v));
