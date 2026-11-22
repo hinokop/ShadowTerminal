@@ -77,7 +77,7 @@ const { APP } = require('./_pfad');
       const el = document.querySelector('.split');
       return { rudiment: !!document.querySelector('#btn-einreichen'),
         recherche: !!document.querySelector('#rch-dossier-unterlagen'),
-        graph: !!el && /Beziehungsansicht um/.test(el.innerText),
+        graph: !!el && !!el.querySelector('svg[aria-label^="Beziehungsansicht um"]') && !!el.querySelector('#dossier-verbindungen'),
         kante: dossierRechercheKanten().some(v => v.von === alt || v.nach === alt) };
     }, zuerst);
     assert.ok(panel.rudiment && panel.recherche && panel.graph && panel.kante,
@@ -99,7 +99,7 @@ const { APP } = require('./_pfad');
         bezug: karteBezugVon(alt), option: option && option.textContent,
         name: vorher, alteKante, unveraendert: (STATE.dossiers.entitaeten[alt].kurzlage || '') === vorherNotizen,
         recherchePanel: !!document.querySelector('#rch-dossier-unterlagen'),
-        graphPanel: /Beziehungsansicht um/.test(document.querySelector('.split')?.innerText || '') };
+        graphPanel: !!document.querySelector('.split svg[aria-label^="Beziehungsansicht um"]') };
     }, zuerst);
     assert.ok(block.gesperrt && !block.marker && block.bezug === null,
       'Manuelle Sperre entfernt Dossier und Sichtung aus der Karte: ' + JSON.stringify(block));
