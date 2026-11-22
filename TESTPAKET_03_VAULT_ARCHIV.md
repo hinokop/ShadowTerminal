@@ -1,5 +1,7 @@
 # Testpaket 03 – VAULT-Archivzugriff
 
+**Statusvermerk (22.11.2026):** PR #96 ist in `main` gemergt; die Angabe „ungeprüft/Draft“ weiter unten ist überholt. Historisches Dokument; der Inhalt unten beschreibt den Stand zum Zeitpunkt der Erstellung und wurde nicht aktualisiert. Den aktuellen Stand führt [docs/AKTUELL.md](docs/AKTUELL.md).
+
 **Entwicklungsstand:** Draft-PR #96 auf Basis von `main` nach dem Merge von #95. #96 bleibt bis zu gezielten Linux-/Playwright- und Brückentests ungeprüft. Dieses bereits vorhandene Windows-Testpaket ist eine **optionale Integrationsanleitung**; die vollständige Windows-Oberflächenabnahme wird separat zu einem Gesamtmeilenstein organisiert.
 
 ## Vorbereitung auf Windows

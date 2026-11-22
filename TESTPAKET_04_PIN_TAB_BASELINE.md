@@ -1,5 +1,7 @@
 # Testpaket 04 – PIN-Tab-Baseline und Entwicklungsplan
 
+**Statusvermerk (22.11.2026):** PR #97 ist in `main` gemergt. Historisches Dokument; der Inhalt unten beschreibt den Stand zum Zeitpunkt der Erstellung und wurde nicht aktualisiert. Den aktuellen Stand führt [docs/AKTUELL.md](docs/AKTUELL.md).
+
 **Hinweis (Präzisierung vom 21.11.2026):** Dies ist eine bereits angelegte **optionale Einzelprüfanleitung** für die Baseline. Nach der aktuellen Projektregel werden neue nummerierte Windows-Testpakete grundsätzlich nur noch erstellt, wenn ein umfassender manueller Oberflächen-/Integrationstest unter Windows geplant ist. Für diesen reinen Test-Fix ist kein vollständiger Windows-Praxistest nötig.
 
 **Branch:** `fix/pin-tab-test-und-entwicklungsplan-20261121` (Draft-PR gegen `main`).  

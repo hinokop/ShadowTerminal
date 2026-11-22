@@ -1,5 +1,7 @@
 # Shadow Terminal – verbindlicher Entwicklungs- und Prüfplan
 
+**Statusvermerk (22.11.2026):** Die Schritte 1 bis 5b (PR #97, #95, #96, Phase 5a und 5b, PR #98 bis #108) sind in `main` integriert; die in diesem Plan genannten Pull-Request-Nummern und Draft-Hinweise sind Historie. Fortgeschrieben wird der Stand in [AKTUELL.md](AKTUELL.md). Die Leitprinzipien und Regeln dieses Plans gelten weiter, solange keine neuere ausdrückliche Entscheidung von Shadow vorliegt.
+
 Stand: 2026-11-21. Durch Shadow („Master Wayne“) freigegebene **Reihenfolge der Arbeiten**. Dieses Dokument beschreibt geplante Änderungen; es behauptet nicht, dass diese bereits implementiert oder getestet sind. Bei Abweichungen gelten neuere ausdrückliche Entscheidungen des Eigentümers. Immer die tatsächlich ausgecheckten Branches/SHAs prüfen.
 
 ## Leitprinzipien
