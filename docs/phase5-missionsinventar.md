@@ -1,7 +1,7 @@
 # Phase 5 – Inventar der alten Mission und Abbau in kleinen Schritten
 
-Stand: 22.11.2026. Basis: `main` nach Merge von #101 (`dca5059da6e0`).
-**Arbeitsdokument für Phase 5; Phasen 5a, 5b1, 5b2 und 5b3 in `main`, Phase 5b4 als Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
+Stand: 22.11.2026. Basis: `main` nach Merge von #102 (`8837eeaa3896`).
+**Arbeitsdokument für Phase 5; Phasen 5a bis 5b4 in `main`, Phase 5b5 als Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
 Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische Bestandsaufnahme: [missionsabhaengigkeiten.md](missionsabhaengigkeiten.md).
 
 ## Trennlinien
@@ -81,7 +81,7 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Bewusst offen:** Die historischen Kommunikations-/Missionsaktionen, Zeitgeber, gespeicherten Altfelder, `rudimentAnsicht()` als nicht produktiv eingebundene Alt-Testfunktion sowie weitere Legacy-Texte in Protokoll und Sichtungen werden in späteren separaten Schritten geprüft. Dieser Schritt beansprucht weder vollständige Entkernung noch Profilschemamigration.
 
-## Phase 5b4 – Aktive Recherchebereiche und Ablage ohne Registratur (Draft)
+## Phase 5b4 – Aktive Recherchebereiche und Ablage ohne Registratur (PR #102 integriert)
 
 **Nutzerentscheidung:** Der Reiter `Ablage → Registratur` gehört zur früheren Missions-/Freigabestruktur und soll aus dem produktiven Arbeitsbereich entfernt werden. `Ablage` öffnet künftig unmittelbar den lokalen **Eingang** mit Dateiablage, Vorschau, Fall- und Dossierzuordnung; es gibt weder Reiter „Registratur“/„Eingang“ noch historische Aktenlisten, Schwärzungs- und Einsichtsantragsmasken in der laufenden Ablage. Auch ein importiertes `VIEW.akte.reiter='registratur'` hat darauf keinen Einfluss.
 
@@ -95,6 +95,16 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 **Daten- und Legacy-Grenze:** `renderAkten` zeigt im produktiven Pfad ausschließlich `akEingangAnsicht`. Die bisherige Akten-/Registraturansicht wird als `renderRegistraturLegacy` nur für historische Tests bewahrt (Test `ak2` wählt diesen Renderer in der isolierten Browserinstanz ausdrücklich). `SCENARIO.akten`, `STATE.akten`, Einsichts-/Schwärzungsregeln und gespeicherte Altdaten werden in diesem Schritt **weder gelöscht noch automatisch migriert**. Ihre endgültige Bereinigung benötigt gesonderte Kompatibilitäts- und Migrationstests.
 
 **Regression:** Neuer verpflichtender Test `phase5b4-arbeitszugang` deckt bekannte/unbekannte historische Freigabestufen, Modul X, Arbeitsstand, Inbox-Eingang, Unterlagenzuordnung und -Entfernung, Registratur-Abwesenheit, manuelle Sperre und Entsperren ab. `ablage-eingang` erwartet nun sofortige Eingangsansicht ohne alte Register; `ak2` prüft historische Einsicht nur noch als Legacy-Renderer. Standardauswahl plus isolierte und gezielte CI-Prüfungen müssen vollständig bestehen. Vor vollständigem Ergebnis keine Merge-Empfehlung.
+
+## Phase 5b5 – Historische Missionsnachträge aus der produktiven Dossierübersicht lösen (Draft)
+
+**Ausgangslage auf `main` nach #102:** In `index.html` → `dossierAnsicht(e)` werden bei `missionsbetrieb() && freigeschaltet(n.mission)` unterhalb der regulären Stammdaten weiterhin `e.nachtraege` als Felder `Nachtrag M1: Rolle/Eckdaten` gerendert. Die produktive Dossierübersicht hat dadurch eine sichtbare Abhängigkeit von einem historischen Missionsstatus, obwohl die alte Freigabe- und Rudimentmaske seit 5b3 entfernt ist.
+
+**Isolierter Produkt-Eingriff:** Nur die Nachtrags-Darstellung in `dossierAnsicht` entfernen. Stammdaten, nutzerseitige Bearbeitungen, Kurzlage, Sichtungen, Rechercheunterlagen, Chronik und die manuelle Sperr-/Entsperrlogik unverändert erhalten. Das Feld `e.nachtraege` (beim Laden aus `szenario.js` erzeugt, nicht im Profil gespeichert), Szenariodaten und Altprofile werden **nicht** verändert oder gelöscht.
+
+**Bewusste Grenze:** Historische Nachtragsverwendung an anderen Stellen (etwa `bedrohung`, Dialog-/Missionsauswertung), Missionsaktionen und Zeitgeber bleiben zur separaten Nutzungs- und Regressionseinordnung erhalten. Dies ist kein Schema-Migrationsschritt und keine generelle Bereinigung der alten Missionsengine.
+
+**Abnahme:** Neuer `tests/phase5b5-dossier-nachtraege.js` prüft einen tatsächlich vorhandenen `M1`-Nachtrag mit ausdrücklich aktivierter alter Freischaltung, die reguläre Dossierübersicht (Bedienelemente und Beschreibung) ohne Nachtrags-Felder, durch das Rendern unveränderte Nachtragsdaten sowie Sperre/Entsperren. **Nicht abgedeckt:** die vom alten Kenntnisstand (`schutz()`/`wissen()`) abhängige Darstellung von Kennungen in Beschreibung und Eckdaten; siehe Phase 5b6. Er ist Pflichtbestandteil von `tests/runall.js`. Zusätzlich gezielte Dossier-, Altprofil- und Missionsregressionen sowie die vollständige Standardauswahl auf dem exakten PR-Head. Echte Windows-Altprofile sind damit noch nicht abgenommen. **Draft bis vollständige CI-Ergebnisse und separate Eigentümerfreigabe.**
 
 ## Nächste isolierte Schritte nach Abnahme von 5a
 
