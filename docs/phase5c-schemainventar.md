@@ -94,7 +94,7 @@ Alle 26 Felder sind produktiv in Gebrauch (Import, Export, Dossiers, Karte, Rech
 4. Beim Import älterer Zustandsdateien Konflikte mit vorhandenen Profiltexten kontrolliert behandeln (vorhandener Profiltext hat Vorrang; abweichender importierter Text geht nicht verloren, sondern wird gemeldet).
 5. Ein bewusst geleertes Feld wird nicht durch ältere Werte zurückgeholt (Leerstand mit Zeitpunkt ist ein gültiger Wert).
 6. Speicherfehler werden angezeigt, statt einen erfolgreichen Autosave vorzutäuschen.
-7. **Offene Entscheidung Master Wayne:** Löscht „Profil leeren“ diese beiden Felder mit? *Vorschlag:* ja, denn sie gehören dann zum Profil, mit ausdrücklicher Nennung im Bestätigungstext. „Zustand zurücksetzen“ löscht sie in keinem Fall; dessen Warntext wird entsprechend korrigiert.
+7. **Entschieden (Master Wayne, 22.11.2026, Vorschlag übernommen):** „Profil leeren“ löscht beide Felder mit, ausdrücklich genannt im Bestätigungstext. „Zustand zurücksetzen“ löscht sie in keinem Fall; dessen Warntext wird entsprechend korrigiert.
 
 **E3 – Zustandsimport.** Gespeicherte Zustände und importierte Dateien laufen durch dieselbe Migration. Formate 2 und 3 werden weiterhin über 4 nach 5 überführt (keine stillschweigende Einschränkung). Validierung vor dem Ersetzen; ein abgelehnter Import lässt Zustand und Profil unverändert. Die Migration einer importierten Datei überschreibt keine aktuellen Profildaten unbemerkt (siehe E2.4).
 
@@ -118,4 +118,5 @@ Automatische Tests für 5c1 (mindestens): (1) frischer Zustand Format 5 und wied
 - 22.11.2026: Bestandsaufnahme (Claude, `f29bad8`).
 - 22.11.2026: Entscheidung E6 und Klarstellung E7 nach Rückfrage Master Wayne (`847dac2`). Die zuvor übermittelte Zusammenfassung nannte beide noch als offen; maßgeblich ist dieses Dokument.
 - 22.11.2026: Unabhängige Quelltextprüfung durch ChatGPT. Zustimmung zum Konzept, präzisierte Anforderungen (eingearbeitet in Abschnitt 7 und 8), Befunde B7 und B8. Von Claude gegen den Code geprüft: alle überprüfbaren Aussagen zutreffend. Ausdrücklich keine Merge-Freigabe.
+- 22.11.2026: Entscheidung E2.7 („Profil leeren“ löscht die Profiltexte mit) durch Master Wayne; Beginn 5c1a.
 - Korrektur: Mehrere Dokumente dieser Phase trugen irrtümlich das Datum 23.11.2026; berichtigt auf 22.11.2026. Die Branchnamen der PRs #105 bis #109 enthalten dasselbe falsche Datum (`…-20261123`); sie bleiben aus Nachvollziehbarkeitsgründen unverändert.
