@@ -941,7 +941,7 @@ function LM() { const m = KM(); return m && MS(m.id).status === 'laufend' ? m : 
 
 function freigeschaltet(mid) { return mid === 'STD' || !!(STATE.missionen[mid] && STATE.missionen[mid].angenommenAm); }
 /* Dossiers sind im Recherchebetrieb unabhängig von einem angenommenen Auftrag sichtbar (alle Beispiele); im Missionsbetrieb gilt die alte Freischaltung */
-function dossierOffen(mid) { return !missionsbetrieb() || freigeschaltet(mid); }
+function dossierOffen(mid) { return true; }   /* Phase 5b9: Missionsbetrieb stillgelegt (5b7), alle Missionsdossiers offen */
 function poolAlle() { return alleEntitaeten().filter(function (e) { return dossierOffen(e.mission); }); }
 /* Sichtbare Entitäten: unbekannte Personen und Organisationen tauchen in keiner Liste, Auswahl oder Verbindung auf */
 function pool() { return poolAlle().filter(function (e) { return wissen(e) !== 'unbekannt'; }); }
@@ -1784,11 +1784,7 @@ function planeZustellung(kanalId, msg) {
   });
 }
 function planeAlle() {
-  zustellTimer.forEach(clearTimeout); zustellTimer = [];
-  if (!missionsbetrieb()) return;                         /* Altnachrichten eines früheren Auftrags erhalten im Recherchebetrieb keine Statuswechsel */
-  Object.keys(STATE.komm.kanaele).forEach(function (kid) {
-    STATE.komm.kanaele[kid].nachrichten.forEach(function (m) { if (m.von === 'agent' && m.status !== 'gelesen' && !m.blockiert) planeZustellung(kid, m); });
-  });
+  zustellTimer.forEach(clearTimeout); zustellTimer = [];   /* Phase 5b9: Zustellung des Missionsablaufs entfällt (Missionsbetrieb stillgelegt) */
 }
 
 /* =====================================================================
@@ -3433,20 +3429,8 @@ function freigabeAbsenden(k, msg, r, out) {
    3: alle drei Punkte, mind. 60 Zeichen, Vertrauen ab 50. Zuordnung zum Auftrag oder bewilligte Verstärkung/Freigabe öffnet das Dossier ebenfalls.
    ===================================================================== */
 function IZ() { if (!STATE.infozugang) STATE.infozugang = {}; return STATE.infozugang; }
-/* Wissensstand einer Entität: 'frei' (Vollzugriff), 'bekannt' (nur Rudiment: Name, Rolle, Bedrohungsbewertung) oder 'unbekannt' (nirgends sichtbar) */
-function wissen(e) {
-  if (!e || typeof STATE === 'undefined' || !STATE) return 'frei';
-  if (e.eigen || e.typ === 'Ort') return 'frei';
-  if (!missionsbetrieb()) return 'frei';                  /* Recherchebetrieb: alle Dossiers voll zugänglich, keine Freigabe */
-  const x = (STATE.infozugang || {})[e.id];
-  if (x && x.status === 'frei') return 'frei';
-  const def = LM();
-  if (def && (MS(def.id).zusatz || []).some(function (z) { return z.id === e.id && z.urteil !== 'abgelehnt'; })) return 'frei';
-  const key = schluesselIds().indexOf(e.id) >= 0;
-  if (e.mission !== 'STD' && !key) return 'frei';
-  if (x && x.status === 'bekannt') return 'bekannt';
-  return key ? 'bekannt' : 'unbekannt';
-}
+/* Wissensstand einer Entität. Historisch 'frei', 'bekannt' (Rudiment) oder 'unbekannt'; seit 5b9 stets 'frei'. */
+function wissen(e) { return 'frei'; }   /* Phase 5b9: ohne Missionsbetrieb stets voller Zugang */
 /* Kennungen nicht freigegebener Entitäten in Fließtexten ersetzen: bekannt gibt den Namen, unbekannt eine neutrale Umschreibung */
 function schutz(t) {
   return String(t == null ? '' : t).replace(/\b([PO])-(\d{4})\b/g, function (m) {
@@ -4072,23 +4056,6 @@ const ACTIONS = {
   SITZUNG_START: function (a) {
     const out = [{ modul: 'System', aktion: 'Sitzung geöffnet', detail: a.neu ? 'Ausgangszustand aus Szenario erzeugt' : 'Gespeicherter Zustand geladen' }];
     const jetzt = Date.now();
-    if (!a.neu && missionsbetrieb() && meldeAktiv()) {
-      let f = fensterNach(Date.parse(STATE.melde.geprueftBis)), n = 0, erstes = null, letztes = null;
-      while (f && f.D <= jetzt && n < 4000) { n += 1; erstes = erstes || f; letztes = f; f = fensterNach(f.D); }
-      if (n) out.push({ modul: 'Profil', aktion: 'Fenster während Abwesenheit nicht bewertet',
-        detail: n + (n === 1 ? ' Meldefenster' : ' Meldefenster') + ' zwischen ' + erstes.label + ' (' + fmtDatum(erstes.S) + ') und ' + letztes.label + ' (' + fmtDatum(letztes.S) + '); keine Wertung als Versäumnis' });
-    }
-    if (!a.neu && missionsbetrieb()) {                      /* Nachholverhalten: veraltete Nachfragen verfallen, der Rest wird gestaffelt zugestellt */
-      const letzte = STATE.log.length ? Date.parse(STATE.log[STATE.log.length - 1].t) : jetzt, weg = Math.round((jetzt - letzte) / 60000);
-      if (weg >= 20) {
-        const vorher = STATE.plan.length;
-        STATE.plan = STATE.plan.filter(function (p) { return !(Date.parse(p.faelligAm) <= jetzt && (p.typ === 'lebenszeichen' || p.typ === 'lz_frist')); });
-        if (lzS().offen) lzS().offen = null;
-        STATE.fgRueck = null; STATE.dossierRueck = null;
-        const ueber = STATE.plan.filter(function (p) { return Date.parse(p.faelligAm) <= jetzt; }).length;
-        out.push({ modul: 'System', aktion: 'Rückstau nach Abwesenheit', detail: dauerText(weg) + ' ohne Sitzung; ' + (vorher - STATE.plan.length) + ' veraltete Nachfragen verworfen, ' + ueber + ' fällige Einträge werden gestaffelt zugestellt' });
-      }
-    }
     STATE.melde.geprueftBis = new Date(jetzt).toISOString();
     if (!a.neu) profilEinspielen(STATE);
     profilSpeichern();
@@ -5217,10 +5184,6 @@ function dispatch(action) {
     STATE.log.push(eintrag);
     try { if (typeof kartenProtokollErfassen === 'function' && kartenProtokollErfassen(eintrag, e, action.type)) kpNeu = true; } catch (ex) { /* das Kartenprotokoll darf den Ablauf nicht stoppen */ }
   });
-  if (missionsbetrieb()) {
-    try { zustandAus(action, liste); } catch (ex) { /* Zustandsmodell darf den Ablauf nicht stoppen */ }
-    try { abdPruefen(); } catch (ex) { /* Spurenmodell darf den Ablauf nicht stoppen */ }
-  }
   if (STATE.log.length > LOG_LIMIT) STATE.log.splice(0, STATE.log.length - LOG_LIMIT);
   Store.save(STATE);                                     /* (3) */
   if ((PROFIL_AKTIONEN[action.type] || kpNeu) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
@@ -5307,29 +5270,7 @@ function tick() {
   if (Zugang.beendet()) return;
   Zugang.leerlauf();
   try { const kz = $('h-kanal'); if (kz) kz.textContent = kanalAnzeige(); } catch (e) {}
-  const jetzt = Date.now(), fo = STATE.serie.folge;
-  const ruhend = STATE.agent.status === 'Ruhend';                  /* Ruhend: Ansprechpartner und Gegenstellen schweigen, nur Antworten laufen */
-  const bel = belS();
-  const mb = missionsbetrieb();
-  if (mb && STATE.automatik && !ruhend) {
-    if (lzNoetig()) dispatch({ type: 'LZ_ANSETZEN' });
-    if ((bel.w >= 70 && (!bel.hinweis || (!bel.hinweisRuhe && !LM()))) || (bel.w >= 85 && !bel.sperre)) dispatch({ type: 'BELASTUNG_PRUEFUNG' });
-  }
-  if (mb && fo && !ruhend && !STATE.serie.ende && Date.parse(fo.faelligAm) <= jetzt && !kwSperrt() && !STATE.funkstille.aktiv && belS().w < 85) dispatch({ type: 'MISSION_ZUGEWIESEN', id: fo.mission });
-  /* Fällige Planeinträge (nur im Missionsbetrieb); Antworten laufen dort auch bei ausgeschalteter Automatik */
-  let faellig = STATE.plan.filter(function (p) { return Date.parse(p.faelligAm) <= jetzt && mb && (p.typ === 'antwort' || (STATE.automatik && !ruhend)); })
-    .sort(function (a, b) { return Date.parse(a.faelligAm) - Date.parse(b.faelligAm); });
-  /* Rückstau (z. B. nach Stunden ohne offenes Terminal): ältere Einträge nacheinander zustellen statt alle in derselben Sekunde */
-  if (faellig.length > 1 && jetzt - Date.parse(faellig[0].faelligAm) > RUECKSTAU_SCHWELLE_MS) {
-    if (jetzt - RUECKSTAU_LETZTER < RUECKSTAU_ABSTAND_MS) faellig = [];
-    else { faellig = faellig.slice(0, 1); RUECKSTAU_LETZTER = jetzt; }
-  }
-  faellig.forEach(function (p) { dispatch({ type: 'FAELLIG', id: p.id }); });
-  if (mb && STATE.automatik && !ruhend && !STATE.funkstille.aktiv && LM() && einsatzLaeuft()) { const zid = zonenFaellig(jetzt); if (zid) dispatch({ type: 'ZONEN_EREIGNIS', id: zid }); }
-  if (mb && meldeAktiv()) {
-    const f = fensterNach(Date.parse(STATE.melde.geprueftBis));
-    if (f && f.D <= jetzt) dispatch({ type: 'MELDEFENSTER_PRUEFUNG' });
-  }
+  /* Phase 5b9: Missionsablauf (Plan, Folgeaufträge, Zonen-, Melde- und Belastungsereignisse) entfällt, Missionsbetrieb stillgelegt */
   renderClock();
 }
 

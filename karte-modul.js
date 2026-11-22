@@ -105,7 +105,7 @@ function karteAssetId(e) {
   return !!n && e.typ === 'Person' && (e.aliase || []).some(function (al) { return erkFold(al) === n; });
 }
 /* Missionsobjekte der Karte (Standorte, Zonen des Auftrags, Verbindungen, Zeitfenster) gibt es nur im Missionsbetrieb mit laufendem Auftrag */
-function karteOhneMission() { return STATE.vorlauf || !missionsbetrieb(); }
+function karteOhneMission() { return true; }   /* Phase 5b9: Missionsbetrieb stillgelegt (5b7) */
 /* Darstellung getrennt von zDef() für den historischen Ablauf. Kein Wiederaufleben des Karten-UI aus Altdaten. */
 function karteAuftragsansicht() { return VIEW.missionsansicht === STATE && !PROFIL.karteBlanko ? zDef() : null; }
 /* Pin und Sichtung gehören nur zusammen, wenn beide Seiten dieselbe Paarung nennen: Pin im selben Dossier, pin.sichtung = Sichtungs-Nr., Sichtung.pin = Pin-Kennung.
@@ -644,7 +644,7 @@ function zeichneKarte(svg) {
 }
 
 /* ---------- Lagezonen ---------- */
-function zDef() { return karteOhneMission() ? null : KM(); }
+function zDef() { return null; }   /* Phase 5b9: kein Auftragsrahmen mehr; Missionszonen entstehen nicht */
 /* Abstand bis zur nächsten Ereignismeldung einer eigenen Zone (Minuten, je nach Bewertung; unruhige Zonen melden häufiger) */
 const ZONEN_INTERVALL = { ruhig: [90, 180], leicht: [35, 70], bedroht: [20, 40], akut: [10, 20] };
 function zoneNaechste(zn) {
