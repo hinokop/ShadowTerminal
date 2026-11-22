@@ -65,7 +65,10 @@ const { APP } = require('./_pfad');
     /* Lokaler Ablage-Eingang: der sichtbare Picker und der asynchrone Schreibpfad
        müssen unabhängig von infozugang sein. */
     await p.locator('#nav-akten').click();
-    await p.locator('#ak-tab-eingang').click();
+    assert.equal(await p.locator('#ak-tab-registratur, #ak-tab-eingang, #akte-blatt, #ak-suche').count(), 0,
+      'produktive Ablage enthält keine Registratur oder Umschaltreiter');
+    assert.equal(await p.locator('#ak-eingang-datei').count(), 1,
+      'lokaler Eingang ist unmittelbar sichtbar');
     const choices = await p.locator('#ak-eingang-dossier option').evaluateAll(options =>
       options.map(x => x.value));
     assert.ok(choices.includes(fx.bekannt) && choices.includes(fx.unbekannt),
@@ -113,15 +116,18 @@ const { APP } = require('./_pfad');
         !PROFIL.recherche.beobachtungen.some(x => x.zitat === 'GESPERRT');
       const lesbar = xDossierLesbar(entitaet(fx.bekannt));
       const verknuepfen = xVerknuepfen(xFall(fx.fall), 'dossiers', fx.bekannt, false);
-      dispatch({ type: 'NAVIGATION', modul: 'akten' }); AK_EINGANG.reiter = 'eingang';
+      /* Ein importiertes Legacy-Reiterfeld darf die Registratur nicht reaktivieren. */
+      VIEW.akte.reiter = 'registratur';
+      dispatch({ type: 'NAVIGATION', modul: 'akten' });
       renderModule();
       const picker = [...document.querySelectorAll('#ak-eingang-dossier option')].map(x => x.value);
       return { gesperrt: dossierGesperrt(entitaet(fx.bekannt)), keinSchreiben,
         stand, auswahl: STATE.dossiers.auswahl, lesbar, verknuepfen,
-        pickerEnthaelt: picker.includes(fx.bekannt), b: b.id };
+        pickerEnthaelt: picker.includes(fx.bekannt),
+        keinLegacyReiter: !document.querySelector('#ak-tab-registratur, #akte-blatt'), b: b.id };
     }, fx);
     assert.ok(locked.gesperrt && locked.keinSchreiben && !locked.lesbar && !locked.verknuepfen &&
-      !locked.pickerEnthaelt && locked.stand.uebersprungen.includes('Dossier ' + fx.bekannt) &&
+      !locked.pickerEnthaelt && locked.keinLegacyReiter && locked.stand.uebersprungen.includes('Dossier ' + fx.bekannt) &&
       locked.auswahl === fx.unbekannt,
       'Manuelle Sperre bleibt in Fall, Arbeitsstand, Recherche und Eingang wirksam: ' + JSON.stringify(locked));
 
