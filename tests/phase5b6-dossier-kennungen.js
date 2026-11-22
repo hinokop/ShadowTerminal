@@ -3,7 +3,7 @@
    Recherchebetrieb. Differenzprüfung über alle Dossiers: Übersichtstext,
    Bedienelemente, Beziehungsansicht (SVG-Texte und -Titel), Verbindungsziele
    und Adresspfad. Zusätzlich: Ausblenden einer Szenarioverbindung wirkt nur im
-   Profil, manuelle Sperren gelten weiter, historische Helfer bleiben unverändert. */
+   Profil, manuelle Sperren gelten weiter; seit 5b7 wirkt der Altzustand auch auf die historischen Helfer nicht. */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
@@ -49,9 +49,9 @@ const { APP } = require('./_pfad');
       const o1 = entitaet('O-0001');
       return {
         anzahl: ids.length,
-        altAktiv: missionsbetrieb() && freigeschaltet('M1'),
+        altAktiv: STATE.missionsbetrieb === true && freigeschaltet('M1') && !missionsbetrieb(),
         abweichend,
-        /* Historische Helfer behalten ihr Altverhalten (nur außerhalb des Moduls Dossiers genutzt). */
+        /* Seit 5b7 verhalten sich auch die historischen Helfer wie im Recherchebetrieb. */
         schutzAlt: schutz('Beirat bei O-0001'),
         anzeigeAlt: anzeige(o1),
         eckdatenP4: recherche['P-0004'].text.includes('Beirat bei O-0001'),
@@ -60,12 +60,12 @@ const { APP } = require('./_pfad');
     });
     assert.ok(r, 'Altmission M1 im Zustand vorhanden');
     assert.ok(r.anzahl >= 28, 'alle Dossiers geprüft (' + r.anzahl + ')');
-    assert.equal(r.altAktiv, true, 'Altzustand tatsächlich aktiv');
+    assert.equal(r.altAktiv, true, 'Altfelder gesetzt, Missionsbetrieb seit 5b7 wirkungslos');
     assert.equal(r.eckdatenP4, true, 'Referenz: Eckdaten von P-0004 nennen O-0001 im Recherchebetrieb');
     assert.equal(r.pfadP4, '/dossier?id=P-0004', 'Referenz: Adresspfad mit Kennung');
     assert.deepEqual(r.abweichend, [], 'Modul Dossiers im Altzustand identisch zum Recherchebetrieb');
-    assert.notEqual(r.schutzAlt, 'Beirat bei O-0001', 'historisches schutz() bleibt unverändert');
-    assert.notEqual(r.anzeigeAlt, 'O-0001 Havelstahl Handels GmbH', 'historisches anzeige() bleibt unverändert');
+    assert.equal(r.schutzAlt, 'Beirat bei O-0001', 'schutz() ohne Wirkung des Altzustands');
+    assert.equal(r.anzeigeAlt, 'O-0001 Havelstahl Handels GmbH', 'anzeige() ohne Wirkung des Altzustands');
 
     /* Verbindung entfernen im Altzustand: Szenario bleibt, Ausblendung nur im Profil. */
     const v = await p.evaluate(() => {

@@ -58,7 +58,7 @@ const PF = require('./_pfad');
     const historisch = await p.evaluate(() => {
       dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' });
       dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
-      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && wissen(x) === 'unbekannt');
+      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.mission === 'STD' && !IZ()[x.id] && !dossierGesperrt(x));
       if (!e) return null;
       IZ()[e.id] = { status: 'bekannt' };
       const d = STATE.dossiers.entitaeten[e.id];
@@ -69,8 +69,9 @@ const PF = require('./_pfad');
       return { id: e.id, info: infoGesperrt(e), wissen: wissen(e), gesperrt: dossierGesperrt(e) };
     });
     assert.ok(historisch, 'historisches Standarddossier mit früherer Freigabesperre benötigt');
-    assert.deepEqual([historisch.wissen, historisch.info, historisch.gesperrt], ['bekannt', true, false],
-      'historische Beschränkung aktiv, aber manuelle Sperre nicht gesetzt');
+    /* Phase 5b7: Das gespeicherte Ansprechpartnermerkmal bleibt, wirkt aber nicht mehr. */
+    assert.deepEqual([historisch.wissen, historisch.info, historisch.gesperrt], ['frei', false, false],
+      'historisches Merkmal gespeichert, ohne Wirkung; manuelle Sperre nicht gesetzt');
     const [legacyDownload] = await Promise.all([
       p.waitForEvent('download'),
       p.evaluate(id => kartenTxtExport('sichtung', 'SI-090', id), historisch.id)

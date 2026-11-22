@@ -36,7 +36,7 @@ const { APP } = require('./_pfad');
       const text = document.querySelector('main').innerText;
       return {
         id: e.id,
-        missionAktiv: missionsbetrieb() && freigeschaltet('M1'),
+        missionAktiv: STATE.missionsbetrieb === true && freigeschaltet('M1') && !missionsbetrieb(),
         legacyLabel: text.includes('Nachtrag M1'),
         legacyRolle: text.includes(nachtrag.rolle),
         legacyEckdaten: (nachtrag.eckdaten || []).some(d => d && text.includes(d)),
@@ -48,7 +48,7 @@ const { APP } = require('./_pfad');
       };
     });
     assert.ok(fixture, 'Standarddossier mit gespeichertem M1-Nachtrag und Altmissionszustand vorhanden');
-    assert.equal(fixture.missionAktiv, true, 'historische Freischaltung tatsächlich aktiv');
+    assert.equal(fixture.missionAktiv, true, 'Altfelder gesetzt (Flag, M1 angenommen), Missionsbetrieb seit 5b7 wirkungslos');
     /* Belegt nur Rechercheansicht und Beschreibung. Die Darstellung von
        Kennungen in Beschreibung/Eckdaten (schutz) ist Gegenstand von 5b6. */
     assert.equal(fixture.regulareAnsicht && fixture.stammdaten, true,

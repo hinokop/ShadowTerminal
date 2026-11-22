@@ -53,7 +53,7 @@ const alt = require('./fixtures/altprofil-mission.json');
     await pruefeAnsicht();
     const vorhanden = await p.evaluate(() => {
       const K = VIEW.karte;
-      const d = PROFIL.eigene[0], pin = PROFIL.pins[0], zone = PROFIL.zonen[0], def = zDef();
+      const d = PROFIL.eigene[0], pin = PROFIL.pins[0], zone = PROFIL.zonen[0], def = KM();   /* gespeicherte Kontextmission (Altfeld) */
       const ll = karteKoord(d.id) || pin.ll;
       const gespeicherteMission = JSON.stringify(MS(def.id));
       /* Farbe und Zusatzringe testen, auch wenn das Altprofil das Dossier genau an den alten Check-in setzt. */
@@ -63,7 +63,7 @@ const alt = require('./fixtures/altprofil-mission.json');
       zeichneKarte($('k-svg'));
       const m = karteMarker(), drei = karte3dDaten();
       return {
-        altmodus: !!def && missionsbetrieb(), standorteAlt: def.standorte.length,
+        altmodus: !!def && STATE.missionsbetrieb === true && !missionsbetrieb() && zDef() === null, standorteAlt: def.standorte.length,
         missionUnveraendert: gespeicherteMission === JSON.stringify(MS(def.id)),
         eigeneObjekte: m.some(x => x.id === pin.id) && m.some(x => x.id === d.id) && drei.zonen.some(x => x.id === zone.id),
         ohneMissionsebenen: m.every(x => !['standort', 'zugriff'].includes(x.kat) && !x.stufe && !x.asset && !x.zusatz) &&

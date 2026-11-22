@@ -1,6 +1,6 @@
 /* Missionsautomatik und Recherchebetrieb sind getrennt: Ein Altprofil mit laufender Mission und fälligen Planeinträgen löst im Hintergrund nichts mehr aus
    (Sekundentakt, Ereignisregeln, Zustands- und Spurenmodell), die Recherche (Dossiers, Unterlagen, Fallpaket, eigene Kartenobjekte,
-   Diagnoseterminal) arbeitet unverändert. Der Missionsablauf läuft weiter, sobald eine Missionsaktion ausgeführt wird. Exit-Code 1 bei Fehlschlag. */
+   Diagnoseterminal) arbeitet unverändert. Seit Phase 5b7 bleibt der Missionsablauf auch nach einer Missionsaktion stillgelegt. Exit-Code 1 bei Fehlschlag. */
 const PF = require('./_pfad.js'); const { chromium } = require('playwright'); const fs = require('fs'); const path = require('path');
 const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'altprofil-mission.json'), 'utf8'));
 const ISO = /\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, DREI_H = 3 * 3600000;
@@ -97,12 +97,13 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   const n0 = await p.evaluate(() => STATE.plan.filter(x => x.text === 'Prüfnachricht Missionsablauf').length);
   /* Auf den tatsächlichen Sekunden-Tick warten statt auf eine feste kurze
      Pause; unter paralleler Browserlast können Timer deutlich verzögert sein. */
-  await p.waitForFunction(() => !STATE.plan.some(x => x.text === 'Prüfnachricht Missionsablauf'), null, { timeout: 18000 }).catch(() => null);
+  await p.waitForFunction(() => !STATE.plan.some(x => x.text === 'Prüfnachricht Missionsablauf'), null, { timeout: 8000 }).catch(() => null);
   const n1 = await p.evaluate(() => STATE.plan.filter(x => x.text === 'Prüfnachricht Missionsablauf').length);
-  ok.missionsablaufLaeuft = n0 === 1 && n1 === 0;
+  /* Phase 5b7: auch nach Missionsaktionen wird nichts abgearbeitet und das Altfeld nicht gesetzt */
+  ok.missionsablaufStillgelegt = n0 === 1 && n1 === 1 && await p.evaluate(() => !missionsbetrieb());
   await p.evaluate(() => { dispatch({ type: 'AUTOMATIK_GESETZT', ein: false }); planen(STATE, { typ: 'antwort', kanal: 'handler', text: 'Prüfantwort bei ausgeschalteter Automatik', faelligAm: new Date(Date.now() - 1000).toISOString() }); });
   await p.waitForTimeout(3500);
-  ok.antwortImMissionsbetrieb = await p.evaluate(() => STATE.automatik === false && !STATE.plan.some(x => x.text === 'Prüfantwort bei ausgeschalteter Automatik') && STATE.komm.kanaele.handler.nachrichten.some(m => m.text === 'Prüfantwort bei ausgeschalteter Automatik'));
+  ok.antwortStillgelegt = await p.evaluate(() => STATE.plan.some(x => x.text === 'Prüfantwort bei ausgeschalteter Automatik') && !STATE.komm.kanaele.handler.nachrichten.some(m => m.text === 'Prüfantwort bei ausgeschalteter Automatik'));
   ok.keineFehler = err.length === 0;
   console.log(JSON.stringify(ok, null, 1)); console.log(JSON.stringify({ vor, nach, spaet })); if (err.length) console.log(err.slice(0, 5));
   await b.close(); process.exit(Object.values(ok).every(Boolean) ? 0 : 1);

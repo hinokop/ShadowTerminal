@@ -26,7 +26,7 @@ const { APP } = require('./_pfad');
       const bekannt = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && !e.eigen);
       if (!bekannt) return null;
       IZ()[bekannt.id] = { status: 'bekannt' };
-      const unbekannt = SCENARIO.standard.dossiers.find(e => e.id !== bekannt.id && e.typ === 'Person' && wissen(e) === 'unbekannt');
+      const unbekannt = SCENARIO.standard.dossiers.find(e => e.id !== bekannt.id && e.typ === 'Person' && !IZ()[e.id]);
       if (!unbekannt) return null;
       const f = xAnlegen({ titel: '5b4 Fallbezug' }); profilSpeichern();
       return { bekannt: bekannt.id, unbekannt: unbekannt.id, fall: f.id,
@@ -34,8 +34,9 @@ const { APP } = require('./_pfad');
         wissenUnbekannt: wissen(unbekannt), infoUnbekannt: infoGesperrt(unbekannt) };
     });
     assert.ok(fx, 'Testdossiers aus Standardbestand vorhanden');
+    /* Phase 5b7: Altfelder bleiben gespeichert, wirken aber nicht mehr. */
     assert.deepEqual([fx.wissenBekannt, fx.infoBekannt, fx.wissenUnbekannt, fx.infoUnbekannt],
-      ['bekannt', true, 'unbekannt', true], 'alte Freigabestatuswerte tatsächlich wirksam');
+      ['frei', false, 'frei', false], 'gespeicherte historische Freigabestufen ohne Wirkung');
 
     /* Fall X: beide historischen Freigabestufen erscheinen im Dossierpicker. */
     const fall = await p.evaluate(fx => {
