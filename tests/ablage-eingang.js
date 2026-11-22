@@ -99,8 +99,13 @@ const { APP } = require('./_pfad');
     await p.click('#dlg-ok');
     await p.getByText('Noch keine Dateien abgelegt.').waitFor();
     assert.deepEqual(await p.evaluate(() => RIDB.schluessel()), [key]);
-    await p.click('#ak-tab-registratur'); await p.locator('#ak-suche').waitFor();
+    /* Ein gespeicherter Alt-Reiter darf den abgeschafften Registratur-Renderer
+       auch nach Dateiaktionen oder erneutem Laden nicht aufrufen. */
+    await p.evaluate(() => { VIEW.akte.reiter = 'registratur'; renderModule(); });
+    assert.equal(await p.locator('#ak-eingang-datei').count(), 1, 'Ablage bleibt direkter Datei-Eingang');
+    assert.equal(await p.locator('#ak-tab-registratur, #ak-tab-eingang, #ak-suche, #akte-blatt').count(), 0,
+      'keine historische Registratur erreichbar');
     assert.deepEqual(errors,[]);
-    console.log('OK: Eingang, Textvorschau, Neustart, Speicherrücknahme, Zuordnung ohne Kopie Löschen, Abbrechen, Fehlerrücknahme und Registratur');
+    console.log('OK: Eingang, Textvorschau, Neustart, Speicherrücknahme, Zuordnung ohne Kopie, Löschen, Abbrechen, Fehlerrücknahme; Registratur entfernt');
   } finally { await b.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
