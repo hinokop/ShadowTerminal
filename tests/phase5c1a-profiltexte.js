@@ -3,7 +3,7 @@
    Erhalt über Neuladen und „Zustand zurücksetzen“, Profilexport (Download), Zustandsimport mit Konflikt
    (vorhandener Text hat Vorrang, abweichender wird aufbewahrt und gemeldet), bewusst geleertes Feld wird
    nicht zurückgeholt, Profilimport in ein leeres Profil, „Profil leeren“ löscht beide Felder, Speicherfehler
-   wird angezeigt. */
+   wird angezeigt; Leerstand übersteht Export und Import in ein frisches Profil (Review #110). */
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const { chromium } = require('playwright');
@@ -110,6 +110,49 @@ const { APP } = require('./_pfad');
       return /Profil konnte nicht gespeichert werden/.test(text);
     });
     assert.equal(fehler, true, 'Speicherfehler wird angezeigt');
+    /* 10. Review #110: Text setzen → bewusst leeren → Profil exportieren → in frisches Profil importieren → alten Zustand importieren.
+       Beide Felder müssen leer bleiben, die alten Texte dürfen nur unter verdraengt erscheinen. */
+    const vorbereitung = await p.evaluate(() => {
+      dispatch({ type: 'TEXT_GEAENDERT', feld: 'notizen', wert: 'Vorher A' });
+      dispatch({ type: 'TEXT_GEAENDERT', feld: 'einschraenkungen', wert: 'Vorher B' });
+      const alterZustand = JSON.parse(JSON.stringify(STATE));
+      dispatch({ type: 'TEXT_GEAENDERT', feld: 'notizen', wert: '' });
+      dispatch({ type: 'TEXT_GEAENDERT', feld: 'einschraenkungen', wert: '' });
+      return { alterZustand, t: JSON.parse(JSON.stringify(PROFIL.profiltexte)) };
+    });
+    assert.ok(vorbereitung.t.notizen.t && vorbereitung.t.einschraenkungen.t, 'bewusstes Leeren trägt Zeitpunkte');
+    await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'dossier' }); renderModule(); });
+    const [dl2] = await Promise.all([p.waitForEvent('download'), p.click('#btn-profil-ex')]);
+    const geleertExport = JSON.parse(fs.readFileSync(await dl2.path(), 'utf8'));
+    assert.equal(geleertExport.profiltexte.notizen.text + geleertExport.profiltexte.einschraenkungen.text, '', 'Export enthält den Leerstand');
+    const ctx2 = await browser.newContext({ viewport: { width: 1400, height: 1000 }, reducedMotion: 'reduce' });
+    const q = await ctx2.newPage(); q.setDefaultTimeout(20000);
+    const errors2 = []; q.on('pageerror', e => errors2.push(e.message));
+    await q.route(/^https?:/, r => r.abort());
+    await q.goto(APP); await q.fill('#gate-pw', 'pw-test-123'); if (await q.isVisible('#gate-pw2')) await q.fill('#gate-pw2', 'pw-test-123');
+    await q.click('#gate-go'); await q.waitForFunction(() => !document.body.classList.contains('locked'));
+    const frisch = await q.evaluate(([profil, zustand]) => {
+      const vorher = JSON.parse(JSON.stringify(PROFIL.profiltexte));
+      dispatch({ type: 'PROFIL_IMPORT', profil, datei: 'geleert.json' });
+      const nachProfil = JSON.parse(JSON.stringify(PROFIL.profiltexte));
+      dispatch({ type: 'IMPORT', state: zustand, datei: 'alt.json' });
+      const nachZustand = JSON.parse(JSON.stringify(PROFIL.profiltexte));
+      const spiegel = [STATE.agent.notizen, STATE.agent.einschraenkungen];
+      dispatch({ type: 'PROFIL_LEEREN' });
+      return { vorher, nachProfil, nachZustand, spiegel, leerSpiegel: [STATE.agent.notizenGeaendert, STATE.agent.einschraenkungenGeaendert] };
+    }, [geleertExport, vorbereitung.alterZustand]);
+    assert.equal(frisch.vorher.notizen.t, null, 'frisches Profil: nie gesetzt');
+    for (const f of ['notizen', 'einschraenkungen']) {
+      assert.equal(frisch.nachProfil[f].text, '', f + ': Profilimport übernimmt den Leerstand');
+      assert.ok(frisch.nachProfil[f].t, f + ': Profilimport übernimmt den Zeitpunkt des Leerens');
+      assert.equal(frisch.nachZustand[f].text, '', f + ': alter Zustand holt den gelöschten Text nicht zurück');
+      assert.deepEqual(frisch.nachZustand[f].verdraengt.map(v => v.text), [f === 'notizen' ? 'Vorher A' : 'Vorher B'], f + ': alter Text nur aufbewahrt');
+    }
+    assert.deepEqual(frisch.spiegel, ['', ''], 'Spiegel zeigt den Leerstand');
+    assert.deepEqual(frisch.leerSpiegel, [null, null], 'nach Profil leeren keine veralteten Zeitpunkte im Spiegel');
+    assert.deepEqual(errors2, [], 'keine Browserfehler im frischen Profil');
+    await ctx2.close();
+
     assert.deepEqual(errors, [], 'keine Browserfehler');
     console.log('OK: Phase 5c1a – Profiltexte im Profil: Übernahme, Autosave, Zurücksetzen, Neuladen, Export, Importkonflikte, Leeren, Speicherfehler');
   } finally { await browser.close(); }
