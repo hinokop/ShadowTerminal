@@ -1,7 +1,7 @@
 # Phase 5 – Inventar der alten Mission und Abbau in kleinen Schritten
 
-Stand: 22.11.2026. Basis: `main` nach Merge von #100 (`3dcba04fe2e3`).
-**Arbeitsdokument für Phase 5; Phasen 5a, 5b1 und 5b2 integriert, Phase 5b3 ist ein eigener Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
+Stand: 22.11.2026. Basis: `main` nach Merge von #101 (`dca5059da6e0`).
+**Arbeitsdokument für Phase 5; Phasen 5a, 5b1, 5b2 und 5b3 in `main`, Phase 5b4 als Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
 Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische Bestandsaufnahme: [missionsabhaengigkeiten.md](missionsabhaengigkeiten.md).
 
 ## Trennlinien
@@ -69,7 +69,7 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Abnahme:** Einzeltest `node tests/runall.js phase5b2-recherchezugang`, gezielte Karte-/Dossier-/Altmissionstests und vollständige Standardauswahl. Vor Ende des CI-Laufs keine Erfolgsbehauptung. Windows-Altprofile und reale Archivbrücke werden bei einer späteren Integrationsabnahme geprüft. Kein automatischer Merge.
 
-## Phase 5b3 – Dossier-Hauptansicht ohne historische Freigabemasken (Draft)
+## Phase 5b3 – Dossier-Hauptansicht ohne historische Freigabemasken (PR #101 integriert)
 
 **Sichtbarer Produkt-Effekt:** `dossierAnsicht(e)` verzweigt nach der Prüfung von `dossierGesperrt(e)` künftig direkt zu den regulären Tabs (`Übersicht`, `Sichtungen`, `Chronik`). Die zwei vorherigen UI-Weichen `wissen(e)==='bekannt' → rudimentAnsicht(e)` und `infoGesperrt(e) → Zugriff beschränkt / Ansprechpartner` entfallen. Dies gilt auch für ein ausdrücklich aktiviertes Altprofil mit nicht angenommenen Missionen oder alten `infozugang`-Stufen. Der unabhängige Recherche- und Beziehungsblock aus 5b2 bleibt erhalten.
 
@@ -80,6 +80,21 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 **Neue Abnahme:** `tests/phase5b3-dossieroberflaeche.js` setzt zwei konkrete Altmissions-/Wissenszustände, überprüft das reale Dossier-UI einschließlich Tabs, Bearbeiten, Kurzlage, Unterlagen und Graph **ohne** Freigabemaske; prüft außerdem die manuelle Sperre mit erfolgreichem Entsperren. `phase5b2-recherchezugang` erwartet nun ebenfalls die volle Ansicht. Beide sind Teil der obligatorischen Standardauswahl.
 
 **Bewusst offen:** Die historischen Kommunikations-/Missionsaktionen, Zeitgeber, gespeicherten Altfelder, `rudimentAnsicht()` als nicht produktiv eingebundene Alt-Testfunktion sowie weitere Legacy-Texte in Protokoll und Sichtungen werden in späteren separaten Schritten geprüft. Dieser Schritt beansprucht weder vollständige Entkernung noch Profilschemamigration.
+
+## Phase 5b4 – Aktive Recherchebereiche und Ablage ohne Registratur (Draft)
+
+**Nutzerentscheidung:** Der Reiter `Ablage → Registratur` gehört zur früheren Missions-/Freigabestruktur und soll aus dem produktiven Arbeitsbereich entfernt werden. `Ablage` öffnet künftig unmittelbar den lokalen **Eingang** mit Dateiablage, Vorschau, Fall- und Dossierzuordnung; es gibt weder Reiter „Registratur“/„Eingang“ noch historische Aktenlisten, Schwärzungs- und Einsichtsantragsmasken in der laufenden Ablage. Auch ein importiertes `VIEW.akte.reiter='registratur'` hat darauf keinen Einfluss.
+
+**Gleichzeitig verbleibende reale Zugangsschranken entkoppeln:**
+
+- `arbeitsstand-modul.js`: gespeicherte Dossierauswahl aus dem tatsächlichen Recherchebestand wiederherstellen; für eigene Dossiers weiterhin Registeridentität prüfen und manuelle Sperre beachten.
+- `fall-modul.js`: Dossierverknüpfungen, Dossierauswahl, Verweise und Unterlagen in Modul X richten sich nach Recherchebestand und manuellen Sperren, nicht nach `wissen`, `dossierOffen` oder `infoGesperrt`.
+- `akten-modul.js`: Datei-Eingang und dessen Dossierpicker nehmen den Recherchebestand und prüfen manuelle Sperren vor und während der asynchronen Übernahme; keine historische Ansprechpartnerfreigabe.
+- `recherche-modul.js`: Unterlagen-Erfassung und -Entfernung bleiben trotz altem Missions-/Kontaktstatus möglich; **neue** ausdrückliche Prüfung der manuellen Sperre auch vor `RECHERCHE_BELEG`.
+
+**Daten- und Legacy-Grenze:** `renderAkten` zeigt im produktiven Pfad ausschließlich `akEingangAnsicht`. Die bisherige Akten-/Registraturansicht wird als `renderRegistraturLegacy` nur für historische Tests bewahrt (Test `ak2` wählt diesen Renderer in der isolierten Browserinstanz ausdrücklich). `SCENARIO.akten`, `STATE.akten`, Einsichts-/Schwärzungsregeln und gespeicherte Altdaten werden in diesem Schritt **weder gelöscht noch automatisch migriert**. Ihre endgültige Bereinigung benötigt gesonderte Kompatibilitäts- und Migrationstests.
+
+**Regression:** Neuer verpflichtender Test `phase5b4-arbeitszugang` deckt bekannte/unbekannte historische Freigabestufen, Modul X, Arbeitsstand, Inbox-Eingang, Unterlagenzuordnung und -Entfernung, Registratur-Abwesenheit, manuelle Sperre und Entsperren ab. `ablage-eingang` erwartet nun sofortige Eingangsansicht ohne alte Register; `ak2` prüft historische Einsicht nur noch als Legacy-Renderer. Standardauswahl plus isolierte und gezielte CI-Prüfungen müssen vollständig bestehen. Vor vollständigem Ergebnis keine Merge-Empfehlung.
 
 ## Nächste isolierte Schritte nach Abnahme von 5a
 
