@@ -787,24 +787,16 @@ function zielpersonenListe() {
   return ms.zielpersonen;
 }
 function istZielperson(e) { return zielpersonenListe().indexOf(e.id) >= 0; }
-function karteZonen(def = karteAuftragsansicht()) {
+function karteZonen() {
   const out = [];
-  if (def) {
-    const Z = SCENARIO.zonen, sz = (SCENARIO.karte && SCENARIO.karte.zonen) || {};
-    def.standorte.forEach(function (st) {
-      const ll = karteKoord(st.id);
-      const u = zonenUrteil(def)['ZA-' + st.id] || null;
-      if (ll) out.push({ id: 'ZA-' + st.id, auto: true, standort: st.id, name: st.name, ll: ll, r: (u && u.r) || (sz[st.id] && sz[st.id].r) || Z.radiusStandard, urteil: u });
-    });
-    zonenEigene(def).forEach(function (zn) { out.push(Object.assign({ auto: false }, zn)); });
-  }
+  /* Phase 5b9: Missionszonen (ZA-/ZN-) entstanden nur mit Auftragsrahmen (zDef), der seit 5b7 nie besteht. */
   /* Eigene Zonen des Profils (ZO-nnn): unabhängig vom Auftrag, ohne Bewertung, Zeitgeber und Meldungen */
   (PROFIL.zonen || []).forEach(function (zn) {
     if (!zoneGesperrt(zn)) out.push(Object.assign({}, zn, { auto: false, profil: true, art: 'ort' }));
   });
   return out;
 }
-function karteZoneFinden(id, def) { return id ? (karteZonen(def).find(function (x) { return x.id === id; }) || null) : null; }
+function karteZoneFinden(id) { return id ? (karteZonen().find(function (x) { return x.id === id; }) || null) : null; }
 function zonePositionen(e) {
   const out = [], ll = karteKoord(e.id);
   if (ll) out.push(ll);
@@ -1186,65 +1178,8 @@ function eigeneZonePopup(zn, fertig) {
         : h('button', { type: 'button', class: 'link', id: 'oz-weg', onclick: function () { VIEW.draft['oz-weg'] = zn.id; karteAuswahlAnzeige(); } }, 'Entfernen'))].filter(Boolean));
 }
 function zonePopup(zn, fertig) {
+  /* Phase 5b9: Ohne Auftragsrahmen liefert karteZonen() ausschließlich Profilzonen; die Popups der Missionszonen (ZN-/ZA-) und Zugriffspunkte entfallen. */
   if (zn.profil) return eigeneZonePopup(zn, fertig);
-  if (zn.art === 'zugriff') return zugriffPopup(zn, fertig);
-  const Zt = SCENARIO.zonen, lg = zoneLage(zn), K = VIEW.karte;
-  const liste = function (L, max) {
-    if (!L.length) return 'keine';
-    const teile = [];
-    L.slice(0, max || 6).forEach(function (e, i) { if (i) teile.push(', '); teile.push(dossierLink(e, 'Karte', 'zn-dl-' + e.id)); });
-    if (L.length > (max || 6)) teile.push(' und ' + (L.length - (max || 6)) + ' weitere');
-    return teile;
-  };
-  const eff = zoneStufe(zn, lg);
-  const lageFeld = eff == null ? 'Keine Bewertung: kein bekanntes Dossier im Bereich.' : [stufeLabel(eff), ' ', zn.auto && zn.urteil && zn.urteil.status === 'frei' ? 'eigene Einstufung, freigegeben' : 'höchste Bewertung im Bereich: ' + anzeige(lg.quelle)];
-  const info = [
-    feld('Lage', lageFeld, 'full'),
-    feld('Im Bereich', liste(lg.personen), 'full'),
-    feld('Zielpersonen' + (lg.ziel.length ? ' (' + lg.ziel.length + ')' : ''), liste(lg.ziel), 'full'),
-    lg.standorte.length ? feld('Standorte', lg.standorte.join(', ')) : null,
-    feld('Zeitfenster', lg.fenster.length ? lg.fenster.map(function (w) { return w.id + ' (' + w.zustand + ')'; }).join(', ') : 'keine offen'),
-    feld('Sichtungen', String(lg.sichtungen)),
-    zoneFrische(zn) ? feld('Stand der Einstufung', [frischeLabel(zoneFrische(zn)), ' ' + zoneFrische(zn).text + (zoneFrische(zn).stufe === 'veraltet' ? ' – bitte bestätigen oder neu einstufen' : '')], 'full') : null,
-    !zn.auto && zn.verlauf && zn.verlauf.length ? feld('Verlauf', zn.verlauf.slice(-4).reverse().reduce(function (acc, v, k) { if (k) acc.push(h('br')); acc.push(fmtZ(v.t).slice(11, 16) + 'Z · ' + kuerzen(v.text.replace(/^ZN-\d+ „[^“]*“: /, ''), 110)); return acc; }, []), 'full') : null
-  ];
-  const selR = function (id) { return h('select', { id: 'zn-r', 'aria-label': 'Radius der Zone', onchange: function (ev) { dispatch({ type: id.indexOf('ZA-') === 0 ? 'ZONE_URTEIL' : 'ZONE_GEAENDERT', id: id, r: Number(ev.target.value) }); } }, Zt.radien.map(function (r) { return h('option', { value: String(r), selected: r === zn.r }, r + ' m'); })); };
-  const zentrum = h('button', { type: 'button', class: 'link', id: 'k-pop-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 13.5), karteAuswahlAnzeige, zn.id); } }, 'Zentrieren');
-  if (zn.auto) {
-    const u = zn.urteil, wahl = VIEW.draft['zu-stufe-' + zn.id], offen = u && u.status === 'beantragt';
-    const stufeSel = h('select', { id: 'zu-stufe', 'aria-label': 'Eigene Einstufung', onchange: function (ev) {
-      const v = ev.target.value;
-      if (v === '' || Number(v) <= 3) { delete VIEW.draft['zu-stufe-' + zn.id]; dispatch({ type: 'ZONE_URTEIL', id: zn.id, stufe: v === '' ? null : Number(v) }); }
-      else { VIEW.draft['zu-stufe-' + zn.id] = v; karteAuswahlAnzeige(); }
-    } }, [h('option', { value: '', selected: !wahl && !(u && u.status === 'frei') }, 'berechnet' + (lg.stufe != null ? ' (Stufe ' + lg.stufe + ')' : ''))].concat([1, 2, 3, 4, 5].map(function (n) {
-      return h('option', { value: String(n), selected: wahl ? wahl === String(n) : !!(u && u.status === 'frei' && u.stufe === n) }, 'Stufe ' + n + ' – ' + SCENARIO.bedrohungsstufen[n] + (n >= 4 ? ' (mit Begründung)' : ''));
-    })));
-    const bg = wahl ? h('div', { class: 'k-pop-form' },
-      h('label', { for: 'zu-bg' }, 'Begründung'),
-      entwurf('input', 'zu-bg', 'zu-bg-' + zn.id, { type: 'text', maxlength: '300', placeholder: 'Anlass, Beleg, Nutzen', 'aria-label': 'Begründung für ARGUS', spellcheck: 'false' }),
-      h('span', null), h('button', { type: 'button', id: 'zu-senden', onclick: function () { const t = $('zu-bg').value || ''; dispatch({ type: 'ZONE_URTEIL', id: zn.id, stufe: Number(wahl), begruendung: t }); } }, 'Bei ' + ((kanalDef('handler') || {}).gegenstelle || 'ARGUS') + ' beantragen')) : null;
-    fertig('Lagezone ' + zn.standort, [h('p', { class: 'k-pop-sub' }, zn.name + ' · Radius ' + zn.r + ' m'),
-      h('div', { class: 'k-pop-form' }, h('label', { for: 'zu-stufe' }, 'Einstufung'), stufeSel, h('label', { for: 'zn-r' }, 'Radius'), selR(zn.id)),
-      bg, h('dl', { class: 'fields' }, info),
-      offen ? h('p', { class: 'k-pop-meta' }, 'Beantragt: Stufe ' + u.stufe + ', ' + ((kanalDef('handler') || {}).gegenstelle || 'ARGUS') + ' prüft.') : null,
-      h('div', { class: 'k-pop-akt' }, zentrum,
-        h('button', { type: 'button', class: 'link', id: 'k-pop-frage', title: 'Öffnet den Kanal zum Ansprechpartner mit einem vorbereiteten Entwurf (wird nicht gesendet)', onclick: function () { STATE.komm.aktiv = 'handler'; VIEW.draft['km-handler'] = 'Wie ist die Lage bei ' + zn.standort + '?'; dispatch({ type: 'NAVIGATION', modul: 'nachrichten' }); } }, 'Lage erfragen'),
-        zoneFrische(zn) ? h('button', { type: 'button', class: 'link', id: 'zn-best', onclick: function () { dispatch({ type: 'ZONE_BESTAETIGT', id: zn.id }); meldung('Lage ' + zn.standort + ' bestätigt'); kurzHinweis('Lage ' + zn.standort + ' bestätigt'); karteWaehlen(null, false); } }, 'Lage bestätigen') : null,
-        u ? h('button', { type: 'button', class: 'link', id: 'zu-reset', onclick: function () { delete VIEW.draft['zu-stufe-' + zn.id]; dispatch({ type: 'ZONE_URTEIL', id: zn.id, stufe: null, zurueck: true }); } }, 'Zurücksetzen') : null)].filter(Boolean));
-    return;
-  }
-  const feldName = h('input', { type: 'text', id: 'zn-name', value: zn.name, maxlength: '60', 'aria-label': 'Name der Zone', spellcheck: 'false', onchange: function (ev) { dispatch({ type: 'ZONE_GEAENDERT', id: zn.id, name: ev.target.value }); } });
-  const selW = h('select', { id: 'zn-wertung', 'aria-label': 'Sicherheitsbewertung', onchange: function (ev) { dispatch({ type: 'ZONE_GEAENDERT', id: zn.id, wertung: ev.target.value }); } }, Object.keys(Zt.wertungen).map(function (w) { return h('option', { value: w, selected: w === zn.wertung }, Zt.wertungen[w]); }));
-  const kann = zn.wertung !== 'ruhig';
-  fertig('Zone ' + zn.id, [h('div', { class: 'k-pop-form' }, h('label', { for: 'zn-name' }, 'Name'), feldName, h('label', { for: 'zn-r' }, 'Radius'), selR(zn.id), h('label', { for: 'zn-wertung' }, 'Bewertung'), selW),
-    h('dl', { class: 'fields' }, info),
-    h('p', { class: 'k-pop-meta' }, (zn.durch === 'handler' ? 'Zuletzt von ' + zoneHandlerName() + ' neu eingestuft. ' : '') + (zn.gemeldet ? 'Gemeldet um ' + fmtZ(zn.gemeldet.t).slice(11, 16) + 'Z (' + Zt.wertungen[zn.gemeldet.wertung] + '). ' : '') + (kann ? Zt.meldungHinweis[zn.wertung] : 'Bei „Unauffällig“ ist keine Meldung nötig.')),
-    h('div', { class: 'k-pop-akt' },
-      h('button', { type: 'button', id: 'zn-melden', disabled: !kann, onclick: function () { dispatch({ type: 'ZONE_GEMELDET', id: zn.id }); meldung(zn.id + ' an ' + zoneHandlerName() + ' gemeldet'); kurzHinweis(zoneHandlerName() + ' informiert: ' + zn.id + ' (' + Zt.wertungen[zn.wertung] + ')'); karteWaehlen(null, false); } }, 'Handler informieren'),
-      zentrum,
-      h('button', { type: 'button', class: 'link', id: 'zn-frage', title: 'Fragt ARGUS nach der Lage im Bereich, ohne die Einstufung zu ändern', onclick: function () { dispatch({ type: 'ZONE_ERFRAGT', id: zn.id }); meldung('Lage ' + zn.id + ' bei ' + zoneHandlerName() + ' erfragt'); kurzHinweis('Lage ' + zn.id + ' bei ' + zoneHandlerName() + ' erfragt'); karteWaehlen(null, false); } }, 'Lage erfragen'),
-      h('button', { type: 'button', class: 'link', id: 'zn-best', onclick: function () { dispatch({ type: 'ZONE_BESTAETIGT', id: zn.id }); meldung('Lage ' + zn.id + ' bestätigt'); kurzHinweis('Lage ' + zn.id + ' bestätigt'); karteWaehlen(null, false); } }, 'Lage bestätigen'),
-      h('button', { type: 'button', class: 'link', id: 'zn-weg', onclick: function () { K.auswahl = null; dispatch({ type: 'ZONE_ENTFERNT', id: zn.id }); } }, 'Entfernen'))]);
 }
 function karteWaehlen(id, zentrieren) {
   const K = VIEW.karte, m = id ? (karteMarker().find(function (x) { return x.id === id; }) || (karteKoord(id) ? { ll: karteKoord(id) } : null) || (karteZoneFinden(id) ? { ll: karteZoneFinden(id).ll } : null)) : null;
