@@ -9,7 +9,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await start();
   const a = await p.evaluate(() => {
     const o = {}; o.liste = legendeListe().map(l => l.id); o.vorlauf = !!STATE.vorlauf; o.mission = !!LM();
-    const hand = () => STATE.komm.kanaele.handler.nachrichten.length; const n0 = hand();
+    const hand = () => ((((STATE.komm || ALT().komm) || {}).kanaele || {}).handler || { nachrichten: [] }).nachrichten.length; const n0 = hand();   /* Phase 5c1b: ohne Altbestand keine Kanäle */
     const ziel = o.liste.find(id => id !== aktiveLegendeId()); o.ziel = ziel;
     dispatch({ type: 'LEGENDE_GEWECHSELT', legende: ziel }); o.aktiv = aktiveLegendeId(); o.handlerNachrichten = hand() - n0;
     const d = legendeListe()[0].dokumente[0]; dokZeile(d, Date.now()); o.dokId = d.id; o.frist = PROFIL.dokFristen[d.id]; PROFIL.dokFristen[d.id] = '2031-01-01T00:00:00.000Z'; profilSpeichern();

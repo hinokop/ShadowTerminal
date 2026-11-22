@@ -23,12 +23,12 @@ const { APP } = require('./_pfad');
     const fixture = await p.evaluate(() => {
       const e = SCENARIO.standard.dossiers.find(x =>
         (x.nachtraege || []).some(n => n.mission === 'M1' && n.rolle));
-      if (!e || !STATE.missionen.M1) return null;
+      if (!e) return null;
       const nachtrag = e.nachtraege.find(n => n.mission === 'M1');
       const original = JSON.stringify(nachtrag);
       STATE.missionsbetrieb = true;
-      STATE.automatik = false;
-      STATE.missionen.M1.angenommenAm = nowIso();
+      /* Phase 5c1b: Missionsfelder eines überführten Zustands liegen im Altbestand */
+      STATE.altbestand = { automatik: false, missionen: { M1: { status: 'laufend', angenommenAm: nowIso() } }, kontext: 'M1' };
       STATE.dossiers.auswahl = e.id;
       VIEW.dtab = 'info';
       dispatch({ type: 'NAVIGATION', modul: 'dossier' });

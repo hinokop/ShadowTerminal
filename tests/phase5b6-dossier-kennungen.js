@@ -38,9 +38,9 @@ const { APP } = require('./_pfad');
       };
       const ids = alleEntitaeten().map(e => e.id);
       const recherche = {}; ids.forEach(id => { recherche[id] = bild(id); });
-      if (!STATE.missionen.M1) return null;
-      STATE.missionsbetrieb = true; STATE.automatik = false;
-      STATE.missionen.M1.angenommenAm = nowIso();
+      STATE.missionsbetrieb = true;
+      /* Phase 5c1b: Missionsfelder eines überführten Zustands liegen im Altbestand */
+      STATE.altbestand = { automatik: false, missionen: { M1: { status: 'laufend', angenommenAm: nowIso() } }, kontext: 'M1' };
       const abweichend = [];
       ids.forEach(id => {
         const alt = bild(id), ref = recherche[id];

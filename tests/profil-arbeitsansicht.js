@@ -20,7 +20,7 @@ const { chromium } = require('playwright');
     assert.equal(await p.locator('#h-melde, #h-checkin').count(), 0);
     assert.equal(await p.locator('#btn-karte-bereinigen').isVisible(), true);
     assert.equal(await p.locator('#h-status').textContent(), 'Offline');
-    const mission = () => p.evaluate(() => [STATE.agent.status, !!LM(), STATE.komm.kanaele.handler.nachrichten.length]);
+    const mission = () => p.evaluate(() => [STATE.agent.status, !!LM(), !!STATE.komm, ((ALT().komm || { kanaele: { handler: { nachrichten: [] } } }).kanaele.handler.nachrichten).length]);   /* Phase 5c1b: Kanäle nur im Altbestand */
     const alt = await mission();
     await p.locator('#sel-status').selectOption('Aktiv');
     assert.equal(await p.locator('#h-status').textContent(), 'Aktiv');

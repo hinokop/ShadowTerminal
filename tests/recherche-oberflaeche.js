@@ -63,7 +63,7 @@ const alt = require('./fixtures/altprofil-mission.json');
       zeichneKarte($('k-svg'));
       const m = karteMarker(), drei = karte3dDaten();
       return {
-        altmodus: !!def && STATE.missionsbetrieb === true && !missionsbetrieb() && zDef() === null, standorteAlt: def.standorte.length,
+        altmodus: !!def && STATE.altbestand.missionsbetrieb === true && !missionsbetrieb() && zDef() === null,   /* Phase 5c1b: Altfeld im Altbestand */ standorteAlt: def.standorte.length,
         missionUnveraendert: gespeicherteMission === JSON.stringify(MS(def.id)),
         eigeneObjekte: m.some(x => x.id === pin.id) && m.some(x => x.id === d.id) && drei.zonen.some(x => x.id === zone.id),
         ohneMissionsebenen: m.every(x => !['standort', 'zugriff'].includes(x.kat) && !x.stufe && !x.asset && !x.zusatz) &&
