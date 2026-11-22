@@ -65,7 +65,7 @@ const { APP } = require('./_pfad');
     await p.click('#x-pin-offen-' + pin);
     assert.equal(await p.evaluate(() => VIEW.karte.auswahl), pin);
     await p.click('#nav-akten');
-    await p.click('#ak-tab-eingang');
+    /* Seit 5b4 ist der Datei-Eingang die unmittelbare Ablageansicht. */
     await p.locator('#ak-eingang-datei').setInputFiles({ name: 'x-unterlage.txt', mimeType: 'text/plain', buffer: Buffer.from('Fallnotiz') });
     await p.locator('#ak-eingang-vorschau pre').waitFor();
     await p.selectOption('#ak-eingang-fall', id);
