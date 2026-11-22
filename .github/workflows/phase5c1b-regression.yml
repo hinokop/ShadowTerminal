@@ -35,7 +35,7 @@ jobs:
         env:
           FT_PARALLEL: '2'
         run: |
-          node tests/runall.js phase5c1b-zustandsformat phase5c1a-profiltexte missionstrennung rs identitaeten profil-arbeitsansicht phase5b2-recherchezugang phase5b3-dossieroberflaeche phase5b5-dossier-nachtraege phase5b6-dossier-kennungen phase5b7-missionsbetrieb recherche-oberflaeche terminal-sudo terminal-onion speicher-voll dossier-nummern fallpaket arbeitsstand aussagen-alt
+          node tests/runall.js phase5c1b-zustandsformat phase5c1b-ladefehler lage-box phase5c1a-profiltexte missionstrennung rs identitaeten profil-arbeitsansicht phase5b2-recherchezugang phase5b3-dossieroberflaeche phase5b5-dossier-nachtraege phase5b6-dossier-kennungen phase5b7-missionsbetrieb recherche-oberflaeche terminal-sudo terminal-onion speicher-voll dossier-nummern fallpaket arbeitsstand aussagen-alt
       - name: Complete standard selection
         env:
           FT_PARALLEL: '4'
