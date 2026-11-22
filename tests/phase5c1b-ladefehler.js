@@ -7,7 +7,10 @@
    (C2) ungültiges JSON, Ablage gelingt: Normalfall, Rohtext unter .defekt, neuer Zustand, keine Sperre;
    (D) Zustand lässt sich nach dem Schreiben nicht zurücklesen: Meldung behauptet keinen unveränderten Stand, Rückschreibversuch des Originals;
    (E) Sicherung scheitert und Speichern scheitert (bereits in phase5c1b-zustandsformat): hier zusätzlich Profil unverändert;
-   (F) Lesefehler beim Laden des gespeicherten Zustands: Sperre, Rohtext unverändert.
+   (F) Lesefehler beim Laden des gespeicherten Zustands: Sperre, Rohtext unverändert;
+   (H) vorhandener, aber leerer Schlüssel (''): gilt als defekt, nicht als fehlend. Rohtext wird unter .defekt gesichert, bevor ein neuer Zustand entsteht;
+   (H2) dasselbe mit misslungener Ablage unter .defekt: Rohtext unverändert, Sitzung nicht persistent;
+   (H3) eine frühere, nicht leere Ablage unter .defekt wird durch einen leeren Rohtext nicht überschrieben.
    Exit-Code 1 bei Fehlschlag. */
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -194,6 +197,41 @@ function v4Eingang() {
     assert.ok(f.grund, 'F: Sperre gesetzt'); assert.equal(f.persist, false);
 
     });
+    /* (H) Vorhandener, aber leerer Schlüssel: defekt, nicht fehlend */
+    await fall('H', async () => {
+    await regeln(null, null);
+    await einlegen({ state: '', profil: roh4.profil });
+    await anmelden();
+    const h = await lesen();
+    assert.equal(h.defekt, '', 'H: leerer Rohtext unter .defekt abgelegt (Existenz des Schlüssels nachgewiesen)');
+    assert.equal(h.grund, null); assert.equal(h.persist, true);
+    assert.equal(JSON.parse(h.roh).version, 5, 'H: danach neuer Zustand');
+    assert.match(h.meldung, /nicht lesbar/);
+    });
+
+    /* (H2) Leerer Schlüssel, Ablage unter .defekt scheitert */
+    await fall('H2', async () => {
+    await regeln(null, null);
+    await einlegen({ state: '', profil: roh4.profil });
+    await regeln({ exakt: [SCHL + '.defekt'] }, null);
+    await anmelden();
+    const h2 = await lesen();
+    assert.equal(h2.roh, '', 'H2: leerer Rohtext bleibt unberührt');
+    assert.equal(h2.profil, roh4.profil, 'H2: Profil bleibt zeichengleich');
+    assert.ok(h2.grund, 'H2: Schreibsperre gesetzt'); assert.equal(h2.persist, false);
+    });
+
+    /* (H3) Frühere, nicht leere Ablage unter .defekt wird durch einen leeren Rohtext nicht überschrieben */
+    await fall('H3', async () => {
+    await regeln(null, null);
+    await einlegen({ state: '', profil: roh4.profil });
+    await p.evaluate(() => localStorage.setItem(STORAGE_KEY + '.defekt', '{frueherer defekter stand'));
+    await anmelden();
+    const h3 = await lesen();
+    assert.equal(h3.defekt, '{frueherer defekter stand', 'H3: frühere Ablage bleibt erhalten');
+    assert.equal(h3.grund, null); assert.equal(JSON.parse(h3.roh).version, 5);
+    });
+
     /* (G) Normalfall ohne Fehler: Überführung, Profil wird danach geschrieben */
     await fall('G', async () => {
     await regeln(null, null);
