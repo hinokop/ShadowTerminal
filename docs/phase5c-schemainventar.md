@@ -151,6 +151,20 @@ Commitfolge auf `refactor/phase5c1b-zustandsformat-20261122`: Store → E7 → E
   - *Hinweis aus dem Review zu 5c2:* `buildInitialStateV4` und die Migration von Format 2 und 3 brauchen weiterhin `SCENARIO.missionen`; diese Definitionen werden in 5c2 nicht entfernt, solange keine gleichwertige, getestete Altformat-Interpretation vorhanden ist.
 - **Vor der realen Windows-Migration (E1.8):** externer Export von Zustand (Kopfzeile „Export“) und Profil (Profilexport); Anhänge in IndexedDB zusätzlich über Fallpakete.
 
+## 8c. Umsetzung 5c2a (Draft): Darstellung der verbliebenen Missionsdaten
+
+**E8 – Entschieden (Master Wayne, 22.11.2026): Option C, ausblenden.** Anzeige und Zählung der verbliebenen Missionsdaten im Dossier entfallen; die Daten bleiben unverändert in `STATE.altbestand` (Speicher, Export und Zustandsimport unberührt). Anlass der Wahl: Der echte Datenbestand besteht nach Angabe von Master Wayne nur aus Test-Dossiers, Pins und Zonen. Ob der echte Altbestand tatsächlich leer ist, wurde nicht ausgelesen.
+
+Umgesetzt in `index.html` (zwei Stellen):
+1. `erkenntnisLage()` zählt nur noch eigene Sichtungen. Belege der laufenden Altmission, Berichte (`ALT().berichte`) und Einschätzungen (`ALT().infozugang`) fließen nicht mehr in die Erkenntnislage ein.
+2. Im Sichtungsreiter entfallen die Tabelle „Aussagen des Agenten“ und der Hinweis „offener Widerspruch … Kanal Ansprechpartner“.
+
+Bewusst nicht in 5c2a: Entfernen der danach ungenutzten Funktionen (`IZ()`, `aussagenListe()`, `widerspruchOffen()`) und des übrigen `ALT()`-Rest-Codes (Funkstille, Verstärkung, Plan, Briefing-Pfad, Entwicklerkonsole) sowie der Texte in `SCENARIO.abfragen.aussagen`; das folgt als 5c2b nach Referenzprüfung. Die Aussagen in `PROFIL.recherche.aussagen` (Fallpaket, ohne Oberfläche) sind nicht betroffen.
+
+Test: `tests/phase5c2a-altdaten.js` (Zustand mit Altbestand: keine Aussagentabelle, kein Widerspruchshinweis, Erkenntnislage zählt nur die Sichtung, Altbestand im Speicher und gespeichert unverändert). Rot-vor-Grün gegen den Stand vor der Änderung belegt; Gegenprobe mit nur halber Änderung ist ebenfalls rot.
+
+Hinweis: Ein unverändert gespeicherter Erkenntnis-Standardtext wird nicht als eigener Eintrag geführt (`erkWert === null`); nur wer den Text im Dossier ausdrücklich gespeichert hat, behält seinen Wortlaut. Bereits gespeicherte eigene Texte werden nicht verändert.
+
 ## 9. Prüfhistorie
 
 - 22.11.2026: Bestandsaufnahme (Claude, `f29bad8`).
@@ -161,4 +175,5 @@ Commitfolge auf `refactor/phase5c1b-zustandsformat-20261122`: Store → E7 → E
 - 22.11.2026: Beginn 5c1b auf Anweisung Master Wayne; Umsetzung als Draft (Abschnitt 8b).
 - 22.11.2026: Unabhängiges Review von ChatGPT zu #111 (Review 6014052284, Head `2cb4185`): Blocker (Ladepfad `Store.load` → `init`) und drei Absicherungen; von Claude gegen den Code geprüft und am Verhalten reproduziert (Test A auf dem alten Stand: vorhandener Zustand durch einen frischen ersetzt). Korrektur in Abschnitt 8b. Keine Merge-Freigabe.
 - 22.11.2026: Nachprüfung von ChatGPT zu #111 (Review 6014282037, Head `978d7a2`): Hauptpfade behoben, Restfall leerer Schlüssel; von Claude am Code bestätigt und korrigiert (siehe 8b). Keine Merge-Freigabe.
+- 22.11.2026: Entscheidung E8 (Option C) durch Master Wayne; Beginn 5c2a (Abschnitt 8c).
 - Korrektur: Mehrere Dokumente dieser Phase trugen irrtümlich das Datum 23.11.2026; berichtigt auf 22.11.2026. Die Branchnamen der PRs #105 bis #109 enthalten dasselbe falsche Datum (`…-20261123`); sie bleiben aus Nachvollziehbarkeitsgründen unverändert.

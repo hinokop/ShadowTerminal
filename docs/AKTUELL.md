@@ -52,7 +52,7 @@ Erledigt: #111 (Phase 5c1b), der Dokumentationsstand #112 und die dauerhafte CI 
 
 1. **Dokumentationsnachtrag** zu #111 und #114 (PR #113).
 2. **CI-Konsolidierung** vor 5c2: Schritt 1 (dauerhafte Prüfung, `.github/workflows/ci.yml`) ist mit #114 in `main` (`c9e48ab`); der erste Push-Lauf auf `main` (45075611403) ist grün (91 grün, 0 unerwartet rot). Als Nächstes: wiederholt erfolgreiche Läufe abwarten, dann die zwölf phasengebundenen Workflows in einem eigenen PR entfernen; Branch-Schutz erst danach und nur auf Entscheidung von Master Wayne. Vorgemerkt: die Einschränkung von `lage-box` (`BEKANNT_NUR`) im Test-Runner weiter absichern.
-3. **5c2:** verbliebene Altzugriffe auf Missionsfelder (`ALT()`, Darstellung) entfernen, Daten im Altbestand bewahren. Vorher gesonderte Entscheidung (Abschnitt 5, Punkt 1).
+3. **5c2:** in zwei Schritten, Daten im Altbestand bleiben erhalten. **5c2a:** Darstellung ausblenden (Entscheidung C, Draft). **5c2b:** danach ungenutzte Funktionen und verbliebenen `ALT()`-Rest-Code nach Referenzprüfung entfernen.
 4. **Branch-Bereinigung:** nur nach Abgleich und ausdrücklicher Freigabe.
 5. **Phase 6:** Unix-/Linux-Realismus im Terminal und schrittweise Englischumstellung ([terminal-entwicklungsplan-2026-11.md](terminal-entwicklungsplan-2026-11.md)), Modernisierung der Oberfläche modulweise.
 
@@ -66,7 +66,7 @@ Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Fre
 
 ## 5. Offene Entscheidungen und Produktideen
 
-1. **Alte Missionsdaten in der Darstellung** (vor 5c2): Sie fließen heute in Erkenntnislage, die Tabelle „Aussagen des Agenten“, Belege und Adresshinweise ein. Optionen: belassen, in eigene Dossierdaten überführen oder ausblenden. Die Daten selbst bleiben in jedem Fall erhalten.
+1. **Alte Missionsdaten in der Darstellung:** entschieden am 22.11.2026 (Option C, ausblenden; Daten bleiben unverändert in `STATE.altbestand`). Umsetzung als Draft 5c2a (Abschnitt 8c in [phase5c-schemainventar.md](phase5c-schemainventar.md)); die Entfernung des Rest-Codes folgt als 5c2b.
 2. **Passwortsperre für das Modul Profil** (Produktidee, nicht Teil von Phase 5c): analog zur Sperre einzelner Dossiers, Entsperren über Eingabe oder Terminal. Offen für Vorschläge.
 3. **Weitere Vormerkungen:** Notizfelder nur als „Bisherige Notizen“ sichtbar, wenn Text vorhanden ist; Entscheidung zu den Lichtbildern `l-9052` und `l-9053`; lokale Bereitstellung von MapLibre.
 4. **Veraltete Texte im Code** (nicht Gegenstand dieses Dokumentations-PR): der Dateikopf von `akten-modul.js` beschreibt noch Akten, Schwärzungen und Einsichtsanträge, produktiv zeigt die Ablage nur den lokalen Eingang (`renderAkten`); die Startfehlermeldung in `index.html` nennt noch `dialog.js` und `klassifikator.js`, die nicht mehr existieren. Bereinigung gehört zu 5c2 oder einer eigenen Runde. Ebenso trägt der Kopf von `docs/phase5c-schemainventar.md` noch „Reine Bestandsaufnahme, kein Code geändert“ mit Basis `c19b93b`; das Dokument ist Entscheidungshistorie, wird aber seit #111 auch für die Umsetzung herangezogen und sollte im Zuge von 5c2 aktualisiert werden.
