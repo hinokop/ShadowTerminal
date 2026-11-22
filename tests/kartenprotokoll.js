@@ -12,10 +12,10 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   const id = await p.evaluate(() => STATE.dossiers.eigene.find(x => x.name === 'Protokolltest').id);
   await p.evaluate(i => { dispatch({ type: 'SICHTUNG_HINZU', id: i, ort: 'Hauptbahnhof', text: 'Person gesehen', guete: 'plausibel', quelle: 'Meldung' }); }, id);
   await p.evaluate(() => { dispatch({ type: 'PIN_ANGELEGT', ll: [52.52, 13.4] }); });
-  /* Zonen setzen den Missionsrahmen voraus (zDef); Missionseinträge selbst werden nicht protokolliert */
-  await p.evaluate(() => { dispatch({ type: 'KENNWORT_SCHALTER', an: false }); dispatch({ type: 'STATUS_GESETZT', status: 'Standby' }); dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); dispatch({ type: 'MISSION_BEGINN_JETZT' }); });
+  /* Phase 5b7: Profilzonen (ZO-) statt der stillgelegten Missionszonen; Missionsaktionen werden nicht protokolliert */
+  await p.evaluate(() => { dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); });
   const vorZone = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
-  await p.evaluate(() => { dispatch({ type: 'ZONE_ANGELEGT', ll: [52.51, 13.41] }); });
+  await p.evaluate(() => { dispatch({ type: 'OZONE_ANGELEGT', ll: [52.51, 13.41] }); });
   ok.missionNichtErfasst = (await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length)) === vorZone + 1;
   /* Befund 1: echte Änderungen (auch "leicht") rein, simulierte Handler-Ereignisse raus */
   const vor1 = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
@@ -26,9 +26,8 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   const arten = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.map(x => x.art));
   ok.erfasst = ['Sichtung', 'Pin', 'Zone'].every(a => arten.includes(a)) && arten.length >= 3;
   const vorH = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
-  const hLog = await p.evaluate(() => { const L = STATE.log.length; dispatch({ type: 'ZONEN_EREIGNIS', id: 'ZN-001' }); return STATE.log.length - L; });
+  await p.evaluate(() => { dispatch({ type: 'ZONEN_EREIGNIS', id: 'ZN-001' }); });   /* stillgelegtes Handler-Ereignis: ohne Protokolleintrag */
   ok.handlerNichtErfasst = (await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length)) === vorH;
-  ok.handlerEreignisLief = hLog >= 1;
   /* Auswahl, Navigation, Mausaktionen erzeugen nichts */
   const n0 = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
   await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule(); });
@@ -75,11 +74,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.selectOption('#kp-filter', ''); await p.click('#kp-leeren'); await p.waitForTimeout(300);
   await p.evaluate(() => { const d = document.getElementById('dlg'); const btn = Array.from(d.querySelectorAll('button')).find(x => /Protokoll leeren/.test(x.textContent)); btn && btn.click(); }); await p.waitForTimeout(300);
   ok.leeren = (await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length)) === 0 && await p.evaluate(i => (STATE.dossiers.entitaeten[i].sichtungen || []).length >= 1, id);
-  /* Mehrfachänderung an Zonen wird erfasst */
-  const vorM = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.length);
-  await p.evaluate(() => { dispatch({ type: 'ZONE_ANGELEGT', ll: [52.55, 13.45] }); dispatch({ type: 'ZONEN_MEHRFACH', ids: ['ZN-001', 'ZN-002'], op: 'radius', wert: 500 }); dispatch({ type: 'ZONEN_MEHRFACH', ids: ['ZN-001', 'ZN-002'], op: 'art', wert: 'zugriff' }); });
-  const mehr = await p.evaluate(() => PROFIL.kartenProtokoll.eintraege.map(x => x.aktion).filter(a => /Mehrfachauswahl/.test(a)).length);
-  ok.mehrfachErfasst = mehr >= 1;
+  /* Mehrfachänderung betraf nur die stillgelegten Missionszonen (ZONEN_MEHRFACH); seit 5b7 historisch, siehe zn/zn3 */
   /* Echter Reload: abgelaufener Eintrag im gespeicherten Profil verschwindet beim Laden, ohne dass die Karte geöffnet wird */
   await p.evaluate(() => { PROFIL.kartenProtokoll.frist = 24; PROFIL.kartenProtokoll.eintraege = [{ id: 'KP-900', t: new Date(Date.now() - 100 * 3600000).toISOString(), art: 'Pin', aktion: 'Pin gesetzt', text: 'alt' }, { id: 'KP-901', t: new Date().toISOString(), art: 'Pin', aktion: 'Pin gesetzt', text: 'neu' }]; profilSpeichern(); });
   await p.reload(); await p.waitForTimeout(1500);

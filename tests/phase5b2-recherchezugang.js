@@ -1,6 +1,6 @@
 /* Phase 5b2: Dossier-/Kartenrecherche darf von altem Missions- und Ansprechpartnerstatus
    nicht eingeschränkt werden. Die manuelle Sperre bleibt für Marker, Graph und
-   Schreiboperationen wirksam. Historische wissen()-Semantik bleibt bestehen. */
+   Schreiboperationen wirksam. Seit 5b7 wirkt die historische wissen()-Semantik nicht mehr. */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
@@ -24,7 +24,7 @@ const { APP } = require('./_pfad');
          Rückwärtskompatibilitätsfall, ohne deren Timer anlaufen zu lassen. */
       STATE.missionsbetrieb = true;
       const alt = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && !e.eigen);
-      const andereMission = SCENARIO.entitaeten.find(e => e.mission !== 'STD' && !dossierOffen(e.mission));
+      const andereMission = SCENARIO.entitaeten.find(e => e.mission !== 'STD' && !freigeschaltet(e.mission));
       if (!alt || !andereMission) return null;
       IZ()[alt.id] = { status: 'bekannt' };
       PROFIL.koord[alt.id] = [52.52, 13.405];
@@ -37,6 +37,7 @@ const { APP } = require('./_pfad');
       VIEW.karte.ebenen.sichtungen = true;
       const marker = karteMarker();
       const v = { alt: alt.id, zweite: andereMission.id,
+        altfeld: STATE.missionsbetrieb === true && IZ()[alt.id].status === 'bekannt', mb: missionsbetrieb(),
         wissen: wissen(alt), info: infoGesperrt(alt), zweiteOffen: dossierOffen(andereMission.mission),
         altMarker: marker.some(m => m.id === alt.id && m.entitaet),
         zweiteMarker: marker.some(m => m.id === andereMission.id && m.entitaet),
@@ -46,8 +47,9 @@ const { APP } = require('./_pfad');
       return v;
     });
     assert.ok(zuerst, 'Standard- und Missionsdossier vorhanden');
-    assert.deepEqual([zuerst.wissen, zuerst.info, zuerst.zweiteOffen],
-      ['bekannt', true, false], 'historische Wissens- und Missionsfreigabe bleiben unverändert');
+    /* Phase 5b7: gespeicherte Altfelder bleiben erhalten, der stillgelegte Missionsbetrieb wirkt nicht mehr. */
+    assert.deepEqual([zuerst.altfeld, zuerst.mb, zuerst.wissen, zuerst.info, zuerst.zweiteOffen],
+      [true, false, 'frei', false, true], 'Altfelder erhalten, historische Wissens- und Missionsfreigabe ohne Wirkung');
     assert.ok(zuerst.altMarker && zuerst.zweiteMarker && zuerst.sichtung && zuerst.bezug && zuerst.inRecherche,
       'Kartenmarker, Sichtung und Lagebezug trotz alter Freigabe vorhanden: ' + JSON.stringify(zuerst));
 

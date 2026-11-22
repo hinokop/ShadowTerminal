@@ -79,10 +79,10 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.evaluate(() => { karte3dEingang({ typ: 'karte3d-nutzer-bewegt' }, null); karte3dEingang({ typ: 'karte3d-kamera', kamera: { center: [13.9, 52.9], zoom: 15, pitch: 40, bearing: 0 } }, null); });
   ok.dreiDRueckfall = await p.evaluate(() => VIEW.karte.bezug === null && !document.getElementById('k-st-objekt') && /52\.900/.test(document.getElementById('k-st-pos').innerText) && /13\.900/.test(document.getElementById('k-st-pos').innerText));
   await p.evaluate(() => { VIEW.karte.ansicht3d = false; });
-  /* F: Gegenprobe mit Auftrag */
+  /* F: Gegenprobe nach Missionsaktionen (seit 5b7 entsteht kein Auftragsrahmen mehr) */
   await p.evaluate(() => { dispatch({ type: 'KENNWORT_SCHALTER', an: false }); dispatch({ type: 'STATUS_GESETZT', status: 'Standby' }); dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); dispatch({ type: 'MISSION_BEGINN_JETZT' }); VIEW.karte.bezug = null; VIEW.karte.statusOffen = true; dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; renderModule(); });
   await p.waitForTimeout(800);
-  ok.auchMitAuftragNurLage = await p.evaluate(() => !!zDef() && !!$('k-st-licht') && !!$('k-st-pos') && ['k-st-stufe', 'k-st-ci', 'k-st-ziele', 'k-st-fenster'].every(i => !$(i)));
+  ok.auchMitAuftragNurLage = await p.evaluate(() => zDef() === null && !!$('k-st-licht') && !!$('k-st-pos') && ['k-st-stufe', 'k-st-ci', 'k-st-ziele', 'k-st-fenster'].every(i => !$(i)));
   /* Rücksprung bei aktiver 3D-Ansicht behält den Objektbezug der Lage-Box (Kamerafahrt darf ihn nicht löschen) */
   await p.evaluate(() => { dispatch({ type: 'OZONE_ANGELEGT', ll: [52.51, 13.41] }); const id = PROFIL.zonen[PROFIL.zonen.length - 1].id; window.__zid = id; VIEW.karte.bezug = null; VIEW.karte.ansicht3d = true; kartenObjektZeigen(id); });
   ok.bezugNach3DRuecksprung = await p.evaluate(() => VIEW.karte.bezug === window.__zid);

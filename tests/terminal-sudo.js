@@ -118,17 +118,16 @@ const { APP } = require('./_pfad');
     assert.doesNotMatch(spuren, /geheim1|falsch2|falsch3|pw-test-12|SUDO_DISCARD_SENTINEL_5F83B2/);
     assert.deepEqual(await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.filter(x => x.startsWith('sudo open') || x.startsWith('sudo map')).length > 0), true);
 
-    /* Freigabe durch den Ansprechpartner bleibt: sudo hebt nur die manuelle Sperre auf */
+    /* sudo hebt nur die manuelle Sperre auf; das gespeicherte Ansprechpartnermerkmal bleibt (seit 5b7 wirkungslos) */
     const info = await p.evaluate(() => {
       dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
-      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && wissen(x) === 'unbekannt');
+      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.mission === 'STD' && !IZ()[x.id] && !dossierGesperrt(x));
       IZ()[e.id] = { status: 'bekannt' };
       dispatch({ type: 'DOSSIER_SPERREN', id: e.id }); dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule();
       return { id: e.id, wissen: wissen(e), info: infoGesperrt(e) };
     });
-    assert.deepEqual([info.wissen, info.info], ['bekannt', true]);
-    /* Historische Kenntnisstufen bleiben für alte Tests korrekt; die aktuelle
-       Terminalzugangsentscheidung bewertet ausschließlich die manuelle Sperre. */
+    assert.deepEqual([info.wissen, info.info], ['frei', false], 'Phase 5b7: gespeichertes Ansprechpartnermerkmal ohne Wirkung');
+    /* Die Terminalzugangsentscheidung bewertet ausschließlich die manuelle Sperre. */
     assert.deepEqual(await p.evaluate(i => {
       const z = zielZugang(i);
       return [z && z.id, z && z.gesperrt, z && z.info,
@@ -139,7 +138,7 @@ const { APP } = require('./_pfad');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     assert.equal(await gesperrt(info.id), false);
     assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: info.id });
-    assert.deepEqual(await p.evaluate(i => [wissen(entitaet(i)), infoGesperrt(entitaet(i)), (STATE.infozugang || {})[i]?.status], info.id), ['bekannt', true, 'bekannt'], 'historischer Erkenntnisstand unverändert');
+    assert.deepEqual(await p.evaluate(i => [wissen(entitaet(i)), infoGesperrt(entitaet(i)), (STATE.infozugang || {})[i]?.status], info.id), ['frei', false, 'bekannt'], 'gespeicherter Erkenntnisstand unverändert erhalten, ohne Wirkung');
     assert.deepEqual(await p.evaluate(i => {
       const z = zielZugang(i);
       return [z.id, z.gesperrt, z.info];

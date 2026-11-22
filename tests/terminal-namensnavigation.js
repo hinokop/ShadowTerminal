@@ -159,13 +159,13 @@ const { APP } = require('./_pfad');
     await cmd('echo maskierung-aktiv');
     assert.doesNotMatch(await out.textContent(), /Geheime Quellakte/,
       'nach weiterer Terminalausgabe keine kurzzeitig unmaskierten Namen');
-    /* Phase 5a: Die historische Wissens-/Einschätzungslogik bleibt unverändert,
-       Dossierliste und Terminalnamen lösen dagegen ohne Ansprechpartnerstatus auf. */
+    /* Phase 5a/5b7: Dossierliste und Terminalnamen lösen ohne Ansprechpartnerstatus auf;
+       seit 5b7 ist auch die historische Wissenslogik wirkungslos. */
     const historisch = await p.evaluate(() => {
       dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' });
       dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
-      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' &&
-        wissen(x) === 'unbekannt' && x.name && !dossierGesperrt(x));
+      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.mission === 'STD' &&
+        !IZ()[x.id] && x.name && !dossierGesperrt(x));
       if (!e) return null;
       IZ()[e.id] = { status: 'bekannt' };
       const z = zielZugang(e.id);
@@ -175,8 +175,9 @@ const { APP } = require('./_pfad');
         nameTreffer: terminalZielNamen('open', e.name).some(x => x.id === e.id) };
     });
     assert.ok(historisch && historisch.name, 'Test benötigt ein historisch eingeschränktes Dossier');
-    assert.equal(historisch.status, 'bekannt', 'Wissensstand bleibt für historische Abläufe erhalten');
-    assert.equal(historisch.info, true, 'historische Freigabe wird nicht künstlich überschrieben');
+    /* Phase 5b7: Das gespeicherte Merkmal bleibt erhalten, der stillgelegte Missionsbetrieb wirkt nicht mehr. */
+    assert.equal(historisch.status, 'frei', 'gespeicherter Wissensstand ohne Wirkung');
+    assert.equal(historisch.info, false, 'historische Freigabe ohne Wirkung');
     assert.deepEqual(historisch.zugang, { id: historisch.id, info: false, gesperrt: false },
       'Terminalzugang beruht allein auf der manuellen Sperre');
     assert.equal(historisch.recherche && historisch.nameTreffer, true,

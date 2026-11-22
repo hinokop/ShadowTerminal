@@ -1,7 +1,7 @@
 # Phase 5 – Inventar der alten Mission und Abbau in kleinen Schritten
 
-Stand: 22.11.2026. Basis: `main` nach Merge von #102 (`8837eeaa3896`).
-**Arbeitsdokument für Phase 5; Phasen 5a bis 5b4 in `main`, Phase 5b5 (#103) als Draft, Phase 5b6 als darauf aufbauender Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
+Stand: 23.11.2026. Basis: `main` nach Merge von #104 (`7e21bc2`).
+**Arbeitsdokument für Phase 5; Phasen 5a bis 5b6 in `main`, Phase 5b7 als Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
 Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische Bestandsaufnahme: [missionsabhaengigkeiten.md](missionsabhaengigkeiten.md).
 
 ## Trennlinien
@@ -96,7 +96,7 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Regression:** Neuer verpflichtender Test `phase5b4-arbeitszugang` deckt bekannte/unbekannte historische Freigabestufen, Modul X, Arbeitsstand, Inbox-Eingang, Unterlagenzuordnung und -Entfernung, Registratur-Abwesenheit, manuelle Sperre und Entsperren ab. `ablage-eingang` erwartet nun sofortige Eingangsansicht ohne alte Register; `ak2` prüft historische Einsicht nur noch als Legacy-Renderer. Standardauswahl plus isolierte und gezielte CI-Prüfungen müssen vollständig bestehen. Vor vollständigem Ergebnis keine Merge-Empfehlung.
 
-## Phase 5b5 – Historische Missionsnachträge aus der produktiven Dossierübersicht lösen (Draft)
+## Phase 5b5 – Historische Missionsnachträge aus der produktiven Dossierübersicht lösen (PR #103 integriert)
 
 **Ausgangslage auf `main` nach #102:** In `index.html` → `dossierAnsicht(e)` werden bei `missionsbetrieb() && freigeschaltet(n.mission)` unterhalb der regulären Stammdaten weiterhin `e.nachtraege` als Felder `Nachtrag M1: Rolle/Eckdaten` gerendert. Die produktive Dossierübersicht hat dadurch eine sichtbare Abhängigkeit von einem historischen Missionsstatus, obwohl die alte Freigabe- und Rudimentmaske seit 5b3 entfernt ist.
 
@@ -106,7 +106,7 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Abnahme:** Neuer `tests/phase5b5-dossier-nachtraege.js` prüft einen tatsächlich vorhandenen `M1`-Nachtrag mit ausdrücklich aktivierter alter Freischaltung, die reguläre Dossierübersicht (Bedienelemente und Beschreibung) ohne Nachtrags-Felder, durch das Rendern unveränderte Nachtragsdaten sowie Sperre/Entsperren. **Nicht abgedeckt:** die vom alten Kenntnisstand (`schutz()`/`wissen()`) abhängige Darstellung von Kennungen in Beschreibung und Eckdaten; siehe Phase 5b6. Er ist Pflichtbestandteil von `tests/runall.js`. Zusätzlich gezielte Dossier-, Altprofil- und Missionsregressionen sowie die vollständige Standardauswahl auf dem exakten PR-Head. Echte Windows-Altprofile sind damit noch nicht abgenommen. **Draft bis vollständige CI-Ergebnisse und separate Eigentümerfreigabe.**
 
-## Phase 5b6 – Modul Dossiers im Altzustand identisch zum Recherchebetrieb (Draft, Basis 5b5)
+## Phase 5b6 – Modul Dossiers im Altzustand identisch zum Recherchebetrieb (PR #104 integriert)
 
 **Ausgangslage nach 5b5 (empirisch, nicht nur statisch):** Mit `missionsbetrieb=true` und angenommener `M1` weichen alle 31 Dossiers im Reiter Übersicht vom Recherchebetrieb ab. Ursache sind die an `wissen()` gekoppelten Helfer und ein eigenes `missionsbetrieb()`-Gate:
 - Beschreibung/Eckdaten über `schutz()`: Kennungen werden zu Namen oder zu Platzhaltern („Beirat bei eine Organisation“).
@@ -120,6 +120,22 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 **Bewusst unverändert:** `wissen()`, `schutz()`, `anzeige()`, `kennung()`, `pool()` und alle Dialog-/Missionspfade. Ebenfalls außerhalb dieses Schritts: Kartenauswahl und Zonenlage (`karteAuswahlAnzeige`, `zoneLage`, `zonePopup`, `zoneBezug`), die Dienstadresse der Adressleiste (folgt `STATE.kontext`), Profilmodul. Diese werden gesondert inventarisiert.
 
 **Abnahme:** Neuer `tests/phase5b6-dossier-kennungen.js` prüft als Differenztest alle Dossiers (Text, Element-IDs, SVG-Texte/-Titel, `aria-label`, Verbindungsziele, Adresspfad) im Recherche- gegen den Altzustand auf Gleichheit. Zusätzlich: Ausblenden von `V-S1` im Altzustand ohne Szenarioänderung, manuelle Sperre samt Graph-Nachbarschaft, unverändertes Altverhalten von `schutz()`/`anzeige()`. Gegenprobe: gegen den 5b5-Stand rot (31 Dossiers, alle sechs Kategorien). Die historischen Tests `e2e`, `kt3`, `map2` außerhalb der Standardauswahl zeigen auf 5b5 und 5b6 dasselbe Ergebnis. Echte Windows-Altprofile sind nicht abgenommen. **Draft bis vollständige CI-Ergebnisse und separate Eigentümerfreigabe; Merge erst nach #103.**
+
+## Phase 5b7 – Missionsbetrieb stillgelegt (Draft)
+
+**Einordnung (Nutzerentscheidung 22.11.2026):** `STATE.missionsbetrieb === true` entstand nur durch sechs Missionsaktionen, die keine Oberfläche mehr auslöst; Altprofile ohne das Feld liefen ohnehin im Recherchebetrieb. Die Befunde aus 5b5/5b6 waren daher im Code real, für den Nutzer aber nicht erreichbar. Statt jede Ansicht einzeln zu entkoppeln, wird die Markierung zentral stillgelegt.
+
+**Eingriff:** `missionsbetrieb()` liefert konstant `false`; `dispatch` setzt das Feld nicht mehr, `MISSIONS_AKTIONEN` entfällt. Ein gespeichertes Feld bleibt unverändert im Zustand und wird mitgespeichert. Damit sind alle sieben Wirkstellen inaktiv: Hintergrund-Zeitgeber (`tick`, `planeAlle`), Nachbearbeitung in `dispatch`, Sitzungsstart-Zweige, `wissen()`, `dossierOffen()`, `karteOhneMission()`.
+
+**Tests – Einordnung nach tatsächlichem Verhalten (Volllauf mit stillgelegter Markierung):**
+- **Historisch, aus der Standardauswahl genommen** (prüfen Missionsverhalten, per Namen weiter aufrufbar, in `runall.js` als `HISTORISCH`): `zn`, `zn3`, `zev` (Auto-/Lagezonen), `abd` (Auffälligkeit), `zb`, `sm` (Dialog), `ds2`, `wk3` (Rudiment/Freigabe), `zp` (Zugriffspunkte), `kwz` (Kennwort → Auftrag), `m1flow`, `dp` (DISPO), `al`, `nx` (gemischt, siehe unten).
+- **Produktiver Teil ausgegliedert:** `alterung` (aus `al`: Fristen, Abwertung/Bestätigung von Verbindungen, Dossierdarstellung; ohne Regie-Zeitraffer), `pin-nummern-tasten` (aus `nx`: Pin-Nummern, Taste X, Sperren-Knopf).
+- **Vorbedingung angepasst, produktive Prüfungen unverändert:** `phase5b2`–`phase5b6`, `sichtung-export`, `terminal-namensnavigation`, `terminal-sudo`, `recherche-oberflaeche`, `lage-box` (erwarteten einen wirksamen Altzustand bzw. Auftragsrahmen). `kartenprotokoll` nutzt Profilzonen (`OZONE_ANGELEGT`) statt Missionszonen; die Prüfung der Mehrfachänderung betraf nur Missionszonen und entfällt. `missionstrennung` sichert jetzt zu, dass auch nach Missionsaktionen nichts abgearbeitet wird.
+- **Neu:** `phase5b7-missionsbetrieb` – Missionsaktionen setzen kein Altfeld; ein gespeichertes Altfeld übersteht Speichern und Neuladen und bleibt wirkungslos. Gegenprobe gegen `main`: rot.
+
+**Nebenbefund `dp`:** Die bekannte Instabilität hat eine feste Ursache. Der Test wählt die Meldung über `/informieren/`, der Knopf verlangt `/bitte (den )?(Ansprechpartner|Handler) informieren/`; die zufällige Variante `szenario.js:1031` erfüllt nur das erste Muster. Mit 5b7 ist `dp` historisch.
+
+**Bewusst offen:** Der Missionscode selbst ist noch vorhanden. Er wird über Aktionen aus Tests teilweise noch ausgeführt (`freigeschaltet`, `LM()`), ist aus der Oberfläche aber nicht erreichbar. Entfernung in getrennten Schritten (5b8 ff.), siehe Erreichbarkeitsanalyse.
 
 ## Nächste isolierte Schritte nach Abnahme von 5a
 

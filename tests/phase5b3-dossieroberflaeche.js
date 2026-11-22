@@ -20,12 +20,12 @@ const { APP } = require('./_pfad');
     await p.waitForFunction(() => !document.body.classList.contains('locked'));
 
     const ids = await p.evaluate(() => {
-      STATE.missionsbetrieb = true;  /* Nur der historische Sonderfall, keine Missions-Timer */
+      STATE.missionsbetrieb = true;  /* gespeichertes Altfeld; seit 5b7 ohne Wirkung */
       const known = SCENARIO.standard.dossiers.find(e => e.typ === 'Person');
       if (!known) return null;
       IZ()[known.id] = { status: 'bekannt' };
-      const unknown = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && e.id !== known.id && wissen(e) === 'unbekannt');
-      const unaccepted = SCENARIO.entitaeten.find(e => e.typ === 'Person' && e.mission !== 'STD' && !dossierOffen(e.mission));
+      const unknown = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && e.id !== known.id && !IZ()[e.id]);
+      const unaccepted = SCENARIO.entitaeten.find(e => e.typ === 'Person' && e.mission !== 'STD' && !freigeschaltet(e.mission));
       if (!unknown || !unaccepted) return null;
       return { known: known.id, unknown: unknown.id, unaccepted: unaccepted.id,
         knownW: wissen(known), knownInfo: infoGesperrt(known),
@@ -34,8 +34,8 @@ const { APP } = require('./_pfad');
     });
     assert.ok(ids, 'historisch bekanntes, unbekanntes und nicht freigeschaltetes Dossier verfügbar');
     assert.deepEqual([ids.knownW, ids.knownInfo, ids.unknownW, ids.unknownInfo, ids.unacceptedW, ids.unacceptedOffen],
-      ['bekannt', true, 'unbekannt', true, 'frei', false],
-      'alle drei alten Wissens-/Missionsfreigabezustände korrekt identifiziert');
+      ['frei', false, 'frei', false, 'frei', true],
+      'Phase 5b7: gespeicherte alte Wissens-/Missionsfreigabezustände ohne Wirkung');
 
     const oeffnen = id => p.evaluate(i => {
       STATE.dossiers.auswahl = i;
