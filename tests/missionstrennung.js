@@ -22,16 +22,18 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   await anmelden();
   await p.evaluate(a => { localStorage.setItem(STORAGE_KEY, a.state); localStorage.setItem(PROFIL_KEY, a.profil); }, { state: zurueck(JSON.stringify(alt)), profil: zurueck(JSON.stringify(FIX.profil)) });
   await anmelden();
-  const messen = () => p.evaluate(() => ({
-    plan: STATE.plan.length, ereignisse: JSON.stringify(STATE.ereignisse || {}), abd: ((STATE.abdruck && STATE.abdruck.spuren) || []).length,   /* Phase 5b9: abdS() entfernt; gespeichertes Feld direkt */ folge: JSON.stringify(STATE.serie.folge),
-    komm: Object.values(STATE.komm.kanaele).reduce((n, k) => n + k.nachrichten.length, 0),
+  /* Phase 5c1b: Die Missionsfelder des Altprofils liegen nach der Überführung unverändert in STATE.altbestand */
+  const messen = () => p.evaluate(() => { const Z = STATE.altbestand; return {
+    format: STATE.version, kernOhneAltfelder: ['plan', 'komm', 'missionen', 'kontext', 'serie'].every(k => !(k in STATE)),
+    plan: Z.plan.length, ereignisse: JSON.stringify(Z.ereignisse || {}), abd: ((Z.abdruck && Z.abdruck.spuren) || []).length,   /* Phase 5b9: abdS() entfernt; gespeichertes Feld direkt */ folge: JSON.stringify(Z.serie.folge),
+    komm: Object.values(Z.komm.kanaele).reduce((n, k) => n + k.nachrichten.length, 0),
     mission: STATE.log.filter(l => !['System', 'Profil', 'Dossier', 'Karte', 'Recherche', 'Ablage'].includes(l.modul)).length,
     lm: !!LM(), status: STATE.agent.status,
-    antwort: STATE.plan.some(x => x.id === 'F-901'), antwortNachricht: Object.values(STATE.komm.kanaele).some(k => k.nachrichten.some(m => m.text === 'Alte Antwort des Ansprechpartners')),
-    n900: (STATE.komm.kanaele.handler.nachrichten.find(m => m.id === 'N-900') || {}).status, statusLog: STATE.log.filter(l => l.aktion === 'Nachrichtenstatus geändert').length
-  }));
+    antwort: Z.plan.some(x => x.id === 'F-901'), antwortNachricht: Object.values(Z.komm.kanaele).some(k => k.nachrichten.some(m => m.text === 'Alte Antwort des Ansprechpartners')),
+    n900: (Z.komm.kanaele.handler.nachrichten.find(m => m.id === 'N-900') || {}).status, statusLog: STATE.log.filter(l => l.aktion === 'Nachrichtenstatus geändert').length
+  }; });
   const vor = await messen();
-  ok.altprofilGeladen = vor.lm && vor.status === 'Aktiv' && vor.plan >= 10;
+  ok.altprofilGeladen = vor.format === 5 && vor.kernOhneAltfelder && vor.lm && vor.status === 'Aktiv' && vor.plan >= 10;
   await p.waitForTimeout(14000);                                  /* der Rückstau stellt höchstens einen fälligen Eintrag je 12 s zu */
   const nach = await messen();
   ok.keinePlaneintraegeAbgearbeitet = nach.plan === vor.plan;
@@ -41,10 +43,10 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   ok.keineAltzustellung = vor.n900 === 'gesendet' && nach.n900 === 'gesendet' && nach.statusLog === vor.statusLog;
   /* --- Kartenpfade der Mission: im Recherchebetrieb weder sichtbar noch auslösbar ("Lage erfragen", Lage melden, Zonen des Auftrags) --- */
   const kp = await p.evaluate(() => {
-    const kommN = () => Object.values(STATE.komm.kanaele).reduce((n, k) => n + k.nachrichten.length, 0), v = { komm: kommN(), plan: STATE.plan.length, log: STATE.log.length };
+    const Z = STATE.altbestand, kommN = () => Object.values(Z.komm.kanaele).reduce((n, k) => n + k.nachrichten.length, 0), v = { komm: kommN(), plan: Z.plan.length, log: STATE.log.length };
     dispatch({ type: 'ZONE_ANGELEGT', ll: [52.5, 13.4] });
     const zid = (zonenEigene(KM()).slice(-1)[0] || {}).id; dispatch({ type: 'ZONE_ERFRAGT', id: zid }); dispatch({ type: 'ZONE_GEMELDET', id: zid });
-    return { sichtbar: karteZonen().some(z => !z.profil) || karteMarker().some(m => m.kat === 'standort'), komm: kommN() - v.komm, plan: STATE.plan.length - v.plan, log: STATE.log.length - v.log };
+    return { sichtbar: karteZonen().some(z => !z.profil) || karteMarker().some(m => m.kat === 'standort'), komm: kommN() - v.komm, plan: Z.plan.length - v.plan, log: STATE.log.length - v.log };
   });
   ok.keineMissionszonenAufDerKarte = !kp.sichtbar;
   ok.lageErfragenLoestNichtsAus = kp.komm === 0 && kp.plan === 0 && kp.log === 0;
@@ -81,29 +83,16 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   await p.waitForTimeout(4000);
   const spaet = await messen();
   ok.rechercheLoestNichtsAus = spaet.plan === vor.plan && spaet.ereignisse === vor.ereignisse && spaet.abd === vor.abd && spaet.mission === vor.mission && spaet.komm === vor.komm;
-  ok.gespeicherteFelderErhalten = await p.evaluate(() => STATE.agent.status === 'Aktiv' && STATE.plan.length > 0 && !!STATE.missionen && !!STATE.kontext && typeof STATE.automatik === 'boolean');
+  ok.gespeicherteFelderErhalten = await p.evaluate(() => { const Z = STATE.altbestand; return STATE.agent.status === 'Aktiv' && Z.plan.length > 0 && !!Z.missionen && !!Z.kontext && typeof Z.automatik === 'boolean'; });
   /* --- Der Missionsablauf läuft, sobald eine Missionsaktion ausgeführt wird --- */
   await p.evaluate(() => { dispatch({ type: 'PROFIL_LEEREN' }); });
   await p.evaluate(() => { dispatch({ type: 'RESET' }); }); await p.waitForTimeout(800);
-  await p.evaluate(() => { dispatch({ type: 'KENNWORT_SCHALTER', an: false }); dispatch({ type: 'STATUS_GESETZT', status: 'Standby' }); dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); dispatch({ type: 'MISSION_BEGINN_JETZT' });
-    /* Der Missions-Rückstau verarbeitet höchstens einen überfälligen Eintrag je
-       zwölf Sekunden. Der gezielte Probeeintrag muss deshalb vor den anderen
-       Missionsplaneinträgen liegen, die ein Reset/Start erzeugt hat. */
-    const zuerst = STATE.plan.reduce((min, x) => {
-      const t = Date.parse(x.faelligAm);
-      return Number.isFinite(t) ? Math.min(min, t) : min;
-    }, Date.now());
-    planen(STATE, { typ: 'skript', kanal: 'handler', text: 'Prüfnachricht Missionsablauf', faelligAm: new Date(zuerst - 1000).toISOString() }); });
-  const n0 = await p.evaluate(() => STATE.plan.filter(x => x.text === 'Prüfnachricht Missionsablauf').length);
-  /* Auf den tatsächlichen Sekunden-Tick warten statt auf eine feste kurze
-     Pause; unter paralleler Browserlast können Timer deutlich verzögert sein. */
-  await p.waitForFunction(() => !STATE.plan.some(x => x.text === 'Prüfnachricht Missionsablauf'), null, { timeout: 8000 }).catch(() => null);
-  const n1 = await p.evaluate(() => STATE.plan.filter(x => x.text === 'Prüfnachricht Missionsablauf').length);
-  /* Phase 5b7: auch nach Missionsaktionen wird nichts abgearbeitet und das Altfeld nicht gesetzt */
-  ok.missionsablaufStillgelegt = n0 === 1 && n1 === 1 && await p.evaluate(() => !missionsbetrieb());
-  await p.evaluate(() => { dispatch({ type: 'AUTOMATIK_GESETZT', ein: false }); planen(STATE, { typ: 'antwort', kanal: 'handler', text: 'Prüfantwort bei ausgeschalteter Automatik', faelligAm: new Date(Date.now() - 1000).toISOString() }); });
+  /* Phase 5c1b: Nach dem Zurücksetzen gibt es weder Missionsfelder noch Altbestand. Ein künstlich eingesetzter,
+     fälliger Planeintrag wird vom Sekundentakt nicht abgearbeitet. */
+  ok.resetOhneAltfelder = await p.evaluate(() => STATE.version === 5 && !('altbestand' in STATE) && Object.keys(STATE).every(k => ['version', 't0', 'idv', 'ui', 'seq', 'dossiers', 'log', 'agent', 'alterung'].includes(k)));
+  await p.evaluate(() => { STATE.plan = [{ id: 'F-999', typ: 'skript', kanal: 'handler', text: 'Prüfnachricht Missionsablauf', faelligAm: new Date(Date.now() - 1000).toISOString() }]; });
   await p.waitForTimeout(3500);
-  ok.antwortStillgelegt = await p.evaluate(() => STATE.plan.some(x => x.text === 'Prüfantwort bei ausgeschalteter Automatik') && !STATE.komm.kanaele.handler.nachrichten.some(m => m.text === 'Prüfantwort bei ausgeschalteter Automatik'));
+  ok.missionsablaufStillgelegt = await p.evaluate(() => STATE.plan.length === 1 && !missionsbetrieb() && !('komm' in STATE));
   ok.keineFehler = err.length === 0;
   console.log(JSON.stringify(ok, null, 1)); console.log(JSON.stringify({ vor, nach, spaet })); if (err.length) console.log(err.slice(0, 5));
   await b.close(); process.exit(Object.values(ok).every(Boolean) ? 0 : 1);

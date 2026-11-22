@@ -1,0 +1,50 @@
+name: Phase 5c1b - State format 5 with legacy archive
+
+on:
+  push:
+    branches:
+      - refactor/phase5c1b-zustandsformat-20261122
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: State format 5, migration safety and complete standard selection
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser dependencies
+        working-directory: tests
+        run: |
+          npm install --no-save --no-package-lock playwright@1.57.0 maplibre-gl@4.7.1
+          npx playwright install --with-deps chromium
+      - name: Create non-secret CARTO fixture
+        run: |
+          printf 'window.KARTEN_SCHLUESSEL = {carto: "cb1_ci_fixture_not_a_real_token"};\n' > kartenschluessel.js
+      - name: Python local archive bridge tests
+        run: python3 tests/terminal_bridge_pagination.py
+      - name: Syntax of all application scripts
+        run: |
+          for f in szenario.js karte-modul.js akten-modul.js recherche-modul.js profil-modul.js fall-modul.js arbeitsstand-modul.js; do node --check "$f"; done
+      - name: Format, migration and legacy-reader regressions
+        env:
+          FT_PARALLEL: '2'
+        run: |
+          node tests/runall.js phase5c1b-zustandsformat phase5c1b-ladefehler lage-box phase5c1a-profiltexte missionstrennung rs identitaeten profil-arbeitsansicht phase5b2-recherchezugang phase5b3-dossieroberflaeche phase5b5-dossier-nachtraege phase5b6-dossier-kennungen phase5b7-missionsbetrieb recherche-oberflaeche terminal-sudo terminal-onion speicher-voll dossier-nummern fallpaket arbeitsstand aussagen-alt
+      - name: Complete standard selection
+        env:
+          FT_PARALLEL: '4'
+        run: node tests/runall.js
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5c1b-test-logs
+          path: /tmp/ft-out/*.txt
+          if-no-files-found: ignore
+          retention-days: 3

@@ -16,7 +16,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.goto(PF.APP); await p.waitForTimeout(5200); await p.fill('#gate-pw', 'pw-test-123'); const z = await p.$('#gate-pw2'); if (z && await z.isVisible()) await z.fill('pw-test-123'); await p.click('#gate-go');
   await p.waitForFunction(() => !document.body.classList.contains('locked'), null, { timeout: 20000 });
   const ok = {};
-  ok.ohneAuftrag = await p.evaluate(() => !!STATE.vorlauf && !zDef());
+  ok.ohneAuftrag = await p.evaluate(() => !('vorlauf' in STATE) && !('altbestand' in STATE) && !LM() && !zDef());   /* Phase 5c1b: frischer Zustand im Format 5 ohne Missionsfelder */
   const text = id => p.evaluate(i => { const e = document.getElementById(i); return e ? e.innerText : null; }, id);
   /* A: gezielter Sprung aus dem Dossier */
   await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; VIEW.karte.statusOffen = false; VIEW.karte.ebenen.kacheln = true; VIEW.karte.lat = 50; VIEW.karte.lon = 10; VIEW.karte.zoom = 6; renderModule(); });

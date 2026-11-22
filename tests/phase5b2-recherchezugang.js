@@ -24,9 +24,9 @@ const { APP } = require('./_pfad');
          Rückwärtskompatibilitätsfall, ohne deren Timer anlaufen zu lassen. */
       STATE.missionsbetrieb = true;
       const alt = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && !e.eigen);
-      const andereMission = SCENARIO.entitaeten.find(e => e.mission !== 'STD' && !freigeschaltet(e.mission));
+      const andereMission = SCENARIO.entitaeten.find(e => e.id === 'P-0001' && !freigeschaltet('M1'));   /* Phase 5c1b: frühere Missionsdossiers gehören zum Beispielbestand (mission 'STD') */
       if (!alt || !andereMission) return null;
-      IZ()[alt.id] = { status: 'bekannt' };
+      /* Phase 5c1b: alter Kenntnisstand liegt nur noch im Altbestand */ STATE.altbestand = Object.assign(STATE.altbestand || {}, { infozugang: Object.assign((STATE.altbestand && STATE.altbestand.infozugang) || {}, { [alt.id]: { status: 'bekannt' } }) });
       PROFIL.koord[alt.id] = [52.52, 13.405];
       PROFIL.koord[andereMission.id] = [52.523, 13.406];
       const d = STATE.dossiers.entitaeten[alt.id];

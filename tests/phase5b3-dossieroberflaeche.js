@@ -23,9 +23,9 @@ const { APP } = require('./_pfad');
       STATE.missionsbetrieb = true;  /* gespeichertes Altfeld; seit 5b7 ohne Wirkung */
       const known = SCENARIO.standard.dossiers.find(e => e.typ === 'Person');
       if (!known) return null;
-      IZ()[known.id] = { status: 'bekannt' };
+      /* Phase 5c1b: alter Kenntnisstand liegt nur noch im Altbestand */ STATE.altbestand = Object.assign(STATE.altbestand || {}, { infozugang: Object.assign((STATE.altbestand && STATE.altbestand.infozugang) || {}, { [known.id]: { status: 'bekannt' } }) });
       const unknown = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && e.id !== known.id && !IZ()[e.id]);
-      const unaccepted = SCENARIO.entitaeten.find(e => e.typ === 'Person' && e.mission !== 'STD' && !freigeschaltet(e.mission));
+      const unaccepted = SCENARIO.entitaeten.find(e => e.typ === 'Person' && e.id === 'P-0001' && !freigeschaltet('M1'));   /* Phase 5c1b: früheres Missionsdossier, Auftrag nicht angenommen */
       if (!unknown || !unaccepted) return null;
       return { known: known.id, unknown: unknown.id, unaccepted: unaccepted.id,
         knownW: wissen(known), knownInfo: (typeof infoGesperrt === 'function' && infoGesperrt(known)),
