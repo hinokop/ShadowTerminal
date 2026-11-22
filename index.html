@@ -1316,10 +1316,12 @@ function profiltexteAnlegen(z) {
 }
 function profiltexteSpiegeln(z) {
   if (!z || !z.agent || !PROFIL.profiltexte) return;
-  PROFILTEXT_FELDER.forEach(function (f) { const x = PROFIL.profiltexte[f]; z.agent[f] = x.text; if (x.t) z.agent[f + 'Geaendert'] = x.t; });
+  PROFILTEXT_FELDER.forEach(function (f) { const x = PROFIL.profiltexte[f]; z.agent[f] = x.text; z.agent[f + 'Geaendert'] = x.t; });   /* Zeitpunkt stets mitspiegeln, auch null */
 }
-/* Fremde Texte (aus Profil- oder Zustandsimport) einarbeiten. quelle: { feld: { text, t, verdraengt? } }. Rückgabe: Zahl neu aufbewahrter Texte. */
-function profiltexteZusammenfuehren(quelle, herkunft) {
+/* Fremde Texte (aus Profil- oder Zustandsimport) einarbeiten. quelle: { feld: { text, t, verdraengt? } }. Rückgabe: Zahl neu aufbewahrter Texte.
+   leerstandGilt: Ein leerer Text mit Zeitpunkt bedeutet „bewusst geleert“ und wird in ein nie gesetztes Feld übernommen. Nur beim
+   Profilimport verlässlich; Zustandsdateien (Format 4) tragen einen Änderungszeitpunkt auch ohne jede Eingabe. */
+function profiltexteZusammenfuehren(quelle, herkunft, leerstandGilt) {
   let n = 0;
   const aufbewahren = function (lok, text, t, woher) {
     if (!text || text === lok.text || lok.verdraengt.some(function (v) { return v.text === text; })) return;
@@ -1329,10 +1331,10 @@ function profiltexteZusammenfuehren(quelle, herkunft) {
     const q = quelle && quelle[f], lok = PROFIL.profiltexte[f];
     if (!q || typeof q !== 'object') return;
     const text = typeof q.text === 'string' ? q.text : '', t = typeof q.t === 'string' && !isNaN(Date.parse(q.t)) ? q.t : null;
-    if (text && text !== lok.text) {
-      if (lok.t === null && !lok.text) { lok.text = text; lok.t = t || nowIso(); }
-      else aufbewahren(lok, text, t, herkunft);
-    }
+    if (lok.t === null && !lok.text) {                     /* nie gesetztes Feld übernimmt den Stand der Quelle */
+      if (text) { lok.text = text; lok.t = t || nowIso(); }
+      else if (leerstandGilt && t) lok.t = t;               /* bewusst geleert: Leerstand samt Zeitpunkt übernehmen */
+    } else if (text && text !== lok.text) aufbewahren(lok, text, t, herkunft);
     (Array.isArray(q.verdraengt) ? q.verdraengt : []).forEach(function (v) { if (v && typeof v.text === 'string') aufbewahren(lok, v.text, v.t, v.quelle || herkunft); });
   });
   return n;
@@ -2488,7 +2490,7 @@ const ACTIONS = {
       PROFIL.assessmentRotation = { start: q.assessmentRotation.start, bZuerst: q.assessmentRotation.bZuerst };
     }
     Object.keys(q.dokFristen || {}).forEach(function (k) { if (!(k in PROFIL.dokFristen)) PROFIL.dokFristen[k] = q.dokFristen[k]; });
-    const ptN = profiltexteZusammenfuehren(q.profiltexte, 'Profilimport ' + a.datei); profiltexteSpiegeln(STATE);   /* Phase 5c1a */
+    const ptN = profiltexteZusammenfuehren(q.profiltexte, 'Profilimport ' + a.datei, true); profiltexteSpiegeln(STATE);   /* Phase 5c1a */
     if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q, pinNeu);
     const zr = zonenImportieren(q, q.recherche && typeof rchProfilZusammenfuehren === 'function' ? rchProfilZusammenfuehren.abbildung : null);
     return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + zr + rchText + (ptN ? '; ' + ptN + ' abweichende(r) Profiltext(e) erhalten, vorhandener Text unverändert' : '') };
