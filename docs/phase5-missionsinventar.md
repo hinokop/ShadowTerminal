@@ -1,7 +1,7 @@
 # Phase 5 – Inventar der alten Mission und Abbau in kleinen Schritten
 
-Stand: 22.11.2026. Basis: `main` nach Merge von #99 (`64abb4e50825`).
-**Arbeitsdokument für Phase 5; Phase 5a und 5b1 integriert, Phase 5b2 ist ein neuer Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
+Stand: 22.11.2026. Basis: `main` nach Merge von #100 (`3dcba04fe2e3`).
+**Arbeitsdokument für Phase 5; Phasen 5a, 5b1 und 5b2 integriert, Phase 5b3 ist ein eigener Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
 Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische Bestandsaufnahme: [missionsabhaengigkeiten.md](missionsabhaengigkeiten.md).
 
 ## Trennlinien
@@ -53,7 +53,7 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Prüfung:** `node tests/runall.js sichtung-export terminal-archiv-zugriff karte-sperre-pins terminal-sudo al zb ds2`; danach vollständige Standardauswahl mit präzisem Head. Ein neuer Draft-PR erhält keinen automatischen Merge.
 
-## Phase 5b2 – Karte und Dossierzusatzansichten (Draft)
+## Phase 5b2 – Karte und Dossierzusatzansichten (PR #100 integriert)
 
 **Ausgangslage:** Nach PR #99 zeigten Karte und Dossier bei explizitem Altmissionsstatus weiterhin Zugriffsreste: `karteMarker`, `karteBezugVon` und Kartenortauflösung prüften `infoGesperrt`/das historische `pool()`; Dossier-Graph und Verbindungen waren über `kantenPool` an `wissen()`/`dossierOffen` gekoppelt; `renderDossier` blendete unabhängige Recherche- und Graph-Panels für ein bloß historisch beschränktes Dossier aus. Einige Dossier-Schreibaktionen verweigerten Änderungen allein wegen einer nicht angenommenen Mission.
 
@@ -68,6 +68,18 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 **Absichtliche Grenze:** `wissen()`, `dossierOffen()`, `kantenPool()`, `rudimentAnsicht()`, der Dossier-Hauptpanel-Zweig in `dossierAnsicht` sowie historische Nachrichten- und Missionsreducer/Timer bleiben für `al`, `zb`, `ds2` und weitere Legacy-Tests vorerst erhalten. `VERBINDUNG_GELOESCHT` schreibt bei laufender Altmission historische Szenario-Kanten weiterhin nicht um (zusätzliche Schutzregel unabhängig vom alten Ansprechpartnerfilter). Die komplette Entfernung dieser Pfade erfordert einen separaten UI-/Testmigrationsschritt.
 
 **Abnahme:** Einzeltest `node tests/runall.js phase5b2-recherchezugang`, gezielte Karte-/Dossier-/Altmissionstests und vollständige Standardauswahl. Vor Ende des CI-Laufs keine Erfolgsbehauptung. Windows-Altprofile und reale Archivbrücke werden bei einer späteren Integrationsabnahme geprüft. Kein automatischer Merge.
+
+## Phase 5b3 – Dossier-Hauptansicht ohne historische Freigabemasken (Draft)
+
+**Sichtbarer Produkt-Effekt:** `dossierAnsicht(e)` verzweigt nach der Prüfung von `dossierGesperrt(e)` künftig direkt zu den regulären Tabs (`Übersicht`, `Sichtungen`, `Chronik`). Die zwei vorherigen UI-Weichen `wissen(e)==='bekannt' → rudimentAnsicht(e)` und `infoGesperrt(e) → Zugriff beschränkt / Ansprechpartner` entfallen. Dies gilt auch für ein ausdrücklich aktiviertes Altprofil mit nicht angenommenen Missionen oder alten `infozugang`-Stufen. Der unabhängige Recherche- und Beziehungsblock aus 5b2 bleibt erhalten.
+
+**Sperrschutz:** Manuelle Dossiersperren werden **zuerst** geprüft und verhindern weiterhin die reguläre Ansicht, Bearbeitung, Unterlagen und Graphdarstellung. Entsperren stellt die vollständigen Tabs wieder her.
+
+**Historische Testabgrenzung:** Die alten `wissen()`, `infoGesperrt()`, `rudimentAnsicht()` und Missionsaktionen bleiben im Code. In `tests/al.js` prüft der Alt-Test das historische Frischeformular als nicht angehängtes DOM-Element; in `tests/ds2.js` aktiviert ausschließlich das historische Testskript den alten Rudimentrenderer durch einen lokalen Browser-Override. **Kein produktiver Renderpfad montiert die alte UI.** So können die alten Protokolltests weiterhin laufen, ohne die verschwundene Oberfläche als Produktanforderung zu verankern.
+
+**Neue Abnahme:** `tests/phase5b3-dossieroberflaeche.js` setzt zwei konkrete Altmissions-/Wissenszustände, überprüft das reale Dossier-UI einschließlich Tabs, Bearbeiten, Kurzlage, Unterlagen und Graph **ohne** Freigabemaske; prüft außerdem die manuelle Sperre mit erfolgreichem Entsperren. `phase5b2-recherchezugang` erwartet nun ebenfalls die volle Ansicht. Beide sind Teil der obligatorischen Standardauswahl.
+
+**Bewusst offen:** Die historischen Kommunikations-/Missionsaktionen, Zeitgeber, gespeicherten Altfelder, `rudimentAnsicht()` als nicht produktiv eingebundene Alt-Testfunktion sowie weitere Legacy-Texte in Protokoll und Sichtungen werden in späteren separaten Schritten geprüft. Dieser Schritt beansprucht weder vollständige Entkernung noch Profilschemamigration.
 
 ## Nächste isolierte Schritte nach Abnahme von 5a
 
