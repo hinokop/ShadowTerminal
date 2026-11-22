@@ -1,6 +1,6 @@
 # Shadow Terminal – aktueller Stand
 
-**Stand:** 22.11.2026, geprüft gegen `main` `dc78f0cd952b9b1eb6eb21bc6b1b60fe7c566c35` (Merge von #111; davor #112 als `7a28ca7`) und GitHub (Pull Requests, Branches, Workflows).
+**Stand:** 22.11.2026. Zuletzt geprüft gegen `main` `dc78f0cd952b9b1eb6eb21bc6b1b60fe7c566c35` (Merge von #111; davor #112 als `7a28ca7`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
 
 Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **in `main`** gilt, und dem, was nur in **offenen Pull Requests** vorliegt. Pflege: bei jedem Merge in `main` aktualisieren, Stand und `main`-Commit nachführen. Entwicklungsregeln stehen in [CLAUDE.md](../CLAUDE.md), nicht hier.
 
@@ -42,16 +42,17 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 
 | PR | Inhalt | Stand |
 |---|---|---|
+| #114 | CI-Konsolidierung: neuer Workflow `.github/workflows/ci.yml` (Pull Requests gegen `main`, Push auf `main`, manuell; vollständige Standardauswahl) | **Draft.** Head `f4c75b3`; Lauf 45073790243 auf dem PR-Head: 91 grün, 0 unerwartet rot; unabhängiges Review technisch freigegeben. **Offen:** Merge-Entscheidung durch Master Wayne, danach Prüfung des ersten Push-Laufs auf `main`. |
 | #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
 
-Zurzeit ist außer #55 kein Pull Request offen. Neue Entwürfe hier eintragen, bis sie gemergt oder geschlossen sind; was nur dort gilt, gehört nicht in Abschnitt 1.
+Dokumentations-PRs werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1; auf `main` existiert `ci.yml` erst nach dem Merge von #114.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
 Erledigt: #111 (Phase 5c1b) und der Dokumentationsstand #112, beide in `main`.
 
 1. **Dokumentationsnachtrag** (dieser PR): Stand nach #111.
-2. **CI-Konsolidierung** vor 5c2: dauerhafte Prüfung für Pull Requests und `main`, danach Entfernen der phasengebundenen Workflows und erst dann Branch-Schutz; nur wenn stabil und unabhängig abnahmefähig.
+2. **CI-Konsolidierung** vor 5c2: Schritt 1, die dauerhafte Prüfung, ist in #114 vorbereitet (Draft, nicht gemergt). Danach Prüfung des ersten Push-Laufs auf `main`; die zwölf phasengebundenen Workflows werden erst nach wiederholt erfolgreicher CI in einem eigenen PR entfernt, Branch-Schutz erst danach und nur auf Entscheidung von Master Wayne. Zusätzlich vorgemerkt: die Einschränkung von `lage-box` (`BEKANNT_NUR`) im Test-Runner weiter absichern.
 3. **5c2:** verbliebene Altzugriffe auf Missionsfelder (`ALT()`, Darstellung) entfernen, Daten im Altbestand bewahren. Vorher gesonderte Entscheidung (Abschnitt 5, Punkt 1).
 4. **Branch-Bereinigung:** nur nach Abgleich und ausdrücklicher Freigabe.
 5. **Phase 6:** Unix-/Linux-Realismus im Terminal und schrittweise Englischumstellung ([terminal-entwicklungsplan-2026-11.md](terminal-entwicklungsplan-2026-11.md)), Modernisierung der Oberfläche modulweise.
@@ -60,7 +61,7 @@ Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Fre
 
 ## 4. Repository, Branches und CI
 
-- 60 Branches (`main` und 59 weitere), 111 Pull Requests: 107 gemergt, 1 offen (#55), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches von #111 und #112 bestehen noch. `main` ist nicht geschützt.
+- 62 Branches (`main` und 61 weitere), 113 Pull Requests: 107 gemergt, 3 offen (#55, #113 dieser Doku-Nachtrag, #114), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches der gemergten PRs #111 und #112 bestehen noch. `main` ist nicht geschützt.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
 - Auf `main` liegen zwölf phasenbezogene Workflows (5a, 5b1 bis 5b9, 5c1a, 5c1b). Alle laufen ausschließlich bei Pushes auf ihren Entwicklungsbranch.
 
