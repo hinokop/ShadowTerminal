@@ -41,7 +41,9 @@ chk(!pr.ok&&pr.einschaetzungAlt,'E-Einschätzung nach 30 h: veraltet, Prüfung s
 await p.evaluate(i=>{dispatch({type:'INFO_EINGEREICHT',id:i})},id);await due();
 chk(await p.evaluate(()=>/zu alt/.test(STATE.komm.kanaele.handler.nachrichten.slice(-1)[0].text)),'ARGUS verlangt neue Einschätzung');
 await p.evaluate(i=>{dispatch({type:'NAVIGATION',modul:'dossier'});VIEW.dtab='info';dispatch({type:'DOSSIER_GEOEFFNET',id:i,ueber:'t',navigieren:true})},id);await p.waitForTimeout(500);
-chk(await p.evaluate(()=>/veraltet/.test(document.body.innerText)&&/auffrischen/i.test(document.body.innerText)),'Rudiment zeigt "veraltet"/Auffrischen');
+/* Historische Formlogik bleibt testbar, auch wenn die produktive Dossieransicht
+   seit Phase 5b3 keine Rudimentmaske mehr rendert. */
+chk(await p.evaluate(i=>{const alt=rudimentAnsicht(entitaet(i));return /veraltet/.test(alt.textContent)&&/auffrischen/i.test(alt.textContent)},id),'Legacy-Rudiment enthält "veraltet"/Auffrischen (isoliert)');
 await p.evaluate(i=>{ACTIONS.EINSCHAETZUNG_GESETZT({id:i,quelle:'E',info:'2',quelleArt:'Angabe im Kanal'})},id);
 chk(await p.evaluate(i=>einreichPruefung(entitaet(i)).ok,id),'Neu abgegeben: wieder gültig');
 // 4 Zonen
