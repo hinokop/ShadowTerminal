@@ -8,12 +8,6 @@
    Der Text verdeckter Passagen wird nicht in die Seite geschrieben. Freigaben verfallen mit der Nachbereitung.
    ===================================================================== */
 VIEW.akte = { offen: null }; VIEW.akte.suche = '';
-function schwerKey(doc, r) { return doc.id + ':' + r.r; }
-function schwerListe(doc) {
-  const l = [];
-  doc.abschnitte.forEach(function (a) { a.absaetze.forEach(function (p) { p.forEach(function (x) { if (typeof x !== 'string') l.push(x); }); }); });
-  return l;
-}
 /* Phase 5b4: Die produktive Ablage zeigt ausschließlich den lokalen Eingang.
    Ein importiertes Altprofil mit VIEW.akte.reiter='registratur' darf die
    historische Akten-/Freigabemaske nicht erneut einblenden. */

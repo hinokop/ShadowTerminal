@@ -23,7 +23,7 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   await p.evaluate(a => { localStorage.setItem(STORAGE_KEY, a.state); localStorage.setItem(PROFIL_KEY, a.profil); }, { state: zurueck(JSON.stringify(alt)), profil: zurueck(JSON.stringify(FIX.profil)) });
   await anmelden();
   const messen = () => p.evaluate(() => ({
-    plan: STATE.plan.length, ereignisse: JSON.stringify(STATE.ereignisse || {}), abd: abdS().spuren.length, folge: JSON.stringify(STATE.serie.folge),
+    plan: STATE.plan.length, ereignisse: JSON.stringify(STATE.ereignisse || {}), abd: ((STATE.abdruck && STATE.abdruck.spuren) || []).length,   /* Phase 5b9: abdS() entfernt; gespeichertes Feld direkt */ folge: JSON.stringify(STATE.serie.folge),
     komm: Object.values(STATE.komm.kanaele).reduce((n, k) => n + k.nachrichten.length, 0),
     mission: STATE.log.filter(l => !['System', 'Profil', 'Dossier', 'Karte', 'Recherche', 'Ablage'].includes(l.modul)).length,
     lm: !!LM(), status: STATE.agent.status,

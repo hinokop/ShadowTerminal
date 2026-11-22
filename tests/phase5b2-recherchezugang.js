@@ -38,7 +38,7 @@ const { APP } = require('./_pfad');
       const marker = karteMarker();
       const v = { alt: alt.id, zweite: andereMission.id,
         altfeld: STATE.missionsbetrieb === true && IZ()[alt.id].status === 'bekannt', mb: missionsbetrieb(),
-        wissen: wissen(alt), info: infoGesperrt(alt), zweiteOffen: dossierOffen(andereMission.mission),
+        wissen: wissen(alt), info: (typeof infoGesperrt === 'function' && infoGesperrt(alt)), zweiteOffen: dossierOffen(andereMission.mission),
         altMarker: marker.some(m => m.id === alt.id && m.entitaet),
         zweiteMarker: marker.some(m => m.id === andereMission.id && m.entitaet),
         sichtung: marker.some(m => m.id === 'SI-900' && m.entId === alt.id),

@@ -124,7 +124,7 @@ const { APP } = require('./_pfad');
       const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.mission === 'STD' && !IZ()[x.id] && !dossierGesperrt(x));
       IZ()[e.id] = { status: 'bekannt' };
       dispatch({ type: 'DOSSIER_SPERREN', id: e.id }); dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule();
-      return { id: e.id, wissen: wissen(e), info: infoGesperrt(e) };
+      return { id: e.id, wissen: wissen(e), info: (typeof infoGesperrt === 'function' && infoGesperrt(e)) };
     });
     assert.deepEqual([info.wissen, info.info], ['frei', false], 'Phase 5b7: gespeichertes Ansprechpartnermerkmal ohne Wirkung');
     /* Die Terminalzugangsentscheidung bewertet ausschließlich die manuelle Sperre. */
@@ -138,7 +138,7 @@ const { APP } = require('./_pfad');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     assert.equal(await gesperrt(info.id), false);
     assert.deepEqual(await ansicht(), { modul: 'dossier', auswahl: info.id });
-    assert.deepEqual(await p.evaluate(i => [wissen(entitaet(i)), infoGesperrt(entitaet(i)), (STATE.infozugang || {})[i]?.status], info.id), ['frei', false, 'bekannt'], 'gespeicherter Erkenntnisstand unverändert erhalten, ohne Wirkung');
+    assert.deepEqual(await p.evaluate(i => [wissen(entitaet(i)), (typeof infoGesperrt === 'function' && infoGesperrt(entitaet(i))), (STATE.infozugang || {})[i]?.status], info.id), ['frei', false, 'bekannt'], 'gespeicherter Erkenntnisstand unverändert erhalten, ohne Wirkung');
     assert.deepEqual(await p.evaluate(i => {
       const z = zielZugang(i);
       return [z.id, z.gesperrt, z.info];
