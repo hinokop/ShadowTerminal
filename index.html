@@ -955,6 +955,14 @@ function dossierKantenBestand() {
   return SCENARIO.verbindungen.concat(SCENARIO.standard.verbindungen).filter(function (v) { return entfernt.indexOf(v.id) < 0; })
     .concat((STATE.dossiers && STATE.dossiers.eigeneKanten) || []);
 }
+/* Recherchekanten bleiben unabhängig vom alten Missions-/Wissensstand sichtbar.
+   Kanten zu manuell gesperrten Dossiers werden nicht in Karte oder Graph ausgegeben. */
+function dossierRechercheKanten() {
+  return dossierKantenBestand().filter(function (v) {
+    const a = entitaet(v.von), b = entitaet(v.nach);
+    return a && b && !dossierGesperrt(a) && !dossierGesperrt(b);
+  });
+}
 function kantenPool() {
   const alle = dossierKantenBestand();
   return alle.filter(function (v) { const a = entitaet(v.von), b = entitaet(v.nach); return a && b && dossierOffen(v.mission) && dossierOffen(a.mission) && dossierOffen(b.mission) && wissen(a) !== 'unbekannt' && wissen(b) !== 'unbekannt'; });
@@ -4422,7 +4430,7 @@ const ACTIONS = {
     return { modul: 'System', aktion: 'Abdruck gesetzt (Regie)', detail: ABD.name[a.tr] + ' ' + (a.d > 0 ? '+' : '') + a.d };
   },
   KANTE_BESTAETIGT: function (a) {
-    const v = kantenPool().find(function (x) { return x.id === a.id; });
+    const v = dossierRechercheKanten().find(function (x) { return x.id === a.id; });
     if (!v) return null;
     if (!STATE.dossiers.kantenStand) STATE.dossiers.kantenStand = {};
     const vor = bewertungEff(v);
@@ -5247,7 +5255,7 @@ const ACTIONS = {
   },
   DOSSIER_STATUS: function (a) {
     const e = entitaet(a.id);
-    if (!e || !dossierOffen(e.mission) || (a.status && !statusDef(a.status))) return null;
+    if (!e || dossierGesperrt(e) || (a.status && !statusDef(a.status))) return null;
     const out = [];
     dossierStatusSetzen(e, a.status || null, '', out);
     return out.length ? out : null;
@@ -5331,7 +5339,7 @@ const ACTIONS = {
   },
   DOSSIER_BILD: function (a) {
     const e = entitaet(a.id);
-    if (!e || !dossierOffen(e.mission)) return null;
+    if (!e || dossierGesperrt(e)) return null;
     if (a.bild === null) {
       if (!PROFIL.bilder[e.id]) return null;
       delete PROFIL.bilder[e.id];
@@ -5343,7 +5351,7 @@ const ACTIONS = {
   },
   DOSSIER_FOTO_HINZU: function (a) {
     const e = entitaet(a.id);
-    if (!e || !dossierOffen(e.mission) || !bildGueltig(a.bild)) return null;
+    if (!e || dossierGesperrt(e) || !bildGueltig(a.bild)) return null;
     const l = PROFIL.galerie[e.id] = PROFIL.galerie[e.id] || [];
     if (l.length >= 60) { meldung('Höchstens 60 Aufnahmen je Dossier.'); return null; }
     const f = { id: 'G-' + p3(galerieHoechsteNr(l) + 1), t: nowIso(), bild: a.bild, text: String(a.text || '').trim().slice(0, 200) };
@@ -5366,7 +5374,7 @@ const ACTIONS = {
   },
   DOSSIER_ORT: function (a) {
     const e = entitaet(a.id);
-    if (!e || !dossierOffen(e.mission)) return null;
+    if (!e || dossierGesperrt(e)) return null;
     const leer = a.ll === null || (a.ll === undefined && !String(a.text || '').trim());
     if (leer) {
       if (!PROFIL.koord[e.id]) return null;
@@ -5657,7 +5665,7 @@ const ACTIONS = {
   },
   VERBINDUNG_ANGELEGT: function (a) {
     const von = entitaet(a.von), nach = entitaet(a.nach);
-    if (!von || !nach || von.id === nach.id || !dossierOffen(von.mission) || !dossierOffen(nach.mission)) return null;
+    if (!von || !nach || von.id === nach.id || dossierGesperrt(von) || dossierGesperrt(nach)) return null;
     if (SCENARIO.verbindungstypen.indexOf(a.typ) < 0 || !/^[A-F][1-6]$/.test(a.bewertung)) return null;
     STATE.seq.kante = (STATE.seq.kante || 0) + 1;
     const id = 'V-E' + STATE.seq.kante;
@@ -5665,8 +5673,8 @@ const ACTIONS = {
     return { modul: 'Dossier', aktion: 'Verbindung angelegt', detail: id + ': ' + von.id + (a.beidseitig ? ' ↔ ' : ' → ') + nach.id + ', ' + a.typ + ', Bewertung ' + a.bewertung };
   },
   VERBINDUNG_GELOESCHT: function (a) {
-    const e = entitaet(a.dossier), v = kantenPool().find(function (x) { return x.id === a.id; });
-    if (!e || !v || dossierGesperrt(e) || infoGesperrt(e) || (v.von !== e.id && v.nach !== e.id)) return null;
+    const e = entitaet(a.dossier), v = dossierRechercheKanten().find(function (x) { return x.id === a.id; });
+    if (!e || !v || dossierGesperrt(e) || (v.von !== e.id && v.nach !== e.id)) return null;
     const vorher = { eigene: STATE.dossiers.eigeneKanten, ausgeblendet: PROFIL.ausgeblendeteKanten };
     if (vorher.eigene.includes(v)) STATE.dossiers.eigeneKanten = vorher.eigene.filter(function (x) { return x !== v; });
     else {
@@ -5682,7 +5690,7 @@ const ACTIONS = {
   /* Dossier bearbeiten: eigene Dossiers direkt, Standard- und Missionsdossiers als Änderung im Profil (Original bleibt wiederherstellbar) */
   DOSSIER_BEARBEITET: function (a) {
     const e = entitaet(a.id), name = String(a.name || '').trim(), d = STATE.dossiers.entitaeten[a.id];
-    if (!e || !d || !name || !dossierOffen(e.mission) || dossierGesperrt(e) || infoGesperrt(e)) return null;
+    if (!e || !d || !name || dossierGesperrt(e)) return null;
     const beispiel = istBeispiel(e);
     const zeilen = function (txt, trenner) { return String(txt || '').split(trenner).map(function (x) { return x.trim(); }).filter(Boolean); };
     const stufe = Math.min(5, Math.max(1, Number(a.stufe) || e.bedrohung.stufe));         /* ohne Angabe bleibt die gespeicherte Stufe unverändert (Oberfläche zeigt sie nicht mehr) */
@@ -5721,7 +5729,7 @@ const ACTIONS = {
   },
   DOSSIER_KURZLAGE: function (a) {
     const e = entitaet(a.id), d = STATE.dossiers.entitaeten[a.id];
-    if (!e || !d || !dossierOffen(e.mission) || dossierGesperrt(e) || infoGesperrt(e) || typeof a.inhalt !== 'string' || a.inhalt.length > 24000) return null;
+    if (!e || !d || dossierGesperrt(e) || typeof a.inhalt !== 'string' || a.inhalt.length > 24000) return null;
     const inhalt = kurzlageKanon(a.inhalt);
     if (inhalt === (d.kurzlage || '') && dossierRegisternummer(e, d)) return null;
     if (!inhalt && !d.kurzlage) return null;
@@ -7381,8 +7389,8 @@ function dossierAnsicht(e) {
    Reihenfolge je Ring gemäß SCENARIO.entitaeten, Start oben, im Uhrzeigersinn. */
 function graphSvg(zentrum) {
   const W = 900, H = 690, cx = W / 2, cy = 330, G = VIEW.graph;
-  const kanten = kantenPool().filter(graphFilter);
-  const ordnung = pool().map(function (e) { return e.id; });
+  const kanten = dossierRechercheKanten().filter(graphFilter);
+  const ordnung = dossierRechercheBestand().filter(function (e) { return !dossierGesperrt(e); }).map(function (e) { return e.id; });
   const nachbarn = function (id) {
     return kanten.filter(function (v) { return v.von === id || v.nach === id; }).map(function (v) { return v.von === id ? v.nach : v.von; });
   };
@@ -7471,7 +7479,7 @@ function graphSvg(zentrum) {
   return { svg: svg, kanten: sichtbar.length, knoten: Object.keys(pos).length, unbeschriftet: unbeschriftet };
 }
 function verbindungstabelle(e) {
-  const vs = verbindungenVon(e.id);
+  const vs = dossierRechercheKanten().filter(function (v) { return v.von === e.id || v.nach === e.id; });
   return [
     h('h3', null, 'Verbindungen (' + vs.length + ')'),
     tabelle(['Gegenüber', 'Typ', 'Richtung', 'Bewertung', 'Quelle', 'Aktion'], vs.map(function (v) {
@@ -7630,7 +7638,7 @@ function renderDossier(m) {
   let e = entitaet(STATE.dossiers.auswahl);
   if (!e || !dossierRechercheBestand().some(function (x) { return x.id === e.id; })) e = dossierRechercheBestand()[0];
   return [modKopf(m),
-    h('div', { class: 'split' }, dossierListe(), h('div', null, dossierAnsicht(e), infoGesperrt(e) || dossierGesperrt(e) || typeof rechercheDossier !== 'function' ? null : rechercheDossier(e), infoGesperrt(e) || dossierGesperrt(e) ? null : beziehungsansicht(e), profilPanel()))];
+    h('div', { class: 'split' }, dossierListe(), h('div', null, dossierAnsicht(e), dossierGesperrt(e) || typeof rechercheDossier !== 'function' ? null : rechercheDossier(e), dossierGesperrt(e) ? null : beziehungsansicht(e), profilPanel()))];
 }
 
 /* =====================================================================

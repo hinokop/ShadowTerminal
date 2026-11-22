@@ -44,10 +44,10 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
     const mehr = verz.map(nn).filter(n => n.length >= 5).map(n => n.slice(0, 5)).find((pf, i, a) => a.indexOf(pf) !== a.lastIndexOf(pf) && verz.filter(x => nn(x).indexOf(pf) === 0).length > 1 && !verz.some(x => nn(x) === pf));
     o.mehrdeutigPraefix = mehr; o.mehrdeutigKeinPunkt = mehr ? sichtungKoord({ ort: mehr }) === null : null;
     /* mehrdeutiger Dossier-Ort sperrt auch den Rückfall auf das Ortsverzeichnis */
-    const alt = window.pool; window.pool = function () { return [{ id: 'T-A', typ: 'Ort', name: 'Tokyo Test A' }, { id: 'T-B', typ: 'Ort', name: 'Tokyo Test B' }]; };
+    const alt = window.dossierRechercheBestand; window.dossierRechercheBestand = function () { return [{ id: 'T-A', typ: 'Ort', name: 'Tokyo Test A' }, { id: 'T-B', typ: 'Ort', name: 'Tokyo Test B' }]; };
     PROFIL.koord['T-A'] = [35.6, 139.7]; PROFIL.koord['T-B'] = [35.7, 139.8];
     const imAtlas = verz.some(x => nn(x) === 'tokyo'); o.tokyoImAtlas = imAtlas; o.tokyoMehrdeutig = sichtungKoord({ ort: 'Tokyo' }) === null;
-    window.pool = alt; delete PROFIL.koord['T-A']; delete PROFIL.koord['T-B'];
+    window.dossierRechercheBestand = alt; delete PROFIL.koord['T-A']; delete PROFIL.koord['T-B'];
     const eindeutig = verz.find(x => nn(x).length >= 5 && verz.filter(y => nn(y) === nn(x)).length === 1); o.exaktPunkt = eindeutig ? !!sichtungKoord({ ort: String(eindeutig[0]) }) : null;
     return o;
   });
