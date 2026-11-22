@@ -840,7 +840,6 @@ function arbeitsmodulWiederherstellen(zustand) {
 const LOG_MODULE = ['System'].concat(MODULES.map(function (m) { return m.log; }));
 const STATUS_LISTE = ['Ruhend', 'Standby', 'Aktiv', 'Erhöhtes Risiko', 'Extraktion ausstehend'];
 const STATUS_KLASSE = { 'Ruhend': 's-dim', 'Aktiv': 's-accent', 'Standby': 's-dim', 'Erhöhtes Risiko': 's-warn', 'Extraktion ausstehend': 's-crit' };
-const MISSION_KLASSE = { 'Planung': 's-dim', 'Laufend': 's-accent', 'Pausiert': 's-warn', 'Abgeschlossen': 's-dim' };
 
 function p2(n) { return String(n).padStart(2, '0'); }
 function p3(n) { return String(n).padStart(3, '0'); }
@@ -939,7 +938,6 @@ function MS(id) {
   return m;
 }
 function LM() { const m = KM(); return m && MS(m.id).status === 'laufend' ? m : null; }
-function zugewiesene() { return SCENARIO.missionen.find(function (m) { return MS(m.id).status === 'zugewiesen'; }) || null; }
 
 function freigeschaltet(mid) { return mid === 'STD' || !!(STATE.missionen[mid] && STATE.missionen[mid].angenommenAm); }
 /* Dossiers sind im Recherchebetrieb unabhängig von einem angenommenen Auftrag sichtbar (alle Beispiele); im Missionsbetrieb gilt die alte Freischaltung */
@@ -1013,11 +1011,8 @@ function identitaetUebernehmen(z) {
   return neu;
 }
 function startLegende(def) { return PROFIL.identitaet && legende(PROFIL.identitaet) ? PROFIL.identitaet : def.legendeStart; }
-function ortText(c) { return c && c.standortId ? c.standortId + ' ' + standortName(c.standortId) : '–'; }
 function opText(def) { return def.nummer + ' ' + def.name; }
 function serienText(name, def) { return SCENARIO.serie.texte[name].replace('{OP}', opText(def)).replace('{AV}', def.aktenvermerk); }
-const MZ_KLASSE = { 'offen': 's-dim', 'zugewiesen': 's-warn', 'laufend': 's-accent', 'abgeschlossen': 's-dim', 'abgelehnt': 's-crit', 'abgebrochen': 's-crit' };
-function zustandLabel(st) { return h('span', { class: 'label ' + (MZ_KLASSE[st] || 's-dim') }, st); }
 function kuerzen(t, n) { return t.length > n ? t.slice(0, n - 1) + '…' : t; }
 
 /* Bausteine für dichte Ansichten */
@@ -1545,16 +1540,9 @@ const VIEW = {
   profilReiter: 'agent'
 };
 
-/* Abgeleitete Werte */
-function ungelesenGesamt() {
-  return Object.keys(STATE.komm.kanaele).reduce(function (n, k) { return n + (STATE.komm.kanaele[k].ungelesen || 0); }, 0);
-}
 function offeneZiele() {
   const def = LM();
   return def ? def.ziele.filter(function (z) { return !MS(def.id).ziele[z.id].erledigt; }).length : 0;
-}
-function markierte() {
-  return pool().filter(function (e) { return !!STATE.dossiers.entitaeten[e.id].status; });
 }
 
 /* Zustandshelfer, nur innerhalb von dispatch-Handlern zu verwenden */
@@ -1570,35 +1558,6 @@ function funkstilleBeenden(grund, out) {
   STATE.funkstille = { aktiv: false, seit: null, mission: null };
   STATE.melde = { geprueftBis: nowIso(), versaeumt: 0 };
   out.push({ modul: 'Kommunikation', aktion: 'Funkstille beendet', detail: grund + '; Meldefenster gelten ab jetzt' });
-}
-/* Bereinigung nach der Nachbereitung: Kanalverläufe, Notizen und Planeinträge gehen, Dossiers werden archiviert */
-function nachbereitungAbschliessen(def, out) {
-  const iso = nowIso(), K = STATE.komm.kanaele;
-  let n = 0;
-  Object.keys(K).forEach(function (id) { n += K[id].nachrichten.length; K[id] = { ungelesen: 0, nachrichten: [] }; });
-  zustellTimer.forEach(clearTimeout); zustellTimer = [];
-  STATE.dialog = {}; STATE.plan = []; STATE.anreise = null; STATE.akten = { anfragen: {}, freigaben: {}, offen: null };
-  STATE.agent.notizen = ''; STATE.agent.notizenGeaendert = iso;
-  STATE.agent.einschraenkungen = ''; STATE.agent.einschraenkungenGeaendert = iso;
-  STATE.agent.checkin = { t: iso, standortId: null };
-  let arch = 0;
-  SCENARIO.entitaeten.filter(function (e) { return e.mission === def.id; }).forEach(function (e) {
-    const d = STATE.dossiers.entitaeten[e.id];
-    if (!d.status) { d.status = 'archiviert'; d.statusAm = iso; arch += 1; }
-    d.aktualisiert = iso;
-  });
-  STATE.nachbereitung = null;
-  out.push({ modul: 'Mission', aktion: 'Nachbereitung abgeschlossen',
-    detail: opText(def) + ': ' + n + ' Nachrichten aus den Kanälen entfernt, Notizen und Einschränkungen zurückgesetzt, ' + arch + ' Dossiers archiviert' });
-  eingang('handler', { von: 'gegenstelle', absender: kanalDef('handler').gegenstelle, text: serienText('nachbereitungEnde', def) });
-  const folge = SCENARIO.missionen.find(function (x) { return MS(x.id).status === 'offen'; });
-  if (folge) {
-    const sek = typeof def.folgeNachSek === 'number' ? def.folgeNachSek : SCENARIO.serie.folgeNachSek;
-    STATE.serie.folge = { mission: folge.id, faelligAm: new Date(Date.now() + sek * 1000).toISOString() };
-  } else {
-    eingang('handler', { von: 'gegenstelle', absender: kanalDef('handler').gegenstelle, text: serienText('serienende', def) });
-    serieBeenden('Serie abgeschlossen', def.id, out);
-  }
 }
 function serieBeenden(art, missionId, out) {
   STATE.serie.folge = null;
@@ -1772,12 +1731,6 @@ function systemnachricht(kanalId, text) {
 function handlernachricht(text, art) {
   return eingang('handler', { von: 'gegenstelle', absender: kanalDef('handler').gegenstelle, text: text, dringlichkeit: 'Priorität', art: art });
 }
-function kanalLesen(id) {
-  const k = STATE.komm.kanaele[id], n = k.ungelesen;
-  k.nachrichten.forEach(function (m) { if (m.von !== 'agent' && m.status !== 'gelesen') m.status = 'gelesen'; });
-  k.ungelesen = 0;
-  return n;
-}
 function nachricht(id) {
   const ks = Object.keys(STATE.komm.kanaele);
   for (let i = 0; i < ks.length; i++) {
@@ -1862,68 +1815,6 @@ function dauerText(min) {
   return sign + (hh ? hh + ' h ' : '') + (mm || !hh ? mm + ' min' : '').trim();
 }
 const ART_AUSGANG = ['Safehouse (Wohnung)', 'Safehouse (Lagerhaus)', 'Unterkunft', 'Wohnsitz', 'Sonstiges'];
-function anreiseOptionen(def, tMs, jetzt) {
-  const stunden = (SCENARIO.anreiseTexte && SCENARIO.anreiseTexte.abfahrtStunden) || [];
-  return stunden.filter(function (hh) { const abf = tMs - hh * 3600000; return abf > jetzt + 5 * 60000 && abf <= tMs; });
-}
-function luftlinieKm(a, b) {
-  const r = Math.PI / 180, dLa = (b[0] - a[0]) * r, dLo = (b[1] - a[1]) * r;
-  const h2 = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
-  return 6371 * 2 * Math.atan2(Math.sqrt(h2), Math.sqrt(1 - h2));
-}
-/* Reiseoptionen der Mission: mit Ausgangsort aus der Entfernung berechnet (Reihenfolge Bahn, Auto, Chauffeur, Flug, Bus), sonst die festen Optionen des Szenarios */
-function anreiseListe(def, ausgangId, unterkunft) {
-  const A = def.anreise, ortId = unterkunft === 'ausweich' ? A.unterkunft.ausweich : A.unterkunft.haupt;
-  const ausgang = PROFIL.ausgang.find(function (x) { return x.id === ausgangId; }) || null, ziel = karteKoord(ortId), M = SCENARIO.anreiseModelle || {};
-  if (!ausgang) return { optionen: A.optionen, km: null, ausgang: null, ortId: ortId, grund: PROFIL.ausgang.length ? 'Ausgangsort wählen.' : '' };
-  if (!ausgang.ll || !ziel) return { optionen: [], km: null, ausgang: ausgang, ortId: ortId, grund: !ausgang.ll ? 'Dem Ausgangsort fehlt die Kartenposition.' : 'Dem Einsatzort fehlt die Kartenposition.' };
-  const km = luftlinieKm(ausgang.ll, ziel), optionen = [];
-  ['bahn', 'auto', 'chauffeur', 'flug', 'bus'].forEach(function (id) {
-    const m = M[id];
-    if (!m || (m.minKm && km < m.minKm)) return;
-    const strecke = km * m.umweg;
-    optionen.push({ id: id, name: m.name, spur: m.spur, hinweis: m.hinweis, extra: m.extra || null, km: Math.round(km),
-                    dauerMin: Math.round(m.fixMin + strecke / m.kmh * 60 + (m.pauseKm ? Math.floor(strecke / m.pauseKm) * 30 : 0)) });
-  });
-  return { optionen: optionen, km: km, ausgang: ausgang, ortId: ortId, grund: '' };
-}
-function anreiseBewerten(def, w, jetzt) {
-  const A = def && def.anreise, ms = def && MS(def.id);
-  if (!A || !ms || !ms.beginn || !w) return null;
-  const L = anreiseListe(def, w.ausgang, w.unterkunft);
-  const opt = L.optionen.find(function (o) { return o.id === w.mittel; });
-  const ortId = L.ortId;
-  if (!opt || !ortId || !isFinite(Number(w.abfahrtH))) return null;
-  const tb = Date.parse(ms.beginn), abf = tb - Number(w.abfahrtH) * 3600000, ank = abf + opt.dauerMin * 60000;
-  const puffer = Math.round((tb - ank) / 60000), faktoren = [];
-  let gueltig = true, grund = '';
-  if (PROFIL.ausgang.length && !L.ausgang) { gueltig = false; grund = 'Ausgangsort fehlt.'; }
-  else if (abf <= jetzt) { gueltig = false; grund = 'Die Abfahrt liegt nicht mehr in der Zukunft.'; }
-  else if (puffer < 0) { gueltig = false; grund = 'Ankunft nach Start.'; }
-  const add = function (text, punkte) { if (punkte > 0) faktoren.push({ text: text, punkte: punkte }); };
-  add('Verkehrsmittel hinterlässt Spuren (' + opt.name + ')', [0, 8, 16, 24][opt.spur] || 0);
-  if (opt.extra) add(opt.extra.text, opt.extra.punkte);
-  if (puffer < 60) add('Puffer bis Start unter einer Stunde', 40);
-  else if (puffer < 240) add('Puffer bis Start unter vier Stunden', 20);
-  else if (puffer > 2160) add('Sehr langer Voraufenthalt im Region vor Beginn', 18);
-  else if (puffer > 1440) add('Langer Voraufenthalt im Region vor Beginn', 10);
-  const hUtc = new Date(ank).getUTCHours();
-  if (hUtc >= 0 && hUtc < 5) add('Ankunft zur Nachtzeit fällt bei Bezug der Unterkunft auf', 10);
-  if (opt.dauerMin > 480) add('Sehr lange Reisedauer', 6);
-  if (w.unterkunft === 'ausweich') add('Ausweichunterkunft wird vorzeitig genutzt und steht danach nicht mehr zur Verfügung', 12);
-  if (w.erkundung) add('Vorerkundung am Einsatzort erhöht die Auffälligkeit', 10);
-  const risiko = Math.min(100, faktoren.reduce(function (n, f) { return n + f.punkte; }, 0));
-  const stufe = risiko < 25 ? 'niedrig' : risiko < 45 ? 'mittel' : 'hoch';
-  faktoren.sort(function (x, y) { return y.punkte - x.punkte; });
-  return { gueltig: gueltig, grund: grund, mittel: opt.id, mittelName: opt.name, abfahrtH: Number(w.abfahrtH), unterkunft: w.unterkunft === 'ausweich' ? 'ausweich' : 'haupt', ortId: ortId,
-           ausgangId: L.ausgang ? L.ausgang.id : null, ausgangName: L.ausgang ? L.ausgang.name : null, km: L.km === null ? null : Math.round(L.km),
-           erkundung: !!w.erkundung, abfahrt: new Date(abf).toISOString(), ankunft: new Date(ank).toISOString(), dauerMin: opt.dauerMin, puffer: puffer, risiko: risiko, stufe: stufe, faktoren: faktoren };
-}
-function anreiseRueckmeldung(b) {
-  const T = SCENARIO.anreiseTexte, liste = T[b.stufe], f = b.faktoren[0];
-  return liste[(b.risiko + b.abfahrtH) % liste.length].replace('{PUFFER}', dauerText(b.puffer)).replace('{ANKUNFT}', fmtZ(b.ankunft))
-    .replace('{FAKTOR}', f ? f.text : 'kein besonderer Faktor');
-}
 /* Skriptnachrichten der laufenden Mission mit passendem Auslöser einplanen (checkin; ziel mit Zielkennung) */
 function skriptAusloesen(typ, zielId) {
   const def = LM();
@@ -2142,7 +2033,6 @@ function dlgFolge(kanalId, text, nr, strikt) {
    ===================================================================== */
 const PERSON_RE = /\b(mann|männer|maenner|frau|frauen|typ|kerl|person|personen|jemand|fahrer|besucher|kunde|kundin|junge|jugendliche\w*|chef|mechaniker|wachmann|wachleute|polizist\w*|beamte\w*|herr)\b/i;
 const BESCHR_RE = /\b(größe|groesse|haare|schätze (ihn|sie)|schaetze (ihn|sie)|haarfarbe)\b/i;
-function personMeldung(text) { return PERSON_RE.test(String(text || '')) || BESCHR_RE.test(String(text || '')); }
 function beschrWerte(ref) {
   STATE.beschr = STATE.beschr || {};
   if (STATE.beschr[ref.id]) return STATE.beschr[ref.id];
@@ -2547,14 +2437,6 @@ function zustandTermin(p) {
   const offen = def.ziele.filter(function (z) { return z.art === 'primär' && !MS(def.id).ziele[z.id].erledigt; }).length;
   if (offen > 0) { zustandWirkung('handler', 'vertrauen', -10, 'Termin verstrichen, ' + offen + ' Primärziel(e) offen'); zustandWirkung('handler', 'druck', 15, 'Termin verstrichen'); }
 }
-function zustandStufe(id, feld, w) {
-  if (feld === 'vertrauen') return w < 15 ? 'zerrüttet' : w < 30 ? 'angespannt' : w < 50 ? 'reserviert' : w < 75 ? 'belastbar' : 'verlässlich';
-  return w < 35 ? 'ruhig' : w < 60 ? 'angespannt' : w < 80 ? 'stark belastet' : 'am Limit';
-}
-function haltungText(id) {
-  const a = akteurDaten(id), z = ZUSTAND.zweiter[id];
-  return a ? 'Vertrauen ' + zustandStufe(id, 'vertrauen', a.vertrauen) + ' (' + a.vertrauen + '), ' + (z === 'druck' ? 'Druck' : 'Belastung') + ' ' + zustandStufe(id, z, a[z]) + ' (' + a[z] + ')' : '';
-}
 /* Gegenstelle reagiert je nach Zustand; Notfallwörter und Extraktion bleiben unberührt */
 const FUNKRUHE_MIN = 60, ASSET_SPERRE_AUS = 70;
 /* Meldet sich das Asset nach Schweigen oder Funkruhe wieder: einmal, kurz, ohne Anlass zu Rückfragen. Prüft wiederholt, bis die Belastung unter der Schwelle liegt. */
@@ -2937,9 +2819,6 @@ function bewertungAnzeige(v) {
   return h('abbr', { title: bewertungText(b.code) + '. Stand ' + b.fr.text + (b.abgewertet ? '; ursprünglich ' + b.orig + ', durch Alterung abgewertet' : '') + ' (' + b.fr.stufe + ')' },
     b.code, b.fr.stufe === 'aktuell' ? null : h('span', { class: 'dim' }, b.fr.stufe === 'veraltet' ? ' ⌛' : ' ·'));
 }
-/* Einschätzung (Dossier): ältere Angaben verlieren an Wert; veraltet = für Einreichungen nicht mehr gültig */
-function einschaetzungFrische(x) { return x && x.einschaetzung ? frische(x.einschaetzung.quelle, x.einschaetzung.t) : null; }
-function einschaetzungEff(ea, fr) { return ea.quelle + Math.min(6, Number(ea.info) + (fr ? fr.abwertung : 0)); }
 /* Jüngste Spur zu einer Person oder Organisation (Sichtung, Beleg, Bericht, Einschätzung) mit ihrer Frische */
 function erkenntnisLage(e) {
   const d = STATE.dossiers.entitaeten[e.id], x = IZ()[e.id] || {}, def = LM(), ms = def ? MS(def.id) : null, L = [];
@@ -3210,16 +3089,6 @@ function dossierStatusSetzen(e, status, anlass, out) {
   out.push({ modul: 'Dossier', aktion: 'Dossierstatus geändert', krit: !!(neu && neu.kritisch),
              detail: e.id + ' ' + e.name + ': ' + (alt ? alt.label : 'ohne Status') + ' → ' + (neu ? neu.label : 'ohne Status') + (anlass ? '; Anlass: ' + anlass : '') });
 }
-/* Ziel abhaken oder wieder öffnen; löst Funkstille-Ende und Skriptauslöser aus */
-function zielSetzen(def, z, erledigt, out) {
-  const ms = MS(def.id);
-  ms.ziele[z.id] = { erledigt: !!erledigt, t: erledigt ? nowIso() : null };
-  const offen = offeneZiele();
-  out.push({ modul: 'Mission', aktion: erledigt ? 'Missionsziel abgehakt' : 'Missionsziel wieder geöffnet',
-    detail: z.id + ' (' + z.art + '): ' + z.text + ' Offen: ' + offen + ' von ' + def.ziele.length + (offen === 0 ? '; Abschluss der Mission möglich' : '') });
-  if (erledigt && STATE.funkstille.aktiv && def.funkstille && def.funkstille.bisZiel === z.id) funkstilleBeenden('Vollzugsmeldung ' + z.id, out);
-  if (erledigt) skriptAusloesen('ziel', z.id);
-}
 /* Nachricht des Agenten: Versand, Funkstille-Regel, Zustellung und geplante Antwort */
 /* =====================================================================
    RUHEPHASE: LEBENSZEICHEN, AUSRÜSTUNG, BELASTUNG
@@ -3288,17 +3157,6 @@ function stillBetrifft(p) {
   if (p.typ === 'skript') { const def = LM(); const sk = def && def.skript[p.index]; return !!sk && (sk.kanal === 'handler' || sk.kanal === 'support'); }
   return p.typ === 'lebenszeichen' || p.typ === 'kennwort';
 }
-function funkruheKnopf() {
-  const a = akteurDaten('asset'), ruhig = a && a.ruheBis && Date.parse(a.ruheBis) > Date.now(), rest = ruhig ? Math.ceil((Date.parse(a.ruheBis) - Date.now()) / 60000) : 0;
-  return h('button', { type: 'button', id: 'btn-funkruhe', disabled: !!ruhig || STATE.funkstille.aktiv,
-    title: 'Vereinbart ' + FUNKRUHE_MIN + ' Minuten Funkstille: keine Nachrichten in beide Richtungen.',
-    onclick: function () { dispatch({ type: 'NACHRICHT_GESENDET', kanal: 'asset', text: 'Funkstille für eine Stunde. Ich melde mich nicht und du dich bitte auch nicht.', dringlichkeit: 'Routine', modus: null }); } },
-    ruhig ? 'Funkstille läuft (' + rest + ' min)' : 'Funkstille vereinbaren');
-}
-function atemKnopf() {
-  const B = belS(), rest = B.atemT ? Math.ceil((3600000 - (Date.now() - Date.parse(B.atemT))) / 60000) : 0, frei = rest <= 0;
-  return h('button', { type: 'button', id: 'btn-atempause', disabled: !frei, title: 'Kurze Pause; ARGUS hält den Kanal still, bis Sie sich melden.', onclick: function () { dispatch({ type: 'ATEMPAUSE' }); } }, frei ? 'Atempause (−10)' : 'Atempause in ' + rest + ' Min.');
-}
 function belWirkung(d, grund) {
   const B = belS();
   B.w = Math.max(0, Math.min(100, B.w + d));
@@ -3331,7 +3189,6 @@ function abdSpur(tr, art, w, bez) {
 function abdAnteil(sp) { return sp.w * Math.pow(0.5, Math.max(0, Date.now() - Date.parse(sp.t)) * abdFaktor() / ABD.halb[sp.tr]); }
 function abdWert(tr) { let z = 0; abdS().spuren.forEach(function (sp) { if (sp.tr === tr) z += abdAnteil(sp); }); return Math.max(0, Math.min(100, z)); }
 function abdStufe(tr) { const w = abdWert(tr); for (let i = 0; i < ABD.stufen.length; i++) if (w < ABD.stufen[i][0]) return i; return ABD.stufen.length - 1; }
-function abdText(tr) { return ABD.stufen[abdStufe(tr)][1] + ' (' + Math.round(abdWert(tr)) + ')'; }
 function abdSperre() { const A = abdS(); return A.sperreBis && Date.now() < Date.parse(A.sperreBis) ? A.sperreBis : null; }
 function abdTexte() { return SCENARIO.abdruck; }
 function abdWahl(l) { return l[Math.floor(Math.random() * l.length)]; }
@@ -3385,31 +3242,11 @@ function abdRuege() {
   zustandWirkung('handler', 'druck', 2, 'Kontakt zum Asset trotz Sperre');
   abdPlan('handler', abdWahl(abdTexte().ruege), 20 + Math.floor(Math.random() * 30));
 }
-/* Prüfung nach jedem Ereignis: Warnung beim Überschreiten einer Stufe, Kontaktsperre, Rückstufung der Merker */
-function abdPruefen() {
-  const A = abdS(), T = abdTexte();
-  ['legende', 'asset'].forEach(function (tr) {
-    const st = abdStufe(tr), bisher = A.warn[tr] || 0;
-    if (st > bisher) {
-      A.warn[tr] = st;
-      let bis = '';
-      if (tr === 'asset' && st >= 2) {
-        A.sperreBis = new Date(Date.now() + (st >= 3 ? 6 : 3) * 3600000).toISOString();
-        bis = fmtZ(A.sperreBis).slice(11, 16);
-      }
-      const l = T[tr][st];
-      if (l) abdPlan('handler', abdWahl(l).split('{BIS}').join(bis), 25 + Math.floor(Math.random() * 35));
-      if (tr === 'asset' && st >= 2 && T.assetStimme[st]) { abdPlan('asset', abdWahl(T.assetStimme[st]), 90 + Math.floor(Math.random() * 120)); zustandWirkung('asset', 'belastung', st >= 3 ? 12 : 6, 'Spurenlage'); }
-      if (tr === 'legende' && st >= 3) belWirkung(5, 'Legende verbrannt');
-    } else if (st < bisher) A.warn[tr] = st;
-  });
-}
 
 function belText() {
   const w = Math.round(belS().w), st = BEL_STUFEN.find(function (x) { return w < x[0]; })[1];
   return st;
 }
-function belKlasse() { const w = belS().w; return w < 50 ? '' : w < 70 ? 's-warn' : 's-crit'; }
 
 /* =====================================================================
    KENNWORTPRÜFUNG UND CHECK-IN-BESTÄTIGUNG
@@ -3499,39 +3336,6 @@ function kwBehandeln(k, msg, text, out) {
   }
   return true;
 }
-/* Quittung für einen Check-in. Etwa 70 Prozent werden beantwortet, der erste nach Einsatzstart immer, ein Ausweichort immer.
-   Schweigen zählt nie als Versäumnis. o: { ausweich, vorher } */
-function checkinBestaetigen(out, ort, o) {
-  const def = LM(), K = kwS(), Z = SCENARIO.kennwort.bestaetigung;
-  if (!def || STATE.funkstille.aktiv || STATE.pause || STATE.agent.status === 'Ruhend' || K.gesperrt || K.aufgabe || STATE.abschlussLauf) return;
-  const erst = !K.erst[def.id];
-  K.erst[def.id] = true;
-  if (!erst && !o.ausweich && Math.random() >= 0.7) return;
-  const oid = ort.id || ort.standortId, ortTxt = oid === 'AW' ? ort.name : oid + ' ' + ort.name;
-  const teile = [];
-  if (o.ausweich) teile.push(kwWahl(Z.ausweich).replace('{ORT}', ortTxt));
-  else if (!STATE.extraktion.standortfreigabe) teile.push(kwWahl(Z.ohneFreigabe));
-  const vor = o.vorher, vk = vor && vor.standortId ? (vor.koord || karteKoord(vor.standortId)) : null, nk = ort.koord || karteKoord(oid);
-  if (vk && nk) {
-    const min = Math.max(1, Math.round((Date.now() - Date.parse(vor.t)) / 60000)), km = luftlinieKm(vk, nk);
-    if (km > 3 && km / (min / 60) > 130) {
-      teile.push(Z.reise.replace('{MIN}', min === 1 ? 'einer Minute' : min + ' Minuten').replace('{VON}', standortNameVon(vor)).replace('{NACH}', ortTxt).replace('{KM}', String(Math.round(km))));
-    }
-  }
-  if (o.ausweich && nk) {
-    let nah = null;
-    pool().forEach(function (e) {
-      const ll = karteKoord(e.id);
-      if (ll && bedrohung(e).stufe >= 3 && luftlinieKm(nk, ll) <= 1.5 && (!nah || luftlinieKm(nk, ll) < nah.d)) nah = { e: e, d: luftlinieKm(nk, ll) };
-    });
-    if (nah) teile.push(Z.nahe.replace('{DOSSIER}', nah.e.id + ' ' + nah.e.name));
-  }
-  if (!teile.length) teile.push(kwWahl(Z.plan).replace('{ORT}', ortTxt));
-  const sek = Math.round(15 * Math.pow(80, Math.random()));      /* 15 s bis 20 min, eher kurz */
-  planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, text: teile.join(' '), faelligAm: new Date(Date.now() + sek * 1000).toISOString(), checkinBest: true });
-  out.push({ modul: 'Kommunikation', aktion: 'Check-in-Bestätigung angesetzt', detail: 'ARGUS antwortet in ca. ' + (sek < 90 ? sek + ' s' : Math.round(sek / 60) + ' min') });
-}
-function standortNameVon(c) { return c.standortId === 'AW' ? c.name : standortName(c.standortId); }
 
 
 /* =====================================================================
@@ -3629,11 +3433,6 @@ function freigabeAbsenden(k, msg, r, out) {
    3: alle drei Punkte, mind. 60 Zeichen, Vertrauen ab 50. Zuordnung zum Auftrag oder bewilligte Verstärkung/Freigabe öffnet das Dossier ebenfalls.
    ===================================================================== */
 function IZ() { if (!STATE.infozugang) STATE.infozugang = {}; return STATE.infozugang; }
-function schluesselIds() {
-  const o = [];
-  SCENARIO.missionen.forEach(function (m) { if (freigeschaltet(m.id)) (m.schluessel || []).forEach(function (id) { if (o.indexOf(id) < 0) o.push(id); }); });
-  return o;
-}
 /* Wissensstand einer Entität: 'frei' (Vollzugriff), 'bekannt' (nur Rudiment: Name, Rolle, Bedrohungsbewertung) oder 'unbekannt' (nirgends sichtbar) */
 function wissen(e) {
   if (!e || typeof STATE === 'undefined' || !STATE) return 'frei';
@@ -3740,7 +3539,6 @@ if (typeof MutationObserver === 'function' && typeof document !== 'undefined') {
     });
   }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 }
-function infoMaske(e) { return e.name.replace(/[^\s,().\-"„“]/g, '█'); }
 function infoRueck() { return STATE.infoRueck && Date.now() - Date.parse(STATE.infoRueck.t) < 600000 ? STATE.infoRueck : null; }
 function infoBewerten(e, bg) {
   const stufe = infoStufe(e), hv = akteurDaten('handler'), vt = hv ? hv.vertrauen : 50, B = SCENARIO.abfragen.info;
@@ -3754,15 +3552,6 @@ function infoBewerten(e, bg) {
 function dossierBelege(e) {
   const def = LM(), ms = def ? MS(def.id) : null;
   return ms ? ms.dokumente.filter(function (d) { return d.entitaet === e.id; }) : [];
-}
-function einreichPruefung(e) {
-  const x = IZ()[e.id] || {}, d = STATE.dossiers.entitaeten[e.id], si = (d && d.sichtungen) || [], fehlt = [];
-  const dk = dossierBelege(e);
-  if (!dk.length && !si.some(function (z) { return ((z.ort || '') + (z.text || '')).trim().length >= 8; })) fehlt.push('sichtung');
-  const ef = einschaetzungFrische(x);
-  if (!x.einschaetzung) fehlt.push('einschaetzung');
-  else if (ef.stufe === 'veraltet') fehlt.push('einschaetzung');
-  return { ok: !fehlt.length, fehlt: fehlt, sichtungen: si.length, dokumente: dk.length, einschaetzungAlt: !!(x.einschaetzung && ef.stufe === 'veraltet') };
 }
 function handlerPlan(text, sek, extra) {
   planen(STATE, Object.assign({ typ: 'antwort', kanal: 'handler', text: text, faelligAm: new Date(Date.now() + sek * 1000).toISOString() }, extra || {}));
@@ -4326,43 +4115,6 @@ const ACTIONS = {
     return { modul: 'System', aktion: 'Zustand zurückgesetzt', detail: 'Ausgangszustand hergestellt, Seed-Zeiten neu berechnet' };
   },
 
-  /* --- Modul 1: Profil --- */
-  STATUS_GESETZT: function (a) {
-    if (STATUS_LISTE.indexOf(a.status) < 0 || a.status === STATE.agent.status) return null;
-    if (a.status === 'Ruhend' && (LM() || STATE.extraktion.anforderung.status !== 'keine')) return null;   /* Ruhend nur ohne laufenden Auftrag */
-    const alt = STATE.agent.status, jetzt = Date.now(), out = [];
-    STATE.agent.status = a.status;
-    out.push({ modul: 'Profil', aktion: 'Status geändert', detail: alt + ' → ' + a.status + ' (manuell)',
-               krit: a.status === 'Erhöhtes Risiko' || a.status === 'Extraktion ausstehend' });
-    if (a.status === 'Ruhend') {
-      STATE.pause = nowIso();
-      out.push({ modul: 'Kommunikation', aktion: 'Ansprechpartner schweigt', detail: 'Status Ruhend: keine Zuweisung und keine Meldungen des Ansprechpartners bis zur Reaktivierung' });
-    } else if (alt === 'Ruhend') {
-      SCENARIO.kommunikation.kanaele.forEach(function (kd) { if (STATE.komm.kanaele[kd.id]) delete STATE.komm.kanaele[kd.id].geschlossen; });
-      if (kwS().gesperrt) { kwS().gesperrt = false; kwS().freiPlan = false; }
-      if (STATE.vorlauf && STATE.einweisung === false) {                  /* erste Aktivierung: Verbindungsaufbau, danach erster Auftrag */
-        const S = SCENARIO.serie;
-        STATE.einweisung = true;
-        S.einweisung.forEach(function (m) { planen(STATE, { typ: 'verlauf', kanal: m.kanal, auto: !!m.auto, text: m.text, faelligAm: new Date(jetzt + m.sek * 1000).toISOString() }); });
-        STATE.serie.folge = { mission: S.start, faelligAm: new Date(jetzt + S.einweisungFolgeSek * 1000).toISOString() };
-        out.push({ modul: 'Kommunikation', aktion: 'Verbindung zum Ansprechpartner aufgenommen', detail: 'Erste Aktivierung: Einweisung und erster Auftrag folgen' });
-        kwAnstoss(jetzt, Math.max.apply(null, S.einweisung.map(function (m) { return m.sek; })) + 25, true, out);
-      } else if (STATE.pause) {                                            /* Pause: ausstehende Ereignisse um die Ruhezeit verschieben */
-        const d = jetzt - Date.parse(STATE.pause), v = function (iso) { return new Date(Date.parse(iso) + d).toISOString(); };
-        STATE.plan.forEach(function (p) { if (p.typ !== 'antwort') p.faelligAm = v(p.faelligAm); });
-        if (STATE.serie.folge) STATE.serie.folge.faelligAm = v(STATE.serie.folge.faelligAm);
-        out.push({ modul: 'Kommunikation', aktion: 'Ansprechpartner wieder erreichbar', detail: 'Ausstehende Ereignisse um ' + fmtDauer(d) + ' verschoben' });
-        kwAnstoss(jetzt, 30, false, out);
-      }
-      STATE.pause = null;
-    }
-    if (a.status === 'Aktiv' && STATE.serie.ende && !LM() && STATE.extraktion.anforderung.status === 'keine' && !STATE.plan.some(function (p) { return p.typ === 'neuer_auftrag'; })) {
-      const spaet = STATE.plan.reduce(function (m, p) { return Math.max(m, Date.parse(p.faelligAm)); }, jetzt);   /* erst nach den laufenden Meldungen (Übergabe) */
-      planen(STATE, { typ: 'neuer_auftrag', faelligAm: new Date(spaet + (25 + Math.round(Math.random() * 20)) * 1000).toISOString() });
-      out.push({ modul: 'Mission', aktion: 'Neuer Auftrag angefordert', detail: 'Status Aktiv nach Ende der Auftragsserie (' + STATE.serie.ende.art + '): ARGUS prüft, was ansteht' });
-    }
-    return out;
-  },
   LEGENDE_GEWECHSELT: function (a) {
     const neu = legende(a.legende), alt = legende(aktiveLegendeId());
     if (!neu || (alt && neu.id === alt.id)) return null;
@@ -4370,39 +4122,6 @@ const ACTIONS = {
     const bezeichnung = function (l) { const k = ARBEITS_IDENTITAETEN[l.id] || l; return k.bezeichnung + ' (' + k.name + ', ' + k.land + ')'; };
     return { modul: 'Profil', aktion: 'Aktive Identität gewechselt',
              detail: (alt ? bezeichnung(alt) + ' → ' : '') + bezeichnung(neu) };
-  },
-  CHECKIN: function (a) {
-    const def = KM(), ort = def.standorte.find(function (o) { return o.id === a.standortId; });
-    if (!ort) return null;
-    const jetzt = Date.now(), vorher = STATE.agent.checkin;
-    STATE.agent.checkin = { t: new Date(jetzt).toISOString(), standortId: ort.id };
-    let detail = ort.id + ' ' + ort.name + '; ' + def.meldewesen.kennwortverfahren;
-    if (meldeAktiv()) detail += '; zählt für Meldefenster ' + fensterNach(jetzt).label;
-    else detail += STATE.funkstille.aktiv ? '; Meldefenster ausgesetzt (Funkstille)' : '; kein laufender Auftrag, Meldewesen ruht';
-    if (STATE.melde.versaeumt > 0) {
-      detail += '; Versäumniszähler zurückgesetzt (zuvor ' + STATE.melde.versaeumt + ')';
-      STATE.melde.versaeumt = 0;
-    }
-    skriptAusloesen('checkin');
-    const aus = [{ modul: 'Profil', aktion: 'Check-in gemeldet', detail: detail }];
-    checkinBestaetigen(aus, ort, { ausweich: false, vorher: vorher });
-    return aus;
-  },
-  CHECKIN_AUSWEICH: function (a) {
-    const ll = Array.isArray(a.ll) && a.ll.length === 2 && isFinite(a.ll[0]) && isFinite(a.ll[1]) ? a.ll : null;
-    if (!ll) return null;
-    const jetzt = Date.now(), vorher = STATE.agent.checkin, def = KM(), name = kuerzen(String(a.name || '').trim(), 40) || 'ohne Bezeichnung';
-    const grund = String(a.begruendung || '').trim(), schluessig = grund.length >= 12 && /weil|wegen|gesperrt|sperrung|streife|polizei|kontrolle|umweg|verfolg|beobacht|sicher|unfall|stau|panne|defekt|treffpunkt|verlegt|anweisung|vorsicht/i.test(grund);
-    STATE.agent.checkin = { t: new Date(jetzt).toISOString(), standortId: 'AW', name: name, koord: ll, begruendung: grund };
-    let detail = 'Ausweichort ' + name + ' (' + ll[0].toFixed(4) + ', ' + ll[1].toFixed(4) + '), nicht im Plan; ' + def.meldewesen.kennwortverfahren;
-    if (grund) detail += '; Begründung: ' + kuerzen(grund, 90);
-    if (meldeAktiv()) detail += '; zählt für Meldefenster ' + fensterNach(jetzt).label;
-    else detail += STATE.funkstille.aktiv ? '; Meldefenster ausgesetzt (Funkstille)' : '; kein laufender Auftrag, Meldewesen ruht';
-    if (STATE.melde.versaeumt > 0) { detail += '; Versäumniszähler zurückgesetzt (zuvor ' + STATE.melde.versaeumt + ')'; STATE.melde.versaeumt = 0; }
-    if (LM()) zustandWirkung('handler', 'vertrauen', schluessig ? 1 : (grund ? -1 : -3), 'Ausweichort ' + (schluessig ? 'mit schlüssiger Begründung' : grund ? 'mit dünner Begründung' : 'ohne Begründung'));
-    const aus = [{ modul: 'Profil', aktion: 'Check-in am Ausweichort', krit: !schluessig, detail: detail }];
-    checkinBestaetigen(aus, STATE.agent.checkin, { ausweich: true, vorher: vorher });
-    return aus;
   },
   START_VORGEZOGEN: function () {
     const out = [];
@@ -4414,22 +4133,6 @@ const ACTIONS = {
     planen(STATE, { typ: 'lebenszeichen', faelligAm: new Date(Date.now() + sek * 1000).toISOString() });
     return { modul: 'Kommunikation', aktion: 'Nachfrage angesetzt', detail: 'Status Standby: ARGUS fragt in ca. ' + Math.round(sek / 60) + ' min nach', leicht: true };
   },
-  AUSRUESTUNG_ANFORDERN: function (a) {
-    const x = arListe().find(function (y) { return y.kategorie === a.kategorie; });
-    if (!x || x.zustand === 'einsatzbereit' || x.anfrage || LM() || STATE.agent.status === 'Ruhend') return null;
-    const R = ruheT().ausruestung, jetzt = Date.now(), sek = 75 + Math.round(Math.random() * 125);
-    STATE.agent.ar[x.kategorie] = Object.assign({}, STATE.agent.ar[x.kategorie] || {}, { zustand: x.zustand, hinweis: x.hinweis, anfrage: { t: new Date(jetzt).toISOString() } });
-    planen(STATE, { typ: 'verlauf', kanal: 'support', auto: false, text: R.angenommen.replace('{KAT}', x.kategorie), faelligAm: new Date(jetzt + 8000).toISOString() });
-    planen(STATE, { typ: 'ausruestung', kategorie: x.kategorie, faelligAm: new Date(jetzt + sek * 1000).toISOString() });
-    return { modul: 'Profil', aktion: 'Instandsetzung angefordert', detail: x.kategorie + ' (' + x.zustand + '); Support Element meldet sich in ca. ' + Math.round(sek / 60 * 10) / 10 + ' min' };
-  },
-  ABDRUCK_REGIE: function (a) {
-    const A = abdS();
-    if (a.reset) { A.spuren = []; A.orte = []; A.warn = { legende: 0, asset: 0 }; A.sperreBis = null; A.letzteRuege = null; return { modul: 'System', aktion: 'Spuren gelöscht (Regie)', detail: 'Abdruck zurückgesetzt' }; }
-    if (['legende', 'asset'].indexOf(a.tr) < 0 || !isFinite(a.d)) return null;
-    abdSpur(a.tr, 'Regie', Number(a.d), 'Regie');
-    return { modul: 'System', aktion: 'Abdruck gesetzt (Regie)', detail: ABD.name[a.tr] + ' ' + (a.d > 0 ? '+' : '') + a.d };
-  },
   KANTE_BESTAETIGT: function (a) {
     const v = dossierRechercheKanten().find(function (x) { return x.id === a.id; });
     if (!v) return null;
@@ -4438,33 +4141,12 @@ const ACTIONS = {
     STATE.dossiers.kantenStand[v.id] = nowIso();
     return { modul: 'Dossier', aktion: 'Verbindung bestätigt', detail: v.id + ' ' + v.von + ' → ' + v.nach + ': Stand erneuert (zuvor ' + vor.fr.text + ', ' + vor.fr.stufe + ')' };
   },
-  ALTERUNG_REGIE: function (a) {
-    const f = Number(a.faktor);
-    if (!isFinite(f) || f < 0 || f > 100000) return null;
-    const alt = altS().faktor; altS().faktor = f;
-    return { modul: 'System', aktion: 'Alterung gesetzt (Regie)', detail: (alt === 1 ? 'Echtzeit' : '×' + alt) + ' → ' + (f === 1 ? 'Echtzeit' : f === 0 ? 'aus' : '×' + f) };
-  },
   ZONE_BESTAETIGT: function (a) {
     const def = zDef(), zn = def && !PROFIL.karteBlanko ? karteZoneFinden(a.id, def) : null;
     if (!zn) return null;
     if (zn.auto) { const u = zonenUrteil(def)[zn.id]; if (!u || u.stufe == null || u.status !== 'frei') return null; u.t = nowIso(); }
     else { const z = zonenEigene(def).find(function (x) { return x.id === zn.id; }); if (!z) return null; z.stand = nowIso(); }
     return { modul: 'Karte', aktion: 'Lage bestätigt', detail: zn.id + ': Einstufung erneuert' };
-  },
-  BELASTUNG_REGIE: function (a) {
-    const B = belS(), alt = B.w;
-    const neu = a.w != null ? a.w : alt + (Number(a.d) || 0);
-    B.w = Math.max(0, Math.min(100, neu)); B.t = nowIso();
-    B.verlauf = B.verlauf || []; B.verlauf.push({ t: nowIso(), d: Math.round(B.w - alt), grund: 'Regie' });
-    while (B.verlauf.length > 20) B.verlauf.shift();
-    return { modul: 'System', aktion: 'Belastung gesetzt (Regie)', detail: Math.round(alt) + ' → ' + Math.round(B.w) };
-  },
-  ATEMPAUSE: function () {
-    const alt = Math.round(belS().w);
-    if (!atempauseWirkung()) return null;
-    const out = [{ modul: 'Profil', aktion: 'Atempause genommen', detail: 'Belastung ' + alt + ' → ' + Math.round(belS().w) + (LM() ? ' (im Einsatz)' : '') }];
-    handlerPlan('Verstanden. Kurze Atempause, ich halte den Kanal still. Melde dich, wenn du wieder bereit bist.', 3 + Math.floor(Math.random() * 4), { frei: true });
-    return out;
   },
   BELASTUNG_PRUEFUNG: function () {
     const B = belS(), out = [], R = ruheT().belastung;
@@ -4483,13 +4165,6 @@ const ACTIONS = {
       out.push({ modul: 'Profil', aktion: 'Auftragsvergabe ausgesetzt', krit: true, detail: 'Belastung ' + Math.round(B.w) + ': neue Aufträge erst nach Erholung unter 70' });
     }
     return out.length ? out : null;
-  },
-  KENNWORT_SCHALTER: function (a) {
-    const K = kwS();
-    if (K.an === !!a.ein) return null;
-    K.an = !!a.ein;
-    if (!K.an) { K.aufgabe = null; K.gesperrt = false; K.freiPlan = false; planEntfernen(function (p) { return p.typ === 'kennwort' || p.typ === 'kennwort_frei'; }); }
-    return { modul: 'Profil', aktion: 'Kennwortprüfung ' + (K.an ? 'eingeschaltet' : 'ausgeschaltet'), detail: K.an ? 'ARGUS stellt gelegentlich Prüfsätze' : 'keine Prüfsätze, Kanal Ansprechpartner offen' };
   },
   TEXT_GEAENDERT: function (a) {
     if (a.feld !== 'notizen' && a.feld !== 'einschraenkungen') return null;
@@ -4543,15 +4218,6 @@ const ACTIONS = {
     return out.length ? out : null;
   },
 
-  /* --- Modul 4: Nachrichten --- */
-  KANAL_GEOEFFNET: function (a) {
-    const k = kanalDef(a.kanal);
-    if (!k) return null;
-    if (STATE.komm.aktiv === k.id && STATE.komm.kanaele[k.id].ungelesen === 0) return null;
-    STATE.komm.aktiv = k.id;
-    const n = kanalLesen(k.id);
-    return { modul: 'Kommunikation', aktion: 'Kanal geöffnet', detail: k.name + ' (' + k.gegenstelle + ')' + (n ? ', ' + n + (n === 1 ? ' Nachricht' : ' Nachrichten') + ' als gelesen markiert' : '') };
-  },
   NACHRICHT_GESENDET: function (a) {
     const k = kanalDef(a.kanal), text = String(a.text || '').trim();
     const dr = DRINGLICHKEIT.indexOf(a.dringlichkeit) >= 0 ? a.dringlichkeit : 'Routine';
@@ -4570,25 +4236,6 @@ const ACTIONS = {
     /* leicht: nur die Statusanzeige der Nachricht wird nachgeführt */
     return { modul: 'Kommunikation', aktion: 'Nachrichtenstatus geändert', leicht: true,
              detail: n.msg.id + ' (Kanal ' + kanalDef(n.kanal).name + '): ' + alt + ' → ' + a.status };
-  },
-  /* Nächste noch nicht gesendete Skriptnachricht der laufenden Mission sofort (Regie) */
-  NACHRICHT_EINGEHEND: function () {
-    const def = LM();
-    if (!def) return null;
-    const i = MS(def.id).skript.findIndex(function (s) { return s !== 'gesendet'; });
-    if (i < 0) return null;
-    const out = [];
-    sendeSkript(def, i, out);
-    return out;
-  },
-  NACHRICHT_EINGESPIELT: function (a) {
-    const k = kanalDef(a.kanal), text = String(a.text || '').trim();
-    if (!k || !text) return null;
-    const msg = eingang(k.id, { von: 'gegenstelle', absender: k.gegenstelle, text: text, lagerelevant: !!a.lagerelevant,
-                                dringlichkeit: DRINGLICHKEIT.indexOf(a.dringlichkeit) >= 0 ? a.dringlichkeit : 'Routine' });
-    const out = [eingangsEintrag(msg, k, '')];
-    if (msg.lagerelevant) bedrohungErhoehen(msg, k.name, out);
-    return out;
   },
   /* Fälliger Planeintrag (Skriptnachricht, Antwort, Freigabe, Durchführung) */
   FAELLIG: function (a) {
@@ -4748,131 +4395,8 @@ const ACTIONS = {
     }
     return out.length ? out : { modul: 'System', aktion: 'Planeintrag verworfen', detail: p.id + ' (' + p.typ + ') ohne Wirkung, Voraussetzung entfallen' };
   },
-  AUTOMATIK_GESETZT: function (a) {
-    if (STATE.automatik === !!a.ein) return null;
-    STATE.automatik = !!a.ein;
-    return { modul: 'System', aktion: 'Automatik der Gegenstellen ' + (STATE.automatik ? 'eingeschaltet' : 'ausgeschaltet'), detail: STATE.plan.length + ' Ereignisse im Plan' };
-  },
-  FUNKSTILLE_GESETZT: function (a) {
-    if (STATE.funkstille.aktiv === !!a.aktiv) return null;
-    const out = [];
-    if (a.aktiv) {
-      STATE.funkstille = { aktiv: true, seit: nowIso(), mission: STATE.kontext };
-      out.push({ modul: 'Kommunikation', aktion: 'Funkstille begonnen', krit: true, detail: 'Anordnung des Ansprechpartners; Meldefenster ausgesetzt, keine Eskalation' });
-    } else funkstilleBeenden('Anordnung des Ansprechpartners', out);
-    return out;
-  },
-  /* Eigene Einschätzung des Agenten, zusätzlich zur Bewertung des Ansprechpartners */
-  BEDROHUNG_EIGEN: function (a) {
-    const X = STATE.extraktion, neu = Number(a.stufe), alt = X.stufe, B = SCENARIO.bedrohungsstufen, text = String(a.begruendung || '').trim();
-    if (!LM() || !(neu >= 1 && neu <= 5) || neu === alt || text.length < 10) return null;
-    const t = nowIso(), out = [];
-    X.stufe = neu; X.bewertet = t;
-    X.begruendung.push({ t: t, text: 'Eigene Einschätzung: Stufe ' + alt + ' → Stufe ' + neu + '. ' + text, quelle: 'Agent ' + SCENARIO.agent.codename });
-    out.push({ modul: 'Extraktion', aktion: neu > alt ? 'Bedrohungsstufe erhöht (eigene Bewertung)' : 'Bedrohungsstufe gesenkt (eigene Bewertung)', krit: neu > alt,
-               detail: 'Stufe ' + alt + ' (' + B[alt] + ') → Stufe ' + neu + ' (' + B[neu] + '); ' + kuerzen(text, 140) });
-    if (neu >= 4 && STATE.agent.status === 'Aktiv') setStatus('Erhöhtes Risiko', 'Bedrohungsstufe ' + neu + '; eigene Bewertung', out);
-    planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, faelligAm: new Date(Date.now() + 20000).toISOString(),
-      text: neu >= 4 ? 'Deine Bewertung Stufe ' + neu + ' zur Kenntnis genommen. Ab jetzt keine Maßnahme ohne meine Abstimmung. Wenn es Substanz hat, melde es genau.'
-          : neu > alt ? 'Eigene Bewertung Stufe ' + neu + ' vermerkt. Ich gleiche sie mit meiner Quellenlage ab.' : 'Absenkung auf Stufe ' + neu + ' vermerkt. Das musst du verantworten, nicht ich.' });
-    return out;
-  },
-  BEDROHUNG_GESETZT: function (a) {
-    const X = STATE.extraktion, neu = Number(a.stufe), alt = X.stufe, B = SCENARIO.bedrohungsstufen;
-    if (!(neu >= 1 && neu <= 5) || neu === alt) return null;
-    const t = nowIso(), out = [];
-    X.stufe = neu; X.bewertet = t;
-    X.begruendung.push({ t: t, text: 'Neubewertung der Lage durch den Ansprechpartner: Stufe ' + alt + ' → Stufe ' + neu + '.', quelle: 'Ansprechpartner ' + SCENARIO.extraktion.freigabe.durch });
-    out.push({ modul: 'Extraktion', aktion: neu > alt ? 'Bedrohungsstufe erhöht' : 'Bedrohungsstufe gesenkt', krit: neu > alt,
-               detail: 'Stufe ' + alt + ' (' + B[alt] + ') → Stufe ' + neu + ' (' + B[neu] + '); Anlass: Neubewertung durch den Ansprechpartner' });
-    if (neu >= 4 && STATE.agent.status === 'Aktiv') setStatus('Erhöhtes Risiko', 'Bedrohungsstufe ' + neu + '; Anlass: Neubewertung durch den Ansprechpartner', out);
-    return out;
-  },
 
-  /* --- Modul 5: Panic / Extraktion --- */
-  EXTRAKTION_ANGEFORDERT: function (a) {
-    const o = optionDef(a.option), text = String(a.begruendung || '').trim(), X = STATE.extraktion;
-    if (!o || !text || X.anforderung.status !== 'keine') return null;
-    const t = nowIso();
-    X.anforderung = Object.assign(leereAnforderung(), { status: 'angefordert', option: o.id, begruendung: text, t: t, durch: 'Agent',
-                                                         statusZuvor: STATE.agent.status, freigabe: 'ausstehend' });
-    delete VIEW.draft['x-begr']; delete VIEW.draft['x-opt'];
-    const out = [{ modul: 'Extraktion', aktion: 'Extraktion angefordert', krit: true,
-      detail: optionText(o.id) + ', Vorlauf ' + o.vorlauf + '; Begründung: ' + kuerzen(text, 110) + '; Freigabe durch ' + SCENARIO.extraktion.freigabe.durch + ' ausstehend' }];
-    setStatus('Extraktion ausstehend', 'Extraktionsanforderung ' + optionText(o.id), out);
-    systemnachricht('handler', 'Systemmeldung: Extraktionsanforderung gestellt, ' + optionText(o.id) + '. Begründung: ' + text + ' Freigabe durch Ansprechpartner ausstehend.');
-    planeGegenstelle('freigabe');                           /* Automatik: Freigabe nach freigabeNachSek */
-    return out;
-  },
-  EXTRAKTION_GEGENSTELLE: function (a) { return gegenstelleSchritt(a.schritt); },
-  EXTRAKTION_ZURUECKGEZOGEN: function () {
-    const r = STATE.extraktion.anforderung;
-    if (r.durch !== 'Agent' || (r.status !== 'angefordert' && r.status !== 'bestätigt')) return null;
-    const O = optionText(r.option), out = [{ modul: 'Extraktion', aktion: 'Anforderung zurückgezogen', detail: O + ': ' + r.status + ' → keine, durch Agent' }];
-    systemnachricht('handler', 'Systemmeldung: Extraktionsanforderung ' + O + ' durch Agent zurückgezogen.');
-    anforderungAufheben('Extraktionsanforderung zurückgezogen', out);
-    return out;
-  },
-  STANDORTFREIGABE_GESETZT: function (a) {
-    const X = STATE.extraktion;
-    if (X.standortfreigabe === !!a.ein) return null;
-    X.standortfreigabe = !!a.ein;
-    return { modul: 'Extraktion', aktion: 'Standortfreigabe ' + (X.standortfreigabe ? 'eingeschaltet' : 'ausgeschaltet'),
-             detail: 'Letzter bekannter Standort: ' + ortText(STATE.agent.checkin) + ', Stand ' + fmtZ(STATE.agent.checkin.t) };
-  },
 
-  /* --- Modul 2: Auftrag und Auftragsabfolge --- */
-  ZIEL_GESETZT: function (a) {
-    const def = SCENARIO.missionen.find(function (m) { return m.ziele.some(function (z) { return z.id === a.id; }); });
-    if (!def) return null;
-    const ms = MS(def.id), z = def.ziele.find(function (x) { return x.id === a.id; });
-    if (ms.status !== 'laufend' || !einsatzLaeuft() || ms.ziele[z.id].erledigt === !!a.erledigt) return null;   /* Ziele sind erst ab Start abhakbar */
-    if (a.erledigt && !zielErreichbar(def, z)) return null;                                                  /* Zähler muss erfüllt sein */
-    const out = [];
-    zielSetzen(def, z, a.erledigt, out);
-    return out;
-  },
-  /* Ziel als erledigt (oder eliminiert) melden: Meldung an den Ansprechpartner, Ziel abhaken, Dossierstatus gemäß Zieldefinition */
-  ZIEL_GEMELDET: function (a) {
-    const def = LM();
-    const z = def ? def.ziele.find(function (x) { return x.id === a.id; }) : null;
-    if (!z || !einsatzLaeuft() || MS(def.id).ziele[z.id].erledigt || !zielErreichbar(def, z)) return null;
-    const M = z.meldung || null, sd = M ? statusDef(M.status) : null, out = [];
-    out.push({ modul: 'Mission', aktion: sd && sd.id === 'eliminiert' ? 'Ziel als eliminiert gemeldet' : 'Ziel als erledigt gemeldet', krit: !!(sd && sd.kritisch),
-               detail: z.id + ' (' + z.art + ')' + (M ? '; Bezug ' + M.entitaet + ' ' + entitaet(M.entitaet).name : '') });
-    const text = SCENARIO.serie.texte[M && M.vollzug ? 'vollzugsmeldung' : 'zielmeldung'].replace('{Z}', z.id);
-    if (!STATE.funkstille.aktiv || (def.funkstille && def.funkstille.bisZiel === z.id)) nachrichtSenden(kanalDef('handler'), text, 'Priorität', out);
-    else out.push({ modul: 'Kommunikation', aktion: 'Ergebnis zurückgestellt', detail: z.id + ': keine Nachricht während der Funkstille; das Ziel wird im Terminal vermerkt' });
-    zielSetzen(def, z, true, out);
-    if (M) dossierStatusSetzen(entitaet(M.entitaet), M.status, 'Meldung Ziel ' + z.id, out);
-    return out;
-  },
-  MISSIONSSTATUS_GESETZT: function (a) {
-    const def = LM();
-    if (!def || SCENARIO.serie.arbeitsstaende.indexOf(a.status) < 0 || a.status === MS(def.id).arbeitsstand) return null;
-    const alt = MS(def.id).arbeitsstand;
-    MS(def.id).arbeitsstand = a.status;
-    return { modul: 'Mission', aktion: 'Arbeitsstand geändert', detail: opText(def) + ': ' + alt + ' → ' + a.status };
-  },
-  LAGEBERICHT: function (a) {
-    const text = String(a.text || '').trim();
-    if (!text) return null;
-    STATE.seq.bericht += 1;
-    const id = 'LB-' + p3(STATE.seq.bericht);
-    STATE.berichte.push({ id: id, t: nowIso(), text: text, mission: STATE.kontext });
-    delete VIEW.draft['lb-text'];
-    const out = [{ modul: 'Mission', aktion: 'Bericht erfasst', detail: id + ' (' + STATE.kontext + '): ' + kuerzen(text, 140) }], dl = LM();
-    if (dl && /treff|getroffen|gesprochen|gespräch|angesprochen|begegn/i.test(text)) {
-      const kennung = (text.match(/\b[POL]-\d{4}\b/) || [null])[0];
-      const antwort = function (t) { planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, text: t, faelligAm: new Date(Date.now() + 20000).toISOString() }); };
-      if (kennung && entitaet(kennung) && entitaet(kennung).typ === 'Person') {
-        MS(dl.id).treffen += 1;
-        antwort('Bericht ' + id + ' gelesen. Begegnung mit ' + kennung + ' notiert. Weiter wie geplant, möglichst unauffällig.');
-        out.push({ modul: 'Mission', aktion: 'Begegnung gemeldet', detail: id + ': Begegnung mit ' + kennung + ' ' + entitaet(kennung).name });
-      } else antwort('Bericht ' + id + ': Wer war das? Ohne Dossierkennung der Person zähle ich keine Begegnung.');
-    }
-    return out;
-  },
   /* Zuweisung eines Auftrags durch den Ansprechpartner (Folgeauftrag nach der Verzögerung folgeNachSek) */
   MISSION_ZUGEWIESEN: function (a) {
     const def = missionDef(a.id);
@@ -4923,23 +4447,6 @@ const ACTIONS = {
     }
     return out;
   },
-  ANREISE_EINGEREICHT: function (a) {
-    const def = LM();
-    if (!def || !def.anreise || einsatzLaeuft() || STATE.agent.status === 'Ruhend') return null;
-    if (STATE.anreise && STATE.anreise.abfahrt && Date.now() >= Date.parse(STATE.anreise.abfahrt)) return null;
-    const jetzt = Date.now(), b = anreiseBewerten(def, a, jetzt);
-    if (!b || !b.gueltig) return null;
-    planEntfernen(function (p) { return p.typ === 'anreise_ankunft' || p.anreise; });
-    const text = anreiseRueckmeldung(b);
-    STATE.anreise = { mission: def.id, eingereicht: new Date(jetzt).toISOString(), ohnePlan: false, angekommen: false, mittel: b.mittel, mittelName: b.mittelName, abfahrtH: b.abfahrtH,
-                      unterkunft: b.unterkunft, ortId: b.ortId, ausgangId: b.ausgangId, ausgangName: b.ausgangName, km: b.km, erkundung: b.erkundung, abfahrt: b.abfahrt, ankunft: b.ankunft, dauerMin: b.dauerMin, puffer: b.puffer,
-                      risiko: b.risiko, stufe: b.stufe, faktoren: b.faktoren, rueckmeldung: text };
-    planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, anreise: true, text: text, faelligAm: new Date(jetzt + (25 + b.risiko % 20) * 1000).toISOString() });
-    planen(STATE, { typ: 'anreise_ankunft', mission: def.id, faelligAm: b.ankunft });
-    return { modul: 'Mission', aktion: 'Reiseplan eingereicht', krit: b.stufe === 'hoch',
-             detail: opText(def) + ': ' + (b.ausgangName ? 'ab ' + b.ausgangName + ', ' : '') + b.mittelName + ', Abfahrt ' + fmtZ(b.abfahrt) + ', Ankunft ' + fmtZ(b.ankunft) + ' in ' + b.ortId + ' ' + standortName(b.ortId) +
-                     ', Puffer ' + dauerText(b.puffer) + ', Risikowert ' + b.risiko + ' (' + b.stufe + ')' + (b.erkundung ? ', mit Vorerkundung' : '') };
-  },
   MISSION_AKTEUR_ZUGEORDNET: function (a) {
     const def = LM(), e = entitaet(a.id);
     if (!def || !e || !freigeschaltet(e.mission) || e.mission === def.id || STATE.agent.status === 'Ruhend') return null;
@@ -4953,120 +4460,7 @@ const ACTIONS = {
     planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, text: text, faelligAm: new Date(Date.now() + (20 + e.id.length * 3) * 1000).toISOString() });
     return { modul: 'Mission', aktion: 'Zusatzakteur gemeldet', krit: b.urteil === 'abgelehnt', detail: opText(def) + ': ' + e.id + ' ' + e.name + ' als ' + rolle + ', Bewertung ' + (b.urteil === 'auflage' ? 'mit Auflage' : b.urteil) };
   },
-  MISSION_AKTEUR_ENTFERNT: function (a) {
-    const def = LM();
-    if (!def) return null;
-    const ms = MS(def.id), i = (ms.zusatz || []).findIndex(function (x) { return x.id === a.id; });
-    if (i < 0) return null;
-    const x = ms.zusatz.splice(i, 1)[0], e = entitaet(x.id);
-    return { modul: 'Mission', aktion: 'Zusatzakteur zurückgezogen', detail: opText(def) + ': ' + x.id + (e ? ' ' + e.name : '') };
-  },
-  AKTE_ANTRAG: function (a) {
-    const doc = (SCENARIO.akten || []).find(function (d) { return d.id === a.doc; });
-    if (!doc || !freigeschaltet(doc.mission) || STATE.agent.status === 'Ruhend') return null;
-    const r = schwerListe(doc).find(function (x) { return x.r === a.r; });
-    if (!r || !schwerOffen(doc, r) || r.antrag === 'nie') return null;
-    const key = schwerKey(doc, r);
-    if (STATE.akten.anfragen[key]) return null;
-    STATE.akten.anfragen[key] = nowIso();
-    planen(STATE, { typ: 'akte_antwort', doc: doc.id, r: r.r, faelligAm: new Date(Date.now() + (50 + (r.t.length * 7) % 40) * 1000).toISOString() });
-    return { modul: 'Akten', aktion: 'Freigabe beantragt', detail: doc.id + ' ' + doc.titel + ', Schwärzung ' + r.r + ' (Mindeststufe ' + r.stufe + ', Zugang ' + doc.zugang + ')' };
-  },
-  MISSION_ABGELEHNT: function (a) {
-    const def = missionDef(a.id), text = String(a.begruendung || '').trim();
-    if (!def || MS(def.id).status !== 'zugewiesen' || !text) return null;
-    const ms = MS(def.id), iso = nowIso(), out = [];
-    ms.ablehnungen.push({ t: iso, text: text });
-    STATE.agent.ablehnungen += 1;
-    const n = ms.ablehnungen.length;
-    out.push({ modul: 'Mission', aktion: 'Auftrag abgelehnt', krit: true, detail: opText(def) + ', ' + n + '. Ablehnung; Begründung: ' + kuerzen(text, 140) });
-    if (n === 1) {
-      const m = handlernachricht(serienText('ablehnung1', def), 'Aktenvermerk');
-      out.push({ modul: 'Mission', aktion: 'Aktenvermerk angelegt', detail: def.aktenvermerk + ' zu ' + opText(def) + '; Nachricht ' + m.id + ' (Kanal Ansprechpartner); Auftrag bleibt zugewiesen' });
-      if (STATE.agent.status !== 'Extraktion ausstehend') setStatus('Standby', 'Ablehnung ' + opText(def), out);
-    } else {
-      ms.status = 'abgelehnt'; ms.beendetAm = iso;
-      const m = handlernachricht(serienText('ablehnung2', def), 'Abberufung');
-      out.push({ modul: 'Mission', aktion: 'Abberufung eingeleitet', krit: true, detail: 'Zweite Ablehnung ' + opText(def) + '; ' + def.aktenvermerk + ' ergänzt; Nachricht ' + m.id + ' (Kanal Ansprechpartner)' });
-      if (STATE.extraktion.anforderung.status === 'keine') {
-        STATE.extraktion.anforderung = Object.assign(leereAnforderung(), { status: 'bestätigt', option: 'A', durch: 'Gegenstelle', t: iso,
-          statusZuvor: 'Standby', freigabe: 'erteilt', freigabeT: iso, begruendung: 'Durch Ansprechpartner eingeleitet: Abberufung nach zweiter Ablehnung von ' + opText(def) + ' (' + def.aktenvermerk + ').' });
-        out.push({ modul: 'Extraktion', aktion: 'Option A durch Ansprechpartner eingeleitet', krit: true, detail: optionText('A') + ', Stand bestätigt; Anlass: Abberufung' });
-        planeGegenstelle('durchfuehrung');
-      }
-      setStatus('Extraktion ausstehend', 'Abberufung nach zweiter Ablehnung', out);
-      serieBeenden('Abberufung', def.id, out);
-    }
-    return out;
-  },
-  MISSION_ABGESCHLOSSEN: function (a) {
-    const def = LM(), text = String(a.bericht || '').trim();
-    if (!def || offeneZiele() > 0 || text.length < 20) return null;
-    const ms = MS(def.id), iso = nowIso(), out = [];
-    ms.status = 'abgeschlossen'; ms.beendetAm = iso; ms.abschlussbericht = text;
-    planEntfernen(function (p) { return p.termin === def.id && Date.parse(p.faelligAm) > Date.now(); });
-    STATE.seq.bericht += 1;
-    const id = 'LB-' + p3(STATE.seq.bericht);
-    STATE.berichte.push({ id: id, t: iso, text: 'Abschlussbericht ' + opText(def) + ': ' + text, mission: def.id, art: 'Abschlussbericht' });
-    const m = handlernachricht(serienText('abschluss', def), 'Abschluss');
-    out.push({ modul: 'Mission', aktion: 'Mission abgeschlossen', krit: true,
-      detail: opText(def) + ': ' + def.ziele.length + ' von ' + def.ziele.length + ' Zielen abgehakt; Abschlussbericht ' + id + ' im Archiv; Bestätigung ' + m.id + ' (Kanal Ansprechpartner)' });
-    if (STATE.funkstille.aktiv) funkstilleBeenden('Abschluss ' + opText(def), out);
-    if (STATE.agent.status !== 'Extraktion ausstehend') setStatus('Standby', 'Abschluss ' + opText(def), out);
-    arVerschleiss(out);
-    STATE.nachbereitung = { mission: def.id, seit: iso, erledigt: {} };
-    planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, text: SCENARIO.serie.texte.nachbereitungHinweis, faelligAm: new Date(Date.now() + 25000).toISOString() });
-    out.push({ modul: 'Mission', aktion: 'Nachbereitung eröffnet', detail: opText(def) + ': ' + SCENARIO.serie.nachbereitung.length + ' Schritte; der nächste Auftrag folgt erst nach Abschluss der Nachbereitung' });
-    return out;
-  },
-  NACHBEREITUNG_SCHRITT: function (a) {
-    const nb = STATE.nachbereitung, T = SCENARIO.serie.nachbereitung;
-    if (!nb) return null;
-    const st = T.find(function (x) { return x.id === a.id; });
-    if (!st || nb.erledigt[st.id]) return null;
-    if (st.id === 'nachbesprechung' && T.some(function (x) { return x.id !== st.id && !nb.erledigt[x.id]; })) return null;
-    const def = missionDef(nb.mission), out = [];
-    nb.erledigt[st.id] = nowIso();
-    out.push({ modul: 'Mission', aktion: 'Nachbereitung: ' + st.titel, detail: opText(def) + ': ' + st.vermerk });
-    if (T.every(function (x) { return !!nb.erledigt[x.id]; })) nachbereitungAbschliessen(def, out);
-    return out;
-  },
-  MISSION_ABGEBROCHEN: function (a) {
-    const def = LM(), text = String(a.begruendung || '').trim();
-    if (!def || !def.abbruch || !text) return null;
-    const out = [];
-    missionAbbrechen(def, text, out);
-    return out;
-  },
 
-  /* --- Verstärkung --- */
-  VERSTAERKUNG_ANGEFORDERT: function (a) {
-    const def = LM();
-    if (!def || !def.verstaerkung || !vkArt(a.art)) return null;
-    const anzahl = Math.min(3, Math.max(1, Number(a.anzahl) || 1)), art = vkArt(a.art), jetzt = Date.now(), H = 3600000;
-    const req = { art: a.art, anzahl: anzahl, beginnH: Number(a.beginnH) || 6, dauerH: Number(a.dauerH) || 8, zweck: String(a.zweck || '').trim(), bezug: a.bezug || '', ort: a.ort, dringlichkeit: a.dringlichkeit };
-    const b = vkBewerten(def, req);
-    STATE.seq.verstaerkung = (STATE.seq.verstaerkung || 0) + 1;
-    const id = 'VK-' + String(STATE.seq.verstaerkung).padStart(2, '0');
-    const ortName = (function () { const s = def.standorte.find(function (x) { return x.id === a.ort; }); if (s) return s.name; const e = entitaet(a.ort); return e ? e.name : a.ort; })();
-    const v = { id: id, t: nowIso(), art: a.art, anzahl: anzahl, ort: a.ort, ortName: ortName, bezug: req.bezug, dringlichkeit: a.dringlichkeit, zweck: req.zweck,
-                urteil: b.urteil, grund: b.grund, auflage: b.auflage, beginnH: b.beginnH, dauerH: b.dauerH, entscheidung: new Date(jetzt + 20000).toISOString(), zurueck: null };
-    const antwort = function (text, wann) { planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, verstaerkung: id, text: text, faelligAm: new Date(wann).toISOString() }); };
-    if (b.urteil === 'abgelehnt') {
-      antwort('Anforderung ' + id + ' (' + anzahl + ' × ' + art.name + ') abgelehnt. ' + b.grund, jetzt + 20000);
-    } else {
-      const namen = art.rufzeichen, rz = namen[(STATE.seq.verstaerkung - 1) % namen.length] + '-' + anzahl;
-      v.rufzeichen = rz; v.ankunft = new Date(jetzt + b.beginnH * H).toISOString(); v.ende = new Date(jetzt + (b.beginnH + b.dauerH) * H).toISOString();
-      antwort('Anforderung ' + id + ' ' + (b.urteil === 'auflage' ? 'genehmigt, mit Auflage' : 'genehmigt') + ': ' + anzahl + ' × ' + art.name + ', Rufzeichen ' + rz + ', Eintreffen ' + fmtZ(v.ankunft) + ' bei ' + ortName + '. ' +
-        (b.auflage ? 'Auflage: ' + b.auflage + ' ' : '') + 'Du führst. Kontakt zu den Kräften nur über mich, bitte keine Alleingänge.', jetzt + 20000);
-      antwort(rz + ' ist vor Ort bei ' + ortName + ' und wartet auf Weisung über mich.', Date.parse(v.ankunft));
-      antwort(rz + ' ist raus. Abschlussmeldung von dir steht noch aus.', Date.parse(v.ende));
-    }
-    VK().push(v);
-    delete VIEW.draft['vk-zweck'];
-    return { modul: 'Verstärkung', aktion: 'Verstärkung angefordert',
-             detail: id + ': ' + anzahl + ' × ' + art.name + ' bei ' + ortName + ', ' + a.dringlichkeit + '; Entscheidung: ' + b.urteil + (b.grund && b.urteil === 'abgelehnt' ? ' (' + kuerzen(b.grund, 100) + ')' : '') + (b.auflage ? ', Auflage: ' + kuerzen(b.auflage, 100) : '') };
-  },
   FREIGABE_BEANTRAGT: function (a) {
     const def = LM(), art = FG_ARTEN.find(function (x) { return x.id === a.massnahme; }), e = entitaet(a.ziel);
     if (!def || !art || !e) return null;
@@ -5082,87 +4476,7 @@ const ACTIONS = {
     planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, freigabe: id, text: txt, faelligAm: f.entscheidung });
     return { modul: 'Freigabe', aktion: 'Freigabe beantragt', krit: true, detail: id + ': ' + art.name + ' gegen ' + e.id + ' ' + e.name + '; Entscheidung: ' + b.urteil + (b.grund && b.urteil === 'abgelehnt' ? ' (' + kuerzen(b.grund, 100) + ')' : '') };
   },
-  VERSTAERKUNG_ZURUECKGEZOGEN: function (a) {
-    const v = VK().find(function (x) { return x.id === a.id; });
-    if (!v || v.urteil === 'abgelehnt' || ['in Prüfung', 'unterwegs', 'vor Ort'].indexOf(vkStatus(v)) < 0) return null;
-    const war = vkStatus(v);
-    planEntfernen(function (p) { return p.verstaerkung === v.id; });
-    v.zurueck = nowIso();
-    planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, faelligAm: new Date(Date.now() + 15000).toISOString(),
-      text: war === 'vor Ort' ? (v.rufzeichen || v.id) + ' wird abgezogen. Das Kontingent bleibt verbraucht.' : v.id + ' zurückbeordert. Aufwand und Kontingent bleiben verbraucht.' });
-    return { modul: 'Verstärkung', aktion: 'Verstärkung zurückgezogen', detail: v.id + ' (' + war + ')' };
-  },
 
-  /* --- Aufklärung: eigene Ziele, Dokumente, Zugriffspunkte, Wissensstände --- */
-  EIGENES_ZIEL_NEU: function (a) {
-    const def = LM(), t = String(a.text || '').trim();
-    if (!def || !t) return null;
-    const ms = MS(def.id);
-    STATE.seq.eigenziel = (STATE.seq.eigenziel || 0) + 1;
-    const id = 'E-' + String(STATE.seq.eigenziel).padStart(2, '0');
-    ms.eigene.push({ id: id, text: t.slice(0, 200), erledigt: false, t: nowIso() });
-    return { modul: 'Mission', aktion: 'Eigenes Ziel angelegt', leicht: true, detail: id + ': ' + kuerzen(t, 120) };
-  },
-  EIGENES_ZIEL_GESETZT: function (a) {
-    const def = LM(), x = def ? MS(def.id).eigene.find(function (z) { return z.id === a.id; }) : null;
-    if (!x || x.erledigt === !!a.erledigt) return null;
-    x.erledigt = !!a.erledigt;
-    return { modul: 'Mission', aktion: x.erledigt ? 'Eigenes Ziel erledigt' : 'Eigenes Ziel wieder offen', leicht: true, detail: x.id + ': ' + kuerzen(x.text, 120) };
-  },
-  EIGENES_ZIEL_ENTFERNT: function (a) {
-    const def = LM(), ms = def ? MS(def.id) : null, i = ms ? ms.eigene.findIndex(function (z) { return z.id === a.id; }) : -1;
-    if (i < 0) return null;
-    const x = ms.eigene.splice(i, 1)[0];
-    return { modul: 'Mission', aktion: 'Eigenes Ziel entfernt', leicht: true, detail: x.id };
-  },
-  DOKUMENT_EINGEREICHT: function (a) {
-    const def = LM(), e = entitaet(a.entitaet);
-    if (!def || !e || DOK_ARTEN.indexOf(a.art) < 0) return null;
-    const ms = MS(def.id), iso = nowIso();
-    ms.dokumente.push({ id: a.id, t: iso, art: a.art, entitaet: e.id, notiz: String(a.notiz || '').slice(0, 300), name: String(a.name || '').slice(0, 120), groesse: a.groesse || 0, typ: a.typ || '' });
-    if (!a.leise) planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false,
-      text: 'Eingang bestätigt: ' + a.id + ' (' + a.art + '), zugeordnet zu ' + e.id + '. DISPO wertet aus. Wenn sich daraus etwas ergibt, melde ich mich.',
-      faelligAm: new Date(Date.now() + 15000).toISOString() });
-    return { modul: 'Mission', aktion: 'Dokument eingereicht', detail: a.id + ' (' + a.art + ') zu ' + e.id + ' ' + e.name + '; Datei ' + a.name + ', ' + Math.round((a.groesse || 0) / 1024) + ' KB; Eingang wird vom Ansprechpartner bestätigt' };
-  },
-  ZUGRIFF_ANGELEGT: function (a) {
-    const def = LM(), t = String(a.text || '').trim();
-    if (!def || def.zugriffTypen.indexOf(a.typ) < 0) return null;
-    const ms = MS(def.id);
-    STATE.seq.zugriff = (STATE.seq.zugriff || 0) + 1;
-    const id = 'ZP-' + String(STATE.seq.zugriff).padStart(2, '0'), bz = a.bezug && entitaet(a.bezug) ? a.bezug : '';
-    const ll = bz ? karteKoord(bz) : null;
-    const rr = [50, 100, 250, 500].indexOf(Number(a.r)) >= 0 ? Number(a.r) : 0;
-    ms.zugriff.push({ id: id, typ: a.typ, bezug: bz, ll: ll ? [ll[0], ll[1]] : null, text: t.slice(0, 120), r: rr });
-    ms.zugriffUrteil = null;
-    return { modul: 'Mission', aktion: 'Zugriffspunkt gesetzt', detail: id + ' (' + a.typ + ')' + (bz ? ', Dossier ' + bz : '') + (t ? ': ' + kuerzen(t, 100) : '') };
-  },
-  PACE_EINGEREICHT: function (a) {
-    const def = LM();
-    if (!def) return null;
-    const ms = MS(def.id), W = ['p', 'a', 'c', 'e'].map(function (k) { return a[k] || ''; }), ab = String(a.abbruch || '').trim();
-    if (W.some(function (x) { return PACE_WEGE.indexOf(x) < 0; })) { meldung('Plan nicht eingereicht: Für jede Stufe einen Weg wählen.'); return null; }
-    if (ab.length < 20) { meldung('Plan nicht eingereicht: Abbruchkriterium mit mindestens 20 Zeichen angeben.'); return null; }
-    const pinObj = (PROFIL.pins || []).find(function (x) { return x.id === a.pin; }), pin = pinObj ? pinObj.id : '';
-    let grund = '';
-    if (W.some(function (x, i) { return W.indexOf(x) !== i; })) grund = 'Zwei Stufen laufen über denselben Weg. Fällt er aus, fällt der Plan mit ihm. Jede Stufe braucht einen eigenen.';
-    else if (W[3] === 'Kontakt über KIEBITZ' || W[0] === 'Kontakt über KIEBITZ') grund = 'KIEBITZ ist weder Melde- noch Rettungsweg. Er bleibt ein Werkzeug, und wer ihn als Notfallweg nutzt, verbrennt ihn.';
-    else if (W[3] === 'Ablage am toten Briefkasten') grund = 'Eine Ablage kommt im Notfall zu spät. Für den Notfall brauche ich einen Weg, der sofort ankommt.';
-    const iso = nowIso();
-    ms.pace = { p: W[0], a: W[1], c: W[2], e: W[3], pin: pin, abbruch: ab, t: iso, stand: grund ? 'zurueck' : 'angenommen', antwort: '' };
-    const txt = grund ? 'Zum Kommunikationsplan: ' + grund + ' Bitte überarbeiten.' : 'Kommunikationsplan eingegangen. Primär ' + W[0] + ', Notfall ' + W[3] + (pin ? ', Sammelpunkt ' + (pinGesperrt(pinObj) ? pin : pinObj.name) : '') + '. Passt. Er gilt für diesen Auftrag.';
-    ms.pace.antwort = txt;
-    planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, text: txt, faelligAm: new Date(Date.now() + (6 + Math.round(Math.random() * 6)) * 1000).toISOString() });
-    return { modul: 'Mission', aktion: 'Kommunikationsplan eingereicht', detail: 'Primär ' + W[0] + ' · Alternativ ' + W[1] + ' · Ausweichweg ' + W[2] + ' · Notfall ' + W[3] + '; ' + (grund ? 'zurückgewiesen' : 'angenommen') };
-  },
-  AKTE_GEOEFFNET: function (a) {
-    const doc = (SCENARIO.akten || []).find(function (d) { return d.id === a.id; });
-    if (!doc || !aktenListe().some(function (d) { return d.id === doc.id; })) return null;
-    VIEW.akte.offen = doc.id;
-    const g = STATE.akten.gelesen || (STATE.akten.gelesen = {}), x = g[doc.id] || (g[doc.id] = { n: 0, erst: null, zuletzt: null });
-    x.n += 1; x.zuletzt = nowIso(); x.erst = x.erst || x.zuletzt;
-    return { modul: 'Akten', aktion: 'Dokument eingesehen', detail: doc.reg + ' (' + x.n + '. Einsicht)' };
-  },
   ZUGRIFF_GEAENDERT: function (a) {
     const def = LM(), ms = def ? MS(def.id) : null, z = ms ? ms.zugriff.find(function (x) { return x.id === a.id; }) : null;
     if (!z) return null;
@@ -5190,58 +4504,6 @@ const ACTIONS = {
     if (i < 0) return null;
     ms.zugriff.splice(i, 1); ms.zugriffUrteil = null;
     return { modul: 'Mission', aktion: 'Zugriffspunkt entfernt', leicht: true, detail: a.id };
-  },
-  ZUGRIFF_EINGEREICHT: function () {
-    const def = LM();
-    if (!def) return null;
-    const ms = MS(def.id), L = ms.zugriff, mangel = [];
-    if (L.length < 3) mangel.push('Mindestens drei Zugriffspunkte, gesetzt sind ' + L.length + '.');
-    if (L.some(function (z) { return !z.ll; })) mangel.push('Mindestens ein Zugriffspunkt hat keine Position.');
-    const P = def.strecke.map(karteKoord).filter(Boolean), abschn = [], L2 = L.filter(function (z) { return z.ll; });
-    for (let i = 0; i + 1 < P.length; i++) abschn.push([P[i], P[i + 1]]);
-    const nah = function (p, s) {                                      /* Abstand Punkt-Strecke in km (flache Näherung) */
-      const k = Math.cos(p[0] * Math.PI / 180), ax = s[0][1] * k, ay = s[0][0], bx = s[1][1] * k, by = s[1][0], px = p[1] * k, py = p[0];
-      const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy, u = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
-      return Math.hypot(px - (ax + u * dx), py - (ay + u * dy)) * 111;
-    };
-    const leer = abschn.map(function (s, i) { return L2.some(function (z) { return nah(z.ll, s) <= 15; }) ? null : i + 1; }).filter(Boolean);
-    if (L2.length && leer.length) mangel.push('Abschnitt ' + leer.join(', ') + ' der Strecke ist ohne Zugriffspunkt (Umkreis 15 km).');
-    L.forEach(function (z) { if (z.ll && abschn.length && Math.min.apply(null, abschn.map(function (s) { return nah(z.ll, s); })) > 40) mangel.push(z.id + ' liegt über 40 km abseits der vermuteten Strecke.'); });
-    const ok = mangel.length === 0;
-    ms.zugriffUrteil = { t: nowIso(), ok: ok, n: L.length, mangel: mangel };
-    const text = ok
-      ? 'Analyse der Strecke eingegangen: ' + L.length + ' Zugriffspunkte, alle Abschnitte besetzt. Brauchbar. Ob sie halten, zeigt erst der Termin.'
-      : 'Analyse der Strecke eingegangen. Nicht brauchbar: ' + mangel.join(' ') + ' Nachbessern und erneut einreichen.';
-    planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, text: text, faelligAm: new Date(Date.now() + 20000).toISOString() });
-    return { modul: 'Mission', aktion: ok ? 'Streckenanalyse brauchbar' : 'Streckenanalyse nachzubessern', detail: L.length + ' Zugriffspunkte' + (ok ? '' : '; ' + mangel.join(' ')) };
-  },
-  WISSEN_EINGEREICHT: function (a) {
-    const def = LM();
-    if (!def || !def.wahrheit || !def.wahrheit[a.id] || def.wissensOptionen.indexOf(a.urteil) < 0) return null;
-    if (!entitaet(a.id) || wissen(entitaet(a.id)) === 'unbekannt') return null;
-    const ms = MS(def.id), e = entitaet(a.id), bg = String(a.begruendung || '').trim(), alt = ms.wissen[a.id];
-    if (alt && (alt.stand === 'bestaetigt' || alt.stand === 'festgelegt')) return null;
-    const antwort = function (text) { planen(STATE, { typ: 'verlauf', kanal: 'handler', auto: false, text: text, faelligAm: new Date(Date.now() + 15000).toISOString() }); };
-    if (a.urteil === 'unklar') { antwort('Zu ' + a.id + ' lass es offen. Das ist keine Klärung.'); return { modul: 'Mission', aktion: 'Wissensstand offen gelassen', leicht: true, detail: a.id }; }
-    if (bg.length < 30) { meldung('Einschätzung nicht gemeldet: Begründung mit mindestens 30 Zeichen angeben.'); return null; }
-    const beleg = ms.dokumente.some(function (d) { return d.entitaet === a.id; }) || STATE.berichte.some(function (b) { return b.text.indexOf(a.id) >= 0 && b.mission === def.id; });
-    if (!beleg) { antwort('Zu ' + a.id + ' habe ich keine Belegbasis von dir. Dokument zuordnen oder Beobachtung mit der Kennung im Bericht vermerken.'); return { modul: 'Mission', aktion: 'Wissensstand ohne Belegbasis abgewiesen', leicht: true, detail: a.id }; }
-    const w = alt || { versuche: 0 };
-    w.versuche += 1; w.urteil = a.urteil; w.begruendung = bg.slice(0, 300); w.t = nowIso();
-    ms.wissen[a.id] = w;
-    const wahr = def.wahrheit[a.id];
-    let aktion;
-    if (a.urteil === wahr) {
-      w.stand = 'bestaetigt'; aktion = 'Wissensstand bestätigt';
-      antwort('Einschätzung zu ' + a.id + ' ' + e.name + ': ' + a.urteil + '. Das deckt sich mit meiner Quellenlage. Vermerkt.');
-    } else if (w.versuche >= 2) {
-      w.stand = 'festgelegt'; w.festgelegt = wahr; aktion = 'Wissensstand vom Ansprechpartner festgelegt';
-      antwort('Zu ' + a.id + ' ' + e.name + ' lagst du zum zweiten Mal daneben. Wir führen die Person ab jetzt als ' + wahr + '. Bitte künftig besser belegen.');
-    } else {
-      w.stand = 'widerspruch'; aktion = 'Wissensstand widersprochen';
-      antwort('Zu ' + a.id + ' widerspricht die Quellenlage deiner Einschätzung. Belege prüfen, neu bewerten. Ein weiterer Versuch.');
-    }
-    return { modul: 'Mission', aktion: aktion, krit: w.stand === 'festgelegt', detail: a.id + ' ' + e.name + ': Einschätzung ' + a.urteil + ', Versuch ' + w.versuche + ', Stand ' + w.stand };
   },
 
   /* --- Modul 3: Dossiers --- */
@@ -5282,38 +4544,6 @@ const ACTIONS = {
     const ll = parseKoord(a.koord); if (ll) PROFIL.koord[id] = ll;
     STATE.dossiers.auswahl = id;
     return { modul: 'Dossier', aktion: 'Eigenes Dossier angelegt', detail: id + ' ' + name + ' (' + typ + ', ' + land + ', Stufe ' + stufe + (bildbereit ? ', mit Lichtbild' : '') + (ll ? ', mit Kartenposition' : '') + ')' };
-  },
-  PERSON_UEBERMITTELN: function (a) {
-    const n = nachricht(a.msgId);
-    if (!n || n.kanal !== 'asset' || n.msg.von !== 'gegenstelle' || !personMeldung(n.msg.text)) return null;
-    const m = n.msg;
-    if (m.uebermittelt) { handlerPlan('Das liegt bereits bei mir' + (m.uebermitteltAn ? ' (' + m.uebermitteltAn + ')' : '') + '.', 3); return null; }
-    /* Bezugsmeldung: eine Beschreibung gehört zur Meldung, auf die sie sich bezieht */
-    STATE.beschr = STATE.beschr || {};
-    let w = STATE.beschr[m.id] || null, text = m.text, ref = m;
-    if (!w) {
-      const k = Object.keys(STATE.beschr).find(function (id) { const b = STATE.beschr[id]; return BESCHR_RE.test(m.text) && b.t && Math.abs(Date.parse(b.t) - Date.parse(m.t)) < 600000; });
-      if (k) { w = STATE.beschr[k]; text = w.refText; ref = nachricht(k) ? nachricht(k).msg : m; }
-    }
-    const weibl = w ? w.weibl : /\b(frau|kundin|chefin)\b/i.test(text) && !/\bmann\b/i.test(text);
-    const jacke = (text.match(/\b\w*(jacke|mantel|kapuze|mütze|muetze|weste|anzug|uniform|overall)\w*/i) || [null])[0];
-    const tag = fmtZ(m.t).slice(0, 6);
-    const name = 'Unbekannt' + (weibl ? 'e Frau' : 'er Mann') + (jacke ? ' mit ' + jacke : '') + ' (KIEBITZ, ' + tag + ')';
-    const eck = ['Quelle: KIEBITZ, ' + ref.id + ', ' + fmtZ(ref.t).slice(11, 16) + 'Z, unbelegt'];
-    if (w) {
-      eck.push('Alter: ' + w.alter, 'Größe: ' + w.groesse + ', ' + w.statur, 'Haare: ' + w.haare);
-      if (w.augen) eck.push('Augen: ' + w.augen);
-      eck.push('Kleidung: ' + w.kleidung);
-      if (w.merkmal) eck.push('Auffällig: ' + w.merkmal);
-      eck.push(w.stumm ? 'Sprache: nichts gesagt' : 'Sprache: ' + w.sprache);
-    }
-    const out = ACTIONS.DOSSIER_ANGELEGT({ typ: 'Person', name: name, rolle: 'Laut KIEBITZ: ' + kuerzen(text, 220), eckdaten: eck.join('\n'), stufe: 2 });
-    if (!out) return null;
-    const id = STATE.dossiers.auswahl, e = eigeneDossiers().find(function (x) { return x.id === id; });
-    if (e) { e.verteiler = 'Meldung KIEBITZ'; e.bedrohung = { stufe: 2, begruendung: 'Meldung des Assets, unbestätigt.' }; }
-    m.uebermittelt = nowIso(); m.uebermitteltAn = id; if (ref !== m) { ref.uebermittelt = m.uebermittelt; ref.uebermitteltAn = id; }
-    handlerPlan('Übermittlung von KIEBITZ erhalten. Ich lege ein Dossier an: ' + id + ' ' + name + '. ' + (w ? 'Die Angaben zum Aussehen sind übernommen, die Quelle ist vermerkt. Sie bleiben unbelegt, bis du sie selbst bestätigst.' : 'Zum Aussehen liegt noch nichts vor. Lass dir von KIEBITZ Größe, Alter, Haare und Besonderheiten beschreiben und übermittle erneut.'), 15 + (Date.now() % 12));
-    return { modul: 'Kommunikation', aktion: 'Meldung an Handler übermittelt', detail: m.id + ' → Dossier ' + id + (w ? ' (mit Beschreibung)' : ' (ohne Beschreibung)') };
   },
   DOSSIER_GELOESCHT: function (a) {
     const e = eigeneDossiers().find(function (x) { return x.id === a.id; });
@@ -5779,55 +5009,6 @@ const ACTIONS = {
     delete VIEW.draft['si-ort-' + e.id]; delete VIEW.draft['si-text-' + e.id];
     return { modul: 'Dossier', aktion: a.quelle === 'Meldung' ? 'Sichtung gemeldet' : 'Sichtung eingetragen', detail: e.id + ' ' + e.name + ', ' + id + (ort ? ' bei ' + kuerzen(ort, 60) : '') + (text ? ': ' + kuerzen(text, 100) : '') };
   },
-  EINSCHAETZUNG_GESETZT: function (a) {
-    const e = entitaet(a.id), Q = SCENARIO.admiralty;
-    if (!e || wissen(e) !== 'bekannt' || !Q.quelle[a.quelle] || !Q.information[a.info]) return null;
-    const arten = SCENARIO.quellenarten || [], art = arten.indexOf(a.quelleArt) >= 0 ? a.quelleArt : (a.quelleArt === 'Angabe im Kanal' ? a.quelleArt : ''), txt = String(a.quelleText || '').trim().slice(0, 120);
-    if (a.formular && (!art || txt.length < 3)) { meldung('Einschätzung nicht gespeichert: Quellenart wählen und die Quelle in einem kurzen Text benennen.'); return null; }
-    const x = IZ()[e.id] || (IZ()[e.id] = { status: 'bekannt' });
-    x.einschaetzung = { quelleArt: art, quelleText: txt, quelle: a.quelle, info: a.info, t: nowIso() };
-    return { modul: 'Dossier', aktion: 'Einschätzung abgegeben', detail: e.name + ': ' + (art ? art + (txt ? ' (' + txt + ')' : '') + ', ' : '') + 'Zuverlässigkeit ' + a.quelle + ' (' + Q.quelle[a.quelle] + '), Information ' + a.info + ' (' + Q.information[a.info] + ')' };
-  },
-  INFO_EINGEREICHT: function (a) {
-    const e = entitaet(a.id), B = SCENARIO.abfragen.info.einreichung;
-    if (!e) return null;
-    const fill = function (t) { return t.split('{N}').join(e.name); }, w = wissen(e);
-    if (w === 'frei') { handlerPlan(fill(B.schonFrei), 3); return { modul: 'Dossier', aktion: 'Einreichung gegenstandslos', leicht: true, detail: e.name + ': Vollzugriff besteht' }; }
-    if (w !== 'bekannt') return null;
-    const x = IZ()[e.id] || (IZ()[e.id] = { status: 'bekannt' });
-    if (x.eingereicht && Date.now() - Date.parse(x.eingereicht) < 300000) { handlerPlan(fill(B.laeuft), 3); return { modul: 'Dossier', aktion: 'Einreichung wiederholt', leicht: true, detail: e.name + ': Prüfung läuft' }; }
-    const p = einreichPruefung(e);
-    if (!p.ok) {
-      handlerPlan(fill(p.fehlt[0] === 'sichtung' ? B.fehltSichtung : (p.einschaetzungAlt ? B.einschaetzungVeraltet : B.fehltEinschaetzung)), 3);
-      return { modul: 'Dossier', aktion: 'Einreichung unvollständig', detail: e.name + ': es fehlt ' + (p.fehlt[0] === 'sichtung' ? 'eine Sichtung' : (p.einschaetzungAlt ? 'eine aktuelle Einschätzung (die letzte ist veraltet)' : 'die Einschätzung')) };
-    }
-    if (x.rueckfrage) { handlerPlan(fill(B.rueckWartet), 3); return { modul: 'Dossier', aktion: 'Einreichung wiederholt', leicht: true, detail: e.name + ': Rückfrage des Ansprechpartners offen' }; }
-    x.eingereicht = nowIso();
-    const nr = Date.now() % 1000, vorgabe = a.ergebnis || window.__ARGUS_ERGEBNIS, erg = ['direkt', 'denken', 'rueck'].indexOf(vorgabe) >= 0 ? vorgabe : ['direkt', 'direkt', 'denken', 'rueck', 'direkt'][Math.floor(Math.random() * 5)];
-    x.ergebnis = erg;
-    const nb = p.sichtungen + ' Sichtung(en), ' + p.dokumente + ' Dokument(e), Einschätzung ' + x.einschaetzung.quelle + x.einschaetzung.info;
-    handlerPlan(fill(B.ack[nr % B.ack.length]), 3);
-    if (erg === 'direkt') handlerPlan(fill(B.frei[nr % B.frei.length]), 25 + (nr % 20), { infoFrei: e.id });
-    else if (erg === 'denken') {
-      handlerPlan(fill(B.denken[nr % B.denken.length]), 14 + (nr % 8));
-      handlerPlan(fill(B.frei[(nr + 1) % B.frei.length]), 75 + (nr % 90), { infoFrei: e.id });
-    } else {
-      x.rueckfrage = nowIso();
-      handlerPlan(fill(B.rueck[nr % B.rueck.length]), 18 + (nr % 12));
-    }
-    return { modul: 'Dossier', aktion: 'Zur Überprüfung übermittelt', detail: e.name + ': ' + nb + '; Prüfung durch den Ansprechpartner läuft' };
-  },
-  RUECKFRAGE_BEANTWORTET: function (a) {
-    const e = entitaet(a.id), B = SCENARIO.abfragen.info.einreichung, x = e && IZ()[e.id], t = String(a.text || '').trim();
-    if (!e || !x || !x.rueckfrage) return null;
-    const fill = function (z) { return z.split('{N}').join(e.name); };
-    if (t.length < 15) { handlerPlan(fill(B.rueckZuKurz), 3); return { modul: 'Dossier', aktion: 'Rückfrage unzureichend beantwortet', detail: e.name + ': Antwort zu knapp' }; }
-    delete x.rueckfrage; x.rueckAntwort = t.slice(0, 300);
-    const nr = Date.now() % 1000;
-    handlerPlan(fill(B.rueckDanke[nr % B.rueckDanke.length]), 4);
-    handlerPlan(fill(B.frei[nr % B.frei.length]), 20 + (nr % 25), { infoFrei: e.id });
-    return { modul: 'Dossier', aktion: 'Rückfrage beantwortet', detail: e.name + ': ' + kuerzen(t, 100) };
-  },
   ZONE_URTEIL: function (a) {
     const def = zDef(), zn = def && !PROFIL.karteBlanko ? karteZonen(def).find(function (x) { return x.id === a.id && x.auto; }) : null, Zt = SCENARIO.zonen, U = zonenUrteil(def);
     if (!zn) return null;
@@ -5952,16 +5133,6 @@ const ACTIONS = {
     handlerPlan(text, 2 + Math.floor(Math.random() * 6));
     return { modul: 'Karte', aktion: art === 'meldung' ? 'Zonenmeldung durch Handler' : art === 'angehoben' ? 'Zone durch Handler angehoben' : 'Zone durch Handler gesenkt', detail: zn.id + ' (' + Zt.wertungen[zn.wertung] + '): ' + kuerzen(text, 90) };
   },
-  NACHRICHT_TEXT_GEAENDERT: function (a) {
-    const n = nachricht(a.msgId), neu = String(a.text || '').trim().slice(0, 600);
-    if (!n || n.msg.von !== 'gegenstelle' || !neu) return null;
-    const orig = n.msg.original || n.msg.text;
-    PROFIL.tausch = PROFIL.tausch || {};
-    if (neu === orig) { delete PROFIL.tausch[orig]; delete n.msg.original; n.msg.text = orig; }
-    else { PROFIL.tausch[orig] = neu; n.msg.original = orig; n.msg.text = neu; }
-    ERK.eintrag({ kanal: n.kanal, text: '(automatische Nachricht)', grund: 'Text geändert', msgId: n.msg.id, wunsch: neu, hinweis: 'Textänderung für künftige Nachrichten mit diesem Wortlaut', antwort: orig, zuvor: '' });
-    return { modul: 'Kommunikation', aktion: 'Text einer Nachricht geändert', detail: n.msg.id + ': ' + (neu === orig ? 'Original wiederhergestellt' : 'künftig „' + kuerzen(neu, 80) + '“') };
-  },
   ZONE_ENTFERNT: function (a) {
     const def = zDef(), L = def ? zonenEigene(def) : [], i = L.findIndex(function (x) { return x.id === a.id; });
     if (i < 0) return null;
@@ -5987,13 +5158,6 @@ const ACTIONS = {
     const L = SCENARIO.zonen.lageFrage, out = [];
     nachrichtSenden(k, L[Math.floor(Math.random() * L.length)].split('{Z}').join(zn.id).split('{N}').join(zn.name), 'Routine', out);
     return out;
-  },
-  ZIELPERSON_GESETZT: function (a) {
-    const e = entitaet(a.id), L = zielpersonenListe();
-    if (!e || e.typ === 'Ort' || wissen(e) === 'unbekannt' || !zDef()) return null;
-    const i = L.indexOf(e.id);
-    if (a.an && i < 0) L.push(e.id); else if (!a.an && i >= 0) L.splice(i, 1); else return null;
-    return { modul: 'Dossier', aktion: a.an ? 'Als Zielperson geführt' : 'Nicht mehr als Zielperson geführt', detail: e.id + ' ' + e.name };
   },
   SICHTUNG_BEWERTET: function (a) {
     const e = entitaet(a.id), d = e && STATE.dossiers.entitaeten[e.id], si = d && (d.sichtungen || []).find(function (x) { return x.id === a.sid; });
@@ -6282,157 +5446,14 @@ function ausgangPanel() {
     }), '') : h('p', { class: 'note pad' }, 'Noch keine Ausgangsorte angelegt.'),
     h('div', { class: 'row top' }, h('button', { type: 'button', id: 'btn-ausgang-neu', onclick: neuerAusgang }, 'Ausgangsort anlegen')));
 }
-/* =====================================================================
-   MODUL 2: MISSIONSBRIEFING
-   ===================================================================== */
-function zielListe(def, art) {
-  const ms = MS(def.id), frei = ms.status === 'laufend' && einsatzLaeuft();
-  return h('ul', { class: 'ziele' }, def.ziele.filter(function (z) { return z.art === art; }).map(function (z) {
-    const st = ms.ziele[z.id];
-    return h('li', { class: st.erledigt ? 'done' : '' },
-      h('input', { type: 'checkbox', id: 'z-' + z.id, checked: st.erledigt, disabled: !frei || (!st.erledigt && !zielErreichbar(def, z)),
-                   onchange: function (ev) { dispatch({ type: 'ZIEL_GESETZT', id: z.id, erledigt: ev.target.checked }); } }),
-      h('span', { class: 'mono' }, z.id),
-      h('label', { for: 'z-' + z.id }, z.text),
-      z.zaehler ? h('span', { class: 'zt', id: 'zz-' + z.id }, Math.min(zielIst(def, z), z.zaehler.soll) + ' von ' + z.zaehler.soll + ' ' + z.zaehler.einheit) : null,
-      h('span', { class: 'zt' }, st.erledigt ? 'erledigt · abgehakt ' + fmtZ(st.t)
-        : ['offen', frei && zielErreichbar(def, z) ? [' · ', h('button', { type: 'button', class: 'link', id: 'zm-' + z.id, onclick: function () { zielMelden(def, z); } },
-            z.meldung && z.meldung.status === 'eliminiert' ? 'Als eliminiert melden' : 'Als erledigt melden')] : null]));
-  }));
-}
-function zielMelden(def, z) {
-  const M = z.meldung || null, sd = M ? statusDef(M.status) : null, e = M ? entitaet(M.entitaet) : null;
-  const los = function () { dispatch({ type: 'ZIEL_GEMELDET', id: z.id }); };
-  if (!sd || !sd.kritisch) { los(); return; }
-  bestaetigen('Meldung ' + z.id + ': ' + sd.label,
-    [h('dl', { class: 'fields' }, feld('Ziel', z.id + ' ' + z.text, 'full'), feld('Bezug', e.id + ' ' + e.name), feld('Dossierstatus neu', sd.label)),
-     h('p', { class: 'note' }, 'Die Meldung geht an den Ansprechpartner und wird aktenkundig.')],
-    'Melden', los, { pflicht: 'Ich melde ' + z.id + ' mit dem Status "' + sd.label + '" für ' + e.id + '.', klartext: z.id + ': ' + sd.label + ' melden?' });
-}
 function dossierLink(e, ueber, id) {
   return h('button', { type: 'button', class: 'link', id: id, onclick: function () {
     dispatch({ type: 'DOSSIER_GEOEFFNET', id: e.id, navigieren: true, ueber: ueber });
     const t = $('mod-title'); if (t) t.focus();
   } }, anzeige(e));
 }
-function freigabeTabelle(def) {
-  return tabelle(['Stufe', 'Stelle', 'Referenz', 'Vermerk'], def.freigabekette.map(function (f) {
-    return [td('nw', String(f.stufe)), f.stelle, td('nw', f.referenz), f.vermerk];
-  }));
-}
-function zielTabelle(def) {
-  const ms = MS(def.id);
-  return tabelle(['ID', 'Art', 'Ziel', 'Abgehakt (UTC)'], def.ziele.map(function (z) {
-    const st = ms.ziele[z.id];
-    return [td('nw', z.id), z.art, td('txt', z.text), td('nw', st.erledigt ? fmtZ(st.t) : 'offen')];
-  }));
-}
-function funkstilleFeld(def) {
-  const an = STATE.funkstille.aktiv && STATE.funkstille.mission === def.id;
-  if (!def.funkstille) return an ? [h('span', { class: 'label s-warn' }, 'aktiv'), ' Anordnung des Ansprechpartners'] : 'nicht vorgesehen';
-  return [h('span', { class: 'label ' + (an ? 's-warn' : 's-dim') }, an ? 'aktiv' : 'nicht aktiv'), ' ' + def.funkstille.text];
-}
-function auftragFelder(def) {
-  return [
-    feld('Bezeichnung', def.name), feld('Vorgang', def.nummer),
-    feld('Art', def.art), feld('Kurzbezeichnung', def.dienstbezeichnung),
-    feld('Einstufung', def.einstufung), feld('Region', def.schauplatz.einsatzraum),
-    feld('Start', MS(def.id).beginn ? fmtZ(MS(def.id).beginn) + ' (' + (Date.now() < Date.parse(MS(def.id).beginn) ? 'in ' + fmtRest(Date.parse(MS(def.id).beginn) - Date.now()) : 'begonnen') + ')'
-                                            : (def.vorlaufMin ? def.vorlaufMin / 60 + ' Stunden nach Annahme' : 'mit Annahme')),
-    feld('Schwerpunkt', def.schauplatz.schwerpunkt),
-    feld('Abstreitbarkeit', def.abstreitbarkeit.text, 'full'),
-    feld('Funkstille', funkstilleFeld(def), 'full'),
-    feld('Ausgangslage', def.ausgangslage, 'full'),
-    feld('Gegenstand', def.gegenstand, 'full')
-  ];
-}
-function fokusTitel() { const t = $('mod-title'); if (t) t.focus(); }
 
-/* Dialoge der Auftragsabfolge */
-function auftragAnnehmen(def) {
-  bestaetigen('Auftrag annehmen: ' + opText(def),
-    [h('dl', { class: 'fields' },
-       feld('Art', def.art), feld('Kurzbezeichnung', def.dienstbezeichnung), feld('Einstufung', def.einstufung), feld('Region', def.schauplatz.einsatzraum),
-       feld('Start', def.vorlaufMin ? def.vorlaufMin / 60 + ' Stunden nach Annahme' : 'mit Annahme'),
-       feld('Abstreitbarkeit', def.abstreitbarkeit.text, 'full'),
-       def.funkstille ? feld('Funkstille', def.funkstille.text, 'full') : null),
-     h('h3', null, 'Ziele'),
-     tabelle(['ID', 'Art', 'Ziel'], def.ziele.map(function (z) { return [td('nw', z.id), z.art, td('txt', z.text)]; })),
-     h('h3', null, 'Freigabekette'), freigabeTabelle(def),
-     h('p', { class: 'note' }, 'Mit Annahme gelten Einstufung, Identität, Standorte, Extraktionsoptionen und Meldewesen dieses Auftrags.')],
-    'Auftrag annehmen',
-    function () { dispatch({ type: 'MISSION_ANGENOMMEN', id: def.id }); fokusTitel(); },
-    { pflicht: 'Ich nehme den Auftrag ' + opText(def) + ' (' + def.dienstbezeichnung + ') ausdrücklich an.',
-      klartext: opText(def) + ', ' + def.art + ' (' + def.dienstbezeichnung + '), ' + def.einstufung + '. Auftrag annehmen?' });
-}
-function auftragAblehnen(def) {
-  const n = MS(def.id).ablehnungen.length;
-  bestaetigen('Auftrag ablehnen: ' + opText(def),
-    [h('p', null, n === 0
-      ? 'Die Ablehnung wird als kritisches Ereignis protokolliert. Der Ansprechpartner legt einen Aktenvermerk an, der Status wird "Standby", der Auftrag bleibt zugewiesen.'
-      : 'Dies ist die zweite Ablehnung dieses Auftrags. Der Ansprechpartner leitet die Abberufung gemäß Option A ein; es werden keine weiteren Aufträge zugewiesen.')],
-    'Ablehnung absenden',
-    function (text) { dispatch({ type: 'MISSION_ABGELEHNT', id: def.id, begruendung: text }); fokusTitel(); },
-    { text: { label: 'Begründung der Ablehnung (Pflichtangabe)', min: 1 }, klartext: 'Ablehnung ' + opText(def) });
-}
-function missionAbschliessen(def) {
-  bestaetigen('Mission abschließen: ' + opText(def),
-    [h('h3', null, 'Ziele'), zielTabelle(def),
-     h('p', { class: 'note' }, 'Der Bericht geht zu den Akten und an den Ansprechpartner.')],
-    'Mission abschließen',
-    function (text) { dispatch({ type: 'MISSION_ABGESCHLOSSEN', bericht: text }); fokusTitel(); },
-    { text: { label: 'Abschlussbericht (Pflichtangabe, mindestens 20 Zeichen)', min: 20 },
-      pflicht: 'Ich bestätige den Abschluss von ' + opText(def) + ' und die Richtigkeit des Berichts.', klartext: 'Abschlussbericht ' + opText(def) });
-}
-function auftragAbbrechen(def) {
-  bestaetigen('Auftrag abbrechen: ' + opText(def),
-    [h('dl', { class: 'fields' }, feld('Abbruchkriterium', def.abbruchkriterium || 'laut Regeln', 'full')),
-     h('p', { class: 'note' }, def.ersatz ? 'Der Abbruch wird festgehalten. ' + def.ersatz.name + ' übernimmt den Vorgang; Sie gelten dafür als abgelöst. Bereits Gemeldetes und Eingereichtes bleibt bei S-9.' : 'Der Abbruch wird aktenkundig. Weitere Aufträge werden nicht zugewiesen.')],
-    'Auftrag abbrechen',
-    function (text) { dispatch({ type: 'MISSION_ABGEBROCHEN', begruendung: text }); fokusTitel(); },
-    { text: { label: 'Begründung des Abbruchs (Pflichtangabe)', min: 1 },
-      pflicht: 'Ich breche den Auftrag ' + opText(def) + ' ausdrücklich ab.', klartext: 'Abbruch ' + opText(def) });
-}
 
-function abschlussansicht() {
-  const e = STATE.serie.ende;
-  const text = e.art === 'Abberufung' ? 'Die Abberufung gemäß Option A wurde durch den Ansprechpartner eingeleitet (Stand in Modul 5). Mit dem Status Aktiv fordern Sie einen neuen Auftrag an.'
-    : e.art === 'Abbruch' ? 'Der Auftrag wurde abgebrochen. Der Rückzug erfolgt gemäß Plan. Mit dem Status Aktiv fordern Sie einen neuen Auftrag an.'
-    : 'Alle zugewiesenen Aufträge sind abgeschlossen. Mit dem Status Aktiv fordern Sie einen neuen Auftrag an.';
-  return panel('Abschlussansicht: ' + e.art, h('span', { class: 'label ' + (e.art === 'Serie abgeschlossen' ? 's-dim' : 's-crit') }, 'Auftragsserie beendet'),
-    h('dl', { class: 'fields' },
-      feld('Anlass', e.art), feld('Zeitpunkt', fmtZ(e.t)), feld('Status', statusLabel(STATE.agent.status)),
-      feld('Abgelehnte Aufträge', String(STATE.agent.ablehnungen)), feld('Vermerk', text, 'full')),
-    tabelle(['Nr.', 'Vorgang', 'Art', 'Kurzbezeichnung', 'Zustand', 'Angenommen', 'Beendet'], SCENARIO.missionen.map(function (d) {
-      const ms = MS(d.id), sichtbar = ms.status !== 'offen';
-      return [td('nw', d.id), sichtbar ? d.nummer + ' ' + d.name : 'nicht zugewiesen', sichtbar ? d.art : '–', sichtbar ? d.dienstbezeichnung : '–',
-              td('nw', zustandLabel(ms.status)), td('nw', ms.angenommenAm ? fmtZ(ms.angenommenAm) : '–'), td('nw', ms.beendetAm ? fmtZ(ms.beendetAm) : '–')];
-    })));
-}
-function auftragskarte(def) {
-  const ms = MS(def.id), n = ms.ablehnungen.length;
-  return panel('Neuer Auftrag zugewiesen', [zustandLabel('zugewiesen'), h('span', { class: 'badge' }, 'zugewiesen ' + fmtZ(ms.zugewiesenAm))],
-    h('dl', { class: 'fields' }, auftragFelder(def),
-      n ? feld('Bisherige Ablehnungen', n + ' (' + def.aktenvermerk + '), zuletzt ' + fmtZ(ms.ablehnungen[n - 1].t) + ': ' + ms.ablehnungen[n - 1].text, 'full') : null),
-    h('h3', null, 'Freigabekette'), freigabeTabelle(def),
-    h('div', { class: 'row top' },
-      h('button', { type: 'button', id: 'btn-annehmen', disabled: !!LM() || STATE.agent.status === 'Ruhend', onclick: function () { auftragAnnehmen(def); } }, 'Auftrag annehmen'),
-      h('button', { type: 'button', id: 'btn-ablehnen', onclick: function () { auftragAblehnen(def); } }, 'Auftrag ablehnen'),
-      null));
-}
-function archivPanel() {
-  const fertig = SCENARIO.missionen.filter(function (d) { return MS(d.id).status === 'abgeschlossen'; });
-  return panel('Abgeschlossene Missionen', h('span', { class: 'badge' }, String(fertig.length)),
-    fertig.length ? fertig.map(function (d) {
-      const ms = MS(d.id);
-      return [h('h3', null, d.id + ' · Vorgang ' + d.nummer + ' ' + d.name),
-        h('dl', { class: 'fields' },
-          feld('Art', d.art + ' (' + d.dienstbezeichnung + ')'), feld('Einstufung', d.einstufung),
-          feld('Zeitraum', fmtZ(ms.angenommenAm) + ' bis ' + fmtZ(ms.beendetAm)),
-          feld('Abschlussbericht', ms.abschlussbericht, 'full')),
-        zielTabelle(d)];
-    }) : h('p', { class: 'note' }, 'Kein abgeschlossener Auftrag.'));
-}
 
 /* Zusatzakteure: eigene oder Standard-Dossiers, die der Agent der laufenden Mission zuordnet; der Ansprechpartner bewertet nach Regeln */
 const ZUSATZ_ROLLEN = ['Hinweisgeber', 'Kontakt', 'Beobachtungsobjekt', 'Gegenseite'];
@@ -6464,103 +5485,6 @@ function zusatzBewerten(def, e, rolle) {
   if (rolle === 'Kontakt' && st >= 3) return { urteil: 'auflage', auflage: 'Kontaktaufnahme nur nach Rücksprache über den Ansprechpartner.' };
   return { urteil: 'aufgenommen' };
 }
-const AN_KLASSE = { niedrig: 's-accent', mittel: 's-warn', hoch: 's-crit' };
-function fruehCheckinKnopf(def, nachgereicht) {
-  const id = def.checkinStart.standortId, ruhend = STATE.agent.status === 'Ruhend';
-  return h('div', { class: 'row top' },
-    h('button', { type: 'button', id: 'btn-frueh-checkin', disabled: ruhend, title: ruhend ? 'Im Status Ruhend nimmt der Ansprechpartner keine Meldungen an.' : '',
-      onclick: function () { dispatch({ type: 'NACHRICHT_GESENDET', kanal: 'handler', text: 'Check in "' + id + '"' + (nachgereicht ? '.' : ' früher als geplant.'), dringlichkeit: 'Routine', modus: null }); } },
-      nachgereicht ? 'Check-in ' + id + ' nachreichen' : 'Früher Check-in ' + id + ' (ohne Reiseplan)'),
-    h('span', { class: 'dim' }, nachgereicht ? 'Frist ' + ANREISE_FRIST_MIN + ' Minuten ab vorgezogenem Start; danach gilt die Anreise als nicht gemeldet.' : 'Der Einsatz beginnt sofort ohne Reiseplan.'));
-}
-function anreisePanel(def) {
-  const A = def.anreise;
-  if (!A) return null;
-  const ms = MS(def.id), plan = STATE.anreise && STATE.anreise.mission === def.id ? STATE.anreise : null, jetzt = Date.now();
-  const begonnen = einsatzLaeuft(), abgereist = !!(plan && plan.abfahrt && jetzt >= Date.parse(plan.abfahrt));
-  const stufeLbl = function (st, r) { return h('span', { class: 'label ' + AN_KLASSE[st] }, 'Risiko ' + st); };
-  const faktorTab = function (f) { return tabelle(['Auffälligkeiten'], f.map(function (x) { return [td('txt', x.text)]; }), 'Keine Auffälligkeiten.'); };
-  if (begonnen || abgereist) {
-    const kopf = plan && plan.ohnePlan ? 'ohne Meldung' : plan && plan.angekommen ? 'angekommen' : plan ? 'unterwegs' : 'keine Meldung';
-    return panel('Anreise', [h('span', { class: 'badge' }, kopf), plan ? stufeLbl(plan.stufe, plan.risiko) : null],
-      plan && !plan.ohnePlan ? h('dl', { class: 'fields' },
-        feld('Verkehrsmittel', plan.mittelName), feld('Ausgangsort', plan.ausgangName ? plan.ausgangName + (plan.km ? ' (Luftlinie ' + plan.km + ' km)' : '') : A.herkunft),
-        feld('Abfahrt', fmtZ(plan.abfahrt)), feld('Ankunft', fmtZ(plan.ankunft)),
-        feld('Unterkunft', plan.ortId + ' ' + standortName(plan.ortId)), feld('Vorerkundung', plan.erkundung ? 'ja' : 'nein'),
-        feld('Bewertung des Ansprechpartners', plan.rueckmeldung, 'full')) : h('p', { class: 'note pad' }, 'Bis Start wurde keine Reisemeldung abgegeben.'),
-      !plan ? fruehCheckinKnopf(def, true) : null,
-      plan ? h('div', { class: 'pad' }, faktorTab(plan.faktoren)) : null);
-  }
-  const tb = Date.parse(ms.beginn), liste = anreiseOptionen(def, tb, jetzt);
-  const g = function (k, d) { return VIEW.draft[k] != null ? VIEW.draft[k] : d; };
-  const waehle = function (k) { return function (ev) { VIEW.draft[k] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value; renderModule(); }; };
-  const ausgangId = g('an-ausgang', plan && plan.ausgangId ? plan.ausgangId : '');
-  const unt = g('an-unt', plan ? plan.unterkunft : 'haupt');
-  const L = anreiseListe(def, ausgangId, unt), optionenListe = L.optionen;
-  const mittelWunsch = g('an-mittel', plan ? plan.mittel : 'bahn');
-  const mittel = optionenListe.some(function (o) { return o.id === mittelWunsch; }) ? mittelWunsch : (optionenListe[0] ? optionenListe[0].id : '');
-  let abfH = Number(g('an-abf', plan ? plan.abfahrtH : 24));
-  if (liste.length && liste.indexOf(abfH) < 0) abfH = liste.reduce(function (a, b) { return Math.abs(b - abfH) < Math.abs(a - abfH) ? b : a; });
-  const erk = !!g('an-erk', plan ? plan.erkundung : false);
-  const wahl = { mittel: mittel, abfahrtH: abfH, unterkunft: unt, erkundung: erk, ausgang: ausgangId };
-  const b = liste.length && mittel ? anreiseBewerten(def, wahl, jetzt) : null;
-  const opt = optionenListe.find(function (o) { return o.id === mittel; });
-  return panel('Anreiseplanung', [h('span', { class: 'badge' + (plan ? '' : ' on') }, !plan ? 'offen' : plan.angekommen ? 'Angekommen' : plan.geprueft ? 'Plan geprüft, Risiko ' + plan.stufe : 'Plan eingereicht, in Prüfung')],
-    h('p', { class: 'note pad' }, 'Start ' + fmtZ(ms.beginn) + '. Die Anreise vorher festlegen; ein eingereichter Plan lässt sich bis zur Abreise ändern. Ohne Meldung bis Start wird der Agent ohne Plan vor Ort angesetzt.'),
-    liste.length ? h('div', null,
-      PROFIL.ausgang.length ? h('div', { class: 'row' },
-        h('label', { for: 'an-ausgang' }, 'Ausgangsort'),
-        h('select', { id: 'an-ausgang', onchange: waehle('an-ausgang') },
-          h('option', { value: '', selected: !ausgangId }, '– bitte wählen –'),
-          PROFIL.ausgang.map(function (x) { return h('option', { value: x.id, selected: x.id === ausgangId }, x.name + ' (' + x.art + ')' + (x.ll ? '' : ', ohne Position')); })),
-        L.km !== null ? h('span', { class: 'dim' }, 'Luftlinie zur Unterkunft: ' + Math.round(L.km) + ' km') : null) :
-        h('p', { class: 'note pad' }, 'Keine Ausgangsorte im Profil angelegt: es gelten die festen Reiseoptionen des Auftrags. Ausgangsorte legst du im Profil an.'),
-      L.grund ? h('p', { class: 'note pad' }, L.grund) : null,
-      h('div', { class: 'row' },
-        h('label', { for: 'an-mittel' }, 'Verkehrsmittel'),
-        h('select', { id: 'an-mittel', onchange: waehle('an-mittel') }, optionenListe.map(function (o) { return h('option', { value: o.id, selected: o.id === mittel }, o.name + ' (' + dauerText(o.dauerMin) + (o.km ? ', ' + o.km + ' km' : '') + ')'); })),
-        h('label', { for: 'an-abf' }, 'Abfahrt'),
-        h('select', { id: 'an-abf', onchange: waehle('an-abf') }, liste.map(function (hh) { return h('option', { value: String(hh), selected: hh === abfH }, fmtZ(new Date(tb - hh * 3600000)).slice(0, 16) + 'Z (' + hh + ' h vor Beginn)'); }))),
-      h('div', { class: 'row' },
-        h('label', { for: 'an-unt' }, 'Unterkunft'),
-        h('select', { id: 'an-unt', onchange: waehle('an-unt') },
-          h('option', { value: 'haupt', selected: unt === 'haupt' }, 'Hauptunterkunft ' + A.unterkunft.haupt + ' ' + standortName(A.unterkunft.haupt)),
-          h('option', { value: 'ausweich', selected: unt === 'ausweich' }, 'Ausweichunterkunft ' + A.unterkunft.ausweich + ' ' + standortName(A.unterkunft.ausweich))),
-        h('input', { type: 'checkbox', id: 'an-erk', checked: erk, onchange: waehle('an-erk') }),
-        h('label', { for: 'an-erk' }, 'Vorerkundung am Einsatzort')),
-      opt ? h('p', { class: 'note pad' }, opt.hinweis) : null,
-      b ? h('dl', { class: 'fields' },
-        feld('Ausgangsort', b.ausgangName ? b.ausgangName + ' (Luftlinie ' + b.km + ' km)' : A.herkunft), feld('Reisedauer', dauerText(b.dauerMin)),
-        feld('Ankunft', b.gueltig ? fmtZ(b.ankunft) : [fmtZ(b.ankunft), ' ', h('span', { class: 'label s-crit' }, b.grund)]),
-        feld('Puffer bis Start', dauerText(b.puffer)),
-        feld('Risiko', stufeLbl(b.stufe, b.risiko))) : null,
-      b ? h('div', { class: 'pad' }, faktorTab(b.faktoren)) : null,
-      plan && plan.rueckmeldung ? h('p', { class: 'note pad' }, 'Letzte Bewertung des Ansprechpartners: ' + plan.rueckmeldung) : null,
-      h('div', { class: 'row top' }, h('button', { type: 'button', id: 'btn-anreise', disabled: !(b && b.gueltig) || STATE.agent.status === 'Ruhend',
-        onclick: function () { dispatch({ type: 'ANREISE_EINGEREICHT', mittel: mittel, abfahrtH: abfH, unterkunft: unt, erkundung: erk, ausgang: ausgangId }); } }, plan ? 'Reiseplan ändern' : 'Reiseplan einreichen'))) :
-      h('p', { class: 'note pad' }, 'Kein Abfahrtszeitpunkt mehr verfügbar. Der Agent wird zum Start ohne Plan angesetzt.'),
-    !(plan && plan.eingereicht) ? fruehCheckinKnopf(def, false) : null);
-}
-function zusatzZeile(e) {
-  const def = LM();
-  if (!def || e.mission === def.id) return null;
-  const ms = MS(def.id), x = (ms.zusatz || []).find(function (y) { return y.id === e.id; }), ruhend = STATE.agent.status === 'Ruhend';
-  if (x) return h('div', { class: 'row top' }, h('span', null, 'Zusatzakteur im Auftrag ' + def.nummer + ': ' + x.rolle),
-    h('span', { class: 'label ' + (x.urteil === 'abgelehnt' ? 's-crit' : x.urteil === 'auflage' ? 's-warn' : 's-accent') }, x.urteil === 'auflage' ? 'mit Auflage' : x.urteil),
-    h('button', { type: 'button', id: 'btn-zusatz-weg', onclick: function () { dispatch({ type: 'MISSION_AKTEUR_ENTFERNT', id: e.id }); } }, 'Zurückziehen'));
-  return h('div', { class: 'row top' },
-    h('label', { for: 'sel-zusatz' }, 'Dem Auftrag ' + def.nummer + ' zuordnen als'),
-    h('select', { id: 'sel-zusatz' }, ZUSATZ_ROLLEN.map(function (r) { return h('option', { value: r }, r); })),
-    h('button', { type: 'button', id: 'btn-zusatz', disabled: ruhend, title: ruhend ? 'Im Status Ruhend nimmt der Ansprechpartner keine Meldungen an.' : '',
-      onclick: function () { dispatch({ type: 'MISSION_AKTEUR_ZUGEORDNET', id: e.id, rolle: $('sel-zusatz').value }); } }, 'Dem Ansprechpartner melden'));
-}
-/* =====================================================================
-   AUFKLÄRUNG (Auftrag Transportlinie Ost): Zähler zu den Rahmenzielen, eigene Ziele, Dokumente,
-   Zugriffspunkte der Route und Wissensstände. Die App prüft nur Form und Vollständigkeit;
-   Inhalte von Fotos und Dokumenten kann sie nicht beurteilen.
-   ===================================================================== */
-const DOK_ARTEN = ['Frachtbrief', 'Chatverlauf', 'Kontoauszug', 'Lieferschein', 'Foto eines Dokuments', 'Sonstiges'];
-const DOK_MAX = 3 * 1024 * 1024;
 const IDB = {
   db: null,
   oeffnen: function () {
@@ -6586,100 +5510,7 @@ const IDB = {
   get: function (k) { return IDB.tun('readonly', function (st) { return st.get(k); }); },
   leeren: function () { return IDB.tun('readwrite', function (st) { return st.clear(); }).catch(function () {}); }
 };
-function netzPersonen(def) {
-  const ids = Object.keys(def.wahrheit || {}).concat(pool().filter(function (e) { return e.mission === def.id && e.typ === 'Person'; }).map(function (e) { return e.id; }));
-  eigeneDossiers().forEach(function (e) { if (e.typ === 'Person') ids.push(e.id); });
-  return ids.filter(function (id, i) { return ids.indexOf(id) === i && entitaet(id); });
-}
 function hatFoto(id) { return !!(PROFIL.bilder[id] || (PROFIL.galerie[id] && PROFIL.galerie[id].length)); }
-/* Fortschritt eines Rahmenziels mit Zähler; ohne Zähler null */
-function zielIst(def, z) {
-  const ms = MS(def.id), Z = z.zaehler;
-  if (!Z) return null;
-  if (Z.art === 'fotos') return netzPersonen(def).filter(hatFoto).length;
-  if (Z.art === 'dokumente') return ms.dokumente.length;
-  if (Z.art === 'zugriff') return ms.zugriffUrteil && ms.zugriffUrteil.ok ? ms.zugriffUrteil.n : 0;
-  if (Z.art === 'wissen') return Object.keys(ms.wissen).filter(function (k) { return ms.wissen[k].stand === 'bestaetigt'; }).length;
-  if (Z.art === 'treffen') return ms.treffen;
-  if (Z.art === 'eigene') return eigeneDossiers().length;
-  return 0;
-}
-function zielErreichbar(def, z) { return !z.zaehler || zielIst(def, z) >= z.zaehler.soll; }
-function terminInfo(def) {
-  const ms = MS(def.id);
-  if (!def.termin || !ms.beginn) return null;
-  const t = Date.parse(ms.beginn) + def.termin.min * 60000;
-  return { t: t, vorbei: Date.now() >= t };
-}
-function terminPanel(def) {
-  const T = terminInfo(def);
-  if (!T) return null;
-  return h('div', { class: 'row top ' + (T.vorbei ? 'warnzeile' : '') },
-    h('span', { class: 'label ' + (T.vorbei ? 's-crit' : 's-warn') }, def.termin.titel),
-    h('span', null, fmtZ(new Date(T.t).toISOString()) + ' · ' + (T.vorbei ? 'verstrichen' : 'noch ' + fmtRest(T.t - Date.now())) + '. ' + (T.vorbei ? def.termin.verstrichen : def.termin.text)));
-}
-function eigeneZielePanel(def, ms) {
-  const L = ms.eigene;
-  return panel('Eigene Ziele', [h('span', { class: 'badge' }, L.filter(function (x) { return !x.erledigt; }).length + ' von ' + L.length + ' offen')],
-    [h('div', { class: 'pad' },
-      h('div', { class: 'row' },
-        entwurf('input', 'ez-text', 'ez-text', { type: 'text', 'aria-label': 'Eigenes Ziel', placeholder: 'Was will ich bis wann erreicht haben?', maxlength: '200', style: 'min-width:320px', spellcheck: 'false' }),
-        h('button', { type: 'button', id: 'btn-ez', onclick: function () {
-          const t = ($('ez-text').value || '').trim();
-          if (!t) { meldung('Ein Ziel ohne Text wird nicht angelegt.'); return; }
-          delete VIEW.draft['ez-text'];
-          dispatch({ type: 'EIGENES_ZIEL_NEU', text: t });
-        } }, 'Ziel anlegen')),
-      L.length ? h('ul', { class: 'ziele' }, L.map(function (x) {
-        return h('li', { class: x.erledigt ? 'done' : '' },
-          h('input', { type: 'checkbox', id: 'ez-' + x.id, checked: x.erledigt, onchange: function (ev) { dispatch({ type: 'EIGENES_ZIEL_GESETZT', id: x.id, erledigt: ev.target.checked }); } }),
-          h('span', { class: 'mono' }, x.id), h('label', { for: 'ez-' + x.id }, x.text),
-          h('span', { class: 'zt' }, h('button', { type: 'button', class: 'link', onclick: function () { dispatch({ type: 'EIGENES_ZIEL_ENTFERNT', id: x.id }); } }, 'Entfernen')));
-      })) : null)]);
-}
-function dokumentPanel(def, ms) {
-  const L = ms.dokumente;
-  const kand = pool().filter(function (e) { return e.typ !== 'Ort' || def.strecke.indexOf(e.id) >= 0 || e.mission === def.id; });
-  return panel('Dokumente und Belege', [h('span', { class: 'badge' }, String(L.length))],
-    [h('div', { class: 'pad' },
-      h('div', { class: 'row' },
-        h('label', { for: 'dk-art' }, 'Art'),
-        h('select', { id: 'dk-art' }, DOK_ARTEN.map(function (a) { return h('option', { value: a }, a); })),
-        h('label', { for: 'dk-ent' }, 'Dossier'),
-        h('select', { id: 'dk-ent' }, kand.map(function (e) { return h('option', { value: e.id }, anzeige(e)); })),
-        h('input', { type: 'file', id: 'dk-datei', accept: 'image/*,application/pdf', 'aria-label': 'Dokument wählen' })),
-      h('div', { class: 'row' },
-        entwurf('input', 'dk-notiz', 'dk-notiz', { type: 'text', 'aria-label': 'Anmerkung zum Dokument', placeholder: 'Anmerkung (Herkunft, Fundort, Auffälligkeit)', maxlength: '300', style: 'min-width:360px', spellcheck: 'false' }),
-        h('button', { type: 'button', id: 'btn-dok', onclick: function () { dokumentEinreichen(def); } }, 'Dokument einreichen'))),
-     tabelle(['ID', 'Eingang (UTC)', 'Art', 'Dossier', 'Datei', 'Anmerkung', ''], L.map(function (d) {
-       const e = entitaet(d.entitaet);
-       return [td('nw', d.id), td('nw', fmtZ(d.t)), d.art, e ? dossierLink(e, 'Auftrag', 'dk-' + d.id) : td('nw', d.entitaet),
-         td('txt', d.name + ' (' + (d.groesse < 1024 ? d.groesse + ' B' : Math.round(d.groesse / 1024) + ' KB') + ')'), td('txt', d.notiz || ''),
-         td('nw', h('button', { type: 'button', class: 'link', onclick: function () { dokumentOeffnen(d); } }, 'Öffnen'))];
-     }), 'Noch kein Dokument eingereicht.')]);
-}
-function dokumentEinreichen(def) {
-  const f = $('dk-datei').files && $('dk-datei').files[0], ent = $('dk-ent').value, art = $('dk-art').value;
-  if (!f) { meldung('Keine Datei gewählt.'); return; }
-  if (!/^image\//.test(f.type) && f.type !== 'application/pdf') { meldung('Nur Bilder und PDF werden angenommen.'); return; }
-  if (f.size > DOK_MAX) { meldung('Datei über 3 MB, nicht angenommen.'); return; }
-  const ms = MS(def.id);
-  STATE.seq.dok = (STATE.seq.dok || 0) + 1;
-  const id = 'DOK-' + p3(STATE.seq.dok);
-  IDB.put(id, f).then(function () {
-    const n = VIEW.draft['dk-notiz'] || '';
-    delete VIEW.draft['dk-notiz'];
-    dispatch({ type: 'DOKUMENT_EINGEREICHT', id: id, art: art, entitaet: ent, notiz: n, name: f.name, groesse: f.size, typ: f.type });
-  }).catch(function () { STATE.seq.dok -= 1; meldung('Dokument konnte nicht gespeichert werden (Browserspeicher nicht verfügbar).'); });
-}
-function dokumentOeffnen(d) {
-  IDB.get(d.id).then(function (blob) {
-    if (!blob) { meldung('Datei nicht mehr vorhanden (Browserspeicher geleert?).'); return; }
-    const u = URL.createObjectURL(blob), a = h('a', { href: u, target: '_blank', rel: 'noopener' });
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
-  }).catch(function () { meldung('Datei konnte nicht gelesen werden.'); });
-}
 const ZP_RADIEN = [0, 50, 100, 250, 500];
 function zpBezugOptionen() { return pool().filter(function (e) { return wissen(e) !== 'unbekannt'; }); }
 /* Auswahlfelder zu einem Zugriffspunkt (Panel und Karten-Popup teilen sich dieselben Felder) */
@@ -6692,172 +5523,7 @@ function zpFelder(def, z, praefix) {
     h('input', { type: 'text', id: praefix + 'tx-' + z.id, maxlength: '120', value: z.text || '', placeholder: 'Notiz (optional)', 'aria-label': 'Notiz ' + z.id, spellcheck: 'false', onchange: function (ev) { aend({ text: ev.target.value }); } })
   ];
 }
-function zpVerschieben(z) {
-  VIEW.karte.pick = z.id; VIEW.karte.auswahl = null;
-  if (z.ll) { VIEW.karte.lat = z.ll[0]; VIEW.karte.lon = z.ll[1]; VIEW.karte.zoom = Math.max(VIEW.karte.zoom, 13); }
-  if (typeof karteBezugSetzen === 'function') karteBezugSetzen(z.ll ? z.id : null);
-  VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
-  renderModule();
-}
-function zpAnlegen(def, karte) {
-  const n0 = MS(def.id).zugriff.length;
-  dispatch({ type: 'ZUGRIFF_ANGELEGT', typ: $('zp-typ').value, bezug: $('zp-bezug').value, text: ($('zp-text').value || '').trim(), r: $('zp-r').value });
-  const L = MS(def.id).zugriff;
-  if (L.length <= n0) return;
-  delete VIEW.draft['zp-text'];
-  if (karte) zpVerschieben(L[L.length - 1]);
-}
-function zugriffPanel(def, ms) {
-  const L = ms.zugriff, U = ms.zugriffUrteil;
-  return panel('Zugriffspunkte', [h('span', { class: 'badge' }, String(L.length))],
-    [h('div', { class: 'pad' },
-      h('p', { class: 'note' }, 'Punkte werden auf der Karte gesetzt und lassen sich dort oder hier jederzeit ändern und verschieben. Ein Dossier als Bezug ist optional.'),
-      h('div', { class: 'row' },
-        h('label', { for: 'zp-typ' }, 'Art'),
-        h('select', { id: 'zp-typ' }, def.zugriffTypen.map(function (t) { return h('option', { value: t }, t); })),
-        h('label', { for: 'zp-r' }, 'Radius'),
-        h('select', { id: 'zp-r' }, ZP_RADIEN.map(function (r) { return h('option', { value: String(r) }, r ? r + ' m' : 'ohne'); })),
-        h('label', { for: 'zp-bezug' }, 'Dossier'),
-        h('select', { id: 'zp-bezug' }, [h('option', { value: '' }, 'kein Dossier')].concat(zpBezugOptionen().map(function (e) { return h('option', { value: e.id }, anzeige(e)); })))),
-      h('div', { class: 'row' },
-        entwurf('input', 'zp-text', 'zp-text', { type: 'text', 'aria-label': 'Notiz zum Zugriffspunkt', placeholder: 'Notiz (optional)', maxlength: '120', style: 'min-width:320px', spellcheck: 'false' }),
-        h('button', { type: 'button', id: 'btn-zp-karte', title: 'Legt den Punkt an und wechselt in die Karte: ein Klick setzt die Position', onclick: function () { zpAnlegen(def, true); } }, 'Auf Karte setzen'),
-        h('button', { type: 'button', id: 'btn-zp', title: 'Legt den Punkt ohne Position an; mit gewähltem Dossier wird dessen Ort übernommen', onclick: function () { zpAnlegen(def, false); } }, 'Ohne Karte anlegen'))),
-     tabelle(['Nr.', 'Art', 'Radius', 'Dossier', 'Notiz', 'Position', ''], L.map(function (z) {
-       const f = zpFelder(def, z, 'zpe-');
-       return [td('nw', z.id), td('nw', f[0]), td('nw', f[1]), td('nw', f[2]), td('txt', f[3]),
-         td('nw', z.ll ? z.ll[0].toFixed(3) + ', ' + z.ll[1].toFixed(3) : 'fehlt'),
-         td('nw', [h('button', { type: 'button', class: 'link', id: 'zp-v-' + z.id, onclick: function () { zpVerschieben(z); } }, z.ll ? 'Verschieben' : 'Auf Karte setzen'),
-                   ' · ', h('button', { type: 'button', class: 'link', onclick: function () { dispatch({ type: 'ZUGRIFF_ENTFERNT', id: z.id }); } }, 'Entfernen')])];
-     }), 'Noch kein Zugriffspunkt gesetzt.'),
-     h('div', { class: 'pad' },
-       h('div', { class: 'row' },
-         h('button', { type: 'button', id: 'btn-zp-ein', onclick: function () { dispatch({ type: 'ZUGRIFF_EINGEREICHT' }); } }, 'Zur Bewertung einreichen'),
-         U ? h('span', { class: 'label ' + (U.ok ? 's-accent' : 's-warn') }, U.ok ? 'Bewertet: brauchbar' : 'Bewertet: nachbessern') : h('span', { class: 'dim' }, 'Noch nicht eingereicht.')),
-       U && U.mangel.length ? h('ul', { class: 'note' }, U.mangel.map(function (m) { return h('li', null, m); })) : null)]);
-}
-function wissenPanel(def, ms) {
-  /* Nur Personen, die der Agent kennt: unbekannte tauchen weder mit Namen noch als Zeile auf und kommen mit der Freigabe der Dossiers dazu */
-  const ids = Object.keys(def.wahrheit || {}).filter(function (id) { const e = entitaet(id); return e && wissen(e) !== 'unbekannt'; });
-  return panel('Wissensstände', [h('span', { class: 'badge' }, ids.filter(function (k) { return ms.wissen[k] && ms.wissen[k].stand === 'bestaetigt'; }).length + ' von ' + ids.length + ' bekannten bestätigt')],
-    [tabelle(['Person', 'Einschätzung', 'Begründung', 'Stand', ''], ids.map(function (id) {
-       const e = entitaet(id), w = ms.wissen[id] || null, fest = w && (w.stand === 'bestaetigt' || w.stand === 'festgelegt');
-       const sel = h('select', { id: 'wi-s-' + id, disabled: fest, 'aria-label': 'Einschätzung ' + id }, def.wissensOptionen.map(function (o) { return h('option', { value: o, selected: w && w.urteil === o }, o); }));
-       const beg = h('input', { type: 'text', id: 'wi-b-' + id, value: w ? w.begruendung : '', disabled: fest, placeholder: 'Begründung, mindestens 30 Zeichen', maxlength: '300', 'aria-label': 'Begründung ' + id, style: 'min-width:260px', spellcheck: 'false' });
-       return [e ? dossierLink(e, 'Auftrag', 'wi-' + id) : td('nw', id), td('nw', sel), td('txt', beg),
-         td('nw', !w ? 'offen' : w.stand === 'bestaetigt' ? [h('span', { class: 'label s-accent' }, 'bestätigt'), ' ' + w.urteil] : w.stand === 'festgelegt' ? [h('span', { class: 'label s-dim' }, 'vom Ansprechpartner festgelegt'), ' ' + w.festgelegt] : [h('span', { class: 'label s-warn' }, 'Quellenlage widerspricht'), ' Versuch ' + w.versuche + ' von 2']),
-         td('nw', fest ? '' : h('button', { type: 'button', id: 'wi-g-' + id, onclick: function () { dispatch({ type: 'WISSEN_EINGEREICHT', id: id, urteil: $('wi-s-' + id).value, begruendung: ($('wi-b-' + id).value || '').trim() }); } }, 'Melden'))];
-     }), '')]);
-}
-/* Kommunikations- und Notfallplan nach dem PACE-Schema (Primary, Alternate, Contingency, Emergency): jede Stufe ein anderer Weg */
-const PACE_WEGE = ['Kanal Ansprechpartner', 'Kanal Support', 'Rückruf über Festnetz (einmal klingeln lassen)', 'Persönliches Signal am Sammelpunkt', 'Ablage am toten Briefkasten', 'Kontakt über KIEBITZ'];
-const PACE_STUFEN = [['p', 'Primär', 'Regulärer Kontakt'], ['a', 'Alternativ', 'Primärweg nicht erreichbar'], ['c', 'Ausweichweg', 'Beide Wege ausgefallen'], ['e', 'Notfall', 'Akute Gefahr, Tarnung nachrangig']];
-function planPanel(def, ms) {
-  const P = ms.pace || null, fest = !!(P && P.stand === 'angenommen'), pins = (PROFIL.pins || []);
-  const wahl = function (k) { return h('select', { id: 'pace-' + k, disabled: fest, 'aria-label': 'Weg ' + k }, [h('option', { value: '' }, 'wählen')].concat(PACE_WEGE.map(function (w) { return h('option', { value: w, selected: !!(P && P[k] === w) }, w); }))); };
-  return panel('Kommunikations- und Notfallplan', [h('span', { class: 'badge' + (fest ? ' on' : '') }, fest ? 'angenommen' : P ? 'zurückgewiesen' : 'offen')],
-    [tabelle(['Stufe', 'Wann', 'Weg'], PACE_STUFEN.map(function (x) { return [td('nw', x[1]), td('txt', x[2]), td('nw', wahl(x[0]))]; }), ''),
-     h('div', { class: 'pad' },
-       h('div', { class: 'row' },
-         h('label', { for: 'pace-pin' }, 'Sammelpunkt'),
-         h('select', { id: 'pace-pin', disabled: fest }, [h('option', { value: '' }, 'keiner')].concat(pins.map(function (x) { return h('option', { value: x.id, selected: !!(P && P.pin === x.id) }, pinGesperrt(x) ? x.id : x.name + (x.zwecke && x.zwecke.length ? ' (' + x.zwecke.join(', ') + ')' : '')); })))),
-       h('div', { class: 'row' },
-         entwurf('input', 'pace-abbruch', 'pace-abbruch', { type: 'text', 'aria-label': 'Abbruchkriterium', placeholder: 'Abbruchkriterium: Woran erkennst du, dass du abbrechen musst? (mindestens 20 Zeichen)', maxlength: '300', style: 'min-width:420px', spellcheck: 'false', value: P ? P.abbruch : '' }),
-         h('button', { type: 'button', id: 'btn-pace', disabled: fest || STATE.agent.status === 'Ruhend', onclick: function () {
-           dispatch({ type: 'PACE_EINGEREICHT', p: $('pace-p').value, a: $('pace-a').value, c: $('pace-c').value, e: $('pace-e').value, pin: $('pace-pin').value, abbruch: ($('pace-abbruch').value || '').trim() });
-         } }, fest ? 'Plan gilt' : 'Plan einreichen')),
-       P && P.antwort ? h('p', { class: 'note' }, 'Ansprechpartner: ' + P.antwort) : h('p', { class: 'note' }, 'Jede Stufe braucht einen eigenen Weg. Der Plan geht an den Ansprechpartner und gilt für diesen Auftrag.'))]);
-}
-function aufklaerungPanels(def, ms) {
-  return [terminPanel(def), dokumentPanel(def, ms), zugriffPanel(def, ms), planPanel(def, ms), eigeneZielePanel(def, ms)];
-}
 
-function zusatzPanel(def, ms) {
-  const liste = ms.zusatz || [];
-  return panel('Zusatzakteure', [h('span', { class: 'badge' }, String(liste.length))],
-    liste.length ? tabelle(['Akteur', 'Rolle', 'Bewertung des Ansprechpartners', 'Auflage oder Grund', ''], liste.map(function (x) {
-      const e = entitaet(x.id);
-      return [e ? dossierLink(e, 'Auftrag', 'zl-' + e.id) : td('nw', x.id), x.rolle,
-        td('nw', h('span', { class: 'label ' + (x.urteil === 'abgelehnt' ? 's-crit' : x.urteil === 'auflage' ? 's-warn' : 's-accent') }, x.urteil === 'auflage' ? 'mit Auflage' : x.urteil)),
-        td('txt', x.auflage || x.grund || 'ohne Auflage'),
-        td('nw', h('button', { type: 'button', class: 'link', onclick: function () { dispatch({ type: 'MISSION_AKTEUR_ENTFERNT', id: x.id }); } }, 'Zurückziehen'))];
-    }), '') : h('p', { class: 'note pad' }, 'Keine Zusatzakteure. Im Dossier lässt sich ein Akteur dem Auftrag zuordnen; der Ansprechpartner bewertet die Meldung.'));
-}
-function renderMission(m) {
-  const def = KM(), ms = MS(def.id), P = def.partnerstelle, mark = markierte(), laufend = ms.status === 'laufend';
-  const neu = zugewiesene(), offen = offeneZiele();
-  const prim = def.ziele.filter(function (z) { return z.art === 'primär'; }), sek = def.ziele.filter(function (z) { return z.art === 'sekundär'; });
-  const offenIn = function (l) { return l.filter(function (z) { return !ms.ziele[z.id].erledigt; }).length; };
-  const steuerung = [];
-  if (laufend) {
-    steuerung.push(h('label', { for: 'sel-mstatus' }, 'Arbeitsstand'));
-    steuerung.push(h('select', { id: 'sel-mstatus', onchange: function (ev) { dispatch({ type: 'MISSIONSSTATUS_GESETZT', status: ev.target.value }); } },
-      SCENARIO.serie.arbeitsstaende.map(function (x) { return h('option', { value: x, selected: x === ms.arbeitsstand }, x); })));
-    if (offen === 0) steuerung.push(h('button', { type: 'button', id: 'btn-abschluss', onclick: function () { missionAbschliessen(def); } }, 'Mission abschließen'));
-    else steuerung.push(h('span', { class: 'dim' }, offen + ' Ziele offen.'));
-    if (def.abbruch) steuerung.push(h('button', { type: 'button', id: 'btn-abbruch', onclick: function () { auftragAbbrechen(def); } }, 'Auftrag abbrechen'));
-  } else {
-    steuerung.push(h('span', { class: 'dim' }, 'Auftrag ' + ms.status + (ms.beendetAm ? ' seit ' + fmtZ(ms.beendetAm) : '') + '.' +
-      (STATE.serie.folge && !neu ? ' Weisung des Ansprechpartners abwarten.' : '')));
-  }
-  return [
-    modKopf(m),
-    STATE.serie.ende ? abschlussansicht() : null,
-    nachbereitungPanel(),
-    neu ? auftragskarte(neu) : null,
-    laufend ? anreisePanel(def) : null,
-    panel(laufend ? 'Laufender Auftrag' : 'Letzter Auftrag', [zustandLabel(ms.status), laufend ? h('span', { class: 'badge' }, 'Arbeitsstand ' + ms.arbeitsstand) : null],
-      h('dl', { class: 'fields' }, auftragFelder(def),
-        feld('Gültig von', fmtZ(ms.von)), feld('Gültig bis', fmtZ(ms.bis)), feld('Angenommen', fmtZ(ms.angenommenAm)),
-        def.abbruch ? feld('Abbruchkriterium', def.abbruchkriterium, 'full') : null),
-      h('h3', null, 'Freigabekette'), freigabeTabelle(def),
-      h('div', { class: 'row top' }, steuerung)),
-    h('div', { class: 'cols' },
-      panel('Primäre Ziele', h('span', { class: 'badge' }, offenIn(prim) + ' von ' + prim.length + ' offen'), zielListe(def, 'primär')),
-      panel('Sekundäre Ziele', h('span', { class: 'badge' }, offenIn(sek) + ' von ' + sek.length + ' offen'), zielListe(def, 'sekundär'))),
-    ...(laufend && def.termin ? aufklaerungPanels(def, ms) : []),
-    h('div', { class: 'cols' },
-      panel('Rules of Engagement und Einschränkungen', null, h('ol', { class: 'num' }, def.roe.map(function (r) { return h('li', null, r); }))),
-      panel('Abstimmung mit Behörden und Partnerstellen', null,
-        h('dl', { class: 'fields wide' },
-          feld('Status', [h('span', { class: 'label ' + (P.angezeigt ? 's-accent' : 's-warn') }, P.kurz), ' ', P.status]),
-          feld('Stand', fmtZ(ms.partnerStand)),
-          feld('Ansprechstelle', P.ansprechstelle, 'full')),
-        h('h3', null, 'Beschränkungen'),
-        h('ol', { class: 'num' }, P.beschraenkungen.map(function (b) { return h('li', null, b); })))),
-    panel('Zeitfenster und Opportunities', null,
-      tabelle(['ID', 'Fenster', 'Beginn', 'Ende', 'Zustand und Restzeit'], def.zeitfenster.map(function (w) {
-        const z = ms.zeitfenster[w.id];
-        return [td('nw', w.id), td('txt', w.titel), td('nw', fmtZ(z.von)), td('nw', fmtZ(z.bis)), h('td', { class: 'nw', 'data-fenster': w.id })];
-      }))),
-    panel('Zentrale Risiken', null,
-      tabelle(['ID', 'Risiko', 'Eintrittswahrscheinlichkeit', 'Auswirkung', 'Gegenmaßnahme'], def.risiken.map(function (r) {
-        return [td('nw', r.id), td('txt', r.risiko), r.wahrscheinlichkeit, r.auswirkung, td('txt', r.gegenmassnahme)];
-      }))),
-    h('div', { class: 'cols' },
-      panel('Unterstützende Kontakte', null,
-        tabelle(['Bezeichnung', 'Rolle', 'Kontaktweg'], def.assets.map(function (a) { return [td('nw', a.name), a.rolle, a.kontaktweg]; }))),
-      panel('Entitäten mit Status', h('span', { class: 'badge' + (mark.length ? ' on' : '') }, String(mark.length)),
-        tabelle(['Entität', 'Typ', 'Staat', 'Bedrohung', 'Status', 'Seit'], mark.map(function (e) {
-          const d = STATE.dossiers.entitaeten[e.id];
-          return [dossierLink(e, 'Auftrag', 'ml-' + e.id), e.typ, land(e.land), td('nw', stufeLabel(bedrohung(e).stufe)), td('nw', dossierStatusLabel(d.status)), td('nw', fmtZ(d.statusAm))];
-        }), 'Keine Entität mit Status.'))),
-    laufend ? zusatzPanel(def, ms) : null,
-    panel('Berichte', h('span', { class: 'badge' }, String(STATE.berichte.length)),
-      h('div', { class: 'pad' }, entwurf('textarea', 'lb-text', 'lb-text', { rows: '3', 'aria-label': 'Neuer Bericht', placeholder: 'Was, wann, durch wen, mit welchem Ergebnis.', spellcheck: 'false' })),
-      h('div', { class: 'row' },
-        h('button', { type: 'button', id: 'btn-lb', onclick: function () {
-          const t = ($('lb-text').value || '').trim();
-          if (!t) { meldung('Bericht ohne Text wird nicht erfasst.'); return; }
-          dispatch({ type: 'LAGEBERICHT', text: t });
-        } }, 'Bericht erfassen'),
-        null),
-      tabelle(['Zeit (UTC)', 'ID', 'Mission', 'Bericht'], STATE.berichte.slice().reverse().map(function (b) {
-        return [td('nw', fmtZ(b.t)), td('nw', b.id), td('nw', b.mission || '–'), td('txt', b.text)];
-      }), 'Noch kein Bericht erfasst.')),
-    archivPanel()
-  ];
-}
 
 /* =====================================================================
    MODUL 3: DOSSIER-DATENBANK
@@ -7010,14 +5676,6 @@ function dossierListe() {
       ['Person', 'Organisation', 'Ort'].map(function (t) { return h('span', null, icon(t), t); })));
 }
 
-function zielpersonKnopf(e) {
-  if (e.typ === 'Ort' || wissen(e) === 'unbekannt' || !karteAuftragsansicht()) return null;
-  const an = istZielperson(e);
-  return h('div', { class: 'row' },
-    h('button', { type: 'button', id: 'btn-zielperson', 'aria-pressed': an ? 'true' : 'false', onclick: function () { dispatch({ type: 'ZIELPERSON_GESETZT', id: e.id, an: !an }); } }, an ? 'Nicht mehr als Zielperson führen' : 'Als Zielperson führen'),
-    an ? h('span', { class: 'label s-accent' }, 'Zielperson') : null,
-    h('span', { class: 'note' }, 'Eigene Zonen auf der Karte lassen sich dem Ansprechpartner melden, sobald eine Zielperson in der Zone liegt.'));
-}
 /* Gemeinsamer Einstieg „Auf der Karte zeigen“: macht die passende Markerebene (Orte, Personen, Organisationen) sichtbar, zentriert und wählt aus.
    Gilt für 2D und 3D, beide lesen karteMarker(). */
 function kartenEbeneFuer(e) { return e.typ === 'Ort' ? 'orte' : e.typ === 'Person' ? 'personen' : 'organisationen'; }
@@ -7129,75 +5787,6 @@ function sichtungenBlock(e) {
     sichtungsEntwuerfe(e),
     h('div', { class: 'row top' }, h('button', { type: 'button', id: 'btn-si', onclick: function () { sichtungDialog(e); } }, 'Sichtung hinzufügen'))
   ];
-}
-function standortRudiment(e) {
-  const ll = karteKoord(e.id);
-  if (!ll) return feld('Letzter bekannter Standort', 'Nicht bekannt. Eine Sichtung mit Ortsangabe schafft Klarheit.', 'full');
-  const nah = karteEbenenDaten().orte.map(function (o) { return { n: o[0], d: Math.hypot((o[2] / 100 - ll[0]) * 111, (o[1] / 100 - ll[1]) * 68) }; }).sort(function (a, b) { return a.d - b.d; })[0];
-  return feld('Letzter bekannter Standort', [ll[0].toFixed(4) + ', ' + ll[1].toFixed(4) + (nah && nah.d < 15 ? ', Umgebung ' + nah.n : ''), ' ',
-    h('button', { type: 'button', class: 'link', id: 'btn-dk-karte', onclick: function () {
-      kartenSprung(e, ll);
-    } }, 'auf der Karte zeigen')], 'full');
-}
-function belegHinzufuegen(e) {
-  const def = LM(), f = $('rb-datei').files && $('rb-datei').files[0], art = $('rb-art').value;
-  if (!def) { meldung('Kein laufender Auftrag, Beleg nicht angenommen.'); return; }
-  if (!f) { meldung('Keine Datei gewählt.'); return; }
-  if (!/^image\//.test(f.type) && f.type !== 'application/pdf') { meldung('Nur Bilder und PDF werden angenommen.'); return; }
-  if (f.size > DOK_MAX) { meldung('Datei über 3 MB, nicht angenommen.'); return; }
-  STATE.seq.dok = (STATE.seq.dok || 0) + 1;
-  const id = 'DOK-' + p3(STATE.seq.dok);
-  IDB.put(id, f).then(function () {
-    const n = VIEW.draft['rb-notiz-' + e.id] || '';
-    delete VIEW.draft['rb-notiz-' + e.id];
-    dispatch({ type: 'DOKUMENT_EINGEREICHT', id: id, art: art, entitaet: e.id, notiz: n, name: f.name, groesse: f.size, typ: f.type, leise: true });
-  }).catch(function () { STATE.seq.dok -= 1; meldung('Beleg konnte nicht gespeichert werden (Browserspeicher nicht verfügbar).'); });
-}
-function rudimentAnsicht(e) {
-  const x = IZ()[e.id] || {}, Q = SCENARIO.admiralty, p = einreichPruefung(e), b = bedrohung(e), ea = x.einschaetzung || {}, efr = einschaetzungFrische(x) || { stufe: 'aktuell', abwertung: 0, text: '' };
-  const wartet = !!x.rueckfrage || (x.eingereicht && Date.now() - Date.parse(x.eingereicht) < 300000);
-  const ap = (kanalDef('handler') || {}).gegenstelle || 'Ansprechpartner', arten = SCENARIO.quellenarten || [];
-  const selA = h('select', { id: 'sel-ea', 'aria-label': 'Art der Quelle' }, [h('option', { value: '', selected: !ea.quelleArt }, 'Art wählen')].concat(arten.map(function (k) { return h('option', { value: k, selected: ea.quelleArt === k }, k); })));
-  const selQ = h('select', { id: 'sel-eq', 'aria-label': 'Zuverlässigkeit der Quelle (Admiralty)' }, Object.keys(Q.quelle).map(function (k) { return h('option', { value: k, selected: ea.quelle ? ea.quelle === k : k === 'C' }, k + ' ' + Q.quelle[k]); }));
-  const selI = h('select', { id: 'sel-ei', 'aria-label': 'Glaubwürdigkeit der Information (Admiralty)' }, Object.keys(Q.information).map(function (k) { return h('option', { value: k, selected: ea.info ? ea.info === k : k === '3' }, k + ' ' + Q.information[k]); }));
-  const B = dossierBelege(e);
-  return panel('Dossier ' + e.name, [h('span', { class: 'label s-warn' }, 'Rudiment')],
-    h('div', { class: 'pad' },
-      h('div', { class: 'mitfoto' }, bildFeld(bildPfad(e, e.id), 'Lichtbild ' + e.name, 'Kein Lichtbild'),
-        h('dl', { class: 'fields' }, feld('Name', e.name), feld('Typ', e.typ), feld('Rolle zur Mission', rudimentText(e), 'full'),
-          standortRudiment(e),
-          feld('Bedrohungsbewertung', [stufeLabel(b.stufe), ' ', b.begruendung], 'full'),
-          feld('Wissensstand', 'Lichtbild: ' + (e.bild || PROFIL.bilder[e.id] ? 'liegt vor' : 'nicht hinterlegt') + '. Standort: ' + (karteKoord(e.id) ? 'bekannt' : 'nicht bekannt') + '. Identität, Hintergrund, Verbindungen und Dokumente folgen mit der Freigabe.', 'full'))),
-      zielpersonKnopf(e),
-      h('h3', null, 'Aufklärung und Freigabe'),
-      h('p', { class: 'note' }, 'Beleg und Einschätzung gehören zusammen. Als Beleg zählt eine Sichtung oder ein hochgeladenes Dokument. ' + ap + ' prüft die Unterlagen formal, nicht auf Richtigkeit, und entscheidet dann: sofortige Freigabe, eine Rückfrage oder eine zweite Durchsicht.'),
-      h('p', null, h('span', { class: 'label ' + (p.fehlt.indexOf('sichtung') < 0 ? 's-accent' : 's-warn') }, p.fehlt.indexOf('sichtung') < 0 ? 'erfüllt' : 'offen'), ' Beleg: ' + p.sichtungen + ' Sichtung(en), ' + p.dokumente + ' Dokument(e)'),
-      h('p', null, h('span', { class: 'label ' + (x.einschaetzung && efr.stufe !== 'veraltet' ? 's-accent' : 's-warn') }, !x.einschaetzung ? 'offen' : efr.stufe === 'veraltet' ? 'veraltet' : 'erfüllt'), ' Einschätzung: ' + (x.einschaetzung ? (ea.quelleArt ? ea.quelleArt + (ea.quelleText ? ' (' + ea.quelleText + ')' : '') + ', ' : '') + 'Zuverlässigkeit ' + ea.quelle + ' (' + Q.quelle[ea.quelle] + '), Information ' + ea.info + ' (' + Q.information[ea.info] + ')' + ', abgegeben ' + efr.text + (efr.abwertung ? '; wirksam ' + einschaetzungEff(ea, efr) : '') + (efr.stufe === 'veraltet' ? '. Bitte auffrischen: Einschätzung neu speichern.' : '') : 'noch nicht abgegeben')),
-      h('h3', null, 'Beleg hochladen'),
-      h('div', { class: 'row' },
-        h('label', { for: 'rb-art' }, 'Art'), h('select', { id: 'rb-art' }, DOK_ARTEN.map(function (a) { return h('option', { value: a }, a); })),
-        h('input', { type: 'file', id: 'rb-datei', accept: 'image/*,application/pdf', 'aria-label': 'Beleg wählen' })),
-      h('div', { class: 'row' },
-        entwurf('input', 'rb-notiz', 'rb-notiz-' + e.id, { type: 'text', 'aria-label': 'Anmerkung zum Beleg', placeholder: 'Anmerkung (Herkunft, Fundort, Auffälligkeit)', maxlength: '300', style: 'flex:1 1 300px;min-width:0', spellcheck: 'false' }),
-        h('button', { type: 'button', id: 'btn-beleg', onclick: function () { belegHinzufuegen(e); } }, 'Beleg hinzufügen')),
-      B.length ? tabelle(['ID', 'Eingang (UTC)', 'Art', 'Datei', 'Anmerkung', ''], B.map(function (d) {
-        return [td('nw', d.id), td('nw', fmtZ(d.t)), d.art, td('txt', d.name), td('txt', d.notiz || ''), td('nw', h('button', { type: 'button', class: 'link', onclick: function () { dokumentOeffnen(d); } }, 'Öffnen'))];
-      })) : null,
-      h('h3', null, 'Einschätzung der Quelle'),
-      h('p', { class: 'note' }, 'Quelle: woher die Information stammt, nach Art und Bezeichnung. Zuverlässigkeit: wie verlässlich diese Quelle bisher war (A bis F). Information: wie glaubwürdig die Aussage selbst ist (1 bis 6).'),
-      h('div', { class: 'row' }, h('label', { for: 'sel-ea' }, 'Art der Quelle'), selA,
-        entwurf('input', 'eq-text', 'eq-text-' + e.id, { type: 'text', 'aria-label': 'Quelle benennen', placeholder: 'Quelle benennen, z. B. Beobachtung am Hof, 14:20Z', maxlength: '120', style: 'flex:1 1 260px;min-width:0', spellcheck: 'false' })),
-      h('div', { class: 'row' }, h('label', { for: 'sel-eq' }, 'Zuverlässigkeit'), selQ, h('label', { for: 'sel-ei' }, 'Information'), selI,
-        h('button', { type: 'button', id: 'btn-eq', onclick: function () { dispatch({ type: 'EINSCHAETZUNG_GESETZT', id: e.id, formular: true, quelleArt: $('sel-ea').value, quelleText: $('eq-text').value || (VIEW.draft['eq-text-' + e.id] || ''), quelle: $('sel-eq').value, info: $('sel-ei').value }); } }, 'Einschätzung speichern')),
-      x.rueckfrage ? h('div', { class: 'row' },
-        h('span', { class: 'label s-warn' }, 'Rückfrage von ' + ap),
-        entwurf('input', 'rf-text', 'rf-text-' + e.id, { type: 'text', 'aria-label': 'Antwort auf die Rückfrage', placeholder: 'Antwort: Woher stammt der Beleg, wie belastbar ist er?', maxlength: '300', style: 'flex:1 1 300px;min-width:0', spellcheck: 'false' }),
-        h('button', { type: 'button', id: 'btn-rf', onclick: function () { const t = ($('rf-text').value || '').trim(); delete VIEW.draft['rf-text-' + e.id]; if (t.length >= 12 && !/\?\s*$/.test(t) && !/\b(einschaetzung|einschätzung)\b/i.test(t)) dispatch({ type: 'NACHRICHT_GESENDET', kanal: 'handler', text: t, dringlichkeit: 'Routine' }); else dispatch({ type: 'RUECKFRAGE_BEANTWORTET', id: e.id, text: t }); } }, 'Antwort senden')) : null,
-      h('div', { class: 'row top' },
-        h('button', { type: 'button', id: 'btn-einreichen', disabled: !!wartet, onclick: function () { dispatch({ type: 'INFO_EINGEREICHT', id: e.id }); } }, x.rueckfrage ? 'Rückfrage offen' : (wartet ? 'Prüfung läuft' : 'An ' + ap + ' zur Überprüfung übermitteln')),
-        wartet ? h('span', { class: 'note' }, x.rueckfrage ? ap + ' wartet auf deine Antwort. Du kannst sie hier eintragen oder direkt im Kanal ' + ap + ' schreiben.' : ap + ' prüft. Das Ergebnis kommt im Kanal Ansprechpartner.') : null),
-      h('h3', null, 'Sichtungen'),
-      sichtungenBlock(e)));
 }
 /* Nur Text, Grundformatierung und interne Unterlagen-IDs werden übernommen.
    Beim Lesen wie beim Speichern wird der Inhalt aus erlaubten DOM-Knoten neu aufgebaut. */
@@ -7571,28 +6160,6 @@ function galerieBlock(e) {
       entwurf('input', 'gal-text', key, { type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Beschriftung der Aufnahme', style: 'flex:1 1 260px;min-width:0' }),
       h('input', { type: 'file', id: 'gal-file', accept: 'image/*', multiple: true, 'aria-label': 'Aufnahmen hinzufügen', onchange: hinzu, style: 'max-width:260px' }))];
 }
-function erkennungPanel() {
-  const L = ERK.liste, nv = L.filter(function (x) { return x.grund === 'nicht verstanden'; }).length, nu = L.filter(function (x) { return x.grund === 'als unpassend markiert'; }).length;
-  return panel('Erkennungsprotokoll', h('span', { class: 'badge' }, L.length + ' Einträge'),
-    h('p', { class: 'note pad' }, 'Hier landen Eingaben, die das Terminal nicht verstanden hat (' + nv + '), und Antworten, die du als unpassend markiert hast (' + nu + '). Das Protokoll bleibt beim Zurücksetzen erhalten und dient dazu, die Erkennung gezielt zu verbessern.'),
-    L.length ? h('ul', { class: 'elist' }, L.slice(-5).reverse().map(function (x) {
-      return h('li', null, h('span', { class: 'sub' }, fmtZ(x.t) + ' · ' + x.kanal + ' · ' + x.grund), h('span', null, kuerzen(x.text, 110)));
-    })) : h('p', { class: 'note pad' }, 'Noch keine Einträge.'),
-    h('div', { class: 'row top' },
-      h('button', { type: 'button', id: 'btn-erk-ex', disabled: !L.length, onclick: function () {
-        try {
-          const blob = new Blob([ERK.text()], { type: 'text/plain' }), url = URL.createObjectURL(blob), a = h('a', { href: url, download: 'erkennungsprotokoll-' + dtg(new Date()) + '.txt' });
-          document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-        } catch (e) { meldung('Export nicht möglich: ' + e.message); }
-      } }, 'Protokoll exportieren'),
-      h('button', { type: 'button', id: 'btn-erk-json', disabled: !L.length, onclick: function () {
-        try {
-          const blob = new Blob([ERK.json()], { type: 'application/json' }), url = URL.createObjectURL(blob), a = h('a', { href: url, download: 'bewertungen-' + dtg(new Date()) + '.json' });
-          document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-        } catch (e) { meldung('Export nicht möglich: ' + e.message); }
-      } }, 'Bewertungen als JSON'),
-      h('button', { type: 'button', id: 'btn-erk-leer', disabled: !L.length, onclick: function () { ERK.liste = []; ERK.speichern(); renderModule(); } }, 'Protokoll leeren')));
-}
 function profilPanel() {
   const n = PROFIL.eigene.length, f = Object.keys(PROFIL.galerie).reduce(function (a, k) { return a + PROFIL.galerie[k].length; }, 0);
   return panel('Profil', [h('span', { class: 'badge' }, profilGroesseKb() + ' kB')],
@@ -7636,79 +6203,6 @@ function renderDossier(m) {
     h('div', { class: 'split' }, dossierListe(), h('div', null, dossierAnsicht(e), dossierGesperrt(e) || typeof rechercheDossier !== 'function' ? null : rechercheDossier(e), dossierGesperrt(e) ? null : beziehungsansicht(e), profilPanel()))];
 }
 
-/* =====================================================================
-   MODUL 4: SICHERE KOMMUNIKATION
-   ===================================================================== */
-const DR_KLASSE = { 'Routine': 's-dim', 'Priorität': 's-warn', 'Sofort': 's-crit' };
-function nachrichtElement(m) {
-  return h('li', { class: 'nmsg' + (m.von === 'agent' ? ' own' : m.von === 'system' ? ' sys' : '') },
-    h('div', { class: 'mh' },
-      h('span', { class: 'abs' }, m.absender), h('span', { title: ortszeit(new Date(m.t)) }, fmtZ(m.t)), h('span', null, m.id),
-      m.dringlichkeit !== 'Routine' ? h('span', { class: 'label ' + DR_KLASSE[m.dringlichkeit] }, m.dringlichkeit) : h('span', null, 'Routine'),
-      m.lagerelevant ? h('span', { class: 'label s-warn' }, 'lagerelevant') : null,
-      m.art ? h('span', { class: 'label' }, m.art) : null,
-      h('span', { class: 'st', 'data-nstatus': m.id }, 'Status: ' + m.status)),
-    h('p', null, m.text),
-    m.von === 'gegenstelle' && STATE.komm.aktiv === 'asset' && personMeldung(m.text) ? uebermittelnLeiste(m) : null,
-    m.zu && m.von === 'gegenstelle' ? bewertungsLeiste(m) : null,
-    m.von === 'gegenstelle' && STATE.komm.aktiv === 'support' && /bitte (den )?(Ansprechpartner|Handler) informieren/.test(m.text) ? abweichungKnopf(m) : null,
-    m.von === 'gegenstelle' && !m.art ? textLeiste(m) : null);
-}
-function abweichungKnopf(m) {
-  const id = (m.text.match(/\b[POL]-\d{4}\b/) || [''])[0];
-  return h('div', { class: 'bewertung' }, h('button', { type: 'button', class: 'link', id: 'ab-' + m.id, title: 'Öffnet den Kanal zum Ansprechpartner mit einem vorbereiteten Entwurf (wird nicht gesendet)', onclick: function () {
-    STATE.komm.aktiv = 'handler'; VIEW.draft['km-handler'] = SCENARIO.dokumentPruefung.abweichung.split('{ID}').join(id || 'der Meldung'); dispatch({ type: 'KANAL_GEOEFFNET', kanal: 'handler' }); renderModule();
-  } }, 'Abweichende Einschätzung an Handler'));
-}
-/* Eigener Wortlaut für automatische Nachrichten: gilt für künftige Nachrichten mit exakt gleichem Text und steht im Erkennungsprotokoll */
-function textLeiste(m) {
-  const leiste = h('div', { class: 'bewertung' });
-  const zeigen = function () {
-    leiste.replaceChildren(h('button', { type: 'button', class: 'link', id: 'tx-' + m.id, title: 'Wortlaut dieser Nachricht ändern; gilt künftig für Nachrichten mit gleichem Text', onclick: bearbeiten }, m.original ? 'Text geändert (zurücksetzen oder anpassen)' : 'Text ändern'));
-  };
-  const bearbeiten = function () {
-    const feld = h('textarea', { class: 'bw-wunsch', rows: '3', style: 'width:100%;min-width:260px', 'aria-label': 'Neuer Wortlaut', spellcheck: 'false' });
-    feld.value = m.text;
-    leiste.replaceChildren(h('span', { class: 'bw-titel' }, 'Neuer Wortlaut:'), feld,
-      h('button', { type: 'button', class: 'link', id: 'tx-ok-' + m.id, onclick: function () { dispatch({ type: 'NACHRICHT_TEXT_GEAENDERT', msgId: m.id, text: feld.value }); } }, 'Speichern'),
-      h('button', { type: 'button', class: 'link', style: m.original ? '' : 'display:none', onclick: function () { dispatch({ type: 'NACHRICHT_TEXT_GEAENDERT', msgId: m.id, text: m.original }); } }, 'Original'),
-      h('button', { type: 'button', class: 'link', onclick: zeigen }, 'Abbrechen'));
-  };
-  zeigen();
-  return leiste;
-}
-function uebermittelnLeiste(m) {
-  if (m.uebermittelt) return h('div', { class: 'bewertung' }, h('span', { class: 'ok-vermerk' }, 'an Handler übermittelt' + (m.uebermitteltAn ? ': ' + m.uebermitteltAn : '')));
-  return h('div', { class: 'bewertung' }, h('button', { type: 'button', class: 'link', id: 'ub-' + m.id, title: 'Die Angaben dieser Meldung an ARGUS geben: ARGUS legt dazu ein Dossier an', onclick: function () { dispatch({ type: 'PERSON_UEBERMITTELN', msgId: m.id }); } }, 'An Handler übermitteln'));
-}
-/* Bewertung einer Antwort: gut, geht so, unpassend; bei den beiden letzten mit Sollabsicht und Wunschantwort. Alles landet im Erkennungsprotokoll. */
-function bewertungsLeiste(m) {
-  const n = nachricht(m.zu), kanal = n ? n.kanal : STATE.komm.aktiv, eingabe = n ? n.msg.text : '';
-  const bekannt = ERK.liste.find(function (x) { return x.msgId === m.id && x.bewertung; });
-  const leiste = h('div', { class: 'bewertung' });
-  const fertig = function (b, soll, wunsch, hinweis) {
-    const vor = STATE.komm.kanaele[kanal] ? STATE.komm.kanaele[kanal].nachrichten.filter(function (x) { return x.von === 'gegenstelle' && x.t < (n ? n.msg.t : m.t) && x.id !== m.id; }).pop() : null;
-    ERK.eintrag({ kanal: kanal, text: eingabe, grund: b === 'unpassend' ? 'als unpassend markiert' : 'bewertet', bewertung: b, msgId: m.id, kat: m.kat || null, klass: m.klass || null, soll: soll || null, wunsch: wunsch || '', hinweis: hinweis || '', antwort: m.text, zuvor: vor ? kuerzen(vor.text, 160) : '' });
-    leiste.replaceChildren(h('span', { class: 'ok-vermerk' }, 'vermerkt: ' + b));
-  };
-  if (bekannt) { leiste.appendChild(h('span', { class: 'ok-vermerk' }, 'vermerkt: ' + bekannt.bewertung)); return leiste; }
-  const form = function (b) {
-    const sel = h('select', { class: 'bw-soll', 'aria-label': 'Passende Absicht' }, h('option', { value: '' }, 'Passende Absicht (optional)'),
-      DIALOG.absichten.map(function (a) { return h('option', { value: a.id }, a.id); }), h('option', { value: '_andere' }, 'andere / keine passende'));
-    const txt = h('input', { type: 'text', class: 'bw-wunsch', placeholder: 'Wunschantwort, wörtlich, z. B. Bin am Hof.', 'aria-label': 'Gewünschte Antwort, wörtlich', autocomplete: 'off', spellcheck: 'false' });
-    const hin = h('input', { type: 'text', class: 'bw-hinweis', placeholder: 'Hinweis oder Regel (wird nie als Antwort verwendet)', 'aria-label': 'Hinweis oder Regel', autocomplete: 'off', spellcheck: 'false' });
-    leiste.replaceChildren(h('span', { class: 'bw-titel' }, b + ':'), sel, txt, hin,
-      h('button', { type: 'button', class: 'link', onclick: function () { fertig(b, sel.value, txt.value.trim(), hin.value.trim()); } }, 'Speichern'),
-      h('button', { type: 'button', class: 'link', onclick: function () { leiste.replaceChildren.apply(leiste, knoepfe()); } }, 'Abbrechen'));
-  };
-  const knoepfe = function () {
-    return [h('button', { type: 'button', class: 'link bw-gut', title: 'Antwort passt gut', onclick: function () { fertig('gut'); } }, 'gut'),
-      h('button', { type: 'button', class: 'link bw-geht', title: 'Antwort geht, ist aber nicht ideal', onclick: function () { form('geht so'); } }, 'geht so'),
-      h('button', { type: 'button', class: 'link unpassend', title: 'Antwort passt nicht zur Eingabe: ins Erkennungsprotokoll', onclick: function () { form('unpassend'); } }, 'unpassend')];
-  };
-  knoepfe().forEach(function (b) { leiste.appendChild(b); });
-  return leiste;
-}
 /* Anzeige "Gegenstelle schreibt …": zwischen Status "gelesen" der eigenen Nachricht und Eingang der Antwort */
 function aktualisiereSchreibt() {
   document.querySelectorAll('[data-schreibt]').forEach(function (el) {
@@ -7720,192 +6214,8 @@ function aktualisiereSchreibt() {
     if (offen && war && el.parentNode) el.parentNode.scrollTop = el.parentNode.scrollHeight;
   });
 }
-function sendeNachricht(modus) {
-  const akt = STATE.komm.aktiv, t = ($('km-text').value || '').trim();
-  if (!t) { $('km-hinweis').textContent = 'Nachricht ohne Text wird nicht gesendet.'; return; }
-  dispatch({ type: 'NACHRICHT_GESENDET', kanal: akt, text: t, dringlichkeit: $('km-dr').value, modus: modus === 'sichtung' || modus === 'notiz' ? modus : null });
-}
-function renderKomm(m) {
-  const K = SCENARIO.kommunikation, akt = STATE.komm.aktiv, kd = kanalDef(akt), c = STATE.komm.kanaele[akt];
-  const alter = Math.floor(kd.schluesselalterStd + Math.max(0, Date.now() - Date.parse(STATE.t0)) / 3600000);
-  const dr = VIEW.draft['km-dr'] || 'Routine', gesamt = ungelesenGesamt();
-  return [
-    modKopf(m),
-    h('div', { class: 'komm' },
-      panel('Kanäle', h('span', { class: 'badge' + (gesamt ? ' on' : '') }, gesamt + ' ungelesen'),
-        h('ul', { class: 'elist klist' }, K.kanaele.map(function (k) {
-          const kc = STATE.komm.kanaele[k.id], letzte = kc.nachrichten[kc.nachrichten.length - 1];
-          return h('li', null, h('button', { type: 'button', id: 'kn-' + k.id, 'aria-current': k.id === akt ? 'true' : null,
-              onclick: function () { dispatch({ type: 'KANAL_GEOEFFNET', kanal: k.id }); } },
-            h('span', { class: 'nm' }, k.name),
-            h('span', { class: 'badge' + (kc.ungelesen ? ' on' : '') }, kc.ungelesen + ' ungelesen'),
-            h('span', { class: 'sub' }, kanalDef(k.id).gegenstelle + ' · ' + kc.nachrichten.length + ' Nachrichten · zuletzt ' + (letzte ? dtg(letzte.t) : '–'))));
-        })),
-        null),
-      panel('Kanal ' + kd.name, h('span', { class: 'badge' }, 'Gegenstelle ' + kd.gegenstelle),
-        h('p', { class: 'note mono sec' }, 'Verschlüsselung: ' + kd.verfahren + ' · Schlüsselalter: ' + alter + ' h · Kanalintegrität: ' + kd.integritaet),
-        null,
-        STATE.funkstille.aktiv ? h('p', { class: 'note sec' }, h('span', { class: 'label s-warn' }, 'Funkstille'), ' ' + (KM().funkstille ? KM().funkstille.text : 'Anordnung des Ansprechpartners') + '. Kein Versand.') : null,
-        h('ol', { class: 'thread', 'data-scroll': 'thread-' + akt + '-' + c.nachrichten.length, 'data-bottom': '', tabindex: '0', 'aria-label': 'Nachrichtenverlauf Kanal ' + kd.name },
-          c.nachrichten.map(nachrichtElement), h('li', { class: 'nmsg schreibt', 'data-schreibt': akt, hidden: true }))),
-      panel('Nachricht an ' + kd.gegenstelle, null,
-        h('div', { class: 'pad' },
-          entwurf('textarea', 'km-text', 'km-' + akt, { rows: '6', 'aria-label': 'Nachricht an ' + kd.gegenstelle, placeholder: 'Nachricht an ' + kd.gegenstelle, title: 'Strg+Eingabe sendet', spellcheck: 'false',
-            onkeydown: function (ev) { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); sendeNachricht(); } } })),
-        h('div', { class: 'row bausteine' }, SCENARIO.kommunikation.textbausteine.map(function (b, i) {
-          return h('button', { type: 'button', class: 'link', id: 'tb-' + i, title: 'Text übernehmen: ' + b.text.replace('  ', ' … '), onclick: function () {
-            const ta = $('km-text'), luecke = b.text.indexOf('  ');           /* nur vorbefüllen, nicht senden */
-            ta.value = b.text; VIEW.draft['km-' + akt] = b.text; ta.focus();
-            if (luecke >= 0) ta.setSelectionRange(luecke + 1, luecke + 1);
-          } }, b.titel);
-        })),
-        h('div', { class: 'row' },
-          h('label', { for: 'km-dr' }, 'Dringlichkeit'),
-          h('select', { id: 'km-dr', onchange: function (ev) { VIEW.draft['km-dr'] = ev.target.value; } },
-            DRINGLICHKEIT.map(function (x) { return h('option', { value: x, selected: x === dr }, x); })),
-          h('button', { type: 'button', id: 'btn-send', onclick: function () { sendeNachricht(); } }, 'Senden'),
-          akt === 'asset' && !STATE.vorlauf ? funkruheKnopf() : null,
-          akt === 'handler' && LM() ? h('button', { type: 'button', id: 'btn-sichtung', title: 'Text als Sichtung (Ort, Zeit, Güte) ins Dossier der genannten Person oder des genannten Ortes übernehmen', onclick: function () { sendeNachricht('sichtung'); } }, 'Als Sichtung') : null,
-          akt === 'handler' && LM() ? h('button', { type: 'button', id: 'btn-notiz', title: 'Text als freie Notiz ins Dossier übernehmen (ohne Ort und Güte)', onclick: function () { sendeNachricht('notiz'); } }, 'Als Notiz') : null),
-        h('p', { class: 'note', id: 'km-hinweis', role: 'status' }, '')))
-  ];
-}
 
-/* =====================================================================
-   MODUL 5: PANIC / EXTRAKTION
-   ===================================================================== */
-const ANF_STUFEN = ['keine', 'angefordert', 'bestätigt', 'in Durchführung'];
-function pruefeAnforderung() {
-  const X = STATE.extraktion, wahl = VIEW.draft['x-opt'], text = ($('x-begr').value || '').trim(), hin = $('x-hinweis');
-  if (!wahl) { hin.textContent = 'Keine Option gewählt.'; return; }
-  if (!text) { hin.textContent = 'Begründung fehlt.'; return; }
-  hin.textContent = '';
-  const o = optionDef(wahl), ort = ortText(STATE.agent.checkin);
-  bestaetigen('Extraktionsanforderung bestätigen',
-    [h('dl', { class: 'fields wide' },
-      feld('Option', optionText(o.id)), feld('Geschätzte Vorlaufzeit', o.vorlauf),
-      feld('Begründung', text, 'full'),
-      feld('Bedrohungsstufe', 'Stufe ' + X.stufe + ' – ' + SCENARIO.bedrohungsstufen[X.stufe]),
-      feld('Letzter bekannter Standort', ort + ', Stand ' + fmtZ(STATE.agent.checkin.t)),
-      feld('Standortfreigabe', X.standortfreigabe ? 'ein' : 'aus'),
-      feld('Freigabe', SCENARIO.extraktion.freigabe.durch + ', Kanal Ansprechpartner', 'full'))],
-    'Anforderung absenden',
-    function () { dispatch({ type: 'EXTRAKTION_ANGEFORDERT', option: o.id, begruendung: text }); const b = $('btn-xrueck'); if (b) b.focus(); },
-    { pflicht: 'Ich bestätige die Anforderung von ' + optionText(o.id) + ' ausdrücklich.',
-      klartext: optionText(o.id) + ', Vorlauf ' + o.vorlauf + '. Begründung: ' + text + ' Anforderung absenden?' });
-}
-function renderExtraktion(m) {
-  const X = STATE.extraktion, r = X.anforderung, E = SCENARIO.extraktion, G = E.freigabe.durch;
-  const idx = ANF_STUFEN.indexOf(r.status), aktiv = r.status !== 'keine', wahl = VIEW.draft['x-opt'] || null;
-  const ort = ortText(STATE.agent.checkin);
-  const krit = STATE.log.filter(function (e) { return e.krit; }).slice(-12).reverse();
-  const aktionen = [];
-  if (r.durch === 'Agent' && (r.status === 'angefordert' || r.status === 'bestätigt')) {
-    aktionen.push(h('button', { type: 'button', id: 'btn-xrueck', onclick: function () {
-      bestaetigen('Anforderung zurückziehen', optionText(r.option) + ' wird zurückgezogen. Der operative Status kehrt zum Stand vor der Anforderung zurück; der Ansprechpartner erhält eine Systemnachricht.',
-        'Zurückziehen', function () { dispatch({ type: 'EXTRAKTION_ZURUECKGEZOGEN' }); });
-    } }, 'Anforderung zurückziehen'));
-  }
-  const hinweis = r.status === 'keine' ? 'Keine Anforderung offen.'
-    : r.status === 'angefordert' ? 'Freigabe durch ' + G + ' ausstehend.'
-    : r.status === 'bestätigt' ? (r.durch === 'Gegenstelle' ? 'Durch Gegenstelle eingeleitet. Aufhebung nur durch Gegenstelle.' : 'Freigabe liegt vor. Rücknahme bis zum Beginn der Durchführung möglich.')
-    : 'In Durchführung. Rücknahme ausgeschlossen.';
-  return [
-    modKopf(m),
-    h('div', { class: 'cols' },
-      panel('Bedrohungslage', null,
-        h('dl', { class: 'fields' },
-          feld('Bedrohungsstufe', [stufeLabel(X.stufe), ' von 5']),
-          feld('Letzte Bewertung', fmtZ(X.bewertet)),
-          feld('Status', statusLabel(STATE.agent.status)),
-          feld('Lagerelevante Ereignisse', String(X.begruendung.length - 1))),
-        h('h3', null, 'Begründung (neueste zuerst)'),
-        tabelle(['Zeit (UTC)', 'Quelle', 'Ereignis'], X.begruendung.slice().reverse().slice(0, 4).map(function (b) {
-          return [td('nw', fmtZ(b.t)), b.quelle, td('txt', b.text)];
-        }))),
-      panel('Eigene Bewertung der Lage', null,
-        h('div', { class: 'pad' },
-          h('div', { class: 'row' },
-            h('label', { for: 'be-stufe' }, 'Stufe'),
-            h('select', { id: 'be-stufe' }, [1, 2, 3, 4, 5].map(function (n) { return h('option', { value: String(n), selected: n === X.stufe }, n + ' ' + SCENARIO.bedrohungsstufen[n]); }))),
-          h('div', { class: 'row' },
-            entwurf('input', 'be-text', 'be-text', { type: 'text', 'aria-label': 'Begründung der eigenen Bewertung', placeholder: 'Anlass und Beobachtung (mindestens 10 Zeichen)', maxlength: '300', style: 'min-width:380px', spellcheck: 'false' }),
-            h('button', { type: 'button', id: 'btn-be', onclick: function () {
-              const t = ($('be-text').value || '').trim();
-              if (t.length < 10) { meldung('Bewertung nicht gesetzt: Begründung mit mindestens 10 Zeichen angeben.'); return; }
-              delete VIEW.draft['be-text'];
-              dispatch({ type: 'BEDROHUNG_EIGEN', stufe: Number($('be-stufe').value), begruendung: t });
-            } }, 'Eigene Bewertung festlegen')))),
-      panel('Status der Anforderung', null,
-        h('ol', { class: 'steps', 'aria-label': 'Schrittanzeige Anforderung' }, ANF_STUFEN.map(function (st, i) {
-          return h('li', { 'aria-current': i === idx ? 'step' : null, class: i < idx ? 'done' : '' },
-            h('span', { class: 'n' }, (i + 1) + '. ' + st),
-            h('span', { class: 'z' }, i < idx ? 'durchlaufen' : i === idx ? 'aktueller Stand' : 'offen'));
-        })),
-        aktiv ? h('dl', { class: 'fields' },
-          feld('Option', optionText(r.option)), feld('Geschätzte Vorlaufzeit', optionDef(r.option).vorlauf),
-          feld('Angefordert durch', r.durch), feld('Zeitpunkt', fmtZ(r.t)),
-          feld('Freigabe Ansprechpartner', r.freigabe === 'erteilt' ? [h('span', { class: 'label s-accent' }, 'erteilt'), ' ' + fmtZ(r.freigabeT)] : h('span', { class: 'label s-warn' }, 'ausstehend')),
-          feld('Begründung', r.begruendung, 'full')) : null,
-        h('p', { class: 'note' }, hinweis),
-        aktionen.length ? h('div', { class: 'row top' }, aktionen) : null)),
-    h('div', { class: 'cols' },
-      panel('Extraktionsoption und Begründung', null,
-        h('fieldset', { class: 'opts', disabled: aktiv },
-          h('legend', { class: 'vh' }, 'Extraktionsoption'),
-          KM().extraktion.optionen.map(function (o) {
-            return h('label', { class: 'opt', for: 'xo-' + o.id },
-              h('input', { type: 'radio', name: 'xopt', id: 'xo-' + o.id, value: o.id, checked: wahl === o.id, onchange: function () { VIEW.draft['x-opt'] = o.id; } }),
-              h('span', { class: 'mono' }, '(' + o.id + ')'), h('span', null, o.titel), h('span', { class: 'mono dim' }, 'Vorlauf ' + o.vorlauf),
-              h('span', { class: 'od' }, o.text));
-          }),
-          h('div', { class: 'pad' }, entwurf('textarea', 'x-begr', 'x-begr', { rows: '3', 'aria-label': 'Begründung der Anforderung', placeholder: 'Begründung: Anlass, Zeitpunkt, Bewertung.', spellcheck: 'false' })),
-          h('div', { class: 'row' },
-            h('button', { type: 'button', id: 'btn-xpruef', onclick: pruefeAnforderung }, 'Anforderung prüfen'),
-            h('span', { id: 'x-hinweis', role: 'status' }, aktiv ? 'Es besteht bereits eine Anforderung (' + r.status + ').' : ''))),
-        h('p', { class: 'note' }, 'Freigabe durch ' + G + ' über Kanal Ansprechpartner.')),
-      panel('Standort', null,
-        h('dl', { class: 'fields' },
-          feld('Standortfreigabe', h('span', { class: 'label ' + (X.standortfreigabe ? 's-accent' : 's-dim') }, X.standortfreigabe ? 'ein' : 'aus')),
-          feld('Letzter bekannter Standort', ort),
-          feld('Zeitstempel (letzter Check-in)', fmtZ(STATE.agent.checkin.t)),
-          feld('Nächstes Meldefenster', h('span', { 'data-melde': '' }, meldeText(Date.now())))),
-        h('div', { class: 'row top' },
-          h('button', { type: 'button', id: 'btn-ort', 'aria-pressed': X.standortfreigabe ? 'true' : 'false',
-            onclick: function () { dispatch({ type: 'STANDORTFREIGABE_GESETZT', ein: !X.standortfreigabe }); } }, X.standortfreigabe ? 'Standortfreigabe ausschalten' : 'Standortfreigabe einschalten')),
-        h('p', { class: 'note' }, 'Übermittelt wird der Standort des letzten Check-ins.'))),
-    panel('Letzte kritische Ereignisse', h('span', { class: 'badge' }, krit.length + ' angezeigt'),
-      tabelle(['Zeit (UTC)', 'Modul', 'Aktion', 'Detail'], krit.map(function (e) {
-        return [td('nw', fmtZ(e.t)), td('nw', e.modul), e.aktion, td('txt', e.detail)];
-      }), 'Keine kritischen Ereignisse im Protokoll.'))
-  ];
-}
 
-/* Erststart (vorlauf): Ansichten ohne Bezug zu einem noch nicht angenommenen Auftrag */
-function leerAnsicht(m, titel, text) { return [modKopf(m), panel(titel, null, h('p', { class: 'note pad' }, text))]; }
-function renderMissionVorlauf(m) {
-  const neu = zugewiesene();
-  return [modKopf(m), STATE.serie.ende ? abschlussansicht() : null,
-          neu ? auftragskarte(neu) : panel('Kein Auftrag zugewiesen', null, h('p', { class: 'note pad' }, STATE.agent.status === 'Ruhend' ? 'Status Ruhend: keine Zuweisung. Zum Empfang auf Standby oder Aktiv setzen.' : 'Zuweisung durch den Ansprechpartner abwarten.'))];
-}
-function nachbereitungPanel() {
-  const nb = STATE.nachbereitung;
-  if (!nb) return null;
-  const T = SCENARIO.serie.nachbereitung, def = missionDef(nb.mission), fertig = T.filter(function (x) { return !!nb.erledigt[x.id]; }).length;
-  return panel('Nachbereitung ' + opText(def), h('span', { class: 'badge on' }, fertig + ' von ' + T.length + ' erledigt'),
-    h('ul', { class: 'nachb' }, T.map(function (x, i) {
-      const t = nb.erledigt[x.id], gesperrt = x.id === 'nachbesprechung' && T.some(function (y) { return y.id !== x.id && !nb.erledigt[y.id]; });
-      return h('li', { class: t ? 'done' : '' },
-        h('span', { class: 'mono' }, String(i + 1)),
-        h('span', { class: 'nt' }, h('strong', null, x.titel), ' ', x.text),
-        h('span', { class: 'zt' }, t ? 'erledigt · ' + fmtZ(t)
-          : h('button', { type: 'button', id: 'nb-' + x.id, disabled: gesperrt, onclick: function () {
-              bestaetigen('Nachbereitung: ' + x.titel, x.text, 'Durchführen', function () { dispatch({ type: 'NACHBEREITUNG_SCHRITT', id: x.id }); },
-                { klartext: x.titel + ' durchführen?' });
-            } }, 'Durchführen')));
-    })),
-    h('p', { class: 'note pad' }, 'Nach dem letzten Schritt werden die Kanalverläufe gelöscht, Notizen zurückgesetzt und die Dossiers archiviert. Danach folgt der nächste Auftrag.'));
-}
 /* =====================================================================
    MODUL 8: VERSTÄRKUNG
    Kräfte werden beim Ansprechpartner angefordert. Die Entscheidung folgt Regeln (Begründung, Sperren je Auftrag, Kontingent, gleichzeitige Kräfte,
@@ -7921,14 +6231,6 @@ function vkStatus(v, jetzt) {
   if (t < Date.parse(v.ankunft)) return 'unterwegs';
   if (t < Date.parse(v.ende)) return 'vor Ort';
   return 'abgeschlossen';
-}
-function vkAktiveKraefte(von, bis, ohneId) {
-  let n = 0;
-  VK().forEach(function (v) {
-    if (v.id === ohneId || v.zurueck || v.urteil === 'abgelehnt') return;
-    if (Date.parse(v.ankunft) < bis && Date.parse(v.ende) > von) n += v.anzahl * vkArt(v.art).kraefte;
-  });
-  return n;
 }
 
 /* =====================================================================
@@ -7964,40 +6266,6 @@ function begruendungPruefen(ziele, bg, streng, bezugImplizit) {
 function begruendungAblehnung(r) {
   return (r.gefuehl ? 'Eine Sorge ist kein Anlass. ' : '') + 'Das reicht mir so noch nicht, es fehlt ' + r.fehlt.join(', ') + '. Ergänze es in ein, zwei Sätzen und reich die Anfrage neu ein.';
 }
-function vkBewerten(def, a) {
-  const V = def.verstaerkung, art = vkArt(a.art), auflagen = [], H = 3600000, jetzt = Date.now();
-  const nein = function (g) { return { urteil: 'abgelehnt', grund: g, auflage: '', beginnH: a.beginnH, dauerH: a.dauerH }; };
-  if (!art) return nein('Unbekannte Art der Verstärkung.');
-  if (String(a.zweck || '').trim().length < 30) return nein('Ohne ausreichende Begründung stelle ich keine Kräfte ab. Zweck, Anlass und erwarteter Nutzen, in ganzen Sätzen.');
-  { const bz = begruendungPruefen([entitaet(a.bezug), entitaet(a.ort)], a.zweck, false, true); if (!bz.ok) return nein(begruendungAblehnung(bz)); }
-  if (V.gesperrt.indexOf(art.id) >= 0) return nein(V.gesperrtText);
-  const hv = akteurDaten('handler');
-  if (hv && hv.vertrauen < 30) return nein('Nach den letzten Vorgängen stelle ich dir keine weiteren Kräfte ab. Erst Ergebnisse, dann reden wir.');
-  const genehmigt = VK().filter(function (v) { return v.urteil !== 'abgelehnt'; }).length;
-  if (genehmigt >= V.kontingent) return nein('Das Kontingent für diesen Auftrag (' + V.kontingent + ' Entsendungen) ist ausgeschöpft. Mehr gibt es nicht.');
-  let beginn = Number(a.beginnH), dauer = Math.min(48, Math.max(1, Number(a.dauerH) || 8));
-  const bezug = a.bezug ? entitaet(a.bezug) : null, st = bezug ? bedrohung(bezug).stufe : 0;
-  if (bezug && st >= 5 && (art.id === 'beobachter' || art.id === 'technik')) return nein('Annäherung an ' + bezug.id + ' kommt nicht in Frage (Stufe 5). Dafür schicke ich niemanden.');
-  let vorlauf = art.vorlaufH;
-  if (hv && hv.vertrauen >= 75) { vorlauf = Math.max(1, Math.ceil(vorlauf * 0.75)); auflagen.push('Verkürzter Vorlauf, weil deine bisherige Arbeit belastbar war.'); }
-  if (a.dringlichkeit === 'Sofort') {
-    if (STATE.extraktion.stufe < 3) auflagen.push('Kein Anlass für "Sofort" bei Bedrohungsstufe ' + STATE.extraktion.stufe + '; geführt als Priorität.');
-    else { vorlauf = Math.max(1, Math.ceil(vorlauf / 2)); auflagen.push('Sofortverlegung halbiert den Vorlauf und geht zulasten der Tarnung.'); }
-  }
-  if (beginn < vorlauf) { auflagen.push('Frühestes Eintreffen in ' + vorlauf + ' h statt ' + beginn + ' h.'); beginn = vorlauf; }
-  if (dauer > 24) { auflagen.push('Einsatzdauer auf 24 h begrenzt.'); dauer = 24; }
-  const kr = art.kraefte * a.anzahl, von = jetzt + beginn * H, bis = von + dauer * H;
-  const belegt = vkAktiveKraefte(von, bis);
-  if (belegt + kr > V.maxKraefte) return nein('Im Zeitraum wären ' + (belegt + kr) + ' Kräfte gleichzeitig im Raum. Mehr als ' + V.maxKraefte + ' sind nicht abstreitbar. Anderen Zeitraum wählen oder weniger anfordern.');
-  if (bezug && st >= 4) auflagen.push('Bezug ' + bezug.id + ' ist Stufe ' + st + ': Mindestabstand 500 m, keine Annäherung an Begleitschutz, nur beobachten.');
-  if (genehmigt >= V.kontingent - 1) auflagen.push('Das ist die letzte Entsendung im Kontingent.');
-  return { urteil: auflagen.length ? 'auflage' : 'genehmigt', grund: auflagen.length ? '' : 'Anforderung stimmig.', auflage: auflagen.join(' '), beginnH: beginn, dauerH: dauer };
-}
-function vkAnfordern(def) {
-  const g = function (id) { return $(id).value; };
-  dispatch({ type: 'VERSTAERKUNG_ANGEFORDERT', art: g('vk-art'), anzahl: Number(g('vk-anz')), ort: g('vk-ort'), bezug: g('vk-bezug'), beginnH: Number(g('vk-beginn')),
-             dauerH: Number(g('vk-dauer')), dringlichkeit: g('vk-dr'), zweck: ($('vk-zweck').value || '').trim() });
-}
 /* =====================================================================
    MODUL 9: FREIGABEN
    Anträge auf eingriffsnahe Maßnahmen gegen Ziele. Die Entscheidung folgt Regeln, kommt zeitversetzt über den Ansprechpartner und wird protokolliert.
@@ -8013,13 +6281,6 @@ const FG_ARTEN = [
 ];
 function FGL() { if (!STATE.freigaben) STATE.freigaben = []; return STATE.freigaben; }
 function fgStatus(f, jetzt) { return (jetzt || Date.now()) < Date.parse(f.entscheidung) ? 'in Prüfung' : f.urteil === 'abgelehnt' ? 'abgelehnt' : f.urteil === 'auflage' ? 'erteilt (Auflage)' : 'erteilt'; }
-/* Die Maßnahme mit Personenschaden erscheint erst, wenn Mitwisserschaft einer Person bestätigt und eine brauchbare Streckenanalyse eingereicht ist */
-function fgSichtbar(art, def) {
-  if (!art.sichtbar) return true;
-  const ms = MS(def.id);
-  const wissentlich = Object.keys(ms.wissen).some(function (id) { const w = ms.wissen[id]; return (w.stand === 'bestaetigt' && w.urteil === 'wissentlich') || (w.stand === 'festgelegt' && w.festgelegt === 'wissentlich'); });
-  return wissentlich && !!(ms.zugriffUrteil && ms.zugriffUrteil.ok);
-}
 function fgBewerten(def, art, e, bg, dr) {
   const ms = MS(def.id), nein = function (g) { return { urteil: 'abgelehnt', grund: g, auflage: '' }; }, auflagen = [];
   if (art.ziele.indexOf(e.typ) < 0) return nein(art.name + ' richtet sich nicht gegen ' + e.typ + '.');
@@ -8057,98 +6318,7 @@ function fgBewerten(def, art, e, bg, dr) {
   if (dr === 'Sofort' && art.id !== 'observation') auflagen.push('"Sofort" geht zulasten der Abstreitbarkeit; Risiko liegt bei dir.');
   return { urteil: auflagen.length ? 'auflage' : 'erteilt', grund: auflagen.length ? '' : 'Antrag stimmig.', auflage: auflagen.join(' ') };
 }
-function renderFreigabe(m) {
-  const def = LM();
-  if (!def) return leerAnsicht(m, 'Freigaben', 'Kein laufender Auftrag. Freigaben werden nur zu einem laufenden Auftrag beantragt.');
-  const g = function (k, d) { return VIEW.draft[k] != null ? VIEW.draft[k] : d; };
-  const sichtbar = FG_ARTEN.filter(function (x) { return fgSichtbar(x, def); });
-  const artId = g('fg-art', sichtbar[0].id), art = sichtbar.find(function (x) { return x.id === artId; }) || sichtbar[0];
-  const ziele = pool().filter(function (e) { return art.ziele.indexOf(e.typ) >= 0 && e.id !== 'P-0001'; });
-  const zielId = ziele.some(function (e) { return e.id === g('fg-ziel', ''); }) ? g('fg-ziel', '') : (ziele[0] ? ziele[0].id : '');
-  const L = FGL(), jetzt = Date.now();
-  return [
-    modKopf(m),
-    panel('Freigabe beantragen', null,
-      h('div', { class: 'pad' },
-        h('div', { class: 'row' },
-          h('label', { for: 'fg-art' }, 'Maßnahme'),
-          h('select', { id: 'fg-art', onchange: function (ev) { VIEW.draft['fg-art'] = ev.target.value; renderModule(); } }, sichtbar.map(function (x) { return h('option', { value: x.id, selected: x.id === art.id }, x.name); })),
-          h('label', { for: 'fg-ziel' }, 'Ziel'),
-          h('select', { id: 'fg-ziel', onchange: function (ev) { VIEW.draft['fg-ziel'] = ev.target.value; } }, ziele.map(function (e) { return h('option', { value: e.id, selected: e.id === zielId }, anzeige(e) + ' (Stufe ' + bedrohung(e).stufe + ')'); })),
-          h('label', { for: 'fg-dr' }, 'Dringlichkeit'),
-          h('select', { id: 'fg-dr' }, ['Routine', 'Priorität', 'Sofort'].map(function (x) { return h('option', { value: x, selected: x === g('fg-dr', 'Routine') }, x); }))),
-        h('p', { class: 'note' }, art.text),
-        h('div', { class: 'row' }, h('label', { for: 'fg-text' }, 'Begründung'),
-          entwurf('textarea', 'fg-text', 'fg-text', { rows: '4', style: 'flex:1 1 360px', spellcheck: 'false', placeholder: 'Anlass, Beleglage, erwarteter Nutzen, Abstreitbarkeit' })),
-        h('div', { class: 'row' }, h('button', { type: 'button', id: 'btn-fg', onclick: function () {
-          const ziel = $('fg-ziel') ? $('fg-ziel').value : '', txt = ($('fg-text').value || '').trim(), massn = $('fg-art').value, dr = $('fg-dr').value;
-          bestaetigen('Freigabe beantragen', 'Antrag auf "' + art.name + '" gegen ' + ziel + '. Der Antrag wird als kritisches Ereignis protokolliert; die Entscheidung kommt über den Ansprechpartner.', 'Beantragen',
-            function () { dispatch({ type: 'FREIGABE_BEANTRAGT', massnahme: massn, ziel: ziel, begruendung: txt, dringlichkeit: dr }); }, { klartext: 'Freigabe beantragen?' });
-        } }, 'Freigabe beantragen')))),
-    panel('Anträge', [h('span', { class: 'badge' }, String(L.length))],
-      tabelle(['Kennung', 'Maßnahme', 'Ziel', 'Gestellt', 'Stand', 'Entscheidung'], L.slice().reverse().map(function (f) {
-        const st = fgStatus(f, jetzt), a = FG_ARTEN.find(function (x) { return x.id === f.massnahme; });
-        return [td('nw', f.id), a ? a.name : f.massnahme, td('nw', f.ziel + ' ' + f.zielName), td('nw', fmtZ(f.t)), td('nw', h('span', { class: 'label ' + (st === 'abgelehnt' ? 's-crit' : st === 'in Prüfung' ? 's-dim' : st === 'erteilt' ? 's-accent' : 's-warn') }, st)),
-          st === 'in Prüfung' ? h('span', { class: 'dim' }, 'steht aus') : td('txt', f.urteil === 'abgelehnt' ? f.grund : (f.auflage || f.grund))];
-      }), 'Noch keine Freigabe beantragt.'))
-  ];
-}
 
-function renderVerstaerkung(m) {
-  const def = LM();
-  if (!def || !def.verstaerkung) return leerAnsicht(m, 'Verstärkung', 'Kein laufender Auftrag. Verstärkung wird nur zu einem laufenden Auftrag angefordert.');
-  const V = def.verstaerkung, L = VK(), jetzt = Date.now();
-  const gen = L.filter(function (v) { return v.urteil !== 'abgelehnt'; }).length;
-  const aktiv = vkAktiveKraefte(jetzt, jetzt + 1);
-  const g = function (k, d) { return VIEW.draft[k] != null ? VIEW.draft[k] : d; };
-  const artId = g('vk-art', SCENARIO.verstaerkung.arten[0].id), art = vkArt(artId) || SCENARIO.verstaerkung.arten[0];
-  const orte = def.standorte.map(function (s) { return { id: s.id, name: s.name }; }).concat(def.strecke.map(function (id) { const e = entitaet(id); return e ? { id: id, name: e.name } : null; }).filter(Boolean));
-  const waehle = function (k) { return function (ev) { VIEW.draft[k] = ev.target.value; renderModule(); }; };
-  const sel = function (id, werte, aktuell, onch) {
-    return h('select', { id: id, onchange: onch || function (ev) { VIEW.draft[id] = ev.target.value; } }, werte.map(function (w) { return h('option', { value: String(w[0]), selected: String(w[0]) === String(aktuell) }, w[1]); }));
-  };
-  return [
-    modKopf(m),
-    panel('Lage der Kräfte', null,
-      h('dl', { class: 'fields' },
-        feld('Kräfte jetzt im Raum', aktiv + ' von höchstens ' + V.maxKraefte + ' gleichzeitig'),
-        feld('Weg der Anforderung', 'Ansprechpartner ' + kanalDef('handler').gegenstelle + '; Kontakt zu den Kräften nur über ihn'))),
-    panel('Verstärkung anfordern', null,
-      h('div', { class: 'pad' },
-        h('div', { class: 'row' },
-          h('label', { for: 'vk-art' }, 'Art'),
-          sel('vk-art', SCENARIO.verstaerkung.arten.map(function (a) { return [a.id, a.name + ' (' + a.kraefte + ' Kräfte je Einheit)']; }), artId, waehle('vk-art')),
-          h('label', { for: 'vk-anz' }, 'Anzahl'),
-          sel('vk-anz', [[1, '1'], [2, '2'], [3, '3']], g('vk-anz', 1))),
-        h('p', { class: 'note' }, art.text + ' Vorlauf mindestens ' + art.vorlaufH + ' h.'),
-        h('div', { class: 'row' },
-          h('label', { for: 'vk-ort' }, 'Einsatzort'),
-          sel('vk-ort', orte.map(function (o) { return [o.id, o.id + ' ' + o.name]; }), g('vk-ort', orte[0].id)),
-          h('label', { for: 'vk-bezug' }, 'Bezug'),
-          sel('vk-bezug', [['', 'kein Dossier']].concat(pool().filter(function (e) { return e.mission === def.id || def.strecke.indexOf(e.id) >= 0 || (def.wahrheit && def.wahrheit[e.id]); }).map(function (e) { return [e.id, anzeige(e)]; })), g('vk-bezug', ''))),
-        h('div', { class: 'row' },
-          h('label', { for: 'vk-beginn' }, 'Eintreffen in'),
-          sel('vk-beginn', [[1, '1 h'], [3, '3 h'], [6, '6 h'], [12, '12 h'], [24, '24 h'], [48, '48 h']], g('vk-beginn', 6)),
-          h('label', { for: 'vk-dauer' }, 'Dauer'),
-          sel('vk-dauer', [[4, '4 h'], [8, '8 h'], [12, '12 h'], [24, '24 h'], [48, '48 h']], g('vk-dauer', 8)),
-          h('label', { for: 'vk-dr' }, 'Dringlichkeit'),
-          sel('vk-dr', [['Routine', 'Routine'], ['Priorität', 'Priorität'], ['Sofort', 'Sofort']], g('vk-dr', 'Routine'))),
-        h('div', { class: 'row' },
-          entwurf('textarea', 'vk-zweck', 'vk-zweck', { rows: '3', 'aria-label': 'Begründung der Anforderung', placeholder: 'Zweck, Anlass und erwarteter Nutzen (mindestens 30 Zeichen)', style: 'flex:1 1 360px;min-width:0', spellcheck: 'false' })),
-        h('div', { class: 'row' }, h('button', { type: 'button', id: 'btn-vk', onclick: function () { vkAnfordern(def); } }, 'Verstärkung anfordern')))),
-    panel('Anforderungen', [h('span', { class: 'badge' }, String(L.length))],
-      tabelle(['ID', 'Gestellt (UTC)', 'Kräfte', 'Ort', 'Eintreffen', 'Dauer', 'Rufzeichen', 'Stand', 'Entscheidung des Ansprechpartners', ''], L.slice().reverse().map(function (v) {
-        const a = vkArt(v.art), st = vkStatus(v), prf = st === 'in Prüfung';
-        return [td('nw', v.id), td('nw', fmtZ(v.t)), td('txt', v.anzahl + ' × ' + a.name), td('txt', v.ort + ' ' + v.ortName),
-          td('nw', prf || v.urteil === 'abgelehnt' ? '–' : fmtZ(v.ankunft)), td('nw', prf || v.urteil === 'abgelehnt' ? '–' : v.dauerH + ' h'), td('nw', prf ? '–' : v.rufzeichen || '–'),
-          h('td', { class: 'nw', 'data-vk': v.id }, st),
-          td('txt', prf ? 'Der Ansprechpartner prüft die Anforderung.' : (v.urteil === 'abgelehnt' ? 'abgelehnt: ' : v.urteil === 'auflage' ? 'mit Auflage: ' : 'genehmigt. ') + (v.grund || '') + (v.auflage ? v.auflage : '')),
-          td('nw', v.urteil !== 'abgelehnt' && ['in Prüfung', 'unterwegs', 'vor Ort'].indexOf(st) >= 0 ? h('button', { type: 'button', class: 'link', id: 'vk-z-' + v.id, onclick: function () {
-            bestaetigen('Verstärkung zurückziehen: ' + v.id, [h('p', { class: 'note' }, 'Die Kräfte werden zurückbeordert. Aufwand und Kontingent sind verbraucht.')], 'Zurückziehen', function () { dispatch({ type: 'VERSTAERKUNG_ZURUECKGEZOGEN', id: v.id }); });
-          } }, 'Zurückziehen') : '')];
-      }), 'Noch keine Verstärkung angefordert.'))
-  ];
-}
 
 
 function karteBereinigenPanel() {
@@ -8162,15 +6332,10 @@ function karteBereinigenPanel() {
 }
 const RENDER = {
   profil: function (m) { return renderArbeitsprofil(m); },
-  mission: function (m) { return STATE.vorlauf ? renderMissionVorlauf(m) : renderMission(m); },
   dossier: renderDossier,
-  komm: renderKomm,
   karte: function () { return renderKarte.apply(null, arguments); },   /* Modul 6 liegt in karte-modul.js (nach dem Hauptskript geladen) */
   akten: function () { return renderAkten.apply(null, arguments); },   /* Modul 7 liegt in akten-modul.js */
   x: function (m) { return renderX(m); },
-  verstaerkung: renderVerstaerkung,
-  freigabe: renderFreigabe,
-  extraktion: function (m) { return STATE.vorlauf ? leerAnsicht(m, 'Extraktion', 'Kein laufender Auftrag. Extraktionsanforderungen sind erst mit einem laufenden Auftrag möglich.') : renderExtraktion(m); }
 };
 
 function renderModule() {
@@ -8340,110 +6505,6 @@ function importFile(file) {
   reader.readAsText(file);
 }
 
-/* =====================================================================
-   START
-   ===================================================================== */
-/* =====================================================================
-   REGIE-KONSOLE
-   Aufruf ausschließlich über Strg+Umschalt+Alt+R; in der Oberfläche nicht erwähnt. Der Dialog entsteht erst beim
-   ersten Aufruf. Regie-Aktionen laufen über dispatch und erzeugen dieselben Protokolleinträge wie die regulären
-   Ereignisse; Öffnen und Schließen der Konsole werden nicht protokolliert.
-   ===================================================================== */
-function regieInhalt(dlg, hinweis) {
-  const r = STATE.extraktion.anforderung, lauf = LM();
-  const neu = function (text) { regieInhalt(dlg, text); };
-  const tun = function (aktion, text) { return function () { dispatch(aktion); neu(text); }; };
-  const knopf = function (id, titel, fn, aus) { return h('button', { type: 'button', id: id, disabled: !!aus, onclick: fn }, titel); };
-  const folge = SCENARIO.missionen.find(function (m) { return MS(m.id).status === 'offen'; });
-  const fokus = document.activeElement && dlg.contains(document.activeElement) ? document.activeElement.id : '';
-  dlg.replaceChildren(
-    h('h2', { id: 'regie-title' }, 'Regie'),
-    h('div', { class: 'body' },
-      h('h3', null, '1 Nachricht einspielen'),
-      h('div', { class: 'row', style: 'padding:4px 0' },
-        h('label', { for: 'rg-kanal' }, 'Kanal'),
-        h('select', { id: 'rg-kanal' }, SCENARIO.kommunikation.kanaele.map(function (k) { return h('option', { value: k.id }, k.name + ' (' + kanalDef(k.id).gegenstelle + ')'); })),
-        h('label', { for: 'rg-dr' }, 'Dringlichkeit'),
-        h('select', { id: 'rg-dr' }, DRINGLICHKEIT.map(function (x) { return h('option', { value: x }, x); })),
-        h('input', { type: 'checkbox', id: 'rg-lage' }), h('label', { for: 'rg-lage' }, 'lagerelevant')),
-      h('textarea', { id: 'rg-text', rows: '3', 'aria-label': 'Nachrichtentext', spellcheck: 'false' }),
-      h('div', { class: 'row', style: 'padding:6px 0 0' },
-        knopf('rg-senden', 'Einspielen', function () {
-          const t = ($('rg-text').value || '').trim();
-          if (!t) { neu('Kein Text.'); return; }
-          dispatch({ type: 'NACHRICHT_EINGESPIELT', kanal: $('rg-kanal').value, text: t, lagerelevant: $('rg-lage').checked, dringlichkeit: $('rg-dr').value });
-          neu('Nachricht eingespielt.');
-        }),
-        knopf('rg-skript', '2 Nächste Skriptnachricht jetzt', tun({ type: 'NACHRICHT_EINGEHEND' }, 'Skriptnachricht ausgelöst.'), !lauf || MS(lauf.id).skript.every(function (s) { return s === 'gesendet'; }))),
-      h('h3', null, '3 Gegenstelle Modul 5 (Stand: ' + r.status + (r.option ? ', Option ' + r.option : '') + ')'),
-      h('div', { class: 'row', style: 'padding:4px 0' },
-        knopf('rg-freigabe', 'Freigabe', tun({ type: 'EXTRAKTION_GEGENSTELLE', schritt: 'freigabe' }, 'Freigabe.'), r.status !== 'angefordert'),
-        knopf('rg-ablehnung', 'Ablehnung', tun({ type: 'EXTRAKTION_GEGENSTELLE', schritt: 'ablehnen' }, 'Ablehnung.'), r.status !== 'angefordert'),
-        knopf('rg-durchf', 'Durchführung', tun({ type: 'EXTRAKTION_GEGENSTELLE', schritt: 'durchfuehrung' }, 'Durchführung.'), r.status !== 'bestätigt'),
-        knopf('rg-aufhebung', 'Aufhebung', tun({ type: 'EXTRAKTION_GEGENSTELLE', schritt: 'aufheben' }, 'Aufhebung.'), r.status !== 'bestätigt'),
-        knopf('rg-abschluss', 'Abschluss', tun({ type: 'EXTRAKTION_GEGENSTELLE', schritt: 'abschliessen' }, 'Abschluss.'), r.status !== 'in Durchführung')),
-      h('h3', null, '4 Automatik, 7 Funkstille'),
-      h('div', { class: 'row', style: 'padding:4px 0' },
-        h('button', { type: 'button', id: 'rg-auto', 'aria-pressed': STATE.automatik ? 'true' : 'false', onclick: tun({ type: 'AUTOMATIK_GESETZT', ein: !STATE.automatik }, 'Automatik umgeschaltet.') },
-          'Automatik: ' + (STATE.automatik ? 'an' : 'aus')),
-        h('button', { type: 'button', id: 'rg-funk', 'aria-pressed': STATE.funkstille.aktiv ? 'true' : 'false', onclick: tun({ type: 'FUNKSTILLE_GESETZT', aktiv: !STATE.funkstille.aktiv }, 'Funkstille umgeschaltet.') },
-          'Funkstille: ' + (STATE.funkstille.aktiv ? 'an' : 'aus')),
-        h('span', { class: 'dim mono' }, STATE.plan.length + ' Ereignisse im Plan')),
-      h('h3', null, '5 Auftragsabfolge'),
-      h('div', { class: 'row', style: 'padding:4px 0' },
-        knopf('rg-folge', 'Folgeauftrag jetzt zuweisen' + (folge ? ' (' + folge.id + ')' : ''), function () { dispatch({ type: 'MISSION_ZUGEWIESEN', id: folge.id }); neu('Folgeauftrag zugewiesen.'); }, !folge || !!zugewiesene() || !!STATE.serie.ende),
-        knopf('rg-start', 'Einsatzstart jetzt', function () { dispatch({ type: 'START_VORGEZOGEN' }); neu('Start vorgezogen.'); }, !lauf || einsatzLaeuft()),
-        knopf('rg-ziele', 'Alle Ziele der Mission abhaken', function () {
-          lauf.ziele.forEach(function (z) { dispatch({ type: 'ZIEL_GESETZT', id: z.id, erledigt: true }); });
-          neu('Ziele abgehakt.');
-        }, !lauf || offeneZiele() === 0)),
-      h('h3', null, '6 Bedrohungsstufe (Stand: ' + STATE.extraktion.stufe + ')'),
-      h('div', { class: 'row', style: 'padding:4px 0' },
-        h('label', { for: 'rg-stufe' }, 'Stufe'),
-        h('select', { id: 'rg-stufe' }, [1, 2, 3, 4, 5].map(function (n) { return h('option', { value: String(n), selected: n === STATE.extraktion.stufe }, n + ' ' + SCENARIO.bedrohungsstufen[n]); })),
-        knopf('rg-stufe-set', 'Setzen', function () { dispatch({ type: 'BEDROHUNG_GESETZT', stufe: Number($('rg-stufe').value) }); neu('Bedrohungsstufe gesetzt.'); })),
-      h('h3', null, 'Abdruck (Legende: ' + abdText('legende') + ', Asset: ' + abdText('asset') + ')'),
-      h('div', { class: 'row', style: 'padding:4px 0' },
-        knopf('rg-abd-l', 'Legende +20', function () { dispatch({ type: 'ABDRUCK_REGIE', tr: 'legende', d: 20 }); neu('Abdruck Legende erhöht.'); }),
-        knopf('rg-abd-a', 'Asset +20', function () { dispatch({ type: 'ABDRUCK_REGIE', tr: 'asset', d: 20 }); neu('Abdruck Asset erhöht.'); }),
-        knopf('rg-abd-0', 'Alle Spuren löschen', function () { dispatch({ type: 'ABDRUCK_REGIE', reset: true }); neu('Spuren gelöscht.'); })),
-      h('h3', null, 'Alterung von Wissen (Stand: ' + (altS().faktor === 1 ? 'Echtzeit' : altS().faktor === 0 ? 'aus' : '×' + altS().faktor) + ')'),
-      h('div', { class: 'row', style: 'padding:4px 0' },
-        knopf('rg-alt-1', 'Echtzeit', function () { dispatch({ type: 'ALTERUNG_REGIE', faktor: 1 }); neu('Alterung in Echtzeit.'); }),
-        knopf('rg-alt-60', '×60 (1 min = 1 h)', function () { dispatch({ type: 'ALTERUNG_REGIE', faktor: 60 }); neu('Alterung ×60.'); }),
-        knopf('rg-alt-1440', '×1440 (1 min = 1 Tag)', function () { dispatch({ type: 'ALTERUNG_REGIE', faktor: 1440 }); neu('Alterung ×1440.'); }),
-        knopf('rg-alt-0', 'Aus', function () { dispatch({ type: 'ALTERUNG_REGIE', faktor: 0 }); neu('Alterung aus.'); })),
-      h('h3', null, 'Belastung (Stand: ' + Math.round(belS().w) + ', ' + (BEL_STUFEN.find(function (x) { return belS().w < x[0]; }) || [0, '?'])[1] + ')'),
-      h('div', { class: 'row', style: 'padding:4px 0' },
-        knopf('rg-bel-m25', '−25', function () { dispatch({ type: 'BELASTUNG_REGIE', d: -25 }); neu('Belastung gesenkt.'); }),
-        knopf('rg-bel-m10', '−10', function () { dispatch({ type: 'BELASTUNG_REGIE', d: -10 }); neu('Belastung gesenkt.'); }),
-        knopf('rg-bel-10', '+10', function () { dispatch({ type: 'BELASTUNG_REGIE', d: 10 }); neu('Belastung erhöht.'); }),
-        knopf('rg-bel-25', '+25', function () { dispatch({ type: 'BELASTUNG_REGIE', d: 25 }); neu('Belastung erhöht.'); }),
-        knopf('rg-bel-75', 'Auf 75 (Hinweis)', function () { dispatch({ type: 'BELASTUNG_REGIE', w: 75 }); neu('Belastung auf 75.'); }),
-        knopf('rg-bel-90', 'Auf 90 (Sperre)', function () { dispatch({ type: 'BELASTUNG_REGIE', w: 90 }); neu('Belastung auf 90.'); }),
-        knopf('rg-bel-0', 'Zurück auf 15', function () { dispatch({ type: 'BELASTUNG_REGIE', w: 15 }); neu('Belastung auf 15.'); })),
-      h('div', { class: 'row', style: 'padding:4px 0' },
-        h('label', { for: 'rg-bel-w' }, 'Genau'),
-        h('input', { type: 'range', id: 'rg-bel-w', min: '0', max: '100', step: '1', value: String(Math.round(belS().w)), 'aria-label': 'Belastung genau setzen',
-          oninput: function (ev) { const o = $('rg-bel-wert'); if (o) o.textContent = ev.target.value; },
-          onchange: function (ev) { dispatch({ type: 'BELASTUNG_REGIE', w: Number(ev.target.value) }); neu('Belastung auf ' + ev.target.value + '.'); } }),
-        h('span', { class: 'mono', id: 'rg-bel-wert' }, String(Math.round(belS().w)))),
-      h('p', { class: 'note', role: 'status', style: 'padding:8px 0 0' }, hinweis || '')),
-    h('div', { class: 'acts' }, knopf('rg-zu', 'Schließen', function () { dlg.close(); })));
-  const ziel = fokus && $(fokus);
-  if (ziel && !ziel.disabled) ziel.focus(); else if (fokus) $('rg-zu').focus();
-}
-function oeffneRegie() {
-  let dlg = $('regie');
-  if (!dlg) {
-    dlg = h('dialog', { id: 'regie', 'aria-labelledby': 'regie-title' });
-    document.body.appendChild(dlg);
-  }
-  if (typeof dlg.showModal !== 'function' || dlg.open) return;
-  regieInhalt(dlg, '');
-  dlg.showModal();
-  $('rg-kanal').focus();
-}
 
 /* =====================================================================
    ZUGANG
@@ -8464,7 +6525,6 @@ const AUFBAU_STUFE_MS = [550, 1100];              /* Dauer je Stufe, zufällig g
 const AUFBAU_ARCHIV_MS = [4200, 6800];              /* Stufe "Verbindung zur Archivdatenbank": bewusst länger */
 const AUFBAU_KURZ_MS = [150, 300];                 /* erneute Anmeldung innerhalb einer Sitzung */
 const AUFBAU_REDUZIERT_MS = [250, 450];            /* prefers-reduced-motion */
-const AUFBAU_SKIP_NACH_MS = 1000;
 /* Entwicklerkonsole: Dev.startJetzt() beginnt den Einsatz sofort (Reiseplan entfällt), Dev.zeitplan() zeigt die Planeinträge */
 window.Dev = {
   startJetzt: function () { dispatch({ type: 'START_VORGEZOGEN' }); return einsatzLaeuft() ? 'Einsatz läuft' : 'nicht möglich (kein laufender Auftrag oder Start bereits erreicht)'; },
