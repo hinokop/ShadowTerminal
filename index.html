@@ -1216,7 +1216,7 @@ function zonenImportieren(q, abbildung) {
   });
   return (neu ? '; ' + neu + ' Zone(n) übernommen' : '') + (neuId ? '; ' + neuId + ' Zone(n) mit gleicher Kennung, aber abweichendem Inhalt unter neuer Kennung übernommen' : '') + (doppelt ? '; ' + doppelt + ' Zone(n) bereits vorhanden' : '') + (verworfen ? '; ' + verworfen + ' Bezug/Bezüge zu Dossier oder Unterlage nicht eindeutig zuzuordnen und weggelassen' : '');
 }
-const PROFIL_AKTIONEN = { LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, SICHTUNG_BEWERTET: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_KURZLAGE: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, DOSSIER_SPERREN: 1, DOSSIER_ENTSPERREN: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1, EXPORT_VERMERKT: 1, SICHTUNG_KENNUNG: 1, ARBEITSSTAND_GESPEICHERT: 1 };
+const PROFIL_AKTIONEN = { TEXT_GEAENDERT: 1, IMPORT: 1, LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, SICHTUNG_BEWERTET: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_KURZLAGE: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, DOSSIER_SPERREN: 1, DOSSIER_ENTSPERREN: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1, EXPORT_VERMERKT: 1, SICHTUNG_KENNUNG: 1, ARBEITSSTAND_GESPEICHERT: 1 };
 function profilSpeichern() {
   if (STATE && STATE.dossiers) {
     const d = STATE.dossiers, daten = {};
@@ -1284,6 +1284,60 @@ function profilEinspielen(z) {
       x.durch = kopie(q.durch); x.aktualisiert = q.aktualisiert;
     }
   });
+  profiltexteSpiegeln(z);                                   /* Phase 5c1a: Profiltexte überstehen Zurücksetzen und Import */
+}
+/* Phase 5c1a: Notizen und Operative Einschränkungen des Profils liegen in PROFIL.profiltexte ({ text, t, verdraengt } je Feld).
+   t = null heißt „nie gesetzt“; ein bewusst geleertes Feld trägt einen Zeitpunkt. STATE.agent führt nur noch eine Spiegelung
+   (Zustandsexport, Formatprüfung bis 5c1b). Bei Importen hat der vorhandene Profiltext Vorrang; ein abweichender
+   importierter Text wird unter verdraengt aufbewahrt und gemeldet, nie stillschweigend verworfen. */
+const PROFILTEXT_FELDER = ['notizen', 'einschraenkungen'];
+function profiltexteNormal(o) {
+  const out = {};
+  PROFILTEXT_FELDER.forEach(function (f) {
+    const x = o && typeof o === 'object' ? o[f] : null;
+    out[f] = {
+      text: x && typeof x.text === 'string' ? x.text : '',
+      t: x && typeof x.t === 'string' && !isNaN(Date.parse(x.t)) ? x.t : null,
+      verdraengt: x && Array.isArray(x.verdraengt) ? x.verdraengt.filter(function (v) { return v && typeof v.text === 'string' && v.text; }) : []
+    };
+  });
+  return out;
+}
+/* Einmalige Übernahme aus dem Sitzungszustand (Format 4); ein leerer Alttext gilt als nie gesetzt. Rückgabe: true, wenn neu angelegt. */
+function profiltexteAnlegen(z) {
+  if (PROFIL.profiltexte) { PROFIL.profiltexte = profiltexteNormal(PROFIL.profiltexte); return false; }
+  const ag = (z && z.agent) || {}, p = {};
+  PROFILTEXT_FELDER.forEach(function (f) {
+    const text = typeof ag[f] === 'string' ? ag[f] : '', t = ag[f + 'Geaendert'];
+    p[f] = { text: text, t: text ? (typeof t === 'string' && !isNaN(Date.parse(t)) ? t : nowIso()) : null, verdraengt: [] };
+  });
+  PROFIL.profiltexte = p;
+  return true;
+}
+function profiltexteSpiegeln(z) {
+  if (!z || !z.agent || !PROFIL.profiltexte) return;
+  PROFILTEXT_FELDER.forEach(function (f) { const x = PROFIL.profiltexte[f]; z.agent[f] = x.text; z.agent[f + 'Geaendert'] = x.t; });   /* Zeitpunkt stets mitspiegeln, auch null */
+}
+/* Fremde Texte (aus Profil- oder Zustandsimport) einarbeiten. quelle: { feld: { text, t, verdraengt? } }. Rückgabe: Zahl neu aufbewahrter Texte.
+   leerstandGilt: Ein leerer Text mit Zeitpunkt bedeutet „bewusst geleert“ und wird in ein nie gesetztes Feld übernommen. Nur beim
+   Profilimport verlässlich; Zustandsdateien (Format 4) tragen einen Änderungszeitpunkt auch ohne jede Eingabe. */
+function profiltexteZusammenfuehren(quelle, herkunft, leerstandGilt) {
+  let n = 0;
+  const aufbewahren = function (lok, text, t, woher) {
+    if (!text || text === lok.text || lok.verdraengt.some(function (v) { return v.text === text; })) return;
+    lok.verdraengt.push({ text: text, t: t || null, quelle: woher, am: nowIso() }); n += 1;
+  };
+  PROFILTEXT_FELDER.forEach(function (f) {
+    const q = quelle && quelle[f], lok = PROFIL.profiltexte[f];
+    if (!q || typeof q !== 'object') return;
+    const text = typeof q.text === 'string' ? q.text : '', t = typeof q.t === 'string' && !isNaN(Date.parse(q.t)) ? q.t : null;
+    if (lok.t === null && !lok.text) {                     /* nie gesetztes Feld übernimmt den Stand der Quelle */
+      if (text) { lok.text = text; lok.t = t || nowIso(); }
+      else if (leerstandGilt && t) lok.t = t;               /* bewusst geleert: Leerstand samt Zeitpunkt übernehmen */
+    } else if (text && text !== lok.text) aufbewahren(lok, text, t, herkunft);
+    (Array.isArray(q.verdraengt) ? q.verdraengt : []).forEach(function (v) { if (v && typeof v.text === 'string') aufbewahren(lok, v.text, v.t, v.quelle || herkunft); });
+  });
+  return n;
 }
 function profilGroesseKb() { try { return Math.round((window.localStorage.getItem(PROFIL_KEY) || '').length / 1024); } catch (e) { return 0; } }
 function parseKoord(txt) {
@@ -1998,8 +2052,11 @@ const ACTIONS = {
   AUTH_EREIGNIS: function (a) { return a.liste && a.liste.length ? a.liste : null; },
   IMPORT: function (a) {
     if (a.state && a.state.dossiers) { const km = idImportAbbilden(a.state.dossiers.eigene, PROFIL.eigene); idMigrieren(a.state, km); a.state.idv = 2; }
+    const ag = (a.state && a.state.agent) || {}, eingehend = {};   /* Phase 5c1a: Profiltexte der Datei einarbeiten, vorhandene haben Vorrang */
+    PROFILTEXT_FELDER.forEach(function (f) { if (typeof ag[f] === 'string') eingehend[f] = { text: ag[f], t: ag[f + 'Geaendert'] }; });
+    const ptN = profiltexteZusammenfuehren(eingehend, 'Zustandsimport ' + a.datei);
     STATE = a.state; arbeitsmodulWiederherstellen(STATE); const idNeu = identitaetUebernehmen(STATE); VIEW.draft = {}; planeAlle(); profilEinspielen(STATE); if (idNeu) profilSpeichern();
-    return { modul: 'System', aktion: 'Zustand importiert', detail: a.datei + ', ' + a.state.log.length + ' Protokolleinträge übernommen' };
+    return { modul: 'System', aktion: 'Zustand importiert', detail: a.datei + ', ' + a.state.log.length + ' Protokolleinträge übernommen' + (ptN ? '; ' + ptN + ' abweichende(r) Profiltext(e) aus der Datei erhalten, vorhandener Text unverändert' : '') };
   },
   IMPORT_ABGELEHNT: function (a) { return { modul: 'System', aktion: 'Import abgelehnt', detail: a.datei + ': ' + a.grund }; },
   RESET: function () {
@@ -2028,10 +2085,11 @@ const ACTIONS = {
     return { modul: 'Dossier', aktion: 'Verbindung bestätigt', detail: v.id + ' ' + v.von + ' → ' + v.nach + ': Stand erneuert (zuvor ' + vor.fr.text + ', ' + vor.fr.stufe + ')' };
   },
   TEXT_GEAENDERT: function (a) {
-    if (a.feld !== 'notizen' && a.feld !== 'einschraenkungen') return null;
-    if (STATE.agent[a.feld] === a.wert) return null;
-    STATE.agent[a.feld] = a.wert;
-    STATE.agent[a.feld + 'Geaendert'] = nowIso();
+    if (PROFILTEXT_FELDER.indexOf(a.feld) < 0 || typeof a.wert !== 'string') return null;
+    const x = PROFIL.profiltexte[a.feld];
+    if (x.text === a.wert) return null;
+    x.text = a.wert; x.t = nowIso();                        /* Phase 5c1a: primär im Profil; auch ein geleertes Feld trägt den Zeitpunkt */
+    profiltexteSpiegeln(STATE);
     /* leicht: Das Eingabefeld zeigt den Wert bereits; der Modulbereich wird nicht neu aufgebaut,
        damit ein gleichzeitiger Klick auf eine Schaltfläche nicht verloren geht. */
     return { modul: 'Profil', aktion: a.feld === 'notizen' ? 'Notizen geändert' : 'Operative Einschränkungen geändert',
@@ -2432,9 +2490,10 @@ const ACTIONS = {
       PROFIL.assessmentRotation = { start: q.assessmentRotation.start, bZuerst: q.assessmentRotation.bZuerst };
     }
     Object.keys(q.dokFristen || {}).forEach(function (k) { if (!(k in PROFIL.dokFristen)) PROFIL.dokFristen[k] = q.dokFristen[k]; });
+    const ptN = profiltexteZusammenfuehren(q.profiltexte, 'Profilimport ' + a.datei, true); profiltexteSpiegeln(STATE);   /* Phase 5c1a */
     if (q.recherche && typeof rchProfilZusammenfuehren === 'function') rchText = rchProfilZusammenfuehren(q.recherche, q, pinNeu);
     const zr = zonenImportieren(q, q.recherche && typeof rchProfilZusammenfuehren === 'function' ? rchProfilZusammenfuehren.abbildung : null);
-    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + zr + rchText };
+    return { modul: 'Dossier', aktion: 'Profil geladen', detail: a.datei + ': ' + neu + ' neue eigene Dossiers, Bilder und Aufnahmen zusammengeführt' + (pinKonflikt ? '; ' + pinKonflikt + ' Pin(s) mit gleicher Nummer, aber abweichendem Inhalt unter neuer Nummer übernommen' : '') + (pinDoppelt ? '; ' + pinDoppelt + ' Pin(s) bereits vorhanden' : '') + zr + rchText + (ptN ? '; ' + ptN + ' abweichende(r) Profiltext(e) erhalten, vorhandener Text unverändert' : '') };
   },
   PROFIL_LEEREN: function () {
     /* Eine offene Profanity-Sitzung gehört zum verworfenen Kontakt: sie endet samt Timern (OMEMO-Aufbau, Antworten,
@@ -2450,6 +2509,7 @@ const ACTIONS = {
     PROFIL.recherche.faelle.forEach(function (f) { if (xDossiers(f).some(function (id) { return ids.includes(id); })) f.dossiers = xDossiers(f).filter(function (id) { return !ids.includes(id); }); });
     PROFIL.pins = []; PROFIL.seq.pin = pinZaehler;     /* IDs werden auch nach dem Leeren nie neu vergeben */
     PROFIL.seq.zone = zoneZaehler; PROFIL.zonen = [];
+    PROFIL.profiltexte = profiltexteNormal(null); profiltexteSpiegeln(STATE);   /* Phase 5c1a: Entscheidung E2.7 */
     Object.keys(STATE.dossiers.entitaeten).forEach(function (id) {
       const x = STATE.dossiers.entitaeten[id];
       if (x) { if (Array.isArray(x.notizen)) x.notizen = []; delete x.reg; delete x.kurzlage; delete x.durch; delete x.selbstBearbeitet; }
@@ -2457,7 +2517,7 @@ const ACTIONS = {
     aenderungenAnwenden();
     STATE.seq.eigen = 0; STATE.seq.kante = 0;
     if (ids.indexOf(STATE.dossiers.auswahl) >= 0) STATE.dossiers.auswahl = SCENARIO.standard.dossiers[0].id;
-    return { modul: 'Dossier', aktion: 'Profil geleert', krit: true, detail: ids.length + ' eigene Dossiers sowie alle Bilder, Aufnahmen und Kartenpositionen entfernt' };
+    return { modul: 'Dossier', aktion: 'Profil geleert', krit: true, detail: ids.length + ' eigene Dossiers sowie alle Bilder, Aufnahmen, Kartenpositionen, Notizen und Operativen Einschränkungen entfernt' };
   },
   VERBINDUNG_ANGELEGT: function (a) {
     const von = entitaet(a.von), nach = entitaet(a.nach);
@@ -2808,13 +2868,24 @@ function autosaveFlush(id, feld) {
 }
 function autosaveFeld(id, feld, label) {
   return h('textarea', { id: id, rows: '5', 'aria-label': label, spellcheck: 'false',
-    value: VIEW.draft[id] !== undefined ? VIEW.draft[id] : STATE.agent[feld],
+    value: VIEW.draft[id] !== undefined ? VIEW.draft[id] : PROFIL.profiltexte[feld].text,
     oninput: function (ev) {
       VIEW.draft[id] = ev.target.value;
       clearTimeout(saveTimer[id]);
       saveTimer[id] = setTimeout(function () { autosaveFlush(id, feld); }, SAVE_DELAY);
     },
     onblur: function () { autosaveFlush(id, feld); } });
+}
+/* Phase 5c1a: beim Import aufbewahrte abweichende Texte sichtbar machen (nur lesen, nichts geht verloren) */
+function profiltextAufbewahrt(feld) {
+  const v = (PROFIL.profiltexte && PROFIL.profiltexte[feld] && PROFIL.profiltexte[feld].verdraengt) || [];
+  if (!v.length) return null;
+  return h('details', { class: 'k-pop-meta', id: 'pt-alt-' + feld },
+    h('summary', null, v.length + (v.length === 1 ? ' abweichender Text' : ' abweichende Texte') + ' aus Import aufbewahrt'),
+    v.map(function (x, i) {
+      return h('div', { class: 'pad' }, h('p', { class: 'mono dim' }, (x.quelle || 'Import') + (x.t ? ', Stand ' + fmtZ(x.t) : '')),
+        h('textarea', { id: 'pt-alt-' + feld + '-' + i, rows: '3', readonly: true, 'aria-label': 'Aufbewahrter Text ' + (i + 1), spellcheck: 'false', value: x.text }));
+    }));
 }
 function autosaveAlle() { autosaveFlush('ta-notizen', 'notizen'); autosaveFlush('ta-einschr', 'einschraenkungen'); }
 
@@ -3574,7 +3645,7 @@ function profilPanel() {
       h('label', { for: 'file-profil' }, 'Profil laden'),
       h('input', { type: 'file', id: 'file-profil', accept: 'application/json,.json', onchange: function (ev) { const fl = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (fl) profilImportieren(fl); } }),
       h('button', { type: 'button', id: 'btn-profil-leer', onclick: function () {
-        bestaetigen('Profil leeren', 'Alle eigenen Dossiers, Verbindungen, Bilder, Aufnahmen und Kartenpositionen werden endgültig entfernt. Der Vorgang wird protokolliert.', 'Profil leeren',
+        bestaetigen('Profil leeren', 'Alle eigenen Dossiers, Verbindungen, Bilder, Aufnahmen und Kartenpositionen sowie die Notizen und Operativen Einschränkungen werden endgültig entfernt. Der Vorgang wird protokolliert.', 'Profil leeren',
           function () { dispatch({ type: 'PROFIL_LEEREN' }); }, { pflicht: 'Das gesamte Profil endgültig leeren.' });
       } }, 'Profil leeren')));
 }
@@ -4380,6 +4451,8 @@ function init() {
     STATE.idv = 2; profilSpeichern();
   }
   arbeitsmodulWiederherstellen(STATE);
+  if (profiltexteAnlegen(STATE) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?). Notizen und Operative Einschränkungen sind nur bis zum Schließen gesichert.');   /* Phase 5c1a: einmalige Übernahme */
+  profiltexteSpiegeln(STATE);
   const idNeu = identitaetUebernehmen(STATE);
   if (idNeu) { if (!neu) profilEinspielen(STATE); profilSpeichern(); }       /* erst nach dem Einspielen des Profils speichern */
 
@@ -4401,7 +4474,7 @@ function init() {
   });
   $('btn-reset').addEventListener('click', function () {
     bestaetigen('Zustand zurücksetzen',
-      'Der Ausgangszustand wird hergestellt. Protokoll, Notizen, Nachrichten und Statusänderungen dieser Sitzung gehen verloren. Eigene Dossiers, Bilder, Aufnahmen und Kartenpositionen bleiben im Profil erhalten. Ein vorheriger Export wird empfohlen.',
+      'Der Ausgangszustand wird hergestellt. Das Protokoll dieser Sitzung geht verloren. Im Profil erhalten bleiben: eigene Dossiers, Notizen und Sichtungen an Dossiers, Bilder, Aufnahmen, Kartenpositionen sowie die Notizen und Operativen Einschränkungen. Ein vorheriger Export wird empfohlen.',
       'Zurücksetzen',
       function () { dispatch({ type: 'RESET' }); meldung('Ausgangszustand hergestellt.'); });
   });

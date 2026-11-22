@@ -3465,10 +3465,10 @@ function renderArbeitsprofil(m) {
   return kopf.concat(assessmentAnsicht(kennung, Date.now()),
     h('button', { id: 'profil-terminal-oeffnen', type: 'button', 'aria-keyshortcuts': 'T',
       onclick: terminalKonsoleOeffnen }, 'Terminal öffnen'),
-    [STATE.agent.notizen, STATE.agent.einschraenkungen, VIEW.draft['ta-notizen'], VIEW.draft['ta-einschr']].some(Boolean) ?
+    [PROFIL.profiltexte.notizen.text, PROFIL.profiltexte.einschraenkungen.text, PROFIL.profiltexte.notizen.verdraengt.length, PROFIL.profiltexte.einschraenkungen.verdraengt.length, VIEW.draft['ta-notizen'], VIEW.draft['ta-einschr']].some(Boolean) ?   /* Phase 5c1a: Quelle ist das Profil */
       h('details', { class: 'panel profil-alt-notizen' }, h('summary', null, 'Bisherige Notizen'),
         h('div', { class: 'cols pad' },
-          panel('Notizen', null, h('div', { class: 'pad' }, autosaveFeld('ta-notizen', 'notizen', 'Notizen'))),
-          panel('Operative Einschränkungen', null, h('div', { class: 'pad' }, autosaveFeld('ta-einschr', 'einschraenkungen', 'Operative Einschränkungen'))))) : null,
+          panel('Notizen', null, h('div', { class: 'pad' }, autosaveFeld('ta-notizen', 'notizen', 'Notizen'), profiltextAufbewahrt('notizen'))),
+          panel('Operative Einschränkungen', null, h('div', { class: 'pad' }, autosaveFeld('ta-einschr', 'einschraenkungen', 'Operative Einschränkungen'), profiltextAufbewahrt('einschraenkungen'))))) : null,
     karteBereinigenPanel());
 }
