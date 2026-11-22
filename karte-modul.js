@@ -86,7 +86,7 @@ function sichtungKoord(s) {
   const richtung = /^richtung\b/i.test(roh), name = erkFold(roh.replace(/^richtung\s+/i, '')).replace(/[^a-z0-9 ]/g, ' ').trim();
   if (name.length < 4) return null;
   const norm = function (t) { return erkFold(t).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }, q = name.replace(/\s+/g, ' ');
-  const orte = pool().filter(function (e) { return e.typ === 'Ort' && karteKoord(e.id); });
+  const orte = dossierRechercheBestand().filter(function (e) { return e.typ === 'Ort' && !dossierGesperrt(e) && karteKoord(e.id); });
   /* exakter Name zuerst; Teiltreffer nur, wenn genau ein Ort passt (mehrdeutige Angaben bekommen keinen geratenen Punkt) */
   const exakt = orte.filter(function (e) { return norm(e.name) === q; }), teil = orte.filter(function (e) { return norm(e.name).indexOf(q) >= 0; });
   const dmehr = exakt.length > 1 || (!exakt.length && teil.length > 1);          /* mehrdeutiger Dossier-Ort: kein Punkt, auch nicht aus dem Ortsverzeichnis */
@@ -127,8 +127,8 @@ function karteMarker() {
   if (def && Z.route !== false) MS(def.id).zugriff.forEach(function (z) { if (z.ll) out.push({ id: z.id, kat: 'zugriff', name: z.typ + ' ' + z.id, ll: z.ll, r: z.r || 0, zp: z }); });
   if (Z.pins !== false) (PROFIL.pins || []).forEach(function (x) { if (x.ll && !pinGesperrt(x)) out.push({ id: x.id, kat: 'pin', name: x.name, ll: x.ll }); });   /* Pin eines gesperrten Dossiers wie dessen Sichtungen: nicht gezeichnet */
   const fokus = VIEW.karte.sichtungFokus || null;             /* gezielt angesprungene Sichtung: auch wenn älter als die letzten drei oder die Ebene ausgeblendet ist */
-  if (Z.sichtungen !== false || fokus) pool().forEach(function (e) {
-    if (infoGesperrt(e) || dossierGesperrt(e)) return;
+  if (Z.sichtungen !== false || fokus) dossierRechercheBestand().forEach(function (e) {
+    if (dossierGesperrt(e)) return;
     const d = STATE.dossiers.entitaeten[e.id], alle = (d && d.sichtungen) || [], sicht = Z.sichtungen !== false ? alle.slice(-3) : [];
     if (Z.sichtungen !== false) alle.forEach(function (si) { if (si.pin && sicht.indexOf(si) < 0 && sichtungPin(si, e.id)) sicht.push(si); });          /* Sichtung mit Ursprungspin wird immer gezeichnet, sonst fehlte beides */
     if (fokus) { const f = alle.find(function (x) { return x.id === fokus; }); if (f && sicht.indexOf(f) < 0) sicht.push(f); }
@@ -141,10 +141,10 @@ function karteMarker() {
   for (let i = out.length - 1; i >= 0; i--) { const m = out[i]; if (m.kat !== 'pin') continue; const px = (PROFIL.pins || []).find(function (y) { return y.id === m.id; }); if (px && px.sichtung && px.dossier && pinSichtung(px) && gez[px.dossier + '|' + px.sichtung]) out.splice(i, 1); }   /* Pin nur ausblenden, wenn seine Sichtung tatsächlich gezeichnet wird */
   const zusatzIds = {};
   if (def) (MS(def.id).zusatz || []).forEach(function (x) { if (x.urteil !== 'abgelehnt') zusatzIds[x.id] = true; });
-  pool().forEach(function (e) {
+  dossierRechercheBestand().forEach(function (e) {
     const ll = karteKoord(e.id);
     if (!ll) return;
-    if (infoGesperrt(e) || dossierGesperrt(e)) return;
+    if (dossierGesperrt(e)) return;
     const stufe = def ? bedrohung(e).stufe : 0;
     if (e.typ === 'Ort') { if (Z.orte) out.push({ id: e.id, kat: 'ort', typ: 'Ort', name: e.name, ll: ll, land: e.land, entitaet: true, stufe: stufe }); }
     else if (e.typ === 'Person' ? Z.personen : Z.organisationen) out.push({ id: e.id, kat: 'figur', typ: e.typ, name: e.name, ll: ll, land: e.land, entitaet: true, stufe: stufe, zusatz: zusatzIds[e.id] || false, asset: !!def && karteAssetId(e) });
@@ -546,7 +546,7 @@ function zeichneKarte(svg) {
   marker.forEach(function (m) { if (m.llV) { m.llW = m.ll; m.ll = m.llV; } });             /* Zeichenlage; ll bleibt für Popup und Zentrieren die wahre Lage */
   marker.forEach(function (m) { if (m.entitaet) pos[m.id] = m; });
   if (Z.verbindungen) {
-    kantenPool().forEach(function (v) {
+    dossierRechercheKanten().forEach(function (v) {
       const a = pos[v.von], b = pos[v.nach];
       if (!a || !b) return;
       const x1 = P.px(a.ll[1]), y1 = P.py(a.ll[0]), x2 = P.px(b.ll[1]), y2 = P.py(b.ll[0]);
@@ -939,7 +939,7 @@ function karteBezugVon(id) {
   if (ao && ao.ll) return { id: id, typ: 'Ausgangsort', name: ao.name, ll: ao.ll, stand: null, filter: false };
   const m = karteMarker().find(function (x) { return x.id === id; });
   if (m && m.ll) return { id: id, typ: m.kat === 'sichtung' ? 'Sichtung' : 'Standort', name: m.name || id, ll: m.ll, stand: null, filter: false };
-  const e = entitaet(id), ll = e && !infoGesperrt(e) && !dossierGesperrt(e) ? karteKoord(id) : null;
+  const e = entitaet(id), ll = e && !dossierGesperrt(e) ? karteKoord(id) : null;
   if (ll) return { id: id, typ: 'Dossier ' + e.typ, name: e.name, ll: ll, stand: null, filter: false };
   return null;
 }
@@ -1010,7 +1010,7 @@ function kartePopupPos() {
   if (m) ll = m.ll;
   else if (karteZoneFinden(ref)) ll = karteZoneFinden(ref).ll;
   else {
-    const v = kantenPool().find(function (x) { return x.id === ref; });
+    const v = dossierRechercheKanten().find(function (x) { return x.id === ref; });
     const a = v && karteKoord(v.von), b = v && karteKoord(v.nach);
     if (a && b) ll = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
   }
@@ -1028,7 +1028,7 @@ function karteAuswahlAnzeige() {
   const fertig = function (kopf, nodes) { box.hidden = false; const kk = h('div', { class: 'k-pop-kopf', title: 'Zum Verschieben ziehen' }, h('strong', null, kopf), zu); kartePopupZiehbar(kk, box); box.replaceChildren(kk, h('div', { class: 'k-pop-body' }, nodes)); kartePopupPos(); };
   if (VIEW.karte.mehr && VIEW.karte.mehr.length) { zonenMehrPanel(fertig); return; }
   if (!id) { box.hidden = true; box.replaceChildren(); return; }
-  const v = kantenPool().find(function (x) { return x.id === id; });
+  const v = dossierRechercheKanten().find(function (x) { return x.id === id; });
   if (v) {
     const a = entitaet(v.von), b = entitaet(v.nach);
     fertig('Verbindung ' + v.id, [h('dl', { class: 'fields' }, feld('Art', v.typ), feld('Richtung', v.richtung === 'beidseitig' ? 'beidseitig' : 'gerichtet'), feld('Bewertung', [bewertungAnzeige(v)]), feld('Stand', bewertungEff(v).fr.text + ' (' + bewertungEff(v).fr.stufe + ')'), feld('Quelle', v.quelle || '–', 'full')),
@@ -1119,8 +1119,8 @@ function karteNeuZeichnen() {
   karteStatusAkt();
 }
 function dossierOptionen(gewaehlt) {
-  const liste = typeof pool === 'function' ? pool().slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'de'); }) : [];
-  return liste.map(function (e) { return h('option', { value: e.id, selected: e.id === gewaehlt }, kuerzen(e.name, 40) + ' (' + e.id + ')'); });
+  const liste = dossierRechercheBestand().slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'de'); });
+  return liste.map(function (e) { return h('option', { value: e.id, selected: e.id === gewaehlt }, dossierGesperrt(e) ? e.id : kuerzen(e.name, 40) + ' (' + e.id + ')'); });
 }
 /* Zone oder Pin auf der Karte zeigen (aus Dossier, Unterlage und Terminal); wählt das Objekt und zentriert. false: kein Ziel mit
    Position oder Pin eines gesperrten Dossiers (zielZugang) */
@@ -1288,7 +1288,7 @@ function karteMessText(a, b) {
 function karteFokus(svg, id) {
   if (!id) { svg.classList.remove('hat-fokus'); svg.querySelectorAll('.k-nah').forEach(function (n) { n.classList.remove('k-nah'); }); return; }
   const nah = {}; nah[id] = 1;
-  kantenPool().forEach(function (v) { if (v.von === id) nah[v.nach] = 1; else if (v.nach === id) nah[v.von] = 1; });
+  dossierRechercheKanten().forEach(function (v) { if (v.von === id) nah[v.nach] = 1; else if (v.nach === id) nah[v.von] = 1; });
   svg.classList.add('hat-fokus');
   svg.querySelectorAll('.k-marker').forEach(function (g) { g.classList.toggle('k-nah', !!nah[g.getAttribute('data-id')]); });
   svg.querySelectorAll('.k-verbg').forEach(function (g) { g.classList.toggle('k-nah', g.getAttribute('data-von') === id || g.getAttribute('data-nach') === id); });
