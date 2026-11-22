@@ -1,5 +1,7 @@
 # Testpaket 02 – Direkte Namensnavigation
 
+**Statusvermerk (22.11.2026):** Der zugehörige PR #95 ist in `main` gemergt; die Angabe, `main` bleibe unverändert, ist überholt. Historisches Dokument; der Inhalt unten beschreibt den Stand zum Zeitpunkt der Erstellung und wurde nicht aktualisiert. Den aktuellen Stand führt [docs/AKTUELL.md](docs/AKTUELL.md).
+
 **Gültig für:** Draft-PR zur direkten Namensnavigation (`feat/terminal-namensnavigation`). Der Entwicklungsstand ist vollständig im Branch enthalten. `main` bleibt bis zur Abnahme unverändert.
 
 ## 1. Windows-Testinstallation

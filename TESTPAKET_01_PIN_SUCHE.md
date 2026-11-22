@@ -1,5 +1,7 @@
 # Testpaket 01 – Live-Pinsuche und Navigation per Tab
 
+**Statusvermerk (22.11.2026):** PR #94 ist in `main` gemergt; die Angabe „nicht gemergt“ weiter unten ist überholt. Historisches Dokument; der Inhalt unten beschreibt den Stand zum Zeitpunkt der Erstellung und wurde nicht aktualisiert. Den aktuellen Stand führt [docs/AKTUELL.md](docs/AKTUELL.md).
+
 **Stand:** Draft-PR #94 (`feat/terminal-pin-suche`). Dieses Paket enthält den vollständigen Stand des Branches und ist nicht gemergt.
 
 ## Windows-Praxistest
