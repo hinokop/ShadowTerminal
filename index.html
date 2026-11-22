@@ -7343,11 +7343,9 @@ function dossierAnsicht(e) {
       kurzlageFeld(e, st),
       feld('Beschreibung', schutz(e.rolle), 'full'),
       feld(e.typ === 'Person' ? 'Biografische Eckdaten' : 'Eckdaten', schutz(e.eckdaten.join(' · ')), 'full'),
-      feld('Zuletzt verändert durch', dossierVermerk(st), 'full'),
-      (e.nachtraege || []).filter(function (n) { return missionsbetrieb() && freigeschaltet(n.mission); }).map(function (n) {
-        return [feld('Nachtrag ' + n.mission + ' ' + missionDef(n.mission).name + ': Rolle', schutz(n.rolle), 'full'),
-                feld('Nachtrag ' + n.mission + ': Eckdaten', schutz(n.eckdaten.join(' · ')), 'full')];
-      }))),
+      /* Phase 5b5: Historische Missionsnachträge gehören nicht in die
+         produktive Rechercheansicht. Die alten Datensätze bleiben erhalten. */
+      feld('Zuletzt verändert durch', dossierVermerk(st), 'full'))),
     h('div', { class: 'row top' },
       h('label', { for: 'sel-dstatus' }, 'Status'),
       h('select', { id: 'sel-dstatus', onchange: function (ev) {
