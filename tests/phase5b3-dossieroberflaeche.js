@@ -28,8 +28,8 @@ const { APP } = require('./_pfad');
       const unaccepted = SCENARIO.entitaeten.find(e => e.typ === 'Person' && e.mission !== 'STD' && !freigeschaltet(e.mission));
       if (!unknown || !unaccepted) return null;
       return { known: known.id, unknown: unknown.id, unaccepted: unaccepted.id,
-        knownW: wissen(known), knownInfo: infoGesperrt(known),
-        unknownW: wissen(unknown), unknownInfo: infoGesperrt(unknown),
+        knownW: wissen(known), knownInfo: (typeof infoGesperrt === 'function' && infoGesperrt(known)),
+        unknownW: wissen(unknown), unknownInfo: (typeof infoGesperrt === 'function' && infoGesperrt(unknown)),
         unacceptedW: wissen(unaccepted), unacceptedOffen: dossierOffen(unaccepted.mission) };
     });
     assert.ok(ids, 'historisch bekanntes, unbekanntes und nicht freigeschaltetes Dossier verfügbar');

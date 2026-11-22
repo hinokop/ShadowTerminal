@@ -8,14 +8,15 @@
    werden getrennt ausgewiesen. Exit-Code 1 bei jedem anderen roten oder ungeprüften Skript und bei einem ausdrücklich angeforderten, fehlenden Skript. */
 const { spawn } = require('child_process'); const fs = require('fs'); const os = require('os'); const path = require('path');
 const GRUPPEN = [
-  ['kt', 'kv3', 'alterung', 'pin-nummern-tasten', 'speicher-voll'], ['fd', 'rs'],
+  ['kt', 'kv3', 'alterung', 'pin-nummern-tasten', 'speicher-voll'], ['rs'],
   ['un'], ['p4', 'pn', 'kc'],
   ['kartenprotokoll', 'pins', 'unterlagen', 'aussagen-alt', 'fallpaket', 'recherche'], ['kartensprung', 'identitaeten', 'verlaesslichkeit', 'arbeitsnavigation', 'kartenbereinigung', 'profil-arbeitsansicht'], ['profil-assessment', 'missionstrennung', 'dossier-einheitlich', 'phase5b2-recherchezugang', 'phase5b3-dossieroberflaeche', 'phase5b4-arbeitszugang', 'phase5b5-dossier-nachtraege', 'phase5b6-dossier-kennungen', 'phase5b7-missionsbetrieb', 'dossier-kurzlage', 'dossier-nummern', 'dossier-maske', 'sichtung-pin', 'sichtung-import', 'bearbeitet-hinweis'], ['recherche-oberflaeche', 'karten-messen', 'ablage-eingang', 'lage-box', 'terminal-bruecken-ausfall', 'fall-modul', 'dossier-fallverweise', 'dossier-galerie-nummern', 'profil-seq-galerie', 'sichtung-export', 'arbeitsstand', 'lagebriefing', 'briefing-eintraege', 'fallpaket-x', 'arbeitsstand-tasten', 'terminal-konsole', 'terminal-link-kette', 'terminal-shell-kern', 'terminal-einwahl-abschluss', 'terminal-einwahl-realismus', 'terminal-tmux', 'terminal-befehlstabelle', 'terminal-auswahlliste', 'terminal-vorschlag', 'terminal-einfaerbung', 'terminal-ppp-persist', 'terminal-plog', 'terminal-tmux-bereiche', 'terminal-predict-anzeige', 'terminal-einwahl-zeiten', 'terminal-ppp-abbruch', 'terminal-link-end', 'terminal-onion', 'terminal-profanity-fenster', 'terminal-profanity-win10', 'terminal-nmap', 'terminal-profanity-sendfile', 'terminal-link-anzeige', 'terminal-profanity-kontakt', 'terminal-profanity-offline', 'terminal-strg-rechts', 'terminal-vorschlag-ergaenzung', 'terminal-benutzer', 'karte-sperre-pins', 'terminal-navigation', 'terminal-sudo', 'terminal-pin-suche', 'terminal-namensnavigation', 'terminal-vault', 'terminal-objektnavigation', 'terminal-archiv-zugriff']
 ];
 /* Phase 5b7: Tests des stillgelegten Missionsablaufs, nicht mehr in der Standardauswahl, per Namen aufrufbar
    (Befunde: docs/phase5-missionsinventar.md, Abschnitte 5b7/5b8). Ein roter Lauf dort ist kein Befund gegen die Anwendung. */
 const HISTORISCH = ['zn', 'zn3', 'zev', 'al', 'abd', 'zb', 'ds2', 'zp', 'sm', 'kwz', 'nx', 'm1flow', 'dp', 'wk3',
-  /* Phase 5b8: Code der alten Module entfernt */ 'fg', 'tx', 'fgy', 'p3', 'ak2', 'au', 'p2'];
+  /* Phase 5b8: Code der alten Module entfernt */ 'fg', 'tx', 'fgy', 'p3', 'ak2', 'au', 'p2',
+  /* Phase 5b9: Dialogkern entfernt */ 'fd'];
 const BEKANNT = { m1flow: 'Missionsablauf, auch auf main rot', 'lage-box': 'unter Parallellast instabil (animationKeinRueckfall), einzeln grün', wk3: 'unzuverlässig', dp: 'unzuverlässig' };
 const FEHLER = /(^|\s)FAIL\b|FEHLER: [1-9]|Fehlschläge: [1-9]|Error/;
 // Höchstzahl gleichzeitig laufender Skripte. Zu viele Browser auf wenigen Kernen lassen Tests am Start scheitern (Absturz, Ladezeit).

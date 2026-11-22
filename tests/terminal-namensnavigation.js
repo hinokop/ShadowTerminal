@@ -169,7 +169,7 @@ const { APP } = require('./_pfad');
       if (!e) return null;
       IZ()[e.id] = { status: 'bekannt' };
       const z = zielZugang(e.id);
-      return { id: e.id, name: e.name, status: wissen(e), info: infoGesperrt(e),
+      return { id: e.id, name: e.name, status: wissen(e), info: (typeof infoGesperrt === 'function' && infoGesperrt(e)),
         zugang: z && { id: z.id, info: z.info, gesperrt: z.gesperrt },
         recherche: dossierRechercheBestand().some(x => x.id === e.id),
         nameTreffer: terminalZielNamen('open', e.name).some(x => x.id === e.id) };

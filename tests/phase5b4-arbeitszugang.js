@@ -30,8 +30,8 @@ const { APP } = require('./_pfad');
       if (!unbekannt) return null;
       const f = xAnlegen({ titel: '5b4 Fallbezug' }); profilSpeichern();
       return { bekannt: bekannt.id, unbekannt: unbekannt.id, fall: f.id,
-        wissenBekannt: wissen(bekannt), infoBekannt: infoGesperrt(bekannt),
-        wissenUnbekannt: wissen(unbekannt), infoUnbekannt: infoGesperrt(unbekannt) };
+        wissenBekannt: wissen(bekannt), infoBekannt: (typeof infoGesperrt === 'function' && infoGesperrt(bekannt)),
+        wissenUnbekannt: wissen(unbekannt), infoUnbekannt: (typeof infoGesperrt === 'function' && infoGesperrt(unbekannt)) };
     });
     assert.ok(fx, 'Testdossiers aus Standardbestand vorhanden');
     /* Phase 5b7: Altfelder bleiben gespeichert, wirken aber nicht mehr. */

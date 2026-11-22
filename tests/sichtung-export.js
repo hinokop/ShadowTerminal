@@ -66,7 +66,7 @@ const PF = require('./_pfad');
       d.sichtungen = d.sichtungen || [];
       d.sichtungen.push({ id: 'SI-090', uid: 'a5b6c7d8e9f0', t: nowIso(), ort: '52.5000, 13.4000',
         text: 'Historischer Sichtungsbeleg ohne Ansprechpartnerfreigabe', guete: 'unbewertet', quelle: 'Eintrag' });
-      return { id: e.id, info: infoGesperrt(e), wissen: wissen(e), gesperrt: dossierGesperrt(e) };
+      return { id: e.id, info: (typeof infoGesperrt === 'function' && infoGesperrt(e)), wissen: wissen(e), gesperrt: dossierGesperrt(e) };
     });
     assert.ok(historisch, 'historisches Standarddossier mit früherer Freigabesperre benötigt');
     /* Phase 5b7: Das gespeicherte Ansprechpartnermerkmal bleibt, wirkt aber nicht mehr. */
