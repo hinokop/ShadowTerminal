@@ -37,7 +37,7 @@ Aktueller Stand von `main`, offene Pull Requests, Reihenfolge der nächsten Schr
 
 ## Tests
 
-`node tests/runall.js` führt die Standardauswahl aus (Playwright, Passwort `pw-test-123`); einzelne Skripte: `node tests/runall.js zev zp`. Gleichzeitig laufen höchstens `FT_PARALLEL` Skripte (Vorgabe: Anzahl der Kerne). Historische Skripte des stillgelegten Missionsablaufs sind nur namentlich aufrufbar. Bekannt rot oder instabil: `m1flow`, `wk3`, `dp`; `lage-box` unter Parallellast. Ausgemusterte Tests: docs/r5-bereinigung.md. Die GitHub-Actions-Workflows sind derzeit phasen- und branchgebunden (Einzelheiten in docs/AKTUELL.md).
+`node tests/runall.js` führt die Standardauswahl aus (Playwright, Passwort `pw-test-123`); einzelne Skripte: `node tests/runall.js zev zp`. Gleichzeitig laufen höchstens `FT_PARALLEL` Skripte (Vorgabe: Anzahl der Kerne). Historische Skripte des stillgelegten Missionsablaufs sind nur namentlich aufrufbar. Bekannt rot oder instabil: `m1flow`, `wk3`, `dp`; `lage-box` unter Parallellast. Ausgemusterte Tests: docs/r5-bereinigung.md. CI: `.github/workflows/ci.yml` führt die Standardauswahl bei jedem Pull Request gegen `main` und jedem Push auf `main` aus; die phasengebundenen Workflows (`phase5*-regression.yml`) sind Altbestand (Einzelheiten in docs/AKTUELL.md).
 
 ## Git
 
