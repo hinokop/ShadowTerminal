@@ -39,8 +39,22 @@ chk(await p.evaluate(()=>{const zn=zonenEigene(zDef())[0];return Date.parse(zn.n
 const sp=await p.evaluate(()=>{const zn=zonenEigene(zDef())[0];zn.naechste=new Date(Date.now()-1000).toISOString();STATE.zonenEv.letzte=null;STATE.agent.status='Ruhend';return zonenEigene(zDef())[0].verlauf.slice(-1)[0].t});
 await p.waitForTimeout(2500);chk(await p.evaluate(n=>zonenEigene(zDef())[0].verlauf.slice(-1)[0].t===n,sp),'Ruhend: keine Zonenmeldungen');
 await p.evaluate(()=>{STATE.agent.status='Standby'});
-// Popup Verlauf
-await p.evaluate(()=>{karteWaehlen('ZN-001',false)});await p.waitForTimeout(500);
-chk(await p.evaluate(()=>/Verlauf/i.test(document.body.innerText)),'Popup zeigt Verlauf');
+// Popup-Verlauf: statt starrem 500-ms-Fenster die tatsächlich gerenderte
+// Zone samt Historienfeld erwarten. Unter CI-Last kann das SVG/Popup später
+// neu gezeichnet werden. Eine echte fehlende Anzeige bleibt ein Testfehler.
+await p.evaluate(()=>{karteWaehlen('ZN-001',false)});
+await p.waitForFunction(()=>{
+  const box=document.getElementById('k-auswahl');
+  return !!box && !box.hidden && /Verlauf/i.test(box.textContent);
+},null,{timeout:6000}).catch(()=>null);
+const popup=await p.evaluate(()=>{
+  const box=document.getElementById('k-auswahl'), z=karteZoneFinden('ZN-001');
+  return {auswahl:VIEW.karte.auswahl, popup:!!box, hidden:box?box.hidden:null,
+    text:box?box.textContent.slice(0,200):'', zonenansicht:VIEW.missionsansicht===STATE,
+    zone:!!z, verlaenge:z&&z.verlauf?z.verlauf.length:0,
+    verlauf:!!box && !box.hidden && /Verlauf/i.test(box.textContent)};
+});
+if(!popup.verlauf)console.log('ZEV Popup-Diagnose:',JSON.stringify(popup));
+chk(popup.verlauf,'Popup zeigt Verlauf');
 await p.screenshot({path:'zev.png'});
 console.log(e.join('\n')||'keine Seitenfehler');console.log(fail?'FEHLER: '+fail:'ALLE OK');await b.close()})();
