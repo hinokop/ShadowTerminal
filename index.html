@@ -1086,7 +1086,7 @@ const Store = (function () {
     laden: function () {
       let raw = null;
       try { raw = window.localStorage.getItem(STORAGE_KEY); } catch (e) { return { status: 'lesefehler', roh: null, wert: null }; }
-      if (raw === null || raw === '') return { status: 'fehlt', roh: null, wert: null };
+      if (raw === null) return { status: 'fehlt', roh: null, wert: null };   /* ein leerer Text ('') belegt, dass der Schlüssel existiert: er gilt als defekt */
       try { const w = JSON.parse(raw); if (w && typeof w === 'object') return { status: 'vorhanden', roh: raw, wert: w }; } catch (e) { /* defekt */ }
       return { status: 'defekt', roh: raw, wert: null };
     },
@@ -1098,6 +1098,9 @@ const Store = (function () {
     sichereDefekt: function (raw) {
       Store.defektGesichert = false;
       try {
+        /* Ein leerer Text trägt keinen Inhalt; eine frühere, nicht leere Ablage wird dadurch nicht überschrieben */
+        const frueher = String(raw) === '' ? window.localStorage.getItem(STORAGE_KEY + '.defekt') : null;
+        if (frueher) { Store.defektGesichert = true; return; }
         window.localStorage.setItem(STORAGE_KEY + '.defekt', String(raw));
         Store.defektGesichert = window.localStorage.getItem(STORAGE_KEY + '.defekt') === String(raw);
       } catch (e) { /* kein Platz: dann ist er nicht gesichert */ }
