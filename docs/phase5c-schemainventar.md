@@ -70,7 +70,7 @@ Alle 26 Felder sind produktiv in Gebrauch (Import, Export, Dossiers, Karte, Rech
 - **B3 – Missionsreste mit Laufzeitbezug:** `startVorziehen`, `KM`, `MS`, `freigeschaltet`, `VK`, `IZ`, `kanalDef`/`modKopf` (Vorgangsanzeige), `namenNachziehen` (schreibt Umbenennungen in alte Nachrichten), die `def`-Zweige der Karte (`karteMarker`, `karteFenster`, `karteStrecke`, `karteHerkunft`, `karteGrundansicht`, `zeichneKarte`, `renderKarte`, `zoneLage`, `zielpersonenListe`) und Zonenaktionen in `index.html`. Statisch erreichbar, ohne Missionsdaten wirkungslos. Sie fallen weg, sobald das aktive Schema die Missionsfelder nicht mehr führt.
 - **B4 – Tote Datenpfade:** `ERK` (Schlüssel `.erkennung`) wird beim Start geladen und nie genutzt; `fieldterminal.dok` hat keine Schreibstelle mehr.
 - **B5 – Missionsdossiers:** `SCENARIO.entitaeten` enthält drei Dossiers der Mission M1 (`P-0001` Emre Kaya, `P-0002` „Kutscher“, `P-0003` „Händler“), die mit den 28 Standarddossiers als Beispiele erscheinen.
-- **B6 – Adressleiste:** Der inszenierte Dienst der Adressleiste folgt `STATE.kontext`, also der Mission.
+- **B6 – Adressleiste:** Die `.onion`-Adresse der URL-Leiste wird einmalig zufällig erzeugt und unter dem Schlüssel des Missionskontexts (`STATE.kontext`, stets `M1`) in `fieldterminal.v1.dienste` gespeichert; daher ist sie seit jeher konstant. Der Pfad folgt der Ansicht.
 
 ## 7. Entscheidungsvorlage
 
@@ -84,12 +84,12 @@ Alle 26 Felder sind produktiv in Gebrauch (Import, Export, Dossiers, Karte, Rech
 
 **E5 – Tote Datenpfade (B4).** Vorschlag: Code entfernen, Daten unter `.erkennung` und in `fieldterminal.dok` **liegen lassen** (kein Löschen ohne Entscheidung).
 
-**E6 – Missionsdossiers P-0001 bis P-0003 (B5).** Offene Produktfrage: als Beispieldossiers behalten oder ausblenden? Sie haben Verbindungen und Pins in Beispielen; Ausblenden müsste Verknüpfungen berücksichtigen.
+**E6 – Missionsdossiers P-0001 bis P-0003 (B5). Entschieden (Master Wayne, 23.11.2026):** Sie bleiben als Beispiele erhalten und werden **vollständig vom Missionskontext gelöst**, sodass sie als Blankos dienen. Kopplungen im heutigen Stand: (1) `mission: 'M1'` an den drei Dossiers und an ihren sieben Verbindungen `V-01` bis `V-07`; (2) ihr Status wird von `profilSpeichern` als Missionsstatus behandelt und **nicht ins Profil gesichert**, geht also beim Zurücksetzen verloren; (3) `isValidState` verlangt sie im Zustand; (4) Sonderbehandlung in `migrate`; (5) Verweise aus der Missionsdefinition (Schlüsselpersonen, Asset). Umsetzung: in den Standardbestand überführen (`mission: 'STD'`, ebenso die Verbindungen), Status wie bei Standarddossiers sichern, Kennungen `P-0001` bis `P-0003` unverändert lassen (Notizen, Sichtungen, Pins und Verknüpfungen in Profilen bleiben gültig). Die Missionsdefinition selbst wird nicht mehr gelesen.
 
-**E7 – Dienst der Adressleiste (B6).** Vorschlag: von der Mission lösen und auf einen festen, neutralen Dienst setzen; gestalterische Entscheidung offen.
+**E7 – Adressleiste (B6). Klarstellung:** keine Gestaltungsfrage. Wenn `STATE.kontext` in den Altbestand wandert, braucht die URL-Leiste einen festen Schlüssel für ihre gespeicherte Adresse. Die vorhandene Adresse wird dabei übernommen; **sichtbar ändert sich nichts**.
 
 ## 8. Vorgeschlagene Reihenfolge
 
 1. **5c1:** E2 und E1 mit Migration, Sicherung und angepasster Prüfung; Tests mit dem Altprofil-Fixture und einem künstlich gealterten Stand; Windows-Abnahme mit Ihrem echten Profil (Integrationsmeilenstein).
 2. **5c2:** E3 bis E5 sowie der Rest-Code (B3), mit Differenztests.
-3. E6 und E7 nach Ihrer Produktentscheidung.
+E6 und E7 gehören zu 5c1 (Dossiers und Adressschlüssel hängen am selben Umbau).
