@@ -189,7 +189,6 @@ function rchOeffnen(z) {
 
 /* ---------- Erfassen ---------- */
 function rchEntwurf(k) { return VIEW.draft['rch-' + k] || ''; }
-function rchSetze(k) { return function (ev) { VIEW.draft['rch-' + k] = ev.target.value; }; }
 function rchFallAuswahl(e) {
   const K = VIEW.recherche;
   if (K.fall && K.fallDossier === e.id && PROFIL.recherche.faelle.some(function (f) { return f.id === K.fall; })) return K.fall;

@@ -1,7 +1,7 @@
 # Phase 5 – Inventar der alten Mission und Abbau in kleinen Schritten
 
 Stand: 23.11.2026. Basis: `main` nach Merge von #104 (`7e21bc2`).
-**Arbeitsdokument für Phase 5; Phasen 5a bis 5b6 in `main`, Phase 5b7 als Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
+**Arbeitsdokument für Phase 5; Phasen 5a bis 5b6 in `main`, Phase 5b7 als Draft, Phase 5b8 als darauf aufbauender Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
 Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische Bestandsaufnahme: [missionsabhaengigkeiten.md](missionsabhaengigkeiten.md).
 
 ## Trennlinien
@@ -136,6 +136,20 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 **Nebenbefund `dp`:** Die bekannte Instabilität hat eine feste Ursache. Der Test wählt die Meldung über `/informieren/`, der Knopf verlangt `/bitte (den )?(Ansprechpartner|Handler) informieren/`; die zufällige Variante `szenario.js:1031` erfüllt nur das erste Muster. Mit 5b7 ist `dp` historisch.
 
 **Bewusst offen:** Der Missionscode selbst ist noch vorhanden. Er wird über Aktionen aus Tests teilweise noch ausgeführt (`freigeschaltet`, `LM()`), ist aus der Oberfläche aber nicht erreichbar. Entfernung in getrennten Schritten (5b8 ff.), siehe Erreichbarkeitsanalyse.
+
+## Phase 5b8 – Unerreichbaren Code entfernen, erste Tranche (Draft, Basis 5b7)
+
+**Verfahren:** Erreichbarkeitsanalyse mit echtem JavaScript-Parser (acorn) über alle klassisch geladenen Skripte in einem gemeinsamen globalen Raum. Knoten sind Top-Level-Deklarationen sowie Einträge von `ACTIONS` und `RENDER`. Kanten sind Bezeichner und gleichlautende Stringliterale (konservativ: jeder String mit dem Namen einer Aktion hält sie am Leben). Wurzeln sind Top-Level-Anweisungen und statisches HTML. Zweige hinter `missionsbetrieb()` gelten als tot (konstant `false` seit 5b7). Geprüft und ohne Befund: Zugriffe aus `karte3d.html`, `eval`/`new Function`, dynamische Zugriffe über `window[...]`, Aktionstypen aus Variablen (alle aus Literalen zusammengesetzt).
+
+**Voraussetzung im Code:** `NAVIGATION` und `renderModule` akzeptieren nur noch die fünf Arbeitsmodule; `MODULES` bleibt als Registrierung für gespeicherte Stände. Ohne diese Einschränkung wäre `komm` über ein (unerreichbares) Missionszonen-Popup noch statisch ansteuerbar gewesen.
+
+**Entfernt (164 Deklarationen):** Renderer und Panels der alten Module Auftrag, Nachrichten, Notfall, Support und Freigaben (`renderMission`, `renderKomm`, `renderExtraktion`, `renderVerstaerkung`, `renderFreigabe` samt Zubehör), Regie-Konsole (`regieInhalt`, `oeffneRegie`), `rudimentAnsicht`, Registratur-Legacy in `akten-modul.js` (`akteAnsicht`, `renderRegistraturLegacy`, Aktenliste), 48 nie ausgelöste Missionsaktionen sowie ausschließlich von diesen genutzte Hilfsfunktionen und Konstanten. Größe: `index.html` 677.152 → 514.644 Byte (−24,0 %), `akten-modul.js` 21.950 → 12.067 Byte (−45,0 %).
+
+**Bewusst behalten:** `dokZeile`, `legendeListe` (im Produkt unerreichbar, aber vom produktiven Test `identitaeten` zur Persistenzprüfung genutzt; Entscheidung offen). Datenfelder im Zustand und im Profil bleiben unverändert und werden weiter gelesen und mitgespeichert.
+
+**Tests:** `fg`, `tx`, `fgy`, `p3`, `ak2`, `au`, `p2` prüften Funktionen der entfernten Module bzw. Aktionen und sind nun historisch. Produktiv erhalten: `speicher-voll` (aus `au` AU-1, ausgelöst über eine Dossiernotiz statt über das entfernte Kanalmodul). `p4` prüft nur noch die Kopfzeile ohne Standortfreigabe. `karte-sperre-pins` verliert den Unterblock zur PACE-Sammelpunktauswahl (Maske entfernt); die Maskierung früherer Texte bleibt geprüft.
+
+**Werkzeugfehler im ersten Anlauf (behoben, vor jedem Commit):** Die Erkennung angehängter Kommentare hat bei einer Codezeile mit Zeilenendkommentar rückwärts bis zum nächsten Kommentaranfang gegriffen und dabei die Zugangskonstanten (`KENNUNG_MIN`, `PBKDF2_RUNDEN` u. a.) mitentfernt; der Volllauf war vollständig rot (Anmeldung unmöglich). Korrigiert und um zwei Gegenkontrollen ergänzt: (1) jede nicht als tot markierte Deklaration existiert danach noch, (2) jede lebende Top-Level-Anweisung des alten Stands steht wortgleich im neuen Stand (1.118 Einheiten; einzige Abweichungen die beabsichtigten Änderungen an `NAVIGATION` und `renderModule`).
 
 ## Nächste isolierte Schritte nach Abnahme von 5a
 

@@ -66,14 +66,7 @@ const { APP } = require('./_pfad');
     assert.equal(await p.evaluate(() => document.getElementById('k-auswahl').hidden), false);
     assert.equal(await p.evaluate(i => [...document.querySelectorAll('#pin-dossier option')].some(o => o.value === i), z.e), true);
     assert.doesNotMatch(await text(), /Quarzfeld/, 'Auswahl maskiert');
-    /* Die Sammelpunkt-Auswahl und bereits erzeugte Antworten dürfen den gesperrten Pinnamen nicht preisgeben. */
-    const pace = await p.evaluate(([pin, frei]) => {
-      const panel = planPanel({}, { pace: { pin, stand: 'angenommen', p: 'Kanal Ansprechpartner', a: 'Kanal Support', c: 'Rückruf über Festnetz (einmal klingeln lassen)', e: 'Persönliches Signal am Sammelpunkt', abbruch: '', antwort: '' } });
-      const optionen = [...panel.querySelectorAll('#pace-pin option')].map(x => ({ id: x.value, text: x.textContent, selected: x.selected }));
-      return optionen.filter(x => x.id === pin || x.id === frei);
-    }, [z.pin, z.frei]);
-    assert.deepEqual(pace, [{ id: z.pin, text: z.pin, selected: true },
-      { id: z.frei, text: 'Parkplatz Nord', selected: false }], 'gesperrter Sammelpunkt nur mit Kennung');
+    /* Phase 5b8: Die PACE-Sammelpunktauswahl (planPanel) ist mit dem Missionsmodul entfernt; frühere Texte bleiben maskiert. */
     const historisch = await p.evaluate(pin => {
       const block = document.createElement('div');
       block.textContent = 'Kommunikationsplan: Sammelpunkt Kühlhaus Quellweg; Pin ' + pin;
@@ -94,11 +87,6 @@ const { APP } = require('./_pfad');
     assert.equal((await marker()).includes(z.pin), true);
     await karteZeigen('protokoll');
     assert.match(await text(), /Kühlhaus Quellweg/);
-    const paceOffen = await p.evaluate(pin => {
-      const panel = planPanel({}, { pace: { pin, stand: 'angenommen', p: '', a: '', c: '', e: '', abbruch: '', antwort: '' } });
-      return [...panel.querySelectorAll('#pace-pin option')].find(x => x.value === pin)?.textContent;
-    }, z.pin);
-    assert.match(paceOffen, /Kühlhaus Quellweg/, 'nach Entsperren wieder Klarname');
     await karteZeigen('karte');
     assert.equal(await p.evaluate(i => kartenObjektZeigen(i), z.pin), true);
     assert.equal(await p.evaluate(() => VIEW.karte.auswahl), z.pin);
