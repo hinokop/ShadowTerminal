@@ -1065,28 +1065,42 @@ function meldeText(now) {
    ===================================================================== */
 const ALTSTAND_SICHERUNG_KEY = STORAGE_KEY + '.v4-sicherung';   /* roher Text des gespeicherten Zustands vor einer Formatüberführung, wird nie überschrieben */
 const Store = (function () {
-  let ok = false, lastSaved = null;
+  let ok = false, lastSaved = null, probeOk = false;
   try {
     const probe = STORAGE_KEY + '.probe';
     window.localStorage.setItem(probe, '1');
     window.localStorage.removeItem(probe);
     ok = true;
   } catch (e) { ok = false; }
+  probeOk = ok;
   return {
+    /* Ergebnis der Schreibprobe beim Start (unabhängig von späteren Schreibfehlern) */
+    sondeOk: function () { return probeOk; },
     isPersistent: function () { return ok && !Store.sperrgrund; },
     lastSaved: function () { return lastSaved; },
     /* belegter Platz aller Schlüssel dieser Anwendung in KB (Zeichen, Näherung; das Browserlimit liegt bei etwa 5 MB je Ursprung) */
     groesseKb: function () { try { let n = 0; for (let i = 0; i < window.localStorage.length; i++) { const k = window.localStorage.key(i); if (k && k.indexOf(STORAGE_KEY) === 0) n += k.length + (window.localStorage.getItem(k) || '').length; } return Math.round(n / 1024); } catch (e) { return 0; } },
-    load: function () {
-      if (!ok) return null;
+    /* Phase 5c1b (Review #111): Lesen des gespeicherten Zustands mit eindeutigem Status, unabhängig von der Schreibprobe.
+       'fehlt' (Schlüssel nachweislich nicht vorhanden), 'lesefehler' (Zugriff scheitert, Inhalt unbekannt), 'defekt' (Text vorhanden, aber kein
+       JSON-Objekt), 'vorhanden' (Objekt gelesen). Nur 'fehlt' erlaubt einen neuen Zustand ohne Sicherung. Kein Schreibzugriff. */
+    laden: function () {
       let raw = null;
-      try { raw = window.localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null; }
-      catch (e) { if (raw) Store.sichereDefekt(raw); return null; }
+      try { raw = window.localStorage.getItem(STORAGE_KEY); } catch (e) { return { status: 'lesefehler', roh: null, wert: null }; }
+      if (raw === null || raw === '') return { status: 'fehlt', roh: null, wert: null };
+      try { const w = JSON.parse(raw); if (w && typeof w === 'object') return { status: 'vorhanden', roh: raw, wert: w }; } catch (e) { /* defekt */ }
+      return { status: 'defekt', roh: raw, wert: null };
     },
-    /* Nicht lesbarer oder ungültiger Spielstand: Rohinhalt vor dem Überschreiben unter '<Schlüssel>.defekt' ablegen (nur der jeweils letzte) */
+    /* nur lesend; null, wenn nichts Verwendbares gespeichert oder nicht lesbar ist */
+    load: function () { return Store.laden().wert; },
+    /* Nicht lesbarer oder ungültiger Zustand: Rohinhalt vor dem Überschreiben unter '<Schlüssel>.defekt' ablegen (nur der jeweils letzte).
+       Gilt erst als gesichert, wenn der Text zeichengleich zurückgelesen wird. */
     defektGesichert: false,
     sichereDefekt: function (raw) {
-      try { window.localStorage.setItem(STORAGE_KEY + '.defekt', String(raw)); Store.defektGesichert = true; } catch (e) { /* kein Platz: dann geht er verloren */ }
+      Store.defektGesichert = false;
+      try {
+        window.localStorage.setItem(STORAGE_KEY + '.defekt', String(raw));
+        Store.defektGesichert = window.localStorage.getItem(STORAGE_KEY + '.defekt') === String(raw);
+      } catch (e) { /* kein Platz: dann ist er nicht gesichert */ }
     },
     /* Jeder Aufruf versucht es erneut: nach vollem Speicher erholt sich das Sichern, sobald wieder Platz ist. Ergebnis: true = geschrieben.
        Ist das Speichern gesperrt (Sicherung oder Überführung gescheitert, siehe sperren), bleibt der gespeicherte Stand unberührt. */
@@ -1095,14 +1109,18 @@ const Store = (function () {
       try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); lastSaved = new Date(); ok = true; return true; }
       catch (e) { ok = false; return false; }
     },
-    /* Speichern mit Rücklesen: gilt nur als gelungen, wenn der gespeicherte Text zeichengleich zurückgelesen wird */
+    /* Speichern mit Rücklesen: gilt nur als gelungen, wenn der gespeicherte Text zeichengleich zurückgelesen wird.
+       Ergebnis: 'ok' | 'nicht-geschrieben' (das Schreiben ist gescheitert, der bisherige Text ist unberührt) |
+       'unbestaetigt' (geschrieben, aber nicht bestätigt; ob der neue Text gespeichert ist, ist unbekannt). */
     saveGeprueft: function (state) {
-      if (!Store.save(state)) return false;
-      try { if (window.localStorage.getItem(STORAGE_KEY) === JSON.stringify(state)) return true; } catch (e) { /* nicht lesbar */ }
-      ok = false; return false;
+      if (!Store.save(state)) return 'nicht-geschrieben';
+      try { if (window.localStorage.getItem(STORAGE_KEY) === JSON.stringify(state)) return 'ok'; } catch (e) { /* nicht lesbar */ }
+      ok = false; return 'unbestaetigt';
     },
-    /* Rohtext des gespeicherten Zustands (für die Sicherung vor einer Überführung) */
-    rohtext: function () { try { return window.localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } },
+    /* Rückschreibversuch des Originaltexts nach unbestätigtem Speichern. Ergebnis: true nur, wenn das Original zeichengleich zurückgelesen wird. */
+    wiederherstellen: function (raw) {
+      try { window.localStorage.setItem(STORAGE_KEY, raw); return window.localStorage.getItem(STORAGE_KEY) === raw; } catch (e) { return false; }
+    },
     /* Phase 5c1b: Sicherung des Rohtexts vor der Überführung. Eine vorhandene Sicherung wird nie überschrieben; weicht sie vom
        aktuellen Text ab, entsteht eine weitere unter eigenem Schlüssel. Ergebnis: Schlüssel der geprüften Sicherung oder null. */
     altstandSichern: function (raw) {
@@ -1120,8 +1138,9 @@ const Store = (function () {
       return lesen(k) === raw ? k : null;
     },
     /* Speichern des Zustands für diese Sitzung aussetzen; der gespeicherte Stand bleibt, wie er ist */
-    sperrgrund: null,
-    sperren: function (grund) { Store.sperrgrund = grund; ok = false; }
+    sperrgrund: null, sperrzusatz: null,
+    /* Der erste Grund bleibt maßgeblich. zusatz: abweichender Hinweis zum Stand des gespeicherten Zustands (Vorgabe: unverändert). */
+    sperren: function (grund, zusatz) { if (!Store.sperrgrund) { Store.sperrgrund = grund; Store.sperrzusatz = zusatz || null; } ok = false; }
   };
 })();
 
@@ -1277,11 +1296,22 @@ function profilSpeichern() {
     PROFIL.seq.eigen = Math.max(PROFIL.seq.eigen || 0, STATE.seq.eigen || 0);
     PROFIL.seq.kante = Math.max(PROFIL.seq.kante || 0, STATE.seq.kante || 0);
   }
+  /* Phase 5c1b (Review #111): Solange der Zustand nicht geprüft gespeichert ist, wird das Profil nicht fortgeschrieben (Aufschub); ist die
+     Zustandsspeicherung gesperrt, bleibt auch das gespeicherte Profil unverändert. So entsteht keine Teilmigration. */
+  if (Store.sperrgrund) return false;
+  if (PROFIL_AUFSCHUB.an) { PROFIL_AUFSCHUB.offen = true; return true; }
   try {
     const o = {}; Object.keys(PROFIL).forEach(function (k) { if (k !== 'leer') o[k] = PROFIL[k]; });
     window.localStorage.setItem(PROFIL_KEY, JSON.stringify(o));
     return true;
   } catch (e) { return false; }
+}
+const PROFIL_AUFSCHUB = { an: false, offen: false };
+/* Beendet den Aufschub. Ergebnis: true, wenn nichts offen war oder das Profil geschrieben wurde; false bei Sperre oder Schreibfehler. */
+function profilFreigeben() {
+  const offen = PROFIL_AUFSCHUB.offen;
+  PROFIL_AUFSCHUB.an = false; PROFIL_AUFSCHUB.offen = false;
+  return offen ? profilSpeichern() : true;
 }
 function profilEinspielen(z) {
   const D = z.dossiers, kopie = function (o) { return JSON.parse(JSON.stringify(o)); };
@@ -4531,14 +4561,20 @@ function init() {
   /* Phase 5c1b: Ein Zustand älteren Formats wird vor jeder Änderung als Rohtext gesichert und erst nach geprüfter Sicherung
      überführt gespeichert. Scheitert die Sicherung oder das Speichern, läuft die Sitzung ohne Speichern des Zustands;
      der gespeicherte Stand bleibt unverändert. */
-  const roh = Store.rohtext(), gelesen = Store.load();
+  PROFIL_AUFSCHUB.an = true;                                       /* Profil erst schreiben, wenn der Zustand geprüft gespeichert ist */
+  const L = Store.laden(), roh = L.roh, gelesen = L.wert;
+  if (L.status === 'lesefehler') Store.sperren('Der gespeicherte Zustand konnte nicht gelesen werden');
+  else if (L.status === 'defekt') {
+    Store.sichereDefekt(roh);
+    if (!Store.defektGesichert) Store.sperren('Der gespeicherte Zustand ist nicht lesbar und konnte nicht gesichert werden');
+  } else if (L.status === 'vorhanden' && !Store.sondeOk()) Store.sperren('Die Schreibprobe des Browserspeichers ist fehlgeschlagen');
   const altFormat = !!gelesen && typeof gelesen === 'object' && gelesen.version !== STATE_VERSION;
-  const sicherung = altFormat ? Store.altstandSichern(roh) : null;
-  if (altFormat && !sicherung) Store.sperren('Der gespeicherte Zustand (Format ' + gelesen.version + ') konnte nicht gesichert werden');
+  const sicherung = altFormat && !Store.sperrgrund ? Store.altstandSichern(roh) : null;
+  if (altFormat && !sicherung && !Store.sperrgrund) Store.sperren('Der gespeicherte Zustand (Format ' + gelesen.version + ') konnte nicht gesichert werden');
   const geladen = migrate(gelesen);
   const neu = !isValidState(geladen);
-  if (neu && geladen) {
-    Store.sichereDefekt(typeof roh === 'string' ? roh : JSON.stringify(geladen));
+  if (neu && gelesen) {
+    Store.sichereDefekt(typeof roh === 'string' ? roh : JSON.stringify(gelesen));
     if (!Store.defektGesichert && !sicherung) Store.sperren('Der gespeicherte Zustand ist nicht verwendbar und konnte nicht gesichert werden');
   }
   STATE = neu ? buildInitialState(Date.now()) : geladen;
@@ -4547,12 +4583,25 @@ function init() {
     STATE.idv = 2; profilSpeichern();
   }
   arbeitsmodulWiederherstellen(STATE);
-  if (profiltexteAnlegen(STATE) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?). Notizen und Operative Einschränkungen sind nur bis zum Schließen gesichert.');   /* Phase 5c1a: einmalige Übernahme */
+  const profiltextNeu = profiltexteAnlegen(STATE);                /* Phase 5c1a: einmalige Übernahme */
+  if (profiltextNeu) profilSpeichern();
   profiltexteSpiegeln(STATE);
   const idNeu = identitaetUebernehmen(STATE);
   if (idNeu) { if (!neu) profilEinspielen(STATE); profilSpeichern(); }       /* erst nach dem Einspielen des Profils speichern */
   const ueberfuehrt = altFormat && !neu && !Store.sperrgrund;
-  if (ueberfuehrt && !Store.saveGeprueft(STATE)) Store.sperren('Der überführte Zustand konnte nicht gespeichert werden');
+  if (ueberfuehrt) {
+    const erg = Store.saveGeprueft(STATE);
+    if (erg === 'nicht-geschrieben') Store.sperren('Der überführte Zustand konnte nicht gespeichert werden');
+    else if (erg === 'unbestaetigt') {
+      /* geschrieben, aber nicht bestätigt: Original zurückschreiben und nur behaupten, was geprüft ist */
+      if (Store.wiederherstellen(roh)) Store.sperren('Der überführte Zustand konnte nicht bestätigt werden; der bisherige Stand wurde zurückgeschrieben');
+      else Store.sperren('Der überführte Zustand konnte nicht bestätigt werden',
+        'Ob der gespeicherte Stand dem bisherigen oder dem überführten Zustand entspricht, ist nicht bestätigt; der bisherige Rohtext liegt gesichert unter "' + sicherung + '". Änderungen am Zustand werden in dieser Sitzung nicht gespeichert. Vor dem nächsten Start Export anlegen und Speicher prüfen.');
+    }
+  }
+  /* Profil jetzt schreiben (bei Sperre unterbleibt es), eine misslungene Speicherung des Profils melden */
+  const profilOffen = PROFIL_AUFSCHUB.offen, profilGespeichert = profilFreigeben();
+  if (profilOffen && !profilGespeichert && !Store.sperrgrund && profiltextNeu) meldung('Profil konnte nicht gespeichert werden (Speicher voll?). Notizen und Operative Einschränkungen sind nur bis zum Schließen gesichert.');
 
   renderBanner(); buildNav(); buildLogFilter();
 
@@ -4608,7 +4657,7 @@ function init() {
   dispatch({ type: 'SITZUNG_START', neu: neu });
   planeAlle();
   APP_BEREIT = true;
-  if (Store.sperrgrund) meldung(Store.sperrgrund + '. Änderungen am Zustand werden in dieser Sitzung nicht gespeichert; der gespeicherte Stand bleibt unverändert. Vor dem nächsten Start Export anlegen und Speicherplatz prüfen.');
+  if (Store.sperrgrund) meldung(Store.sperrgrund + '. ' + (Store.sperrzusatz || 'Änderungen am Zustand und am Profil werden in dieser Sitzung nicht gespeichert; der gespeicherte Stand bleibt unverändert. Vor dem nächsten Start Export anlegen und Speicherplatz prüfen.'));
   else if (ueberfuehrt) meldung('Gespeicherter Zustand in das Format ' + STATE_VERSION + ' überführt. Der bisherige Stand liegt unverändert unter "' + sicherung + '" im Browserspeicher.');
   if (Store.defektGesichert) meldung('Der gespeicherte Spielstand war nicht lesbar. Der alte Inhalt liegt unter "' + STORAGE_KEY + '.defekt" im Browserspeicher, ein neuer Zustand wurde angelegt.');
   if (AUTH_PENDING.length) dispatch({ type: 'AUTH_EREIGNIS', liste: AUTH_PENDING.splice(0) });
