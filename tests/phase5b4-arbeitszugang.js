@@ -107,8 +107,8 @@ const { APP } = require('./_pfad');
       buffer: Buffer.from('Manuellen Dossierschutz im Dateieingang prüfen')
     });
     await p.locator('#ak-eingang-vorschau pre').waitFor();
-    assert.ok(await p.locator('#ak-eingang-dossier option').evaluateAll(options =>
-      options.some(o => o.value === fx.bekannt)), 'vor Sperre ist der Dossiereintrag wählbar');
+    assert.ok(await p.locator('#ak-eingang-dossier option').evaluateAll((options, id) =>
+      options.some(o => o.value === id), fx.bekannt), 'vor Sperre ist der Dossiereintrag wählbar');
 
     const locked = await p.evaluate(fx => {
       dispatch({ type: 'RECHERCHE_BELEG', dossier: fx.bekannt, fall: fx.fall,
