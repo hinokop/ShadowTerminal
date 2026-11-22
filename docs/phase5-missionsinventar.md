@@ -1,7 +1,7 @@
 # Phase 5 – Inventar der alten Mission und Abbau in kleinen Schritten
 
 Stand: 23.11.2026. Basis: `main` nach Merge von #104 (`7e21bc2`).
-**Arbeitsdokument für Phase 5; Phasen 5a bis 5b6 in `main`, Phase 5b7 als Draft, Phase 5b8 als darauf aufbauender Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
+**Arbeitsdokument für Phase 5; Phasen 5a bis 5b8 in `main`, Phase 5b9 als Draft.**
 Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische Bestandsaufnahme: [missionsabhaengigkeiten.md](missionsabhaengigkeiten.md).
 
 ## Trennlinien
@@ -121,7 +121,7 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Abnahme:** Neuer `tests/phase5b6-dossier-kennungen.js` prüft als Differenztest alle Dossiers (Text, Element-IDs, SVG-Texte/-Titel, `aria-label`, Verbindungsziele, Adresspfad) im Recherche- gegen den Altzustand auf Gleichheit. Zusätzlich: Ausblenden von `V-S1` im Altzustand ohne Szenarioänderung, manuelle Sperre samt Graph-Nachbarschaft, unverändertes Altverhalten von `schutz()`/`anzeige()`. Gegenprobe: gegen den 5b5-Stand rot (31 Dossiers, alle sechs Kategorien). Die historischen Tests `e2e`, `kt3`, `map2` außerhalb der Standardauswahl zeigen auf 5b5 und 5b6 dasselbe Ergebnis. Echte Windows-Altprofile sind nicht abgenommen. **Draft bis vollständige CI-Ergebnisse und separate Eigentümerfreigabe; Merge erst nach #103.**
 
-## Phase 5b7 – Missionsbetrieb stillgelegt (Draft)
+## Phase 5b7 – Missionsbetrieb stillgelegt (PR #105 integriert)
 
 **Einordnung (Nutzerentscheidung 22.11.2026):** `STATE.missionsbetrieb === true` entstand nur durch sechs Missionsaktionen, die keine Oberfläche mehr auslöst; Altprofile ohne das Feld liefen ohnehin im Recherchebetrieb. Die Befunde aus 5b5/5b6 waren daher im Code real, für den Nutzer aber nicht erreichbar. Statt jede Ansicht einzeln zu entkoppeln, wird die Markierung zentral stillgelegt.
 
@@ -137,7 +137,7 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Bewusst offen:** Der Missionscode selbst ist noch vorhanden. Er wird über Aktionen aus Tests teilweise noch ausgeführt (`freigeschaltet`, `LM()`), ist aus der Oberfläche aber nicht erreichbar. Entfernung in getrennten Schritten (5b8 ff.), siehe Erreichbarkeitsanalyse.
 
-## Phase 5b8 – Unerreichbaren Code entfernen, erste Tranche (Draft, Basis 5b7)
+## Phase 5b8 – Unerreichbaren Code entfernen, erste Tranche (PR #106 integriert, Windows-Abnahme bestanden)
 
 **Verfahren:** Erreichbarkeitsanalyse mit echtem JavaScript-Parser (acorn) über alle klassisch geladenen Skripte in einem gemeinsamen globalen Raum. Knoten sind Top-Level-Deklarationen sowie Einträge von `ACTIONS` und `RENDER`. Kanten sind Bezeichner und gleichlautende Stringliterale (konservativ: jeder String mit dem Namen einer Aktion hält sie am Leben). Wurzeln sind Top-Level-Anweisungen und statisches HTML. Zweige hinter `missionsbetrieb()` gelten als tot (konstant `false` seit 5b7). Geprüft und ohne Befund: Zugriffe aus `karte3d.html`, `eval`/`new Function`, dynamische Zugriffe über `window[...]`, Aktionstypen aus Variablen (alle aus Literalen zusammengesetzt).
 
@@ -150,6 +150,37 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 **Tests:** `fg`, `tx`, `fgy`, `p3`, `ak2`, `au`, `p2` prüften Funktionen der entfernten Module bzw. Aktionen und sind nun historisch. Produktiv erhalten: `speicher-voll` (aus `au` AU-1, ausgelöst über eine Dossiernotiz statt über das entfernte Kanalmodul). `p4` prüft nur noch die Kopfzeile ohne Standortfreigabe. `karte-sperre-pins` verliert den Unterblock zur PACE-Sammelpunktauswahl (Maske entfernt); die Maskierung früherer Texte bleibt geprüft.
 
 **Werkzeugfehler im ersten Anlauf (behoben, vor jedem Commit):** Die Erkennung angehängter Kommentare hat bei einer Codezeile mit Zeilenendkommentar rückwärts bis zum nächsten Kommentaranfang gegriffen und dabei die Zugangskonstanten (`KENNUNG_MIN`, `PBKDF2_RUNDEN` u. a.) mitentfernt; der Volllauf war vollständig rot (Anmeldung unmöglich). Korrigiert und um zwei Gegenkontrollen ergänzt: (1) jede nicht als tot markierte Deklaration existiert danach noch, (2) jede lebende Top-Level-Anweisung des alten Stands steht wortgleich im neuen Stand (1.118 Einheiten; einzige Abweichungen die beabsichtigten Änderungen an `NAVIGATION` und `renderModule`).
+
+## Phase 5b9 – Missionskern entfernen (Draft)
+
+**Freigabe:** Master Wayne, 23.11.2026, einschließlich des Missionszonen-Pfads der Karte unter der Bedingung, dass sich für Profilzonen, Pins und Popups nachweislich nichts ändert.
+
+**Ausgangslage nach 5b8:** Die statische Analyse fand nichts Totes mehr; der Missionskern war nur noch über Laufzeitbedingungen erreichbar. `tick()` filterte fällige Planeinträge über `missionsbetrieb()` (stets leer), deren Abarbeitung galt statisch aber als lebendig. Der Dialogkern hing über `zonePopup → ZONE_ERFRAGT → nachrichtSenden → DIALOG` am Popup der Missionszonen.
+
+**Teil A – Konstante an allen Stellen aufgelöst:** `tick()` (nur noch Zugang, Kanalanzeige, Uhr), `planeAlle()`, `wissen()` (stets `'frei'`), `dossierOffen()` (stets `true`), Missionszweige in `SITZUNG_START` (das Zurücksetzen von `melde.geprueftBis` bleibt) und in `dispatch`, `karteOhneMission()`/`zDef()`.
+
+**Teil B – Missionszonen-Pfad der Karte:** Nachweis der Unerreichbarkeit: `karteZonen()` liefert ohne Auftragsrahmen ausschließlich Profilzonen (`profil: true`); die beiden Aufrufe mit ausdrücklichem Rahmen (`index.html`, Zonenaktionen) setzen ihn nur, wenn `zDef()` ihn liefert, was nie geschieht. `zonePopup` reicht Profilzonen in der ersten Zeile an `eigeneZonePopup` weiter; alles danach betraf nur Missionszonen (`ZN-`/`ZA-`) und Zugriffspunkte. Gekürzt: `zonePopup` und `karteZonen` auf ihren erreichbaren Teil; dadurch unerreichbar und entfernt: `zugriffPopup`, `zonenFaellig`, `zoneBezug`, `zonenUrteil`, `ZUGRIFF_TYPEN`, `zoneHandlerName`, `istZielperson`.
+
+**Entfernt:** 224 Deklarationen (darunter 17 Aktionen) sowie die Dateien `dialog.js` (bestand nur aus `DIALOG`) und `klassifikator.js` (nur von der toten `dialogAntwort` genutzt) samt Einbindung. Verwaiste Abschnittsüberschriften zum Dialog durch eine Überschrift für die verbliebenen Texthilfen (`erkFold`, `falten`) ersetzt.
+
+| Datei | `main` (Byte) | 5b9 (Byte) |
+|---|---|---|
+| `index.html` | 514.644 | 305.840 (−40,6 %) |
+| `karte-modul.js` | 154.845 | 143.200 (−7,5 %) |
+| `akten-modul.js` | 12.067 | 11.802 |
+| `dialog.js` | 65.706 | entfällt |
+| `klassifikator.js` | 18.618 | entfällt |
+
+Gegenüber dem Stand vor 5b8 ist `index.html` damit von 677.152 auf 305.840 Byte geschrumpft (−54,8 %).
+
+**Bewusst behalten:** `missionsbetrieb()` und `karteOhneMission()` (Einzeiler, im Produkt unerreichbar, aber von den Schutztests zur Prüfung der Invariante genutzt), `dokZeile`, `legendeListe` (Test `identitaeten`). Gespeicherte Felder in Zustand und Profil unverändert.
+
+**Nachweise:**
+- Erreichbarkeitsanalyse danach: nur die vier behaltenen Funktionen unerreichbar.
+- Wortgleichheit gegen `main`: 901 lebende Top-Level-Einheiten geprüft; die 16 Abweichungen sind genau die beabsichtigten (11 gefaltete Funktionen, 3 Sammelkonstanten, die 2 Einheiten von `klassifikator.js`).
+- **Kartendifferenz gegen `main`** (Sonde mit fester Uhrzeit: vier Pins, davon einer mit gesperrtem Dossier, drei Profilzonen mit und ohne Dossierbezug, Sichtung, Sperre): Grunddarstellung, Markierungs- und Zonenliste, 3D-Daten, Kartenprotokoll und die Popups aller 36 Objekte identisch, ohne Seitenfehler. Empfindlichkeit belegt: eine absichtlich eingebaute Änderung im Profilzonen-Popup wird genau bei den drei Profilzonen erkannt.
+
+**Tests:** `fd` prüfte Antworten des Dialogkerns und ist historisch. Sechs Schutztests (`phase5b2`–`phase5b4`, `sichtung-export`, `terminal-sudo`, `terminal-namensnavigation`) riefen die entfernte `infoGesperrt()` direkt auf; sie werten deren Fehlen nun als „nicht gesperrt“, was genau der von ihnen erwarteten Invariante entspricht. `missionstrennung` liest das gespeicherte Feld `STATE.abdruck` direkt statt über die entfernte `abdS()`.
 
 ## Nächste isolierte Schritte nach Abnahme von 5a
 
