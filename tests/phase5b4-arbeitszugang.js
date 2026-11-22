@@ -69,16 +69,16 @@ const { APP } = require('./_pfad');
       'produktive Ablage enthält keine Registratur oder Umschaltreiter');
     assert.equal(await p.locator('#ak-eingang-datei').count(), 1,
       'lokaler Eingang ist unmittelbar sichtbar');
-    const choices = await p.locator('#ak-eingang-dossier option').evaluateAll(options =>
-      options.map(x => x.value));
-    assert.ok(choices.includes(fx.bekannt) && choices.includes(fx.unbekannt),
-      'Eingangsauswahl enthält beide historisch beschränkten Dossiers');
-
     await p.locator('#ak-eingang-datei').setInputFiles({
       name: 'phase5b4.txt', mimeType: 'text/plain',
       buffer: Buffer.from('Quellmaterial zum historisch eingeschränkten Dossier')
     });
+    /* Der Dossierpicker existiert nur für eine konkrete Eingangsdatei. */
     await p.locator('#ak-eingang-vorschau pre').waitFor();
+    const choices = await p.locator('#ak-eingang-dossier option').evaluateAll(options =>
+      options.map(x => x.value));
+    assert.ok(choices.includes(fx.bekannt) && choices.includes(fx.unbekannt),
+      'Eingangsauswahl enthält beide historisch beschränkten Dossiers');
     await p.locator('#ak-eingang-fall').selectOption('__neu');
     await p.locator('#ak-eingang-titel').fill('5b4 Eingangsdokument');
     await p.locator('#ak-eingang-dossier').selectOption(fx.bekannt);
@@ -99,6 +99,16 @@ const { APP } = require('./_pfad');
       return !PROFIL.recherche.beobachtungen.some(b => b.id === beleg.id);
     }, { bekannt: fx.bekannt, beleg });
     assert.equal(deleted, true, 'Unterlagenzuordnung ohne Altfreigabe löschbar');
+
+    /* Zweite, noch nicht zugeordnete Datei hält das Zuordnungsformular offen,
+       damit die folgende Sperrprüfung das echte Dossier-Dropdown untersucht. */
+    await p.locator('#ak-eingang-datei').setInputFiles({
+      name: 'phase5b4-sperre.txt', mimeType: 'text/plain',
+      buffer: Buffer.from('Manuellen Dossierschutz im Dateieingang prüfen')
+    });
+    await p.locator('#ak-eingang-vorschau pre').waitFor();
+    assert.ok(await p.locator('#ak-eingang-dossier option').evaluateAll(options =>
+      options.some(o => o.value === fx.bekannt)), 'vor Sperre ist der Dossiereintrag wählbar');
 
     const locked = await p.evaluate(fx => {
       dispatch({ type: 'RECHERCHE_BELEG', dossier: fx.bekannt, fall: fx.fall,
@@ -124,10 +134,11 @@ const { APP } = require('./_pfad');
       return { gesperrt: dossierGesperrt(entitaet(fx.bekannt)), keinSchreiben,
         stand, auswahl: STATE.dossiers.auswahl, lesbar, verknuepfen,
         pickerEnthaelt: picker.includes(fx.bekannt),
+        pickerAnderesDossier: picker.includes(fx.unbekannt),
         keinLegacyReiter: !document.querySelector('#ak-tab-registratur, #akte-blatt'), b: b.id };
     }, fx);
     assert.ok(locked.gesperrt && locked.keinSchreiben && !locked.lesbar && !locked.verknuepfen &&
-      !locked.pickerEnthaelt && locked.keinLegacyReiter && locked.stand.uebersprungen.includes('Dossier ' + fx.bekannt) &&
+      !locked.pickerEnthaelt && locked.pickerAnderesDossier && locked.keinLegacyReiter && locked.stand.uebersprungen.includes('Dossier ' + fx.bekannt) &&
       locked.auswahl === fx.unbekannt,
       'Manuelle Sperre bleibt in Fall, Arbeitsstand, Recherche und Eingang wirksam: ' + JSON.stringify(locked));
 
