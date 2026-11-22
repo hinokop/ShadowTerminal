@@ -7,7 +7,9 @@ function xAuswahl(liste, wert) { return liste.find(function (x) { return x[0] ==
 /* Der in X angezeigte Fall: gewählter Fall, sonst der erste (außer nach übersprungenem Arbeitsstand). Anzeige und Arbeitsstand nutzen dieselbe Auswahl. */
 function xAngezeigt() { return xFall(X_VIEW.id) || (X_VIEW.keine ? null : PROFIL.recherche.faelle[0]) || null; }
 function xFall(id) { return PROFIL.recherche.faelle.find(function (f) { return f.id === id; }); }
-function xDossierLesbar(e) { return !!(e && dossierOffen(e.mission) && wissen(e) !== 'unbekannt' && !dossierGesperrt(e) && !infoGesperrt(e)); }
+/* Fall- und Dossierlinks verwenden den Recherchebestand, nicht alte Missionsstufen.
+   Die manuelle Sperre schützt weiterhin Namen und zugehörige Unterlagen. */
+function xDossierLesbar(e) { return !!(e && dossierRechercheBestand().some(function (x) { return x.id === e.id; }) && !dossierGesperrt(e)); }
 function xPins(f) { return Array.isArray(f.pins) ? f.pins : []; }
 function xDossiers(f) { return Array.isArray(f.dossiers) ? f.dossiers : []; }
 
@@ -207,7 +209,7 @@ function xForm(f) {
 }
 function xBezugPanel(f, pins) {
   const art = pins ? 'pins' : 'dossiers', ids = pins ? xPins(f) : xDossiers(f);
-  const alle = pins ? (PROFIL.pins || []).filter(xPinLesbar) : pool().filter(xDossierLesbar);
+  const alle = pins ? (PROFIL.pins || []).filter(xPinLesbar) : dossierRechercheBestand().filter(xDossierLesbar);
   const verfuegbar = alle.filter(function (x) { return !ids.includes(x.id); });
   const k = pins ? 'pin' : 'dossier';
   const sel = xSelect('x-' + k + '-wahl', [['', pins ? 'Pin wählen' : 'Dossier wählen']].concat(verfuegbar.map(function (x) { return [x.id, x.id + ' · ' + x.name]; })), '', { 'aria-label': pins ? 'Vorhandener Pin' : 'Vorhandenes Dossier' });

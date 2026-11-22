@@ -87,7 +87,7 @@ function rchSchreiben(aktion, aktionsName, zurueck) {
 /* ---------- Aktion ---------- */
 ACTIONS.RECHERCHE_BELEG = function (a) {
   const R = PROFIL.recherche, e = entitaet(a.dossier);
-  if (!e || !a.fassung) return null;
+  if (!e || dossierGesperrt(e) || !a.fassung) return null;
   const ft = a.fundstelle && a.fundstelle.typ ? { typ: String(a.fundstelle.typ).slice(0, 40), wert: String(a.fundstelle.wert || '').slice(0, 120) } : null;      /* Fundstelle ist optional */
   let fall = a.fall ? R.faelle.find(function (f) { return f.id === a.fall; }) : null, neuerFall = false;
   if (!fall && a.neuerFall && a.neuerFall.titel) {
@@ -127,7 +127,8 @@ function rchUnterlageTeiltBezug(b, dossier) {
 ACTIONS.RECHERCHE_UNTERLAGE_ENTFERNT = function (a) {
   const e = entitaet(a.dossier), R = PROFIL.recherche;
   const b = R.beobachtungen.find(function (x) { return x.id === a.beob && (x.dossiers || []).includes(a.dossier); });
-  if (!e || !b || dossierGesperrt(e) || infoGesperrt(e) || !dossierOffen(e.mission)) return null;
+  /* Löschen einer Unterlagen-Zuordnung ist nur durch manuelle Sperren begrenzt. */
+  if (!e || !b || dossierGesperrt(e)) return null;
 
   const geteilt = rchUnterlageTeiltBezug(b, e.id), sicher = JSON.stringify(R);
   let datei = null;

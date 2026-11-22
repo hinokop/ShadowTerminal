@@ -12,10 +12,11 @@ const { APP } = require('./_pfad');
       await p.fill('#gate-pw','pw-test-123');
       if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2','pw-test-123');
       await p.click('#gate-go');
-      await p.click('#nav-akten'); await p.click('#ak-tab-eingang');
+      await p.click('#nav-akten');
     }
     await start();
-    assert.equal(await p.locator('#ak-tab-registratur').count(), 1);
+    assert.equal(await p.locator('#ak-tab-registratur, #ak-tab-eingang, #akte-blatt, #ak-suche').count(), 0,
+      'Ablage zeigt den Eingang direkt; historische Registratur fehlt');
     const datei = {name:'vorlaeufig.txt',mimeType:'text/plain',buffer:Buffer.from('Nur Text <script>kein HTML</script>')};
     await p.locator('#ak-eingang-datei').setInputFiles(datei);
     await p.locator('#ak-eingang-vorschau pre').waitFor();
@@ -98,8 +99,13 @@ const { APP } = require('./_pfad');
     await p.click('#dlg-ok');
     await p.getByText('Noch keine Dateien abgelegt.').waitFor();
     assert.deepEqual(await p.evaluate(() => RIDB.schluessel()), [key]);
-    await p.click('#ak-tab-registratur'); await p.locator('#ak-suche').waitFor();
+    /* Ein gespeicherter Alt-Reiter darf den abgeschafften Registratur-Renderer
+       auch nach Dateiaktionen oder erneutem Laden nicht aufrufen. */
+    await p.evaluate(() => { VIEW.akte.reiter = 'registratur'; renderModule(); });
+    assert.equal(await p.locator('#ak-eingang-datei').count(), 1, 'Ablage bleibt direkter Datei-Eingang');
+    assert.equal(await p.locator('#ak-tab-registratur, #ak-tab-eingang, #ak-suche, #akte-blatt').count(), 0,
+      'keine historische Registratur erreichbar');
     assert.deepEqual(errors,[]);
-    console.log('OK: Eingang, Textvorschau, Neustart, Speicherrücknahme, Zuordnung ohne Kopie Löschen, Abbrechen, Fehlerrücknahme und Registratur');
+    console.log('OK: Eingang, Textvorschau, Neustart, Speicherrücknahme, Zuordnung ohne Kopie, Löschen, Abbrechen, Fehlerrücknahme; Registratur entfernt');
   } finally { await b.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

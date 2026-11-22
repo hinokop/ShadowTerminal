@@ -73,8 +73,16 @@ function akteAnsicht(doc) {
             h('p', { class: 'note pad', id: 'ak-lese' }, 'Leseprotokoll: ' + (function () { const g = (STATE.akten.gelesen || {})[doc.id]; return g ? SCENARIO.agent.codename + ', erste Einsicht ' + fmtZ(g.erst) + ', zuletzt ' + fmtZ(g.zuletzt) + ', ' + g.n + (g.n === 1 ? ' Einsicht' : ' Einsichten') : 'keine Einsicht verzeichnet'; })() + '.'),
             h('p', { class: 'note pad' }, 'Ein Einsichtsersuchen geht über den Ansprechpartner an die Registratur; die Antwort kommt zeitversetzt über den Kanal Ansprechpartner. Entschieden wird nach Zugangsstufe und Kreis der Eingeweihten.'))];
 }
-/* Darstellung des Moduls 7 */
+/* Phase 5b4: Die produktive Ablage zeigt ausschließlich den lokalen Eingang.
+   Ein importiertes Altprofil mit VIEW.akte.reiter='registratur' darf die
+   historische Akten-/Freigabemaske nicht erneut einblenden. */
 function renderAkten(m) {
+  return [modKopf(m), akEingangAnsicht()];
+}
+/* Historische Registraturfunktion für isolierte Altprotokoll-Tests.
+   Kein Produktpfad ruft diesen Renderer mehr auf; archivierte Akten- und
+   Freigabedaten bleiben für spätere Datenmigration erhalten. */
+function renderRegistraturLegacy(m) {
   const eingang = VIEW.akte.reiter === 'eingang';
   const reiter = h('div', { class: 'reiterleiste', role: 'tablist', 'aria-label': 'Ablagebereiche' },
     [['registratur', 'Registratur'], ['eingang', 'Eingang']].map(function (x) {
@@ -205,7 +213,7 @@ async function akEingangZuordnen(eintrag, form) {
   if (AK_EINGANG.arbeit) return;
   const dossier = entitaet(form.elements.dossier.value), fall = form.elements.fall.value;
   const titel = form.elements.titel.value.trim();
-  if (!dossier || dossierGesperrt(dossier) || infoGesperrt(dossier) || !dossierOffen(dossier.mission) ||
+  if (!dossier || dossierGesperrt(dossier) || !dossierRechercheBestand().some(function (e) { return e.id === dossier.id; }) ||
       (!PROFIL.recherche.faelle.some(function (f) { return f.id === fall; }) && !(fall === '__neu' && titel))) {
     meldung('Bitte ein verfügbares Dossier und einen Fall wählen oder benennen.'); return;
   }
@@ -215,7 +223,7 @@ async function akEingangZuordnen(eintrag, form) {
     const blob = await RIDB.get(eintrag.anhang);
     if (!blob) { meldung('Datei fehlt. Die Zuordnung wurde nicht gespeichert.'); return; }
     if (!akEingangSichtbar(akEingangLesen()).some(function (x) { return x.anhang === eintrag.anhang; })) return;
-    if (dossierGesperrt(dossier) || infoGesperrt(dossier) || entitaet(dossier.id) !== dossier || document.body.classList.contains('locked')) return;
+    if (dossierGesperrt(dossier) || entitaet(dossier.id) !== dossier || document.body.classList.contains('locked')) return;
     const ok = rchSchreiben({ type: 'RECHERCHE_BELEG', dossier: dossier.id, fall: fall === '__neu' ? null : fall,
       neuerFall: fall === '__neu' ? { titel: titel } : null, art: 'Datei', notiz: notiz,
       fundstelle: ft || ftTyp === 'ganze Datei' ? { typ: ftTyp, wert: ft } : null,
@@ -247,8 +255,10 @@ function akEingangAnsicht() {
     h('option', { value: '' }, 'Fall wählen'), PROFIL.recherche.faelle.map(function (f) { return h('option', { value: f.id }, f.titel); }), h('option', { value: '__neu' }, 'Neuen Fall anlegen'));
   const tit = h('input', { id: 'ak-eingang-titel', name: 'titel', maxlength: 120, disabled: true });
   fall.addEventListener('change', function () { tit.disabled = fall.value !== '__neu'; });
-  const dos = h('select', { name: 'dossier', id: 'ak-eingang-dossier' }, h('option', { value: '' }, 'Dossier wählen'), pool().filter(function (e) {
-    return !dossierGesperrt(e) && !infoGesperrt(e) && dossierOffen(e.mission);
+  const dos = h('select', { name: 'dossier', id: 'ak-eingang-dossier' }, h('option', { value: '' }, 'Dossier wählen'), /* Der lokale Eingang ist unabhängig von missionsgebundenen Freigabestufen.
+     Manuell gesperrte Dossiers erscheinen nicht in der Auswahl. */
+  dossierRechercheBestand().filter(function (e) {
+    return !dossierGesperrt(e);
   }).map(function (e) { return h('option', { value: e.id }, e.id + ' ' + e.name); }));
   const form = h('form', { onsubmit: function (ev) { ev.preventDefault(); void akEingangZuordnen(cur, ev.currentTarget); } },
     feldZeile('Fall', fall.id, fall), feldZeile('Neuer Falltitel', tit.id, tit), feldZeile('Dossier', dos.id, dos),
