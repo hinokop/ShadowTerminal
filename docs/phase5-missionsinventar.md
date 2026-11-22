@@ -1,7 +1,7 @@
 # Phase 5 – Inventar der alten Mission und Abbau in kleinen Schritten
 
-Stand: 22.11.2026. Basis: `main` nach Merge von #98 (`a54ef5f82ac1`).
-**Arbeitsdokument für Phase 5; Phase 5a abgeschlossen, Phase 5b1 ist ein neuer, noch ungeprüfter Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
+Stand: 22.11.2026. Basis: `main` nach Merge von #99 (`64abb4e50825`).
+**Arbeitsdokument für Phase 5; Phase 5a und 5b1 integriert, Phase 5b2 ist ein neuer Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
 Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische Bestandsaufnahme: [missionsabhaengigkeiten.md](missionsabhaengigkeiten.md).
 
 ## Trennlinien
@@ -41,7 +41,7 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 
 **Prüfung vor Merge:** zuerst die kritischen Erkenntnis-/Missionsregressionen `node tests/runall.js al zb ds2 missionstrennung terminal-sudo terminal-namensnavigation`, dann `node tests/runall.js terminal-navigation terminal-pin-suche terminal-objektnavigation terminal-archiv-zugriff karte-sperre-pins dossier-einheitlich fallpaket sichtung-import`, schließlich `node tests/runall.js` auf exakt dokumentiertem Head. Alte `m1flow`-Fehler und neu auftretende Missionstestfehler ausdrücklich trennen. Keine automatischen Testergebnisse behaupten, bevor sie tatsächlich gelaufen sind. Windows-Gesamtpaket erst für die spätere zusammenhängende UI-Abnahme.
 
-## Phase 5b1 – erster isolierter Berechtigungspfad (Draft)
+## Phase 5b1 – erster isolierter Berechtigungspfad (PR #99 integriert)
 
 **Befund aus `main` nach #98:** `karte-modul.js` → `kartenTxtExport` hat für `sichtung` bislang `infoGesperrt(entitaet(x.dossier))` geprüft. Bei ausdrücklich aktivierter Altmission blockiert dieser historische Ansprechpartnerstatus selbst eine gültige, *nicht manuell gesperrte* Sichtung. Das widerspricht dem in 5a festgelegten Recherchezugang.
 
@@ -52,6 +52,22 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 **Bewusst zurückgestellt:** Weitere `infoGesperrt`-Schranken in `karteMarker`, `karteBezugVon`, `renderDossier` und den Aktionen `VERBINDUNG_GELOESCHT`, `DOSSIER_BEARBEITET`, `DOSSIER_KURZLAGE` sowie `rudimentAnsicht`, `tick`, `MISSIONS_AKTIONEN`. Diese dürfen erst nach eigenem Nutzungsstellen- und Testabgleich fallen. Insbesondere darf die Historienkenntnis `wissen` weiterhin nicht pauschal überschrieben werden.
 
 **Prüfung:** `node tests/runall.js sichtung-export terminal-archiv-zugriff karte-sperre-pins terminal-sudo al zb ds2`; danach vollständige Standardauswahl mit präzisem Head. Ein neuer Draft-PR erhält keinen automatischen Merge.
+
+## Phase 5b2 – Karte und Dossierzusatzansichten (Draft)
+
+**Ausgangslage:** Nach PR #99 zeigten Karte und Dossier bei explizitem Altmissionsstatus weiterhin Zugriffsreste: `karteMarker`, `karteBezugVon` und Kartenortauflösung prüften `infoGesperrt`/das historische `pool()`; Dossier-Graph und Verbindungen waren über `kantenPool` an `wissen()`/`dossierOffen` gekoppelt; `renderDossier` blendete unabhängige Recherche- und Graph-Panels für ein bloß historisch beschränktes Dossier aus. Einige Dossier-Schreibaktionen verweigerten Änderungen allein wegen einer nicht angenommenen Mission.
+
+**Geplanter Rückbau:**
+
+- Kartenmarker (Dossiers, Sichtungen), Lagebezug, benannte Ortsauflösung und Dossierauswahl für Pin/Zone verwenden `dossierRechercheBestand`. `infoGesperrt` entfällt bei diesen Zugriffen. Gesperrte Dossiers und deren Sichtungen bleiben ausgeblendet; Dossier-Klarnamen sind in der Auswahl bei manueller Sperre maskiert.
+- `dossierRechercheKanten` stellt eine eigene Beziehungsmenge aus `dossierKantenBestand` bereit, die nach manueller Sperre beider Endpunkte filtert und alle alten Wissens-/Missionsfreigaben ignoriert. Kartenverbindungen, Graph und Dossier-Verbindungstabelle nutzen sie; der historische `kantenPool` bleibt unangetastet.
+- `renderDossier` zeigt unabhängige Recherche- und Beziehungsansicht auch bei `infoGesperrt`, solange das Dossier manuell nicht gesperrt ist.
+- Dossier-Schreibaktionen `DOSSIER_STATUS`, `DOSSIER_BILD`, `DOSSIER_FOTO_HINZU`, `DOSSIER_ORT`, `DOSSIER_BEARBEITET`, `DOSSIER_KURZLAGE`, `VERBINDUNG_ANGELEGT`, `VERBINDUNG_GELOESCHT` und `KANTE_BESTAETIGT` werden vom historischen Missions-/Kenntniszustand abgekoppelt. Für die angepassten Schreibpfade gelten manuelle Sperren.
+- Ein neuer Test `phase5b2-recherchezugang` aktiviert die historische Freigabesperre, prüft Karte, Sichtung, Verbindung, Bearbeitung, Recherchepanel, manuelle Sperre und Entsperren. Er ist zusätzlich zur Einzelprüfung in `tests/runall.js` aufgenommen.
+
+**Absichtliche Grenze:** `wissen()`, `dossierOffen()`, `kantenPool()`, `rudimentAnsicht()`, der Dossier-Hauptpanel-Zweig in `dossierAnsicht` sowie historische Nachrichten- und Missionsreducer/Timer bleiben für `al`, `zb`, `ds2` und weitere Legacy-Tests vorerst erhalten. `VERBINDUNG_GELOESCHT` schreibt bei laufender Altmission historische Szenario-Kanten weiterhin nicht um (zusätzliche Schutzregel unabhängig vom alten Ansprechpartnerfilter). Die komplette Entfernung dieser Pfade erfordert einen separaten UI-/Testmigrationsschritt.
+
+**Abnahme:** Einzeltest `node tests/runall.js phase5b2-recherchezugang`, gezielte Karte-/Dossier-/Altmissionstests und vollständige Standardauswahl. Vor Ende des CI-Laufs keine Erfolgsbehauptung. Windows-Altprofile und reale Archivbrücke werden bei einer späteren Integrationsabnahme geprüft. Kein automatischer Merge.
 
 ## Nächste isolierte Schritte nach Abnahme von 5a
 
