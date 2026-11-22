@@ -4013,13 +4013,14 @@ function authLog(aktion, detail) {
    Pfad je Ansicht, Ladestreifen, Relais-Zähler, Verbindungsinfo. Rein optisch, keine Netzwerkfunktion.
    ===================================================================== */
 const DIENSTE_KEY = STORAGE_KEY + '.dienste';
+const DIENST_SCHLUESSEL = 'terminal';                /* Phase 5c1b: Schlüssel der Adresse in DIENSTE_KEY, unabhängig von Aufträgen */
 const RELAIS_NAMEN = ['Birkenwald', 'Nordlicht', 'Grauschimmel', 'Kupferhain', 'Steinbock', 'Moorlerche', 'Frostkamm', 'Weidenrauch',
   'Salzgarten', 'Nebelkraehe', 'Eisvogel', 'Tannenzoll', 'Dunkelfurt', 'Heidemond', 'Schieferbach', 'Wacholder', 'Rabenstein', 'Lindenhall'];
 const RELAIS_LAENDER = ['DE', 'NL', 'CH', 'AT', 'LU', 'SE', 'IS', 'FI', 'NO', 'CZ'];
 const SCHALTKREIS_MS = 10 * 60000;                 /* Schaltkreise werden regelmäßig erneuert */
 
 const Leiste = (function () {
-  let eintrag = null, mission = null, pfad = null, relaisN = 0, relaisSt = 'getrennt', offen = false;
+  let eintrag = null, pfad = null, relaisN = 0, relaisSt = 'getrennt', offen = false;
   let tPanel = null, tLade = null, tKette = null, tNeu = [], mem = {}, lat = [0, 0, 0], latT = 0;
 
   const rnd = function (lo, hi) { return lo + Math.random() * (hi - lo); };
@@ -4038,15 +4039,19 @@ const Leiste = (function () {
     for (let i = 0; i < b.length; i++) a += abc[b[i] & 31];
     return a + 'd.onion';
   }
-  function dienst(mid) {
-    const m = ladeMap(), e = m[mid];
-    if (e && typeof e.host === 'string' && /^[a-z2-7]{55}d\.onion$/.test(e.host)) return e;
-    const neu = { host: hostErzeugen(), t: nowIso() };
-    m[mid] = neu; speichereMap(m);
+  /* Phase 5c1b: fester, neutraler Dienstschlüssel. Fehlt er, wird die bisherige Adresse vom alten Missionsschlüssel übernommen
+     (der alte Eintrag bleibt stehen); nur ohne jede gültige Adresse entsteht eine neue. */
+  const gueltig = function (e) { return !!e && typeof e.host === 'string' && /^[a-z2-7]{55}d\.onion$/.test(e.host); };
+  function dienst(altSchluessel) {
+    const m = ladeMap();
+    if (gueltig(m[DIENST_SCHLUESSEL])) return m[DIENST_SCHLUESSEL];
+    const alt = [altSchluessel, 'M1'].find(function (k) { return typeof k === 'string' && gueltig(m[k]); });
+    const neu = alt ? { host: m[alt].host, t: m[alt].t } : { host: hostErzeugen(), t: nowIso() };
+    m[DIENST_SCHLUESSEL] = neu; speichereMap(m);
     return neu;
   }
-  function setzeDienst(mid) {
-    mission = mid; eintrag = dienst(mid);
+  function setzeDienst(altSchluessel) {
+    eintrag = dienst(altSchluessel);
     $('tb-host').textContent = eintrag.host;
     document.title = eintrag.host.slice(0, 16) + '….onion';
   }
@@ -4150,19 +4155,18 @@ const Leiste = (function () {
   }
 
   return {
-    init: function (mid) {
-      setzeDienst(mid); pfad = null; relais(0);
+    init: function (altSchluessel) {
+      setzeDienst(altSchluessel); pfad = null; relais(0);
       $('tb-path').textContent = '/';
       $('tb-shield').addEventListener('click', function () { umschalten(); });
       $('tb-close').addEventListener('click', function () { umschalten(false); $('tb-shield').focus(); });
       document.addEventListener('click', function (ev) { if (offen && !$('torbar').contains(ev.target)) umschalten(false); });
       document.addEventListener('keydown', function (ev) { if (offen && ev.key === 'Escape') { umschalten(false); $('tb-shield').focus(); } });
     },
-    /* Aufruf bei jedem Rendern: Adresse folgt der Mission, Pfad der Ansicht */
+    /* Aufruf bei jedem Rendern: die Adresse bleibt fest (Phase 5c1b), der Pfad folgt der Ansicht */
     sync: function () {
       if (!STATE || !eintrag) return;
       const leise = !APP_BEREIT;
-      if (STATE.kontext !== mission) { setzeDienst(STATE.kontext); if (!leise) neuverbinden(); }
       const p = pfadFuer();
       if (p !== pfad) {
         const erst = pfad === null;
@@ -4439,7 +4443,7 @@ const Zugang = (function () {
     start: function (cb) {
       initCb = cb; rec = authLaden();
       const x = Store.load();
-      Leiste.init(x && typeof x.kontext === 'string' ? x.kontext : SCENARIO.missionen[0].id);
+      Leiste.init(x && typeof x.kontext === 'string' ? x.kontext : (x && x.altbestand && typeof x.altbestand.kontext === 'string' ? x.altbestand.kontext : null));
       hintergrund();
       $('gate-form').addEventListener('submit', abschicken);
       const aktiv = function () { letzteAktion = Date.now(); };
