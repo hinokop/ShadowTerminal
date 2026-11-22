@@ -86,9 +86,18 @@ const zurueck = s => s.replace(ISO, t => new Date(Date.parse(t) - DREI_H).toISOS
   await p.evaluate(() => { dispatch({ type: 'PROFIL_LEEREN' }); });
   await p.evaluate(() => { dispatch({ type: 'RESET' }); }); await p.waitForTimeout(800);
   await p.evaluate(() => { dispatch({ type: 'KENNWORT_SCHALTER', an: false }); dispatch({ type: 'STATUS_GESETZT', status: 'Standby' }); dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); dispatch({ type: 'MISSION_BEGINN_JETZT' });
-    planen(STATE, { typ: 'skript', kanal: 'handler', text: 'Prüfnachricht Missionsablauf', faelligAm: new Date(Date.now() - 1000).toISOString() }); });
+    /* Der Missions-Rückstau verarbeitet höchstens einen überfälligen Eintrag je
+       zwölf Sekunden. Der gezielte Probeeintrag muss deshalb vor den anderen
+       Missionsplaneinträgen liegen, die ein Reset/Start erzeugt hat. */
+    const zuerst = STATE.plan.reduce((min, x) => {
+      const t = Date.parse(x.faelligAm);
+      return Number.isFinite(t) ? Math.min(min, t) : min;
+    }, Date.now());
+    planen(STATE, { typ: 'skript', kanal: 'handler', text: 'Prüfnachricht Missionsablauf', faelligAm: new Date(zuerst - 1000).toISOString() }); });
   const n0 = await p.evaluate(() => STATE.plan.filter(x => x.text === 'Prüfnachricht Missionsablauf').length);
-  await p.waitForTimeout(4500);
+  /* Auf den tatsächlichen Sekunden-Tick warten statt auf eine feste kurze
+     Pause; unter paralleler Browserlast können Timer deutlich verzögert sein. */
+  await p.waitForFunction(() => !STATE.plan.some(x => x.text === 'Prüfnachricht Missionsablauf'), null, { timeout: 18000 }).catch(() => null);
   const n1 = await p.evaluate(() => STATE.plan.filter(x => x.text === 'Prüfnachricht Missionsablauf').length);
   ok.missionsablaufLaeuft = n0 === 1 && n1 === 0;
   await p.evaluate(() => { dispatch({ type: 'AUTOMATIK_GESETZT', ein: false }); planen(STATE, { typ: 'antwort', kanal: 'handler', text: 'Prüfantwort bei ausgeschalteter Automatik', faelligAm: new Date(Date.now() - 1000).toISOString() }); });
