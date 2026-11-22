@@ -1054,6 +1054,7 @@ function meldeText(now) {
 /* =====================================================================
    PERSISTENZ (localStorage, jeder Zugriff in try/catch)
    ===================================================================== */
+const ALTSTAND_SICHERUNG_KEY = STORAGE_KEY + '.v4-sicherung';   /* roher Text des gespeicherten Zustands vor einer Formatüberführung, wird nie überschrieben */
 const Store = (function () {
   let ok = false, lastSaved = null;
   try {
@@ -1063,7 +1064,7 @@ const Store = (function () {
     ok = true;
   } catch (e) { ok = false; }
   return {
-    isPersistent: function () { return ok; },
+    isPersistent: function () { return ok && !Store.sperrgrund; },
     lastSaved: function () { return lastSaved; },
     /* belegter Platz aller Schlüssel dieser Anwendung in KB (Zeichen, Näherung; das Browserlimit liegt bei etwa 5 MB je Ursprung) */
     groesseKb: function () { try { let n = 0; for (let i = 0; i < window.localStorage.length; i++) { const k = window.localStorage.key(i); if (k && k.indexOf(STORAGE_KEY) === 0) n += k.length + (window.localStorage.getItem(k) || '').length; } return Math.round(n / 1024); } catch (e) { return 0; } },
@@ -1078,10 +1079,40 @@ const Store = (function () {
     sichereDefekt: function (raw) {
       try { window.localStorage.setItem(STORAGE_KEY + '.defekt', String(raw)); Store.defektGesichert = true; } catch (e) { /* kein Platz: dann geht er verloren */ }
     },
-    save: function (state) {                     /* jeder Aufruf versucht es erneut: nach vollem Speicher erholt sich das Sichern, sobald wieder Platz ist */
-      try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); lastSaved = new Date(); ok = true; }
-      catch (e) { ok = false; }
-    }
+    /* Jeder Aufruf versucht es erneut: nach vollem Speicher erholt sich das Sichern, sobald wieder Platz ist. Ergebnis: true = geschrieben.
+       Ist das Speichern gesperrt (Sicherung oder Überführung gescheitert, siehe sperren), bleibt der gespeicherte Stand unberührt. */
+    save: function (state) {
+      if (Store.sperrgrund) return false;
+      try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); lastSaved = new Date(); ok = true; return true; }
+      catch (e) { ok = false; return false; }
+    },
+    /* Speichern mit Rücklesen: gilt nur als gelungen, wenn der gespeicherte Text zeichengleich zurückgelesen wird */
+    saveGeprueft: function (state) {
+      if (!Store.save(state)) return false;
+      try { if (window.localStorage.getItem(STORAGE_KEY) === JSON.stringify(state)) return true; } catch (e) { /* nicht lesbar */ }
+      ok = false; return false;
+    },
+    /* Rohtext des gespeicherten Zustands (für die Sicherung vor einer Überführung) */
+    rohtext: function () { try { return window.localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } },
+    /* Phase 5c1b: Sicherung des Rohtexts vor der Überführung. Eine vorhandene Sicherung wird nie überschrieben; weicht sie vom
+       aktuellen Text ab, entsteht eine weitere unter eigenem Schlüssel. Ergebnis: Schlüssel der geprüften Sicherung oder null. */
+    altstandSichern: function (raw) {
+      if (typeof raw !== 'string') return null;
+      const lesen = function (k) { try { return window.localStorage.getItem(k); } catch (e) { return undefined; } };
+      const vorhanden = lesen(ALTSTAND_SICHERUNG_KEY);
+      if (vorhanden === raw) return ALTSTAND_SICHERUNG_KEY;
+      let k = ALTSTAND_SICHERUNG_KEY;
+      if (vorhanden !== null) {
+        if (vorhanden === undefined) return null;
+        k = ALTSTAND_SICHERUNG_KEY + '.' + Date.now();
+        if (lesen(k) !== null) return null;
+      }
+      try { window.localStorage.setItem(k, raw); } catch (e) { return null; }
+      return lesen(k) === raw ? k : null;
+    },
+    /* Speichern des Zustands für diese Sitzung aussetzen; der gespeicherte Stand bleibt, wie er ist */
+    sperrgrund: null,
+    sperren: function (grund) { Store.sperrgrund = grund; ok = false; }
   };
 })();
 
