@@ -7,8 +7,10 @@
    Aufbau
    - Übergreifend: laender, bedrohungsstufen, admiralty, verbindungstypen, agent, kommunikation.kanaele,
      extraktion (Freigabe, Meldungstexte), serie (Texte der Auftragsabfolge), antworten (Antworttabelle).
-   - entitaeten, verbindungen: globaler Pool; das Feld "mission" steuert die Freischaltung bei Annahme.
-     nachtraege an einer Entität ergänzen das Dossier, sobald die genannte Mission angenommen ist.
+   - entitaeten, verbindungen: globaler Pool; das Feld "mission" steuerte früher die Freischaltung bei Annahme.
+     Seit Phase 5c1b tragen alle Dossiers und Verbindungen "STD" (Beispielbestand ohne Auftragsbezug).
+     nachtraege an einer Entität ergänzen das Dossier, sobald die genannte Mission angenommen ist (nur bei überführten
+     Zuständen mit angenommener Mission im Altbestand).
    - antworten: Stichwortstämme (^ = Wortanfang, Leerzeichen = Wortfolge, sonst Teilwort) und Antworten je Kanal.
    - dossierStatus: Statuswerte der Dossiers. Ziele können ein Feld "meldung" tragen (Entität und Status, die mit
      der Meldung des Ziels gesetzt werden).
@@ -327,21 +329,21 @@ var SCENARIO = {
   },
   entitaeten: [
     {
-      id: 'P-0001', typ: 'Person', land: 'DE', mission: 'M1', name: 'Emre Kaya', bild: null, aliase: ['KIEBITZ'],
+      id: 'P-0001', typ: 'Person', land: 'DE', mission: 'STD', name: 'Emre Kaya', bild: null, aliase: ['KIEBITZ'],
       rolle: 'Kontakt vor Ort. Kfz-Mechaniker im Kfz-Betrieb L-0002, sieht, wer abends kommt und was geladen wird.',
       eckdaten: ['Jahrgang 1990', 'wohnhaft in Neukölln', 'Schulden bei einem Händler aus dem Umfeld von P-0007', 'zuverlässig, aber erpressbar'],
       bedrohung: { stufe: 2, begruendung: 'Kein eigener Zugriff auf die Kette; seine Lage macht ihn verwundbar.' },
       reg: 'S9-Reg. 26-0201/0101', verteiler: 'Zugangskreis V-26/0201; keine Weitergabe', aktMin: -900
     },
     {
-      id: 'P-0002', typ: 'Person', land: 'DE', mission: 'M1', name: 'Unbekannt (Deckname "Kutscher")', bild: null, aliase: ['Kutscher'],
+      id: 'P-0002', typ: 'Person', land: 'DE', mission: 'STD', name: 'Unbekannt (Deckname "Kutscher")', bild: null, aliase: ['Kutscher'],
       rolle: 'Fahrer des Transporters. Identität nicht bekannt, mutmaßlich im Umfeld von P-0016.',
       eckdaten: ['männlich, mittleres Alter', 'fährt abends zwischen L-0002 und L-0008', 'Kennzeichen wechselnd'],
       bedrohung: { stufe: 3, begruendung: 'Bewegt die Ladung selbst; Verhalten bei Annäherung unbekannt.' },
       reg: 'S9-Reg. 26-0201/0102', verteiler: 'Zugangskreis V-26/0201', aktMin: -600
     },
     {
-      id: 'P-0003', typ: 'Person', land: 'DE', mission: 'M1', name: 'Unbekannt (Deckname "Händler")', bild: null, aliase: ['Händler'],
+      id: 'P-0003', typ: 'Person', land: 'DE', mission: 'STD', name: 'Unbekannt (Deckname "Händler")', bild: null, aliase: ['Händler'],
       rolle: 'Mutmaßlicher Auftraggeber der Kette. Tritt nicht selbst auf; Weisungen erreichen die Beteiligten über Mittelsleute.',
       eckdaten: ['Identität nicht bekannt', 'Kontakt über verschlüsselte Kanäle', 'Zahlungsweg über O-0001 vermutet'],
       bedrohung: { stufe: 4, begruendung: 'Verfügt über Mittel und Begleitschutz; Annäherung nur mit Freigabe des Ansprechpartners.' },
@@ -349,16 +351,16 @@ var SCENARIO = {
     }
   ],
   verbindungen: [
-    { id: 'V-01', mission: 'M1', von: 'P-0001', nach: 'L-0002', typ: 'Beschäftigung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Eigenangabe Kontakt, belegt' },
-    { id: 'V-02', mission: 'M1', von: 'P-0001', nach: 'P-0007', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'B2', quelle: 'Kontakt KIEBITZ' },
-    { id: 'V-03', mission: 'M1', von: 'P-0002', nach: 'L-0002', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Kontakt KIEBITZ' },
-    { id: 'V-04', mission: 'M1', von: 'P-0002', nach: 'L-0008', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
-    { id: 'V-05', mission: 'M1', von: 'P-0002', nach: 'P-0016', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
-    { id: 'V-06', mission: 'M1', von: 'P-0003', nach: 'P-0006', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'D4', quelle: 'Support Element, unbestätigt' },
-    { id: 'V-07', mission: 'M1', von: 'P-0003', nach: 'O-0001', typ: 'Finanzierung', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Finanzauswertung Support Element' },
-    { id: 'V-08', mission: 'M1', von: 'L-0002', nach: 'L-0008', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
-    { id: 'V-09', mission: 'M1', von: 'L-0008', nach: 'O-0005', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
-    { id: 'V-10', mission: 'M1', von: 'O-0005', nach: 'L-0009', typ: 'Transport', richtung: 'gerichtet', bewertung: 'D4', quelle: 'Einschätzung Ansprechpartner, unbestätigt' }
+    { id: 'V-01', mission: 'STD', von: 'P-0001', nach: 'L-0002', typ: 'Beschäftigung', richtung: 'gerichtet', bewertung: 'A1', quelle: 'Eigenangabe Kontakt, belegt' },
+    { id: 'V-02', mission: 'STD', von: 'P-0001', nach: 'P-0007', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'B2', quelle: 'Kontakt KIEBITZ' },
+    { id: 'V-03', mission: 'STD', von: 'P-0002', nach: 'L-0002', typ: 'Aufenthalt', richtung: 'gerichtet', bewertung: 'B2', quelle: 'Kontakt KIEBITZ' },
+    { id: 'V-04', mission: 'STD', von: 'P-0002', nach: 'L-0008', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
+    { id: 'V-05', mission: 'STD', von: 'P-0002', nach: 'P-0016', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
+    { id: 'V-06', mission: 'STD', von: 'P-0003', nach: 'P-0006', typ: 'Kontakt', richtung: 'beidseitig', bewertung: 'D4', quelle: 'Support Element, unbestätigt' },
+    { id: 'V-07', mission: 'STD', von: 'P-0003', nach: 'O-0001', typ: 'Finanzierung', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Finanzauswertung Support Element' },
+    { id: 'V-08', mission: 'STD', von: 'L-0002', nach: 'L-0008', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
+    { id: 'V-09', mission: 'STD', von: 'L-0008', nach: 'O-0005', typ: 'Transport', richtung: 'gerichtet', bewertung: 'C3', quelle: 'Einschätzung Ansprechpartner' },
+    { id: 'V-10', mission: 'STD', von: 'O-0005', nach: 'L-0009', typ: 'Transport', richtung: 'gerichtet', bewertung: 'D4', quelle: 'Einschätzung Ansprechpartner, unbestätigt' }
   ],
   missionen: [
     {

@@ -1253,15 +1253,13 @@ function profilSpeichern() {
     const d = STATE.dossiers, daten = {};
     d.eigene.forEach(function (e) { if (d.entitaeten[e.id]) daten[e.id] = d.entitaeten[e.id]; });
     PROFIL.eigene = d.eigene; PROFIL.eigeneKanten = d.eigeneKanten; PROFIL.daten = daten;
-    /* Notizen aller Dossiers; Status nur bei Standarddossiers (der Status der Missionsdossiers gehört zum Ablauf der Mission) */
-    const dd = {}, mid = {};
-    SCENARIO.entitaeten.forEach(function (e) { mid[e.id] = true; });
+    /* Notizen und Status aller Beispieldossiers; seit Phase 5c1b gelten P-0001 bis P-0003 wie die übrigen Standarddossiers */
+    const dd = {};
     SCENARIO.entitaeten.concat(SCENARIO.standard.dossiers).forEach(function (e) {
       const x = d.entitaeten[e.id];
       if (!x) return;
-      const std = !mid[e.id];
-      if ((x.notizen && x.notizen.length) || (x.sichtungen && x.sichtungen.length) || (std && x.status) || x.reg || typeof x.kurzlage === 'string' || typeof x.erkenntnis === 'string' || x.durch || x.selbstBearbeitet === true) {
-        dd[e.id] = { status: std ? x.status : null, statusAm: std ? x.statusAm : null, notizen: x.notizen || [], sichtungen: x.sichtungen || [] };
+      if ((x.notizen && x.notizen.length) || (x.sichtungen && x.sichtungen.length) || x.status || x.reg || typeof x.kurzlage === 'string' || typeof x.erkenntnis === 'string' || x.durch || x.selbstBearbeitet === true) {
+        dd[e.id] = { status: x.status, statusAm: x.statusAm, notizen: x.notizen || [], sichtungen: x.sichtungen || [] };
         ['reg', 'kurzlage', 'erkenntnis', 'durch', 'aktualisiert'].forEach(function (k) { if (x[k] || (k === 'kurzlage' && x[k] === '')) dd[e.id][k] = x[k]; });
         if (x.selbstBearbeitet === true) dd[e.id].selbstBearbeitet = true;
       }
