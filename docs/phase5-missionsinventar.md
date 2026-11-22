@@ -1,7 +1,7 @@
 # Phase 5 – Inventar der alten Mission und Abbau in kleinen Schritten
 
 Stand: 22.11.2026. Basis: `main` nach Merge von #102 (`8837eeaa3896`).
-**Arbeitsdokument für Phase 5; Phasen 5a bis 5b4 in `main`, Phase 5b5 als Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
+**Arbeitsdokument für Phase 5; Phasen 5a bis 5b4 in `main`, Phase 5b5 (#103) als Draft, Phase 5b6 als darauf aufbauender Draft. Keine Behauptung einer vollständig entfernten Missionsmechanik.**
 Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische Bestandsaufnahme: [missionsabhaengigkeiten.md](missionsabhaengigkeiten.md).
 
 ## Trennlinien
@@ -105,6 +105,21 @@ Vor weiteren Codeänderungen gegen den aktuellen Head überprüfen. Historische 
 **Bewusste Grenze:** Historische Nachtragsverwendung an anderen Stellen (etwa `bedrohung`, Dialog-/Missionsauswertung), Missionsaktionen und Zeitgeber bleiben zur separaten Nutzungs- und Regressionseinordnung erhalten. Dies ist kein Schema-Migrationsschritt und keine generelle Bereinigung der alten Missionsengine.
 
 **Abnahme:** Neuer `tests/phase5b5-dossier-nachtraege.js` prüft einen tatsächlich vorhandenen `M1`-Nachtrag mit ausdrücklich aktivierter alter Freischaltung, die reguläre Dossierübersicht (Bedienelemente und Beschreibung) ohne Nachtrags-Felder, durch das Rendern unveränderte Nachtragsdaten sowie Sperre/Entsperren. **Nicht abgedeckt:** die vom alten Kenntnisstand (`schutz()`/`wissen()`) abhängige Darstellung von Kennungen in Beschreibung und Eckdaten; siehe Phase 5b6. Er ist Pflichtbestandteil von `tests/runall.js`. Zusätzlich gezielte Dossier-, Altprofil- und Missionsregressionen sowie die vollständige Standardauswahl auf dem exakten PR-Head. Echte Windows-Altprofile sind damit noch nicht abgenommen. **Draft bis vollständige CI-Ergebnisse und separate Eigentümerfreigabe.**
+
+## Phase 5b6 – Modul Dossiers im Altzustand identisch zum Recherchebetrieb (Draft, Basis 5b5)
+
+**Ausgangslage nach 5b5 (empirisch, nicht nur statisch):** Mit `missionsbetrieb=true` und angenommener `M1` weichen alle 31 Dossiers im Reiter Übersicht vom Recherchebetrieb ab. Ursache sind die an `wissen()` gekoppelten Helfer und ein eigenes `missionsbetrieb()`-Gate:
+- Beschreibung/Eckdaten über `schutz()`: Kennungen werden zu Namen oder zu Platzhaltern („Beirat bei eine Organisation“).
+- Verbindungstabelle über `anzeige()`: Gegenüber ohne Kennung; „Entfernen“ für Szenarioverbindungen fehlt, `VERBINDUNG_GELOESCHT` lehnt sie ab.
+- Beziehungsansicht: Knotenkennung über `wissen(e) === 'frei'`, Titel und `aria-label` über `anzeige()`.
+- „Verbindung hinzufügen“: Zielauswahl über `pool()` und `anzeige()`.
+- Adressleiste: `?id=` im Pfad nur bei `wissen() === 'frei'`.
+
+**Eingriff:** Produktive Helfer `rechercheAnzeige(e)` (Kennung und Name) und `rechercheText(t)` (unverändert) an genau diesen Stellen; Zielauswahl über `dossierRechercheBestand()`; Entfernen-Knopf und Aktion unabhängig vom Altbetrieb. Ausgeblendete Szenarioverbindungen landen wie im Recherchebetrieb nur in `PROFIL.ausgeblendeteKanten`, das Szenario bleibt unverändert. Im Recherchebetrieb sind alle ersetzten Ausdrücke wertgleich mit den bisherigen, dort ändert sich also nichts.
+
+**Bewusst unverändert:** `wissen()`, `schutz()`, `anzeige()`, `kennung()`, `pool()` und alle Dialog-/Missionspfade. Ebenfalls außerhalb dieses Schritts: Kartenauswahl und Zonenlage (`karteAuswahlAnzeige`, `zoneLage`, `zonePopup`, `zoneBezug`), die Dienstadresse der Adressleiste (folgt `STATE.kontext`), Profilmodul. Diese werden gesondert inventarisiert.
+
+**Abnahme:** Neuer `tests/phase5b6-dossier-kennungen.js` prüft als Differenztest alle Dossiers (Text, Element-IDs, SVG-Texte/-Titel, `aria-label`, Verbindungsziele, Adresspfad) im Recherche- gegen den Altzustand auf Gleichheit. Zusätzlich: Ausblenden von `V-S1` im Altzustand ohne Szenarioänderung, manuelle Sperre samt Graph-Nachbarschaft, unverändertes Altverhalten von `schutz()`/`anzeige()`. Gegenprobe: gegen den 5b5-Stand rot (31 Dossiers, alle sechs Kategorien). Die historischen Tests `e2e`, `kt3`, `map2` außerhalb der Standardauswahl zeigen auf 5b5 und 5b6 dasselbe Ergebnis. Echte Windows-Altprofile sind nicht abgenommen. **Draft bis vollständige CI-Ergebnisse und separate Eigentümerfreigabe; Merge erst nach #103.**
 
 ## Nächste isolierte Schritte nach Abnahme von 5a
 

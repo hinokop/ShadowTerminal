@@ -950,6 +950,11 @@ function pool() { return poolAlle().filter(function (e) { return wissen(e) !== '
 /* Phase 5a: Der Recherchebestand ist unabhängig von alten Missionen und Ansprechpartnerfreigaben.
    pool()/wissen() bleiben bis 5b für den historischen Missionsablauf unverändert. */
 function dossierRechercheBestand() { return alleEntitaeten(); }
+/* Phase 5b6: Das Modul Dossiers zeigt Kennungen, Namen und Verbindungsziele stets wie im
+   Recherchebetrieb. wissen(), schutz(), anzeige(), kennung() und pool() bleiben für den
+   historischen Missions-/Dialogablauf unverändert. Manuelle Sperren gelten weiter. */
+function rechercheAnzeige(e) { return e.id + ' ' + e.name; }
+function rechercheText(t) { return String(t == null ? '' : t); }
 function dossierKantenBestand() {
   const entfernt = Array.isArray(PROFIL.ausgeblendeteKanten) ? PROFIL.ausgeblendeteKanten : [];
   return SCENARIO.verbindungen.concat(SCENARIO.standard.verbindungen).filter(function (v) { return entfernt.indexOf(v.id) < 0; })
@@ -5678,7 +5683,7 @@ const ACTIONS = {
     const vorher = { eigene: STATE.dossiers.eigeneKanten, ausgeblendet: PROFIL.ausgeblendeteKanten };
     if (vorher.eigene.includes(v)) STATE.dossiers.eigeneKanten = vorher.eigene.filter(function (x) { return x !== v; });
     else {
-      if (missionsbetrieb()) return null;                        /* laufende Altszenarien nicht umschreiben */
+      /* Phase 5b6: Ausblenden wirkt unabhängig vom alten Missionsbetrieb (nur Profil, Szenario bleibt unverändert). */
       PROFIL.ausgeblendeteKanten = (Array.isArray(vorher.ausgeblendet) ? vorher.ausgeblendet : []).concat(v.id);
     }
     if (!profilSpeichern()) {
@@ -6934,7 +6939,7 @@ function neuesDossier() {
   }, { pruefer: function () { return $('nd-name').value.trim().length > 0; }, klartext: 'Neues Dossier anlegen?' });
 }
 function eigenesPanel(e) {
-  const mir = pool().filter(function (x) { return x.id !== e.id; });
+  const mir = dossierRechercheBestand().filter(function (x) { return x.id !== e.id; });
   const Q = SCENARIO.admiralty;
   const ll = karteKoord(e.id), llEigen = !!PROFIL.koord[e.id];
   return [
@@ -6949,7 +6954,7 @@ function eigenesPanel(e) {
     h('h3', null, 'Verbindung hinzufügen'),
     h('div', { class: 'row' },
       h('label', { for: 'vn-ziel' }, 'Gegenüber'),
-      h('select', { id: 'vn-ziel' }, mir.map(function (x) { return h('option', { value: x.id }, anzeige(x)); })),
+      h('select', { id: 'vn-ziel' }, mir.map(function (x) { return h('option', { value: x.id }, rechercheAnzeige(x)); })),
       h('label', { for: 'vn-typ' }, 'Typ'),
       h('select', { id: 'vn-typ' }, SCENARIO.verbindungstypen.map(function (x) { return h('option', { value: x }, x); })),
       h('label', { for: 'vn-q' }, 'Quelle'),
@@ -7341,8 +7346,8 @@ function dossierAnsicht(e) {
       feld('Registernummer', dossierRegisternummer(e, st) || 'ohne'),
       e.typ === 'Ort' ? null : feld('Erkenntnislage', st.erkenntnis || erkenntnisText(e), 'full'),
       kurzlageFeld(e, st),
-      feld('Beschreibung', schutz(e.rolle), 'full'),
-      feld(e.typ === 'Person' ? 'Biografische Eckdaten' : 'Eckdaten', schutz(e.eckdaten.join(' · ')), 'full'),
+      feld('Beschreibung', rechercheText(e.rolle), 'full'),
+      feld(e.typ === 'Person' ? 'Biografische Eckdaten' : 'Eckdaten', rechercheText(e.eckdaten.join(' · ')), 'full'),
       /* Phase 5b5: Historische Missionsnachträge gehören nicht in die
          produktive Rechercheansicht. Die alten Datensätze bleiben erhalten. */
       feld('Zuletzt verändert durch', dossierVermerk(st), 'full'))),
@@ -7437,7 +7442,7 @@ function graphSvg(zentrum) {
     const quer = ring[v.von] === ring[v.nach];             /* Querverbindung innerhalb eines Rings */
     gK.appendChild(s('line', { x1: a.x + ux * 24, y1: a.y + uy * 24, x2: b.x - ux * 26, y2: b.y - uy * 26, class: 'g-edge' + (schwach ? ' weak' : '') + (quer ? ' quer' : ''),
       'marker-end': 'url(#pfeil)', 'marker-start': v.richtung === 'beidseitig' ? 'url(#pfeil)' : null },
-      s('title', null, v.id + ': ' + anzeige(entitaet(v.von)) + (v.richtung === 'beidseitig' ? ' ↔ ' : ' → ') + anzeige(entitaet(v.nach)) + ', ' + v.typ + ', Bewertung ' + bewertungText(bewertungEff(v).code) + ', Quelle: ' + v.quelle)));
+      s('title', null, v.id + ': ' + rechercheAnzeige(entitaet(v.von)) + (v.richtung === 'beidseitig' ? ' ↔ ' : ' → ') + rechercheAnzeige(entitaet(v.nach)) + ', ' + v.typ + ', Bewertung ' + bewertungText(bewertungEff(v).code) + ', Quelle: ' + v.quelle)));
     if (quer) { unbeschriftet += 1; return; }
     const txt = v.typ + ' ' + bewertungEff(v).code, tw = txt.length * 6.4 + 8;
     const innen = ring[v.von] < ring[v.nach] ? a : b, aussen = innen === a ? b : a;
@@ -7449,15 +7454,15 @@ function graphSvg(zentrum) {
     const e = entitaet(id), p = pos[id], mitte = id === zentrum.id;
     const oeffnen = function () { if (!mitte) oeffneDossier(id, 'Beziehungsansicht'); };
     const dst = STATE.dossiers.entitaeten[id].status, elim = dst === 'eliminiert', pfad = bildPfad(e, id);
-    const name = kuerzen(e.name, 22), kennung = (wissen(e) === 'frei' ? id + ' ' : '') + e.land + (elim ? ' · ELIMINIERT' : '');
+    const name = kuerzen(e.name, 22), kennung = id + ' ' + e.land + (elim ? ' · ELIMINIERT' : '');
     const clip = e.typ === 'Person' ? 'url(#clip-kreis)' : e.typ === 'Ort' ? 'url(#clip-raute)' : null;
     const oben = p.y < cy - 40;                           /* Beschriftung auf der dem Zentrum abgewandten Seite */
     const y1 = oben ? p.y - 41 : p.y + 38, y2 = oben ? p.y - 28 : p.y + 51;
     const bw = Math.max(name.length * 5.9, kennung.length * 6.7) + 8;
     const g = s('g', { class: 'node', id: 'gn-' + id, tabindex: '0', role: 'button',
-      'aria-label': anzeige(e) + ', ' + e.typ + ', ' + e.land + (mitte ? ', ausgewählt' : ', Dossier öffnen'),
+      'aria-label': rechercheAnzeige(e) + ', ' + e.typ + ', ' + e.land + (mitte ? ', ausgewählt' : ', Dossier öffnen'),
       onclick: oeffnen, onkeydown: function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); oeffnen(); } } },
-      s('title', null, anzeige(e) + ' (' + e.typ + ', ' + e.land + ')' + (dst ? ', Status ' + statusDef(dst).label : '')),
+      s('title', null, rechercheAnzeige(e) + ' (' + e.typ + ', ' + e.land + ')' + (dst ? ', Status ' + statusDef(dst).label : '')),
       s('rect', { x: p.x - bw / 2, y: y1 - 11, width: bw, height: 28, class: 'g-lblbg' }),
       mitte ? formRein(e.typ, p.x, p.y, 21, 'g-sel') : null,
       formRein(e.typ, p.x, p.y, 16, 'g-shape' + (elim ? ' elim' : '')),
@@ -7479,14 +7484,14 @@ function verbindungstabelle(e) {
     tabelle(['Gegenüber', 'Typ', 'Richtung', 'Bewertung', 'Quelle', 'Aktion'], vs.map(function (v) {
       const g = entitaet(v.von === e.id ? v.nach : v.von);
       const richtung = v.richtung === 'beidseitig' ? 'beidseitig ↔' : (v.von === e.id ? 'ausgehend →' : 'eingehend ←');
-      return [h('button', { type: 'button', class: 'link', id: 'vl-' + v.id, onclick: function () { oeffneDossier(g.id, 'Verbindung ' + v.id); } }, anzeige(g)),
+      return [h('button', { type: 'button', class: 'link', id: 'vl-' + v.id, onclick: function () { oeffneDossier(g.id, 'Verbindung ' + v.id); } }, rechercheAnzeige(g)),
               v.typ, td('nw', richtung), td('nw', bewertungAnzeige(v)), v.quelle,
-              !missionsbetrieb() || STATE.dossiers.eigeneKanten.includes(v) ? h('button', {
+              h('button', {
                 type: 'button', id: 'vx-' + v.id, 'aria-label': 'Verbindung ' + v.id + ' entfernen', onclick: function () {
                   bestaetigen('Verbindung entfernen', e.id + ' ↔ ' + g.id + ' · ' + v.typ + '. Die Verbindung verschwindet in beiden Dossiers und auf der Karte.',
                     'Verbindung entfernen', function () { dispatch({ type: 'VERBINDUNG_GELOESCHT', id: v.id, dossier: e.id }); });
                 }
-              }, 'Entfernen') : '–'];
+              }, 'Entfernen')];
     }), 'Keine Verbindungen zu diesem Dossier.')];
 }
 function beziehungsansicht(e) {
@@ -8623,7 +8628,7 @@ const Leiste = (function () {
     switch (STATE.ui.modul) {
       case 'profil': return '/profil';
       case 'mission': return '/briefing/' + String(STATE.kontext).toLowerCase();
-      case 'dossier': return '/dossier' + (STATE.dossiers && STATE.dossiers.auswahl && wissen(entitaet(STATE.dossiers.auswahl)) === 'frei' ? '?id=' + STATE.dossiers.auswahl : '');
+      case 'dossier': return '/dossier' + (STATE.dossiers && STATE.dossiers.auswahl ? '?id=' + STATE.dossiers.auswahl : '');
       case 'komm': return '/kanal/' + (STATE.komm && STATE.komm.aktiv ? STATE.komm.aktiv : '');
       case 'extraktion': return '/extraktion';
       case 'karte': return '/karte';
