@@ -73,8 +73,16 @@ function akteAnsicht(doc) {
             h('p', { class: 'note pad', id: 'ak-lese' }, 'Leseprotokoll: ' + (function () { const g = (STATE.akten.gelesen || {})[doc.id]; return g ? SCENARIO.agent.codename + ', erste Einsicht ' + fmtZ(g.erst) + ', zuletzt ' + fmtZ(g.zuletzt) + ', ' + g.n + (g.n === 1 ? ' Einsicht' : ' Einsichten') : 'keine Einsicht verzeichnet'; })() + '.'),
             h('p', { class: 'note pad' }, 'Ein Einsichtsersuchen geht über den Ansprechpartner an die Registratur; die Antwort kommt zeitversetzt über den Kanal Ansprechpartner. Entschieden wird nach Zugangsstufe und Kreis der Eingeweihten.'))];
 }
-/* Darstellung des Moduls 7 */
+/* Phase 5b4: Die produktive Ablage zeigt ausschließlich den lokalen Eingang.
+   Ein importiertes Altprofil mit VIEW.akte.reiter='registratur' darf die
+   historische Akten-/Freigabemaske nicht erneut einblenden. */
 function renderAkten(m) {
+  return [modKopf(m), akEingangAnsicht()];
+}
+/* Historische Registraturfunktion für isolierte Altprotokoll-Tests.
+   Kein Produktpfad ruft diesen Renderer mehr auf; archivierte Akten- und
+   Freigabedaten bleiben für spätere Datenmigration erhalten. */
+function renderRegistraturLegacy(m) {
   const eingang = VIEW.akte.reiter === 'eingang';
   const reiter = h('div', { class: 'reiterleiste', role: 'tablist', 'aria-label': 'Ablagebereiche' },
     [['registratur', 'Registratur'], ['eingang', 'Eingang']].map(function (x) {
