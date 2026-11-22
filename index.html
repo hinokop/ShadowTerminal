@@ -805,7 +805,10 @@ if (typeof SCENARIO === 'object' && SCENARIO && !SCENARIO.standard) throw new Er
    GRUNDLAGEN
    ===================================================================== */
 const STORAGE_KEY = 'fieldterminal.v1';
-const STATE_VERSION = 4;                        /* Phase 4: Missionsstruktur; Zustände der Versionen 2 und 3 werden beim Laden überführt */
+const STATE_VERSION = 5;                        /* Phase 5c1b: aktiver Kern ohne Missionsfelder; Zustände der Versionen 2 bis 4 werden beim Laden überführt */
+/* Felder des aktiven Zustands im Format 5. Alle übrigen Felder eines Zustands im Format 4 (Missionen, Plan, Kanäle, Berichte usw.)
+   gehen bei der Überführung unverändert nach STATE.altbestand und werden dort nur noch gelesen (ALT()). */
+const STATE_KERN = ['version', 't0', 'idv', 'ui', 'seq', 'dossiers', 'log', 'agent', 'alterung'];
 const LOG_LIMIT = 600;
 let SESSION_START = Date.now();                /* Sitzungsdauer: je Laden, nicht persistent; beginnt mit der Freigabe am Zugangsschirm */
 const SAVE_DELAY = 1000;                        /* Automatisches Speichern von Freitext: 1 s nach der letzten Eingabe */
@@ -924,15 +927,20 @@ function entitaet(id) { return alleEntitaeten().find(function (e) { return e.id 
 /* Missionen: KM = Kontextmission (zuletzt angenommene Mission; bestimmt Banner, Identität, Standorte, Meldewesen, Extraktionsoptionen),
    LM = laufende Mission oder null, MS = Zustand einer Mission. */
 function missionDef(id) { return SCENARIO.missionen.find(function (m) { return m.id === id; }) || null; }
-function KM() { return missionDef(STATE.kontext); }
+/* Phase 5c1b: Missionsfelder eines überführten Zustands liegen unverändert in STATE.altbestand und werden nur gelesen.
+   Ein Zustand ohne Altbestand (frisch angelegt oder zurückgesetzt) hat keinen Auftrag. Die folgenden Leser behalten die
+   bisherige Wirkung historischer Daten auf die Darstellung (Nachträge, Erkenntnislage, Belege) und schreiben nicht zurück. */
+const ALT_LEER = Object.freeze({});
+function ALT() { return (STATE && STATE.altbestand) || ALT_LEER; }
+function KM() { return missionDef(ALT().kontext); }
 function MS(id) {
-  const m = STATE.missionen[id];
-  if (m && !m.eigene) { m.eigene = []; m.zugriff = []; m.zugriffUrteil = null; m.wissen = {}; m.treffen = 0; m.dokumente = []; }   /* Stände aus früheren Fassungen ergänzen */
-  return m;
+  const M = ALT().missionen, m = M && typeof M === 'object' ? M[id] : null;
+  if (m && !m.eigene) return Object.assign({}, m, { eigene: [], zugriff: [], zugriffUrteil: null, wissen: {}, treffen: 0, dokumente: [] });   /* Stände aus früheren Fassungen ergänzen (nur in der Kopie) */
+  return m || null;
 }
-function LM() { const m = KM(); return m && MS(m.id).status === 'laufend' ? m : null; }
+function LM() { const m = KM(), ms = m && MS(m.id); return ms && ms.status === 'laufend' ? m : null; }
 
-function freigeschaltet(mid) { return mid === 'STD' || !!(STATE.missionen[mid] && STATE.missionen[mid].angenommenAm); }
+function freigeschaltet(mid) { const M = ALT().missionen; return mid === 'STD' || !!(M && M[mid] && M[mid].angenommenAm); }
 /* Dossiers sind im Recherchebetrieb unabhängig von einem angenommenen Auftrag sichtbar (alle Beispiele); im Missionsbetrieb gilt die alte Freischaltung */
 function dossierOffen(mid) { return true; }   /* Phase 5b9: Missionsbetrieb stillgelegt (5b7), alle Missionsdossiers offen */
 function poolAlle() { return alleEntitaeten().filter(function (e) { return dossierOffen(e.mission); }); }
@@ -1045,7 +1053,8 @@ function meldungLiegtVor(f) { return Date.parse(STATE.agent.checkin.t) > f.prevD
 function meldeText(now) {
   if (!LM()) return 'ruht · kein laufender Auftrag';
   if (!einsatzLaeuft()) return 'ruht · Start in ' + fmtRest(einsatzBeginn(LM()) - now);
-  if (STATE.funkstille.aktiv) return 'ausgesetzt · Funkstille seit ' + dtg(STATE.funkstille.seit);
+  const fs = ALT().funkstille;
+  if (fs && fs.aktiv) return 'ausgesetzt · Funkstille seit ' + dtg(fs.seit);
   const f = fensterNach(now);
   const lage = now < f.S ? 'in ' + fmtDauer(f.S - now) : 'Frist läuft, noch ' + fmtDauer(f.D - now);
   return f.label + ' · ' + lage + ' · ' + (meldungLiegtVor(f) ? 'Meldung liegt vor' : 'Meldung offen');
@@ -1423,7 +1432,8 @@ function missionAnsetzen(zustand, def, tMs) {
   zustand.funkstille = { aktiv: false, seit: null, mission: null };
   if (def.funkstille && def.funkstille.ab === 'annahme') planen(zustand, { typ: 'funkstille', mission: def.id, faelligAm: isoB });
 }
-function buildInitialState(t0) {
+/* Ausgangszustand im Format 4 mit Missionsstruktur: nur noch für die Überführung von Zuständen der Version 3 (migrate) */
+function buildInitialStateV4(t0) {
   const at = function (min) { return new Date(t0 + min * 60000).toISOString(); };
   const S = SCENARIO, M1 = missionDef(S.serie.start), iso0 = new Date(t0).toISOString();
   const kanaele = {};
@@ -1438,7 +1448,7 @@ function buildInitialState(t0) {
   const ent = {};
   S.entitaeten.concat(S.standard.dossiers).forEach(function (e) { ent[e.id] = { status: null, statusAm: null, notizen: [], aktualisiert: iso0 }; });
   const zustand = {
-    version: STATE_VERSION,
+    version: 4,
     t0: iso0,
     seq: { nachricht: 0, log: 0, notiz: 0, bericht: 0, plan: 0 },
     verstaerkung: [],
@@ -1468,11 +1478,41 @@ function buildInitialState(t0) {
   profilEinspielen(zustand);
   return zustand;
 }
+/* Phase 5c1b: Ausgangszustand im Format 5. Er besteht aus dem aktiven Kern des bisherigen Ausgangszustands
+   (Identität, Dokumentfristen und Dossierbestand unverändert) und hat keinen Altbestand. */
+function buildInitialState(t0) {
+  const v4 = buildInitialStateV4(t0), n = {};
+  STATE_KERN.forEach(function (k) { if (k in v4) n[k] = v4[k]; });
+  n.version = STATE_VERSION;
+  return n;
+}
 
+/* Prüfung im Format 5: ohne Bezug auf Missionsstrukturen, streng für die produktiven Strukturen */
 function isValidState(x) {
   try {
+    const iso = function (t) { return typeof t === 'string' && !isNaN(Date.parse(t)); };
+    const obj = function (o) { return !!o && typeof o === 'object' && !Array.isArray(o); };
+    const D = x && x.dossiers;
+    return !!x && x.version === STATE_VERSION && iso(x.t0) &&
+      obj(x.ui) && MODULES.some(function (m) { return m.id === x.ui.modul; }) &&
+      obj(x.seq) && typeof x.seq.log === 'number' &&
+      obj(x.agent) && STATUS_LISTE.indexOf(x.agent.status) >= 0 && !!legende(x.agent.legende) &&
+      obj(x.agent.checkin) && iso(x.agent.checkin.t) && obj(x.agent.dokumente) &&
+      typeof x.agent.notizen === 'string' && typeof x.agent.einschraenkungen === 'string' &&
+      obj(D) && obj(D.entitaeten) && Array.isArray(D.eigene) && Array.isArray(D.eigeneKanten) &&
+      D.eigene.every(function (e) { return obj(e) && typeof e.id === 'string'; }) &&
+      (!!entitaet(D.auswahl) || D.eigene.some(function (e) { return e.id === D.auswahl; })) &&
+      SCENARIO.entitaeten.concat(SCENARIO.standard.dossiers).every(function (e) { return obj(D.entitaeten[e.id]) && Array.isArray(D.entitaeten[e.id].notizen); }) &&
+      Array.isArray(x.log) && (x.alterung === undefined || obj(x.alterung)) &&
+      (x.altbestand === undefined || obj(x.altbestand));
+  } catch (e) { return false; }
+}
+
+/* Prüfung im Format 4 (Missionsstruktur): nur noch Eingangsprüfung der Überführung nach Format 5 */
+function isValidStateV4(x) {
+  try {
     const zust = SCENARIO.serie.missionszustaende;
-    return !!x && x.version === STATE_VERSION &&
+    return !!x && x.version === 4 &&
       x.ui && MODULES.some(function (m) { return m.id === x.ui.modul; }) &&
       x.seq && typeof x.seq.log === 'number' && typeof x.seq.nachricht === 'number' &&
       x.agent && STATUS_LISTE.indexOf(x.agent.status) >= 0 && !!legende(x.agent.legende) &&
@@ -1517,7 +1557,7 @@ function migrate(x) {
       x.version = 3;
     }
     if (x && x.version === 3 && x.mission && x.komm && x.agent && x.dossiers && Array.isArray(x.log)) {
-      const n = buildInitialState(Date.parse(x.t0) || Date.now()), m1 = n.missionen[n.kontext];
+      const n = buildInitialStateV4(Date.parse(x.t0) || Date.now()), m1 = n.missionen[n.kontext];
       n.plan = []; n.serie.folge = null; n.vorlauf = false; missionAnsetzen(n, missionDef(n.kontext), Date.parse(x.t0) || Date.now());
       n.ui = x.ui;
       n.seq = Object.assign(n.seq, x.seq);
@@ -1587,8 +1627,21 @@ function migrate(x) {
         }
       });
     }
+    if (x && x.version === 4 && isValidStateV4(x)) x = zustandNachV5(x);   /* ein ungültiger Zustand im Format 4 bleibt unverändert und wird abgelehnt */
   } catch (e) { /* unbrauchbarer Zustand wird von isValidState verworfen */ }
   return x;
+}
+/* Phase 5c1b, Version 4 → 5: Kernfelder bleiben, alle übrigen Felder gehen unverändert nach altbestand.
+   Ein Zustand im Format 5 wird nicht weiter verändert. Einziger Zusatz: ein Protokolleintrag über die Überführung. */
+function zustandNachV5(x) {
+  const n = {}, alt = {};
+  Object.keys(x).forEach(function (k) { if (STATE_KERN.indexOf(k) >= 0) n[k] = x[k]; else alt[k] = x[k]; });
+  n.version = STATE_VERSION;
+  n.altbestand = alt;
+  n.seq.log = (n.seq.log || 0) + 1;
+  n.log.push({ id: n.seq.log, t: new Date().toISOString(), modul: 'System', aktion: 'Zustand überführt',
+               detail: 'Version 4 → 5: ' + Object.keys(alt).length + ' Felder des Missionsbetriebs unverändert als Altbestand übernommen (' + Object.keys(alt).sort().join(', ') + ')' });
+  return n;
 }
 
 let STATE = null;
@@ -1608,13 +1661,14 @@ const VIEW = {
 function kanalDef(id) {
   const k = SCENARIO.kommunikation.kanaele.find(function (x) { return x.id === id; });
   if (!k) return null;
-  const g = STATE && STATE.vorlauf && id === 'asset' ? 'nicht zugewiesen' : (STATE && KM() && KM().kanalGegenstelle ? KM().kanalGegenstelle[id] : null);
+  const vorlauf = STATE && (STATE.altbestand ? STATE.altbestand.vorlauf : true);   /* ohne Altbestand: kein Auftrag angenommen */
+  const g = vorlauf && id === 'asset' ? 'nicht zugewiesen' : (STATE && KM() && KM().kanalGegenstelle ? KM().kanalGegenstelle[id] : null);
   return g ? Object.assign({}, k, { gegenstelle: g }) : k;
 }
 /* Start vorziehen: der Einsatz beginnt jetzt statt nach dem Vorlauf; der Reiseplan entfällt (Anreise auf eigene Faust). Alles, was am Start hängt, rückt entsprechend vor. */
 function startVorziehen(out, opt) {
   const def = LM(), o = opt || {};
-  if (!def || einsatzLaeuft()) return false;
+  if (!def || einsatzLaeuft() || !Array.isArray(STATE.plan)) return false;   /* Phase 5c1b: der Altbestand wird nicht fortgeschrieben */
   const ms = MS(def.id), jetzt = Date.now(), tb = einsatzBeginn(def), d = tb - jetzt, versch = function (iso) { return iso ? new Date(Math.max(jetzt, Date.parse(iso) - d)).toISOString() : iso; };
   ms.beginn = new Date(jetzt).toISOString();
   ms.bis = versch(ms.bis);
@@ -1681,6 +1735,7 @@ function namenNachziehen(alt, neu) {
   return n;
 }
 function nachricht(id) {
+  if (!STATE.komm || !STATE.komm.kanaele) return null;   /* Phase 5c1b: Kanäle nur noch im Altbestand */
   const ks = Object.keys(STATE.komm.kanaele);
   for (let i = 0; i < ks.length; i++) {
     const m = STATE.komm.kanaele[ks[i]].nachrichten.find(function (x) { return x.id === id; });
@@ -1810,7 +1865,7 @@ function erkenntnisLage(e) {
   const d = STATE.dossiers.entitaeten[e.id], x = IZ()[e.id] || {}, def = LM(), ms = def ? MS(def.id) : null, L = [];
   ((d && d.sichtungen) || []).forEach(function (s) { L.push({ t: s.t, q: 'E', art: 'Sichtung' }); });
   if (ms) ms.dokumente.filter(function (z) { return z.entitaet === e.id; }).forEach(function (z) { L.push({ t: z.t, q: 'C', art: 'Beleg' }); });
-  (STATE.berichte || []).forEach(function (b) { if (b.text && b.text.indexOf(e.id) >= 0) L.push({ t: b.t, q: 'C', art: 'Bericht' }); });
+  (ALT().berichte || []).forEach(function (b) { if (b.text && b.text.indexOf(e.id) >= 0) L.push({ t: b.t, q: 'C', art: 'Bericht' }); });
   if (x.einschaetzung) L.push({ t: x.einschaetzung.t, q: x.einschaetzung.quelle, art: 'Einschätzung' });
   L.forEach(function (z) { z.fr = frische(z.q, z.t); });
   const frisch = L.filter(function (z) { return z.fr.stufe !== 'veraltet'; }).sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
@@ -1901,7 +1956,7 @@ function dossierStatusSetzen(e, status, anlass, out) {
    Zugriffsstufe 1: Anlass, Beleg oder Nutzen (zwei von drei). 2: zusätzlich keine bloße Sorge, mind. 50 Zeichen, Vertrauen ab 30.
    3: alle drei Punkte, mind. 60 Zeichen, Vertrauen ab 50. Zuordnung zum Auftrag oder bewilligte Verstärkung/Freigabe öffnet das Dossier ebenfalls.
    ===================================================================== */
-function IZ() { if (!STATE.infozugang) STATE.infozugang = {}; return STATE.infozugang; }
+function IZ() { return ALT().infozugang || {}; }   /* Phase 5c1b: alte Einschätzungen nur lesend */
 /* Wissensstand einer Entität. Historisch 'frei', 'bekannt' (Rudiment) oder 'unbekannt'; seit 5b9 stets 'frei'. */
 function wissen(e) { return 'frei'; }   /* Phase 5b9: ohne Missionsbetrieb stets voller Zugang */
 /* Kennungen nicht freigegebener Entitäten in Fließtexten ersetzen: bekannt gibt den Namen, unbekannt eine neutrale Umschreibung */
@@ -1991,8 +2046,8 @@ function dossierBelege(e) {
 }
 
 
-function aussagenListe() { STATE.aussagen = STATE.aussagen || []; return STATE.aussagen; }
-function widerspruchOffen() { return STATE.widerspruch && Date.now() - Date.parse(STATE.widerspruch.t) < 1800000 ? STATE.widerspruch : null; }
+function aussagenListe() { return STATE.aussagen || ALT().aussagen || []; }   /* Phase 5c1b: frühere Aussagen nur lesend, ohne Anlage eines Felds */
+function widerspruchOffen() { const w = STATE.widerspruch || ALT().widerspruch; return w && Date.now() - Date.parse(w.t) < 1800000 ? w : null; }
 /* Bilder: Pfad aus dem Feld bild oder, bei bilder.automatisch, aus der Kennung. Kein Bild oder Ladefehler: Platzhalter. */
 function bildPfad(obj, kennung) {
   const B = SCENARIO.bilder || {};
@@ -2063,9 +2118,7 @@ const ACTIONS = {
      abliefen, werden nicht als Versäumnis gewertet, sondern nur vermerkt. */
   SITZUNG_START: function (a) {
     const out = [{ modul: 'System', aktion: 'Sitzung geöffnet', detail: a.neu ? 'Ausgangszustand aus Szenario erzeugt' : 'Gespeicherter Zustand geladen' }];
-    const jetzt = Date.now();
-    STATE.melde.geprueftBis = new Date(jetzt).toISOString();
-    if (!a.neu) profilEinspielen(STATE);
+    if (!a.neu) profilEinspielen(STATE);   /* Phase 5c1b: kein Meldewesen mehr; der Altbestand bleibt unverändert */
     profilSpeichern();
     return out;
   },
@@ -2819,7 +2872,7 @@ function renderHeader() {
 
 /* Zeitfenster-Zelle (Auftrag): Zustand und Restzeit */
 function fensterZelle(zelle, now) {
-  const w = MS(STATE.kontext).zeitfenster[zelle.getAttribute('data-fenster')];
+  const ms = MS(ALT().kontext), w = ms && ms.zeitfenster ? ms.zeitfenster[zelle.getAttribute('data-fenster')] : null;
   if (!w) return;
   const von = Date.parse(w.von), bis = Date.parse(w.bis);
   if (now < von) zelle.replaceChildren(h('span', { class: 'label s-dim' }, 'bevorstehend'), ' Beginn in ' + fmtRest(von - now));
@@ -2829,8 +2882,8 @@ function fensterZelle(zelle, now) {
 /* Sekündlich aktualisierte Anzeigen innerhalb des Modulbereichs */
 function tickModule(now) {
   profilAssessmentAktualisieren(now);
-  const txt = meldeText(now);
-  document.querySelectorAll('[data-melde]').forEach(function (e) { if (e.textContent !== txt) e.textContent = txt; });
+  const melde = document.querySelectorAll('[data-melde]');
+  if (melde.length) { const txt = meldeText(now); melde.forEach(function (e) { if (e.textContent !== txt) e.textContent = txt; }); }
   document.querySelectorAll('[data-vk]').forEach(function (c) { const v = VK().find(function (x) { return x.id === c.getAttribute('data-vk'); }); if (v && c.textContent !== vkStatus(v, now)) c.textContent = vkStatus(v, now); });
   document.querySelectorAll('[data-fenster]').forEach(function (z) {
     const key = Math.floor(now / 60000);
@@ -2878,7 +2931,7 @@ function renderNav() {
 function modKopf(m, zusatz) {
   return h('div', { class: 'mod-head' },
     h('h1', { id: 'mod-title', tabindex: '-1' }, m.titel),
-    h('span', { class: 'mono dim' }, 'Modul ' + m.key + (STATE.vorlauf || ARBEITSMODULE.some(function (a) { return a.id === m.id; }) ? '' : ' · Vorgang ' + KM().nummer)), zusatz);
+    h('span', { class: 'mono dim' }, 'Modul ' + m.key + (ALT().vorlauf || !KM() || ARBEITSMODULE.some(function (a) { return a.id === m.id; }) ? '' : ' · Vorgang ' + KM().nummer)), zusatz);
 }
 /* Freitextfeld mit Entwurfspuffer (übersteht Neuaufbau der Ansicht) */
 function entwurf(tag, id, key, attrs) {
@@ -3725,7 +3778,7 @@ function aktualisiereSchreibt() {
    Kräfte werden beim Ansprechpartner angefordert. Die Entscheidung folgt Regeln (Begründung, Sperren je Auftrag, Kontingent, gleichzeitige Kräfte,
    Vorlauf, Dringlichkeit, Gefährdung des Bezugsortes) und wird begründet. Genehmigte Kräfte treffen zeitgesteuert ein und werden abgezogen.
    ===================================================================== */
-function VK() { if (!STATE.verstaerkung) STATE.verstaerkung = []; return STATE.verstaerkung; }
+function VK() { return ALT().verstaerkung || []; }
 function vkStatus(v, jetzt) {
   const t = jetzt || Date.now();
   if (v.zurueck) return 'zurückgezogen';
@@ -3938,7 +3991,7 @@ const AUFBAU_REDUZIERT_MS = [250, 450];            /* prefers-reduced-motion */
 /* Entwicklerkonsole: Dev.startJetzt() beginnt den Einsatz sofort (Reiseplan entfällt), Dev.zeitplan() zeigt die Planeinträge */
 window.Dev = {
   startJetzt: function () { dispatch({ type: 'START_VORGEZOGEN' }); return einsatzLaeuft() ? 'Einsatz läuft' : 'nicht möglich (kein laufender Auftrag oder Start bereits erreicht)'; },
-  zeitplan: function () { return STATE.plan.map(function (p) { return p.id + ' ' + p.typ + ' ' + p.faelligAm; }); }
+  zeitplan: function () { return (ALT().plan || []).map(function (p) { return p.id + ' ' + p.typ + ' ' + p.faelligAm; }); }
 };
 const AUFBAU_STUFEN = [
   { name: 'Anmeldung', detail: 'Zugangsdaten werden geprüft' },
@@ -4098,7 +4151,7 @@ const Leiste = (function () {
     if (!STATE || !STATE.ui) return '/';
     switch (STATE.ui.modul) {
       case 'profil': return '/profil';
-      case 'mission': return '/briefing/' + String(STATE.kontext).toLowerCase();
+      case 'mission': return '/briefing/' + String(ALT().kontext).toLowerCase();
       case 'dossier': return '/dossier' + (STATE.dossiers && STATE.dossiers.auswahl ? '?id=' + STATE.dossiers.auswahl : '');
       case 'komm': return '/kanal/' + (STATE.komm && STATE.komm.aktiv ? STATE.komm.aktiv : '');
       case 'extraktion': return '/extraktion';
@@ -4475,9 +4528,19 @@ function szenarioFehlt() {
 }
 function init() {
   SESSION_START = Date.now();
-  const geladen = migrate(Store.load());
+  /* Phase 5c1b: Ein Zustand älteren Formats wird vor jeder Änderung als Rohtext gesichert und erst nach geprüfter Sicherung
+     überführt gespeichert. Scheitert die Sicherung oder das Speichern, läuft die Sitzung ohne Speichern des Zustands;
+     der gespeicherte Stand bleibt unverändert. */
+  const roh = Store.rohtext(), gelesen = Store.load();
+  const altFormat = !!gelesen && typeof gelesen === 'object' && gelesen.version !== STATE_VERSION;
+  const sicherung = altFormat ? Store.altstandSichern(roh) : null;
+  if (altFormat && !sicherung) Store.sperren('Der gespeicherte Zustand (Format ' + gelesen.version + ') konnte nicht gesichert werden');
+  const geladen = migrate(gelesen);
   const neu = !isValidState(geladen);
-  if (neu && geladen) { try { Store.sichereDefekt(JSON.stringify(geladen)); } catch (e) { /* nicht serialisierbar */ } }
+  if (neu && geladen) {
+    Store.sichereDefekt(typeof roh === 'string' ? roh : JSON.stringify(geladen));
+    if (!Store.defektGesichert && !sicherung) Store.sperren('Der gespeicherte Zustand ist nicht verwendbar und konnte nicht gesichert werden');
+  }
   STATE = neu ? buildInitialState(Date.now()) : geladen;
   if (STATE.idv !== 2) {                                          /* einmalige Umschreibung älterer Dossier-Nummern (siehe ID_STD) */
     if (!neu) { idEigeneZuordnen(((STATE.dossiers && STATE.dossiers.eigene) || []).map(function (e) { return e && e.id; }), PROFIL.idmap); idMigrieren(STATE, PROFIL.idmap); }
@@ -4488,6 +4551,8 @@ function init() {
   profiltexteSpiegeln(STATE);
   const idNeu = identitaetUebernehmen(STATE);
   if (idNeu) { if (!neu) profilEinspielen(STATE); profilSpeichern(); }       /* erst nach dem Einspielen des Profils speichern */
+  const ueberfuehrt = altFormat && !neu && !Store.sperrgrund;
+  if (ueberfuehrt && !Store.saveGeprueft(STATE)) Store.sperren('Der überführte Zustand konnte nicht gespeichert werden');
 
   renderBanner(); buildNav(); buildLogFilter();
 
@@ -4543,6 +4608,8 @@ function init() {
   dispatch({ type: 'SITZUNG_START', neu: neu });
   planeAlle();
   APP_BEREIT = true;
+  if (Store.sperrgrund) meldung(Store.sperrgrund + '. Änderungen am Zustand werden in dieser Sitzung nicht gespeichert; der gespeicherte Stand bleibt unverändert. Vor dem nächsten Start Export anlegen und Speicherplatz prüfen.');
+  else if (ueberfuehrt) meldung('Gespeicherter Zustand in das Format ' + STATE_VERSION + ' überführt. Der bisherige Stand liegt unverändert unter "' + sicherung + '" im Browserspeicher.');
   if (Store.defektGesichert) meldung('Der gespeicherte Spielstand war nicht lesbar. Der alte Inhalt liegt unter "' + STORAGE_KEY + '.defekt" im Browserspeicher, ein neuer Zustand wurde angelegt.');
   if (AUTH_PENDING.length) dispatch({ type: 'AUTH_EREIGNIS', liste: AUTH_PENDING.splice(0) });
   tick();
