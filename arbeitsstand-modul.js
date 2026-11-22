@@ -27,7 +27,9 @@ function asAnwenden(s) {
   if (typeof s.dossier === 'string' && s.dossier) {
     const e = entitaet(s.dossier);
     const regOk = !e || !e.eigen || (!!s.dossierReg && asDossierReg(e.id) === s.dossierReg);   /* eigene Dossiers ohne belastbare Registernummer: überspringen */
-    if (e && regOk && dossierOffen(e.mission) && wissen(e) !== 'unbekannt' && !dossierGesperrt(e) && !infoGesperrt(e)) {
+    /* Der gespeicherte Arbeitsstand folgt dem aktuellen Recherchezugang; nur
+       Identität/Registernummer und die manuelle Dossiersperre entscheiden. */
+    if (e && regOk && dossierRechercheBestand().some(function (x) { return x.id === e.id; }) && !dossierGesperrt(e)) {
       STATE.dossiers.auswahl = e.id;
       if (s.dtab === 'info' || s.dtab === 'sichtungen' || s.dtab === 'chronik') VIEW.dtab = s.dtab;
     } else uebersprungen.push('Dossier ' + s.dossier);
