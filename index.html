@@ -4306,15 +4306,11 @@ const ACTIONS = {
     return out;
   },
   NAVIGATION: function (a) {
-    const m = MODULES.find(function (x) { return x.id === a.modul; });
+    /* Phase 5b8: nur die Arbeitsmodule sind ansteuerbar; die alten Missionsmodule bleiben nur als Registrierung für gespeicherte Stände. */
+    const m = ARBEITSMODULE.find(function (x) { return x.id === a.modul; });
     if (!m || STATE.ui.modul === m.id) return null;
     STATE.ui.modul = m.id;
-    let detail = m.titel;
-    if (m.id === 'komm') {                               /* Öffnen des Moduls öffnet den aktiven Kanal */
-      const n = kanalLesen(STATE.komm.aktiv);
-      if (n) detail += '; Kanal ' + kanalDef(STATE.komm.aktiv).name + ': ' + n + (n === 1 ? ' Nachricht' : ' Nachrichten') + ' als gelesen markiert';
-    }
-    return { modul: m.log, aktion: 'Modul geöffnet', detail: detail };
+    return { modul: m.log, aktion: 'Modul geöffnet', detail: m.titel };
   },
   EXPORT: function (a) { return { modul: 'System', aktion: 'Zustand exportiert', detail: a.datei }; },
   /* Ereignisse des Zugangsschirms (Zeitstempel stammt vom Ereignis selbst, da sie vor dem Laden des Zustands entstehen können) */
@@ -8179,7 +8175,7 @@ const RENDER = {
 
 function renderModule() {
   if (STATE.ui.modul !== 'karte' && VIEW.karte) { if (VIEW.karte.pick && VIEW.karte.pick.startsWith('X:')) VIEW.karte.pick = null; VIEW.karte.messen = false; VIEW.karte.pinSetzen = false; VIEW.karte.zoneSetzen = false; VIEW.karte.zugriffSetzen = false; VIEW.karte.mehr = []; VIEW.karte.mehrModus = false; VIEW.karte.messPts = []; if (VIEW.karte.spiel) { clearInterval(VIEW.karte.spiel); VIEW.karte.spiel = null; } }
-  const m = ARBEITSMODULE.concat(MODULES).find(function (x) { return x.id === STATE.ui.modul; }) || ARBEITSMODULE[0];
+  const m = ARBEITSMODULE.find(function (x) { return x.id === STATE.ui.modul; }) || ARBEITSMODULE[0];   /* Phase 5b8: nur Arbeitsmodule haben Renderer */
   const main = $('main'), act = document.activeElement;
   let halten = null;
   if (act && act.id && main.contains(act)) {
