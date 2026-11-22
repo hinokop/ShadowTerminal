@@ -12,10 +12,11 @@ const { APP } = require('./_pfad');
       await p.fill('#gate-pw','pw-test-123');
       if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2','pw-test-123');
       await p.click('#gate-go');
-      await p.click('#nav-akten'); await p.click('#ak-tab-eingang');
+      await p.click('#nav-akten');
     }
     await start();
-    assert.equal(await p.locator('#ak-tab-registratur').count(), 1);
+    assert.equal(await p.locator('#ak-tab-registratur, #ak-tab-eingang, #akte-blatt, #ak-suche').count(), 0,
+      'Ablage zeigt den Eingang direkt; historische Registratur fehlt');
     const datei = {name:'vorlaeufig.txt',mimeType:'text/plain',buffer:Buffer.from('Nur Text <script>kein HTML</script>')};
     await p.locator('#ak-eingang-datei').setInputFiles(datei);
     await p.locator('#ak-eingang-vorschau pre').waitFor();
