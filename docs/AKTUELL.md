@@ -51,7 +51,7 @@ Dokumentations-PRs werden hier nur geführt, solange sie offen sind. Was nur in 
 Erledigt: #111 (Phase 5c1b), der Dokumentationsstand #112 und die dauerhafte CI #114, alle in `main`.
 
 1. **Dokumentationsnachtrag** zu #111 und #114 (PR #113).
-2. **CI-Konsolidierung** vor 5c2: Schritt 1 (dauerhafte Prüfung, `.github/workflows/ci.yml`) ist mit #114 in `main` (`c9e48ab`); der erste Push-Lauf auf `main` (45075611403) ist grün (91 grün, 0 unerwartet rot). Als Nächstes: wiederholt erfolgreiche Läufe abwarten, dann die zwölf phasengebundenen Workflows in einem eigenen PR entfernen; Branch-Schutz erst danach und nur auf Entscheidung von Master Wayne. Vorgemerkt: die Einschränkung von `lage-box` (`BEKANNT_NUR`) im Test-Runner weiter absichern.
+2. **CI-Konsolidierung** vor 5c2: Die dauerhafte Prüfung (`.github/workflows/ci.yml`) ist mit #114 in `main` (`c9e48ab`), Push-Lauf 45075611403 grün (91 grün, 0 unerwartet rot). Die zwölf phasengebundenen Workflows werden in einem eigenen PR entfernt (Draft vorbereitet, nicht gemergt); Branch-Schutz danach nur auf Entscheidung von Master Wayne. Vorgemerkt: die Einschränkung von `lage-box` (`BEKANNT_NUR`) im Test-Runner weiter absichern.
 3. **5c2:** verbliebene Altzugriffe auf Missionsfelder (`ALT()`, Darstellung) entfernen, Daten im Altbestand bewahren. Vorher gesonderte Entscheidung (Abschnitt 5, Punkt 1).
 4. **Branch-Bereinigung:** nur nach Abgleich und ausdrücklicher Freigabe.
 5. **Phase 6:** Unix-/Linux-Realismus im Terminal und schrittweise Englischumstellung ([terminal-entwicklungsplan-2026-11.md](terminal-entwicklungsplan-2026-11.md)), Modernisierung der Oberfläche modulweise.
@@ -62,7 +62,7 @@ Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Fre
 
 - 62 Branches (`main` und 61 weitere), 113 Pull Requests: 108 gemergt, 2 offen (#55, #113 dieser Doku-Nachtrag), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches der gemergten PRs #111, #112 und #114 bestehen noch. `main` ist nicht geschützt.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
-- Auf `main` liegen der dauerhafte Workflow `ci.yml` (Pull Requests gegen `main`, Push auf `main`, manuell) und zwölf phasenbezogene Workflows (5a, 5b1 bis 5b9, 5c1a, 5c1b), die ausschließlich bei Pushes auf ihre gemergten Entwicklungsbranches auslösen und damit praktisch wirkungslos sind; ihre Entfernung steht aus.
+- Auf `main` liegen der dauerhafte Workflow `ci.yml` (Pull Requests gegen `main`, Push auf `main`, manuell) und zwölf phasenbezogene Workflows (5a, 5b1 bis 5b9, 5c1a, 5c1b), die nur auf ihre gemergten Entwicklungsbranches auslösen und damit praktisch wirkungslos sind. Ihre Entfernung ist als Draft vorbereitet.
 
 ## 5. Offene Entscheidungen und Produktideen
 
