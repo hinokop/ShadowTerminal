@@ -113,6 +113,16 @@ Kopplungen im heutigen Stand: (1) `mission: 'M1'` an den drei Dossiers und an `V
 
 Automatische Tests für 5c1 (mindestens): (1) frischer Zustand Format 5 und wiederholtes Laden; (2) gespeicherter vollständiger Zustand Format 4 mit echten Daten an P-0001 bis P-0003; (3) Import älterer Formate (2, 3, 4) und erneuter Import eines migrierten Zustands; (4) verlustfreie Übernahme aller historischen Felder in `altbestand`; (5) Erhalt von Notizen und Einschränkungen bei Zurücksetzen, Export, Import und Neuladen; (6) erzwungene Speicherfehler vor und während der Migration ohne stillen Datenverlust; (7) Erhalt von Kennungen, Sperren, Dossierbezügen, Fallakten, Pins und Profilzonen; (8) unveränderte Onion-Adresse; (9) identische produktive Karten- und Dossierdarstellung vor und nach der Migration (Differenzsonde wie 5b9); (10) vollständige Standardauswahl auf dem exakten PR-Head. Danach gebündelte Windows-Abnahme mit einer gesicherten Kopie des echten Profils.
 
+## 8a. Umsetzung 5c1a (Draft)
+
+- Neues Profilfeld `PROFIL.profiltexte` mit `{ text, t, verdraengt }` je Feld (`notizen`, `einschraenkungen`); `t = null` bedeutet „nie gesetzt“.
+- **Übernahme:** beim ersten Start einmalig aus `STATE.agent` samt Änderungszeitpunkt; ein leerer Alttext gilt als nie gesetzt. Gelingt das Speichern nicht, erscheint ein Hinweis.
+- **Schreiben:** `TEXT_GEAENDERT` schreibt ins Profil (auch ein geleertes Feld erhält einen Zeitpunkt) und ist Profilaktion, d. h. das Profil wird gespeichert und ein Fehler gemeldet. `STATE.agent` führt eine Spiegelung (Zustandsexport, Formatprüfung bis 5c1b); `profilEinspielen` spiegelt nach Zurücksetzen und Zustandsimport.
+- **Importe:** Zustands- und Profilimport führen über `profiltexteZusammenfuehren` zusammen: ein nie gesetztes Feld übernimmt den Text; sonst hat der vorhandene Text Vorrang, ein abweichender wird unter `verdraengt` aufbewahrt, im Protokoll gemeldet und unter dem Feld angezeigt (nur lesbar).
+- **„Profil leeren“** löscht beide Felder (E2.7); Bestätigungstext und Protokoll nennen sie. **Warntext „Zustand zurücksetzen“** berichtigt: genannt wird nur, was nachweislich erhalten bleibt (geprüft per Sonde: eigene Dossiers, Notizen, Sichtungen und Status der Standarddossiers). Der Status von P-0001 bis P-0003 geht beim Zurücksetzen bis 5c1b weiterhin verloren (E6) und wird im Text nicht zugesichert.
+- **Befund bei der Umsetzung:** Die beiden Felder erscheinen im Profil nur noch als aufklappbarer Bereich „Bisherige Notizen“, wenn Text vorhanden ist; der Schutz betrifft damit vor allem vorhandenen Altbestand.
+- **Test** `phase5c1a-profiltexte` (Standardauswahl): Übernahme, Autosave über die Oberfläche, Zurücksetzen, Neuladen, echter Download des Profilexports, Zustandsimport mit Konflikt und bewusst geleertem Feld, Profil leeren, Profilimport in ein leeres Profil, angezeigter Speicherfehler. Gegenprobe gegen `main`: rot.
+
 ## 9. Prüfhistorie
 
 - 22.11.2026: Bestandsaufnahme (Claude, `f29bad8`).
