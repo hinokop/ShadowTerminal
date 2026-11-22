@@ -49,11 +49,13 @@ const { APP } = require('./_pfad');
     });
     assert.ok(fixture, 'Standarddossier mit gespeichertem M1-Nachtrag und Altmissionszustand vorhanden');
     assert.equal(fixture.missionAktiv, true, 'historische Freischaltung tatsächlich aktiv');
+    /* Belegt nur Rechercheansicht und Beschreibung. Die Darstellung von
+       Kennungen in Beschreibung/Eckdaten (schutz) ist Gegenstand von 5b6. */
     assert.equal(fixture.regulareAnsicht && fixture.stammdaten, true,
-      'reguläre Rechercheansicht mit ursprünglichen Stammdaten bleibt sichtbar');
+      'reguläre Rechercheansicht mit unveränderter Beschreibung bleibt sichtbar');
     assert.equal(fixture.legacyLabel || fixture.legacyRolle || fixture.legacyEckdaten, false,
       'Missionsnachtrag erscheint in der produktiven Dossieransicht nicht');
-    assert.equal(fixture.unveraendert, true, 'gespeicherte Alt-Nachtragsdaten bleiben unverändert');
+    assert.equal(fixture.unveraendert, true, 'Szenario-Nachtragsdaten bleiben durch das Rendern unverändert');
 
     await p.evaluate(id => dispatch({ type: 'DOSSIER_SPERREN', id }), fixture.id);
     const gesperrt = await p.evaluate(() => ({
@@ -80,6 +82,6 @@ const { APP } = require('./_pfad');
     assert.equal(frei.nachtrag, fixture.original,
       'Alt-Nachtragsdaten über Sperren und Entsperren hinweg erhalten');
     assert.deepEqual(errors, [], 'keine Browserfehler');
-    console.log('OK: Phase 5b5 – keine Missionsnachträge in produktiver Dossieransicht; Stammdaten, Altbestand und Sperren erhalten');
+    console.log('OK: Phase 5b5 – keine Missionsnachträge in produktiver Dossieransicht; Beschreibung, Szenariodaten und Sperren erhalten');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
