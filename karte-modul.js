@@ -652,20 +652,7 @@ function zoneNaechste(zn) {
   const I = ZONEN_INTERVALL[zn.wertung] || ZONEN_INTERVALL.ruhig;
   zn.naechste = new Date(Date.now() + (I[0] + Math.random() * (I[1] - I[0])) * 60000).toISOString();
 }
-/* Kennung der Zone, die jetzt eine Meldung fällig hat (höchstens eine alle 8 Minuten über alle Zonen) */
-function zonenFaellig(jetzt) {
-  const def = zDef(); if (!def) return null;
-  const ev = STATE.zonenEv || {};
-  if (ev.letzte && jetzt - Date.parse(ev.letzte) < 8 * 60000) return null;
-  const L = zonenEigene(def);
-  for (let i = 0; i < L.length; i++) {
-    const zn = L[i]; if (zn.auto || zn.art === 'zugriff') continue;
-    if (!zn.naechste) { zoneNaechste(zn); continue; }
-    if (Date.parse(zn.naechste) <= jetzt) return zn.id;
-  }
-  return null;
-}
-const ZUGRIFF_TYPEN = ['Zufahrt', 'Tor', 'Seiteneingang', 'Lieferbereich', 'Dach/Fenster', 'Sichtlücke', 'Sonstiges'], ZUGRIFF_RADIEN = [20, 40, 60, 100, 150];
+const ZUGRIFF_RADIEN = [20, 40, 60, 100, 150];
 const PIN_ZWECKE = ['Treffpunkt', 'Beobachtungspunkt', 'Übergabe', 'Unterstand', 'Fluchtweg', 'Parkmöglichkeit', 'Sammelpunkt', 'Sonstiges'];
 const PIN_UMGEBUNG = [['zufahrt', 'Zufahrten und Wege'], ['sicht', 'Sichtlinien'], ['flucht', 'Fluchtmöglichkeiten'], ['publikum', 'Publikumsverkehr'], ['kameras', 'Kameras, Beleuchtung'], ['nachbarn', 'Nachbarschaft, Gewerbe']];
 function pinEntfernungM(a, b) {
@@ -777,7 +764,6 @@ function pinPopup(x, fertig) {
 }
 function naechsterRadius(liste, w) { return liste.reduce(function (b, r) { return Math.abs(r - w) < Math.abs(b - w) ? r : b; }, liste[0]); }
 function zonenEigene(def) { const ms = def ? MS(def.id) : null; if (!ms) return []; if (!ms.zonen) ms.zonen = []; return ms.zonen; }
-function zonenUrteil(def) { const ms = def ? MS(def.id) : null; if (!ms) return {}; if (!ms.zonenUrteil) ms.zonenUrteil = {}; return ms.zonenUrteil; }
 /* wirksame Stufe einer Standortzone: eigene, freigegebene Einstufung vor der berechneten */
 function zoneStufe(zn, lg) { return zn.auto && zn.urteil && zn.urteil.stufe != null && zn.urteil.status === 'frei' ? zn.urteil.stufe : lg.stufe; }
 function zielpersonenListe() {
@@ -786,7 +772,6 @@ function zielpersonenListe() {
   if (!ms.zielpersonen) ms.zielpersonen = (def.zielpersonen || []).slice();
   return ms.zielpersonen;
 }
-function istZielperson(e) { return zielpersonenListe().indexOf(e.id) >= 0; }
 function karteZonen() {
   const out = [];
   /* Phase 5b9: Missionszonen (ZA-/ZN-) entstanden nur mit Auftragsrahmen (zDef), der seit 5b7 nie besteht. */
@@ -829,11 +814,6 @@ function zoneLage(zn) {
   return { standorte: sts, ents: ents, personen: ents.filter(function (e) { return e.typ !== 'Ort'; }), stufe: top ? top.stufe : null, quelle: top ? top.e : null, fenster: fenster, sichtungen: si.length,
            ziel: ents.filter(function (e) { return zp.indexOf(e.id) >= 0; }), asset: ents.some(function (e) { return karteAssetId(e); }) };
 }
-/* Bezug zum Auftrag: Zielperson oder Standort des Auftrags liegt in der Zone; nur dann ist eine Meldung an den Ansprechpartner sinnvoll */
-function zoneBezug(lg) {
-  return lg.ziel.map(function (e) { return 'Zielperson ' + anzeige(e); }).concat(lg.standorte.map(function (id) { return 'Standort ' + id; }));
-}
-function zoneHandlerName() { return (kanalDef('handler') || {}).gegenstelle || 'ARGUS'; }
 function zoneKlasse(zn, lg) {
   if (!zn.auto) return zn.wertung === 'akut' ? 'akut' : zn.wertung === 'bedroht' ? 'bedroht' : zn.wertung === 'leicht' ? 'leicht' : 'ruhig';
   const st = zoneStufe(zn, lg);
@@ -1070,21 +1050,6 @@ function karteAuswahlAnzeige() {
     w.length ? feld('Zeitfenster', w.map(function (x) { return x.id + ' (' + x.zustand + ')'; }).join(', ')) : null)]);
 }
 
-function zugriffPopup(zn, fertig) {
-  const K = VIEW.karte, hat = function (t) { return (zn.typen || []).indexOf(t) >= 0; };
-  const feldNotiz = h('input', { type: 'text', id: 'zp-notiz', maxlength: '300', value: zn.notiz || '', placeholder: 'Notiz (optional)', 'aria-label': 'Notiz zum Zugriffspunkt', spellcheck: 'false', onchange: function (ev) { dispatch({ type: 'ZONE_GEAENDERT', id: zn.id, notiz: ev.target.value }); } });
-  fertig('Möglicher Zugriffspunkt ' + zn.id, [h('p', { class: 'k-pop-sub' }, zn.name + ' · Radius ' + zn.r + ' m · ' + zn.ll[0].toFixed(4) + ', ' + zn.ll[1].toFixed(4)),
-    h('div', { class: 'k-pop-form' }, h('span', null, 'Art'),
-      h('div', { class: 'k-zp-typen' }, ZUGRIFF_TYPEN.map(function (t) {
-        return h('label', { class: 'k-ebene' }, h('input', { type: 'checkbox', 'data-zp-typ': t, checked: hat(t), onchange: function () { const neu = ZUGRIFF_TYPEN.filter(function (x) { return x === t ? !hat(t) : hat(x); }); dispatch({ type: 'ZONE_GEAENDERT', id: zn.id, typen: neu }); } }), h('span', null, t));
-      })),
-      h('label', { for: 'zp-r' }, 'Radius'), h('select', { id: 'zp-r', 'aria-label': 'Radius des Zugriffspunkts', onchange: function (ev) { dispatch({ type: 'ZONE_GEAENDERT', id: zn.id, r: Number(ev.target.value) }); } }, ZUGRIFF_RADIEN.map(function (r) { return h('option', { value: String(r), selected: r === zn.r }, r + ' m'); })),
-      h('label', { for: 'zp-notiz' }, 'Notiz'), feldNotiz),
-    h('p', { class: 'k-pop-meta' }, 'Potenzieller Zugriffspunkt, nicht bestätigt. Er gilt nur für diese Karte; die Streckenanalyse reichst du weiterhin im Auftrag ein.'),
-    h('div', { class: 'k-pop-akt' }, h('button', { type: 'button', class: 'link', id: 'k-pop-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 16.5), karteAuswahlAnzeige, zn.id); } }, 'Zentrieren'),
-      h('button', { type: 'button', class: 'link', id: 'zp-lage', title: 'Führt die Markierung als Lagezone mit Bewertung und Meldungen', onclick: function () { dispatch({ type: 'ZONEN_MEHRFACH', ids: [zn.id], op: 'art', wert: 'lage' }); } }, 'Als Lagezone führen'),
-      h('button', { type: 'button', class: 'link', id: 'zn-weg', onclick: function () { K.auswahl = null; dispatch({ type: 'ZONE_ENTFERNT', id: zn.id }); } }, 'Entfernen'))]);
-}
 /* Mehrfachauswahl: Umschalt- oder Strg-Klick auf Zonen, oder Schalter "Mehrfach" in der Kartenleiste */
 function zonenMehrPanel(fertig) {
   const K = VIEW.karte, Zt = SCENARIO.zonen, alle = (K.mehr || []).map(function (id) { return karteZoneFinden(id); }).filter(Boolean), Z = alle.filter(function (z) { return !z.auto; });
