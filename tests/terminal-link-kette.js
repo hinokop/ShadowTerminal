@@ -24,7 +24,9 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     await p.fill('#gate-pw', 'pw-link-kette-123');
     if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-link-kette-123');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
-    await p.clock.install(); await imUeberflug(p);
+    await p.clock.install();
+    // Der Helfer wählt den frühesten Überflug aller KESTREL-Satelliten; die Abfragen gelten deshalb diesem Satelliten (tageszeitunabhängig).
+    let sat = (await imUeberflug(p)).name;
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const chat = p.locator('#profil-terminal-chat'), orbit = p.locator('#profil-terminal-orbit');
     const progress = p.locator('#profil-terminal-transfer');
@@ -46,8 +48,8 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
       await inp.press('Tab'); eingabe += token + ' ';
       assert.equal(await inp.inputValue(), eingabe);
     }
-    await inp.fill(eingabe + 'KESTREL-1'); await inp.press('Enter');
-    const rows = (await out.textContent()).split('-p KESTREL-1\n').at(-1).split('\n');
+    await inp.fill(eingabe + sat); await inp.press('Enter');
+    const rows = (await out.textContent()).split('-p ' + sat + '\n').at(-1).split('\n');
     assert.ok(rows.length >= 3, 'Überflug vom Aufgang bis zum Untergang');
     for (const row of rows) {
       assert.doesNotMatch(row, /\b12345\b/);
@@ -57,10 +59,10 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
       assert.ok(row.trim().split(/\s+/).length === 12 || (row.trim().split(/\s+/).length === 11 && / $/.test(row)), date); // im Erdschatten ist die letzte Spalte leer
     }
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.satLink), null, 'predict rechnet nur');
-    await cmd('predict -t /var/cache/tle/kestrel.tle -f KESTREL-1');
+    await cmd('predict -t /var/cache/tle/kestrel.tle -f ' + sat);
     // -f ohne Zeitangabe: eine Zeile für jetzt (predict(1)); die laufende Verfolgung gehört zum interaktiven predict.
     assert.equal(await orbit.isVisible(), false);
-    const fZeile = (await out.textContent()).split('-f KESTREL-1\n').at(-1);
+    const fZeile = (await out.textContent()).split('-f ' + sat + '\n').at(-1);
     assert.ok([12, 11].includes(fZeile.trim().split(/\s+/).length) && !fZeile.includes('\n'), fZeile);
     await cmd('predict');
     assert.equal(await orbit.isVisible(), true);
@@ -190,8 +192,8 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     await inp.press('Control+c'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
     await cmd('echo $?'); assert.match(await out.textContent(), /\n5$/);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null);
-    await imUeberflug(p);
-    await cmd('predict -t /var/cache/tle/kestrel.tle -p KESTREL-1');
+    sat = (await imUeberflug(p)).name;
+    await cmd('predict -t /var/cache/tle/kestrel.tle -p ' + sat);
     await cmd('pppd call kestrel updetach');
     await verbunden(p);
     await p.clock.fastForward(await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now()));
