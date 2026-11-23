@@ -50,13 +50,13 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 |---|---|---|
 | #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
 | #123 | Phase 5c2b D2: überlagerte Variante `sichtungText(e)` aus `index.html` entfernt; neuer Standardtest `phase5c2b-sichtungtext` | Draft, wartet auf CI und Freigabe |
-| #ABSCHLUSS | Abschluss Phase 5 und Backlog ([phase5-abschluss.md](phase5-abschluss.md)); nur Dokumentation | Draft, wartet auf Freigabe |
+| #124 | Abschluss Phase 5 und Backlog ([phase5-abschluss.md](phase5-abschluss.md)); nur Dokumentation | Draft, wartet auf Freigabe |
 
-Zurzeit sind außer #55, #123 und #ABSCHLUSS keine Pull Requests offen. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
+Zurzeit sind außer #55, #123 und #124 keine Pull Requests offen. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
-Phase 5 gilt mit dem Merge von #123 und #ABSCHLUSS als abgeschlossen; die verbleibenden optionalen Bereinigungen stehen als Backlog in [phase5-abschluss.md](phase5-abschluss.md), Phase 6 ist damit eröffnet (Punkt 5). Erledigt, jeweils in `main`: #111 (Phase 5c1b), die Dokumentationsstände #112 und #113, die dauerhafte CI #114, die Entfernung der phasengebundenen Workflows #115, die Tageszeit-Korrektur des Tests `terminal-link-kette` #117 Phase 5c2a #116 (verbliebene Missionsdaten im Dossier ausgeblendet, Entscheidung C) und Phase 5c2b (a) #118 (stillgelegter Tick-Block, Helfer und `widerspruchOffen()` entfernt).
+Phase 5 gilt mit dem Merge von #123 und #124 als abgeschlossen; die verbleibenden optionalen Bereinigungen stehen als Backlog in [phase5-abschluss.md](phase5-abschluss.md), Phase 6 ist damit eröffnet (Punkt 5). Erledigt, jeweils in `main`: #111 (Phase 5c1b), die Dokumentationsstände #112 und #113, die dauerhafte CI #114, die Entfernung der phasengebundenen Workflows #115, die Tageszeit-Korrektur des Tests `terminal-link-kette` #117 Phase 5c2a #116 (verbliebene Missionsdaten im Dossier ausgeblendet, Entscheidung C) und Phase 5c2b (a) #118 (stillgelegter Tick-Block, Helfer und `widerspruchOffen()` entfernt).
 
 1. **5c2b** (verbliebenen `ALT()`-Rest-Code nach Referenzprüfung entfernen; Altformatmigration `SCENARIO.missionen`, `buildInitialStateV4` und gespeicherter Altbestand bleiben geschützt, Punkt 3). Grundsatz (Master Wayne, 23.11.2026): Eine Funktion wird nur bei nachgewiesener Unerreichbarkeit oder fehlender fachlicher Bedeutung entfernt, nicht wegen weniger Referenzen. Aufteilung:
    - **(a)** stillgelegter Tick-Block, seine Helfer und `widerspruchOffen()`: erledigt (#118; Review von ChatGPT und Merge-Freigabe durch Master Wayne am 23.11.2026).
@@ -71,7 +71,7 @@ Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Fre
 
 ## 4. Repository, Branches und CI
 
-- **Prüfstand 23.11.2026, nach den Merges von #120 bis #122 und dem Eröffnen von #123 und #ABSCHLUSS:** ZAHLEN_PRUEFEN Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
+- **Prüfstand 23.11.2026, nach den Merges von #120 bis #122 und dem Eröffnen von #123 und #124:** 72 Branches (`main` und 71 weitere), 123 Pull Requests: 117 gemergt, 3 offen (#55, #123, #124), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
 - Workflows: ausschließlich `ci.yml`. Die früheren zwölf `phase5*-regression.yml` wurden mit #115 entfernt; ihre damaligen Läufe (zuletzt 5c1b, 45067956391) bleiben als Nachweis auf GitHub einsehbar.
 
