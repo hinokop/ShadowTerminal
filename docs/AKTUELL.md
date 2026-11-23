@@ -1,6 +1,6 @@
 # Shadow Terminal – aktueller Stand
 
-**Stand:** 23.11.2026. Zuletzt geprüft gegen `main` `072c2d312625ca34d2862f220d406e2a3babe3df` (Merge von #120; davor #122 als `d6753b8`, #121 als `5501b38`, #119 als `5c5a545`, #118 als `1cb1195`, #116 als `ebe44f6`, #115 als `036f4eb`, #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
+**Stand:** 23.11.2026. Zuletzt geprüft gegen `main` `67e12794ba25e0effbba948ddd1860f241e95f57` (Merge von #123; davor #120 als `072c2d3`, #122 als `d6753b8`, #121 als `5501b38`, #119 als `5c5a545`, #118 als `1cb1195`, #116 als `ebe44f6`, #115 als `036f4eb`, #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
 
 Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **in `main`** gilt, und dem, was nur in **offenen Pull Requests** vorliegt. Pflege: bei jedem Merge in `main` aktualisieren, Stand und `main`-Commit nachführen. Entwicklungsregeln stehen in [CLAUDE.md](../CLAUDE.md), nicht hier.
 
@@ -34,11 +34,12 @@ Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **
 | 5c2b (b) | `IZ()` und `aussagenListe()` entfernt, Tests auf direkte Altbestand-Zugriffe umgestellt; neue Tests `phase5c2b-frischer-zustand` und `phase5c2b-karte-altbestand` | #119 |
 | 5c2b (b), Tests | `phase5b4-arbeitszugang`, `sichtung-export`, `terminal-namensnavigation` zusätzlich gegen migrierten Format-4-Zustand mit historischen Freigabestufen | #121 |
 | 5c2b (c), Analyse | Entwicklerkonsole, `SCENARIO.abfragen`, ungenutzte Helfer ([phase5c2b-c-analyse.md](phase5c2b-c-analyse.md)); nur Dokumentation | #120 |
+| 5c2b (c), D2 | Überlagerte zweite Deklaration `sichtungText(e)` aus `index.html` entfernt; neuer Standardtest `phase5c2b-sichtungtext` (Merge-Commit `67e1279`) | #123 |
 | 5c2b, Inventur | 50 Nicht-Standardskripte mit `IZ(` ([phase5c2b-inventur-nichtstandard.md](phase5c2b-inventur-nichtstandard.md)); Dokumentation und Messwerkzeuge | #122 |
 
 Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Baseline und Entwicklungsplan (#93 bis #97); Doku zu Karten-Konsolenbefunden (#107). Manuelle Dossiersperren, Pin- und Zonenzugriff über `zielZugang` und Profilkompatibilität sind erhalten.
 
-**Tests:** `node tests/runall.js` führt die Standardauswahl aus (89 Skripte bis #110, 91 mit #111, 92 seit #115 mit `dossier-sperre`, 93 seit 5c2a mit `phase5c2a-altdaten`, 94 seit 5c2b (a) mit `phase5c2b-tickblock`, 96 seit 5c2b (b) mit `phase5c2b-frischer-zustand` und `phase5c2b-karte-altbestand`; Playwright, Passwort `pw-test-123`). Historische Skripte des stillgelegten Missionsablaufs sind nur namentlich aufrufbar. Als instabil bekannt: `wk3`, `dp`, `m1flow` (Missionsablauf, auch auf `main` rot) und `lage-box` unter Parallellast. Bestätigung der Läufe erfolgt über GitHub Actions: der dauerhafte Workflow `ci.yml` (seit #114) führt Python-Brückentest, Syntaxprüfung und die vollständige Standardauswahl bei jedem Pull Request gegen `main` und bei jedem Push auf `main` aus (Push-Lauf 45075611403 auf `c9e48ab`: 91 grün, 0 unerwartet rot). Für den Merge-Commit `dc78f0c` von #111 selbst lief keine Standardauswahl; bestätigt war dort der Lauf 45067956391 auf dem Head `477cfaa` des gemergten Branches.
+**Tests:** `node tests/runall.js` führt die Standardauswahl aus (89 Skripte bis #110, 91 mit #111, 92 seit #115 mit `dossier-sperre`, 93 seit 5c2a mit `phase5c2a-altdaten`, 94 seit 5c2b (a) mit `phase5c2b-tickblock`, 96 seit 5c2b (b) mit `phase5c2b-frischer-zustand` und `phase5c2b-karte-altbestand`, 97 seit D2 (#123) mit `phase5c2b-sichtungtext`; Playwright, Passwort `pw-test-123`). Historische Skripte des stillgelegten Missionsablaufs sind nur namentlich aufrufbar. Als instabil bekannt: `wk3`, `dp`, `m1flow` (Missionsablauf, auch auf `main` rot) und `lage-box` unter Parallellast. Bestätigung der Läufe erfolgt über GitHub Actions: der dauerhafte Workflow `ci.yml` (seit #114) führt Python-Brückentest, Syntaxprüfung und die vollständige Standardauswahl bei jedem Pull Request gegen `main` und bei jedem Push auf `main` aus (Push-Lauf 45075611403 auf `c9e48ab`: 91 grün, 0 unerwartet rot). Für den Merge-Commit `dc78f0c` von #111 selbst lief keine Standardauswahl; bestätigt war dort der Lauf 45067956391 auf dem Head `477cfaa` des gemergten Branches.
 
 **Abnahme #111:** Die Windows-Abnahme mit gesicherter Kopie der echten Profildaten wurde laut Master Wayne vor dem Merge durchgeführt und als erfolgreich gemeldet; das Ergebnisblatt ist nicht Teil des Repositorys und wurde von Claude nicht eingesehen.
 
@@ -49,14 +50,12 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 | PR | Inhalt | Stand |
 |---|---|---|
 | #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
-| #123 | Phase 5c2b D2: überlagerte Variante `sichtungText(e)` aus `index.html` entfernt; neuer Standardtest `phase5c2b-sichtungtext` | Draft, wartet auf CI und Freigabe |
-| #124 | Abschluss Phase 5 und Backlog ([phase5-abschluss.md](phase5-abschluss.md)); nur Dokumentation | Draft, wartet auf Freigabe |
 
-Zurzeit sind außer #55, #123 und #124 keine Pull Requests offen. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
+Zurzeit ist außer #55 kein Pull Request offen (Zielstand nach dem Merge von #124). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
-Phase 5 gilt mit dem Merge von #123 und #124 als abgeschlossen; die verbleibenden optionalen Bereinigungen stehen als Backlog in [phase5-abschluss.md](phase5-abschluss.md), Phase 6 ist damit eröffnet (Punkt 5). Erledigt, jeweils in `main`: #111 (Phase 5c1b), die Dokumentationsstände #112 und #113, die dauerhafte CI #114, die Entfernung der phasengebundenen Workflows #115, die Tageszeit-Korrektur des Tests `terminal-link-kette` #117 Phase 5c2a #116 (verbliebene Missionsdaten im Dossier ausgeblendet, Entscheidung C) und Phase 5c2b (a) #118 (stillgelegter Tick-Block, Helfer und `widerspruchOffen()` entfernt).
+Phase 5 gilt mit dem Merge von #124 als abgeschlossen (Reihenfolge: zuerst #123, `67e1279`, dann #124); die verbleibenden optionalen Bereinigungen stehen als Backlog in [phase5-abschluss.md](phase5-abschluss.md), Phase 6 ist damit eröffnet (Punkt 5). Erledigt, jeweils in `main`: #111 (Phase 5c1b), die Dokumentationsstände #112 und #113, die dauerhafte CI #114, die Entfernung der phasengebundenen Workflows #115, die Tageszeit-Korrektur des Tests `terminal-link-kette` #117 Phase 5c2a #116 (verbliebene Missionsdaten im Dossier ausgeblendet, Entscheidung C) und Phase 5c2b (a) #118 (stillgelegter Tick-Block, Helfer und `widerspruchOffen()` entfernt).
 
 1. **5c2b** (verbliebenen `ALT()`-Rest-Code nach Referenzprüfung entfernen; Altformatmigration `SCENARIO.missionen`, `buildInitialStateV4` und gespeicherter Altbestand bleiben geschützt, Punkt 3). Grundsatz (Master Wayne, 23.11.2026): Eine Funktion wird nur bei nachgewiesener Unerreichbarkeit oder fehlender fachlicher Bedeutung entfernt, nicht wegen weniger Referenzen. Aufteilung:
    - **(a)** stillgelegter Tick-Block, seine Helfer und `widerspruchOffen()`: erledigt (#118; Review von ChatGPT und Merge-Freigabe durch Master Wayne am 23.11.2026).
@@ -71,7 +70,7 @@ Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Fre
 
 ## 4. Repository, Branches und CI
 
-- **Prüfstand 23.11.2026, nach den Merges von #120 bis #122 und dem Eröffnen von #123 und #124:** 72 Branches (`main` und 71 weitere), 123 Pull Requests: 117 gemergt, 3 offen (#55, #123, #124), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
+- **Prüfstand 23.11.2026, Zielstand nach dem Merge von #124:** 72 Branches (`main` und 71 weitere), 123 Pull Requests: 119 gemergt, 1 offen (#55), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
 - Workflows: ausschließlich `ci.yml`. Die früheren zwölf `phase5*-regression.yml` wurden mit #115 entfernt; ihre damaligen Läufe (zuletzt 5c1b, 45067956391) bleiben als Nachweis auf GitHub einsehbar.
 
