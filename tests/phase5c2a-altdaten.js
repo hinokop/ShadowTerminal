@@ -2,7 +2,7 @@
    Ein Zustand mit Altbestand (frühere Aussagen, offener Widerspruch, Berichte, Einschätzungen) zeigt im Dossier
    (1) keine Tabelle "Aussagen des Agenten" und keinen Hinweis "offener Widerspruch" im Sichtungsreiter,
    (2) eine Erkenntnislage, die nur eigene Sichtungen zählt,
-   während (3) alle Altdaten unverändert in STATE.altbestand und im gespeicherten Zustand erhalten bleiben.
+   während (3) alle Altdaten unverändert in STATE.altbestand und im gespeicherten Zustand erhalten bleiben, auch nach einem echten Neuladen (4).
    Exit-Code 1 bei Fehlschlag. */
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -22,6 +22,13 @@ function eingang() {
   return { state: JSON.stringify(s), profil: JSON.stringify(FIX.profil) };
 }
 
+async function anmeldenMit(p) {
+  await p.fill('#gate-pw', 'pw-test-123');
+  if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
+  await p.click('#gate-go');
+  await p.waitForFunction(() => !document.body.classList.contains('locked'));
+}
+
 (async () => {
   const browser = await chromium.launch();
   const fehler = [];
@@ -31,13 +38,11 @@ function eingang() {
     p.setDefaultTimeout(20000);
     p.on('pageerror', e => fehler.push(e.message));
     await p.route(/^https?:/, r => r.abort());
+    const anmelden = () => anmeldenMit(p);
     await p.goto(APP);
     await p.evaluate(a => { localStorage.setItem(STORAGE_KEY, a.state); localStorage.setItem(PROFIL_KEY, a.profil); }, eingang());
     await p.goto(APP);
-    await p.fill('#gate-pw', 'pw-test-123');
-    if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
-    await p.click('#gate-go');
-    await p.waitForFunction(() => !document.body.classList.contains('locked'));
+    await anmelden();
 
     const vor = await p.evaluate(() => ({ v: STATE.version, alt: JSON.parse(JSON.stringify(STATE.altbestand)) }));
     assert.equal(vor.v, 5, 'Zustand im Format 5');
@@ -67,6 +72,18 @@ function eingang() {
     const nach = await p.evaluate(() => ({ mem: JSON.parse(JSON.stringify(STATE.altbestand)), disk: JSON.parse(localStorage.getItem(STORAGE_KEY)).altbestand }));
     assert.deepEqual(nach.mem, vor.alt, 'Altbestand im Speicher unverändert');
     assert.deepEqual(nach.disk, vor.alt, 'Altbestand gespeichert unverändert');
+    /* (4) Nach echtem Neuladen: Altbestand weiterhin unverändert, Darstellung weiterhin ohne Altdaten */
+    await p.reload();
+    await anmelden();
+    const neu = await p.evaluate(() => ({ v: STATE.version, alt: JSON.parse(JSON.stringify(STATE.altbestand)), disk: JSON.parse(localStorage.getItem(STORAGE_KEY)).altbestand, erk: erkenntnisText(entitaet('P-0001')) }));
+    assert.equal(neu.v, 5, 'nach Neuladen weiterhin Format 5');
+    assert.deepEqual(neu.alt, vor.alt, 'Altbestand nach Neuladen im Speicher unverändert');
+    assert.deepEqual(neu.disk, vor.alt, 'Altbestand nach Neuladen gespeichert unverändert');
+    assert.match(neu.erk, /^1 Spur, jüngste: Sichtung vom /, 'Erkenntnislage nach Neuladen: ' + neu.erk);
+    await p.evaluate(() => { VIEW.dtab = 'sichtungen'; dispatch({ type: 'DOSSIER_GEOEFFNET', id: 'P-0001', ueber: 't', navigieren: true }); });
+    await p.waitForSelector('#btn-si');
+    const text2 = await p.evaluate(() => document.body.innerText);
+    assert.doesNotMatch(text2, /Aussagen des Agenten|alte Aussage zu P-0001|offener Widerspruch|ARGUS wartet/i, 'nach Neuladen weiterhin keine Altdaten in der Darstellung');
     assert.deepEqual(fehler, [], 'keine Seitenfehler: ' + fehler.join(' | '));
     console.log('Phase 5c2a: ALLE OK');
   } catch (e) {
