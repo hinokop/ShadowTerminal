@@ -43,7 +43,7 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 | PR | Inhalt | Stand |
 |---|---|---|
 | #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
-| 5c2b (a) | stillgelegter Ereignisblock in `tickModule` und seine Helfer (`meldeText`, `meldungLiegtVor`, `VK`, `vkStatus`, `fensterZelle`) sowie `widerspruchOffen()` entfernt; neuer Test `phase5c2b-tickblock` (Standardauswahl dann 94 Skripte); Details: Abschnitt 8d in [phase5c-schemainventar.md](phase5c-schemainventar.md) | Draft, wartet auf unabhängige Prüfung; kein Merge freigegeben. Pull-Request-Nummer: siehe GitHub |
+| #118 (5c2b (a)) | stillgelegter Ereignisblock in `tickModule` und seine Helfer (`meldeText`, `meldungLiegtVor`, `VK`, `vkStatus`, `fensterZelle`) sowie `widerspruchOffen()` entfernt; neuer Test `phase5c2b-tickblock` (Standardauswahl dann 94 Skripte); Details: Abschnitt 8d in [phase5c-schemainventar.md](phase5c-schemainventar.md) | Draft, wartet auf unabhängige Prüfung; kein Merge freigegeben |
 
 Außer diesen beiden ist kein Pull Request offen. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
