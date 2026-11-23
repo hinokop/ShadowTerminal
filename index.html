@@ -1911,17 +1911,6 @@ function sichtungGuete(s) {
   return s.guete || 'unbewertet';
 }
 function gueteLabel(g) { const d = SCENARIO.guete[g] || SCENARIO.guete.unbewertet; return h('span', { class: 'label ' + d.klasse, title: d.text }, d.label); }
-function sichtungText(e) {
-  const T = abfrageT().standort, d = STATE.dossiers.entitaeten[e.id], L = d && d.sichtungen ? d.sichtungen.slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); }) : [];
-  const fuell = function (t, x) { Object.keys(x).forEach(function (k) { t = t.replace('{' + k + '}', x[k]); }); return t; };
-  if (e.typ === 'Ort') return fuell(T.ort, { E: kennung(e), N: e.name, H: e.name });
-  if (L.length) {
-    const s = L[0];
-    return fuell(T.sichtung, { E: kennung(e), N: e.name, T: fmtZ(s.t), O: s.ort ? ', ' + s.ort : '', X: (function () { let t = s.text || ''; if (s.quelle === 'Meldung') { [e.id, e.name].concat(e.aliase || []).forEach(function (n) { t = t.split(n).join(''); }); t = t.replace(/^[\s,.:;\-]+/, '').trim(); if (s.ort && t.toLowerCase().indexOf(s.ort.toLowerCase()) >= 0) t = t.replace(new RegExp(s.ort.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), s.ort); } return t ? ' (' + t + ')' : ''; })(), G: (function () { const g = sichtungGuete(s); return g === 'gesichert' ? '' : ' – ' + SCENARIO.guete[g].label + (g === 'veraltet' ? ', vor ' + Math.max(1, Math.round((Date.now() - Date.parse(s.t)) / 86400000)) + ' d' : ''); })(), ANZ: L.length > 1 ? L.length + ' Sichtungen im Dossier.' : '' }).trim();
-  }
-  const hint = adresseHinterlegt(e);
-  return hint ? fuell(T.adresse, { E: kennung(e), N: e.name, H: hint }) : fuell(T.nichts, { E: kennung(e), N: e.name });
-}
 
 /* Dossierstatus (Statuswerte aus SCENARIO.dossierStatus) */
 function statusDef(id) { return SCENARIO.dossierStatus.find(function (x) { return x.id === id; }) || null; }
