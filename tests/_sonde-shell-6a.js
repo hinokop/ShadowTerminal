@@ -11,12 +11,12 @@ const { chromium } = require('playwright');
 const PF = require('./_pfad');
 
 const BEFEHLE = [
-  'pwd', 'pwd -P', 'pwd -L', 'pwd x', 'pwd --help',
-  'ls', 'ls -a', 'ls -l', 'ls -la', 'ls -al', 'ls -1', 'ls -lh', 'ls -d', 'ls -z', 'ls --help',
+  'pwd', 'pwd -P', 'pwd -L', 'pwd x', 'pwd -x', 'pwd --help',
+  'ls', 'ls -a', 'ls -l', 'ls -la', 'ls -al', 'ls -1', 'ls -lh', 'ls -d', 'ls -F', 'ls -z', 'ls --falsch', 'ls --help',
   'ls /', 'ls /etc', 'ls /etc/ppp', 'ls /var/log', 'ls /etc /var', 'ls -l /etc', 'ls /nonexistent', 'ls etc', 'ls /etc/ppp/peers/kestrel',
   'ls pgcl-eu3.arch07', 'ls /pgcl-eu3.arch07/dossiers', 'ls /pgcl-eu3.arch07/dossiers/eins.txt', 'ls /pgcl-eu3.arch07/ops',
   'cd', 'pwd', 'cd /', 'cd ~', 'cd /etc', 'pwd', 'cd ..', 'cd ../..', 'cd /etc/ppp', 'cd -', 'pwd', 'cd .', 'cd /nonexistent', 'cd /etc/ppp/peers/kestrel',
-  'cd /etc /var', 'cd ""', 'cd ~/etc', 'echo $HOME', 'echo $PWD', 'echo $OLDPWD', 'cd $HOME', 'cd /var/log/syslog',
+  'cd /etc /var', 'cd -x', 'cd ""', 'cd ~/etc', 'echo $HOME', 'echo $PWD', 'echo $OLDPWD', 'cd $HOME', 'cd /var/log/syslog',
   'cd /pgcl-eu3.arch07', 'pwd', 'ls', 'ls -l', 'cd dossiers', 'pwd', 'ls -a', 'ls -l', 'cd eins.txt', 'cd nichts', 'ls nichts', 'ls ..', 'cd ..', 'cd ../ops', 'ls', 'cd /',
   'cat /nonexistent', 'cat /etc', 'ls /var/cache/tle', 'cd /var/cache/tle', 'ls -l'
 ];
