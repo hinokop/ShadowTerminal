@@ -5,6 +5,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
+const { altzustandOeffnen, altbestandPruefen, altbestandUnveraendert } = require('./_altzustand');
 
 (async () => {
   const browser = await chromium.launch();
@@ -146,6 +147,95 @@ const { APP } = require('./_pfad');
     await p.evaluate(fx => dispatch({ type: 'DOSSIER_ENTSPERREN', id: fx.bekannt }), fx);
     assert.equal(await p.evaluate(id => xDossierLesbar(entitaet(id)), fx.bekannt), true,
       'Entsperren stellt den Recherchezugriff wieder her');
+
+    /* Teststärkung (Phase 5c2b-Nachtrag): derselbe Ablauf gegen einen migrierten Format-4-Zustand mit tatsächlich vorhandenen
+       historischen Freigabestufen (bekannt, frei, unbekannt = kein Eintrag). Historische Freigaben dürfen keine Wirkung auf
+       Zugriffsrechte haben; eine manuelle Sperre schlägt auch eine historische Freigabe 'frei'. Der Altbestand bleibt unverändert. */
+    {
+      const q = await (await browser.newContext({ viewport: { width: 1500, height: 1000 }, reducedMotion: 'reduce' })).newPage();
+      q.setDefaultTimeout(18000);
+      const qfehler = [];
+      q.on('pageerror', e => qfehler.push(e.message));
+      await q.route(/^https?:/, r => r.abort());
+      const o = await altzustandOeffnen(q, APP), ids = o.ids, alle = [ids.bekannt, ids.frei, ids.unbekannt, ids.gesperrtFrei];
+      const alt = await altbestandPruefen(q, assert, ids);
+
+      const g = await q.evaluate(({ ids, alle }) => {
+        STATE.missionsbetrieb = true;
+        const f = xAnlegen({ titel: '5b4 Altbestand' }); profilSpeichern();
+        const zug = alle.map(id => {
+          const e = entitaet(id), z = zielZugang(id);
+          return { id, wissen: wissen(e), info: typeof infoGesperrt === 'function' && infoGesperrt(e),
+            zugang: z && { gesperrt: z.gesperrt, info: z.info },
+            lesbar: xDossierLesbar(e), recherche: dossierRechercheBestand().some(x => x.id === id) };
+        });
+        dispatch({ type: 'NAVIGATION', modul: 'x' }); renderModule();
+        const options = [...document.querySelectorAll('#x-dossier-wahl option')].map(o => o.value);
+        const verbunden = alle.map(id => xVerknuepfen(xFall(f.id), 'dossiers', id, false));
+        const stand = alle.map(id => {
+          STATE.dossiers.auswahl = ids.unbekannt === id ? ids.bekannt : ids.unbekannt;
+          const r = asAnwenden({ modul: 'dossier', dossier: id, dtab: 'chronik' });
+          return { ok: !!r.ok && !r.uebersprungen.length, auswahl: STATE.dossiers.auswahl === id };
+        });
+        return { fall: f.id, zug, options, verbunden, stand };
+      }, { ids, alle });
+      for (const z of g.zug) {
+        assert.equal(z.wissen, 'frei', 'historische Stufe ohne Wirkung auf wissen(): ' + z.id);
+        assert.equal(z.info, false, 'historische Stufe ohne Wirkung auf die Freigabe: ' + z.id);
+        assert.deepEqual(z.zugang, { gesperrt: false, info: false }, 'Zugang allein nach manueller Sperre: ' + z.id);
+        assert.equal(z.lesbar && z.recherche, true, 'Dossier lesbar und im Rechercheindex: ' + z.id);
+      }
+      for (const id of alle) assert.ok(g.options.includes(id), 'Fall-X-Auswahl enthält ' + id);
+      assert.deepEqual(g.verbunden, [true, true, true, true], 'Verknüpfung mit allen vier Stufen möglich');
+      assert.deepEqual(g.stand, alle.map(() => ({ ok: true, auswahl: true })), 'Arbeitsstand stellt alle vier Stufen wieder her');
+
+      /* Ablage-Eingang: alle Stufen wählbar, Zuordnung zum Dossier ohne Freigabe schreibt */
+      await q.locator('#nav-akten').click();
+      await q.locator('#ak-eingang-datei').setInputFiles({ name: 'altbestand.txt', mimeType: 'text/plain', buffer: Buffer.from('Quellmaterial mit Altbestand') });
+      await q.locator('#ak-eingang-vorschau pre').waitFor();
+      const wahl = await q.locator('#ak-eingang-dossier option').evaluateAll(opts => opts.map(x => x.value));
+      for (const id of alle) assert.ok(wahl.includes(id), 'Eingangsauswahl enthält ' + id);
+      await q.locator('#ak-eingang-fall').selectOption('__neu');
+      await q.locator('#ak-eingang-titel').fill('5b4 Eingang Altbestand');
+      await q.locator('#ak-eingang-dossier').selectOption(ids.unbekannt);
+      await q.locator('#ak-eingang-zuordnen').click();
+      await q.waitForFunction(id => PROFIL.recherche.beobachtungen.some(b => b.dossiers.includes(id)) && !AK_EINGANG.arbeit, ids.unbekannt);
+
+      /* Manuelle Sperre auf ein Dossier mit historischer Freigabe 'frei': Sperre bleibt wirksam, andere Stufen unberührt */
+      await q.locator('#ak-eingang-datei').setInputFiles({ name: 'altbestand2.txt', mimeType: 'text/plain', buffer: Buffer.from('Zweite Datei') });
+      await q.locator('#ak-eingang-vorschau pre').waitFor();
+      const s = await q.evaluate(ids => {
+        dispatch({ type: 'DOSSIER_SPERREN', id: ids.gesperrtFrei });
+        STATE.dossiers.auswahl = ids.frei;
+        const vorher = PROFIL.recherche.beobachtungen.length;
+        dispatch({ type: 'RECHERCHE_BELEG', dossier: ids.gesperrtFrei, fall: null, art: 'Text', fassung: {}, zitat: 'GESPERRT-ALT' });
+        const stand = asAnwenden({ modul: 'dossier', dossier: ids.gesperrtFrei, dtab: 'info' });
+        const z = zielZugang(ids.gesperrtFrei);
+        dispatch({ type: 'NAVIGATION', modul: 'akten' }); renderModule();
+        const picker = [...document.querySelectorAll('#ak-eingang-dossier option')].map(x => x.value);
+        return { zugang: z && { gesperrt: z.gesperrt, info: z.info }, lesbar: xDossierLesbar(entitaet(ids.gesperrtFrei)),
+          verknuepfen: xVerknuepfen(xFall(null) || xAnlegen({ titel: '5b4 Sperre' }), 'dossiers', ids.gesperrtFrei, false),
+          keinSchreiben: PROFIL.recherche.beobachtungen.length === vorher && !PROFIL.recherche.beobachtungen.some(x => x.zitat === 'GESPERRT-ALT'),
+          uebersprungen: stand.uebersprungen, auswahl: STATE.dossiers.auswahl, picker,
+          andere: [ids.bekannt, ids.frei, ids.unbekannt].map(id => ({ gesperrt: zielZugang(id).gesperrt, lesbar: xDossierLesbar(entitaet(id)) })) };
+      }, ids);
+      assert.deepEqual(s.zugang, { gesperrt: true, info: false }, 'manuelle Sperre schlägt historische Freigabe frei');
+      assert.equal(s.lesbar, false, 'gesperrtes Dossier in Fall X nicht lesbar');
+      assert.equal(s.verknuepfen, false, 'gesperrtes Dossier nicht verknüpfbar');
+      assert.equal(s.keinSchreiben, true, 'kein Schreiben auf das gesperrte Dossier');
+      assert.ok(s.uebersprungen.includes('Dossier ' + ids.gesperrtFrei) && s.auswahl === ids.frei, 'Arbeitsstand überspringt gesperrtes Dossier');
+      assert.equal(s.picker.includes(ids.gesperrtFrei), false, 'Eingangsauswahl ohne gesperrtes Dossier');
+      for (const id of [ids.bekannt, ids.frei, ids.unbekannt]) assert.ok(s.picker.includes(id), 'Eingangsauswahl weiter mit ' + id);
+      assert.deepEqual(s.andere, [{ gesperrt: false, lesbar: true }, { gesperrt: false, lesbar: true }, { gesperrt: false, lesbar: true }],
+        'Sperre wirkt nur auf das gesperrte Dossier');
+      await q.evaluate(id => dispatch({ type: 'DOSSIER_ENTSPERREN', id }), ids.gesperrtFrei);
+      assert.equal(await q.evaluate(id => xDossierLesbar(entitaet(id)), ids.gesperrtFrei), true, 'Entsperren stellt den Zugriff wieder her');
+
+      const nach = await altbestandUnveraendert(q, assert, alt, 'phase5b4-arbeitszugang');
+      assert.deepEqual(nach.ls, alt, 'Altbestand im gespeicherten Zustand unverändert');
+      assert.deepEqual(qfehler, [], 'keine Browserfehler im Altbestandszustand');
+    }
+
     assert.deepEqual(errors, [], 'keine Browserfehler');
     console.log('OK: Phase 5b4 – Arbeitsstand, Fall X, Ablage-Eingang, Recherche und manuelle Sperre');
   } finally { await browser.close(); }
