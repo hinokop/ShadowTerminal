@@ -1,6 +1,6 @@
 # Shadow Terminal – aktueller Stand
 
-**Stand:** 22.11.2026. Zuletzt geprüft gegen `main` `c9e48ab67646e936a8bcbb7f693114829bea0ebb` (Merge von #114; davor #111 als `dc78f0c` und #112 als `7a28ca7`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
+**Stand:** 22.11.2026. Zuletzt geprüft gegen `main` `036f4ebc43e14d27f4f8d8772b66ec93674a3137` (Merge von #115; davor #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`); für #116 ist der Merge-Commit nachzutragen, sobald vorhanden und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
 
 Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **in `main`** gilt, und dem, was nur in **offenen Pull Requests** vorliegt. Pflege: bei jedem Merge in `main` aktualisieren, Stand und `main`-Commit nachführen. Entwicklungsregeln stehen in [CLAUDE.md](../CLAUDE.md), nicht hier.
 
@@ -32,7 +32,7 @@ Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **
 
 Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Baseline und Entwicklungsplan (#93 bis #97); Doku zu Karten-Konsolenbefunden (#107). Manuelle Dossiersperren, Pin- und Zonenzugriff über `zielZugang` und Profilkompatibilität sind erhalten.
 
-**Tests:** `node tests/runall.js` führt die Standardauswahl aus (89 Skripte bis #110, 91 mit #111; Playwright, Passwort `pw-test-123`). Historische Skripte des stillgelegten Missionsablaufs sind nur namentlich aufrufbar. Als instabil bekannt: `wk3`, `dp`, `m1flow` (Missionsablauf, auch auf `main` rot) und `lage-box` unter Parallellast. Bestätigung der Läufe erfolgt über GitHub Actions: der dauerhafte Workflow `ci.yml` (seit #114) führt Python-Brückentest, Syntaxprüfung und die vollständige Standardauswahl bei jedem Pull Request gegen `main` und bei jedem Push auf `main` aus (Push-Lauf 45075611403 auf `c9e48ab`: 91 grün, 0 unerwartet rot). Für den Merge-Commit `dc78f0c` von #111 selbst lief keine Standardauswahl; bestätigt war dort der Lauf 45067956391 auf dem Head `477cfaa` des gemergten Branches.
+**Tests:** `node tests/runall.js` führt die Standardauswahl aus (89 Skripte bis #110, 91 mit #111, 92 seit #115 mit `dossier-sperre`, 93 seit 5c2a mit `phase5c2a-altdaten`; Playwright, Passwort `pw-test-123`). Historische Skripte des stillgelegten Missionsablaufs sind nur namentlich aufrufbar. Als instabil bekannt: `wk3`, `dp`, `m1flow` (Missionsablauf, auch auf `main` rot) und `lage-box` unter Parallellast. Bestätigung der Läufe erfolgt über GitHub Actions: der dauerhafte Workflow `ci.yml` (seit #114) führt Python-Brückentest, Syntaxprüfung und die vollständige Standardauswahl bei jedem Pull Request gegen `main` und bei jedem Push auf `main` aus (Push-Lauf 45075611403 auf `c9e48ab`: 91 grün, 0 unerwartet rot). Für den Merge-Commit `dc78f0c` von #111 selbst lief keine Standardauswahl; bestätigt war dort der Lauf 45067956391 auf dem Head `477cfaa` des gemergten Branches.
 
 **Abnahme #111:** Die Windows-Abnahme mit gesicherter Kopie der echten Profildaten wurde laut Master Wayne vor dem Merge durchgeführt und als erfolgreich gemeldet; das Ergebnisblatt ist nicht Teil des Repositorys und wurde von Claude nicht eingesehen.
 
@@ -44,15 +44,15 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 |---|---|---|
 | #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
 
-Dokumentations-PRs werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1; ein Dokumentations-PR wie dieser ist nach seinem Merge nicht mehr aufzuführen.
+Zurzeit ist außer #55 kein Pull Request offen. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
-Erledigt: #111 (Phase 5c1b), der Dokumentationsstand #112 und die dauerhafte CI #114, alle in `main`.
+Erledigt, jeweils in `main`: #111 (Phase 5c1b), die Dokumentationsstände #112 und #113, die dauerhafte CI #114, die Entfernung der phasengebundenen Workflows #115, die Tageszeit-Korrektur des Tests `terminal-link-kette` #117 und Phase 5c2a #116 (verbliebene Missionsdaten im Dossier ausgeblendet, Entscheidung C).
 
-1. **Dokumentationsnachtrag** zu #111 und #114 (PR #113).
-2. **CI-Konsolidierung** vor 5c2: Schritt 1 (dauerhafte Prüfung, `.github/workflows/ci.yml`) ist mit #114 in `main` (`c9e48ab`); der erste Push-Lauf auf `main` (45075611403) ist grün (91 grün, 0 unerwartet rot). Als Nächstes: wiederholt erfolgreiche Läufe abwarten, dann die zwölf phasengebundenen Workflows in einem eigenen PR entfernen; Branch-Schutz erst danach und nur auf Entscheidung von Master Wayne. Vorgemerkt: die Einschränkung von `lage-box` (`BEKANNT_NUR`) im Test-Runner weiter absichern.
-3. **5c2:** in zwei Schritten, Daten im Altbestand bleiben erhalten. **5c2a:** Darstellung ausblenden (Entscheidung C, Draft). **5c2b:** danach ungenutzte Funktionen und verbliebenen `ALT()`-Rest-Code nach Referenzprüfung entfernen.
+1. **5c2b:** ungenutzte Funktionen (`IZ()`, `aussagenListe()`, `widerspruchOffen()`) und verbliebenen `ALT()`-Rest-Code nach Referenzprüfung entfernen; Altformatmigration (`SCENARIO.missionen`, `buildInitialStateV4`) und gespeicherter Altbestand bleiben geschützt (Punkt 3).
+2. **CI-Konsolidierung** (abgeschlossen mit #114 und #115): `.github/workflows/ci.yml` ist der einzige Workflow (Pull Requests gegen `main`, Push auf `main`, manuell; Python-Brückentest, Syntaxprüfung, vollständige Standardauswahl). Die zwölf früheren phasengebundenen Workflows sind entfernt und in der Git-Historie einsehbar. Der Sonderlauf von `dossier-sperre` ist in die Standardauswahl übernommen; die übrigen Sondertests der alten Workflows (`zn`, `zev`, `al`, `zb`, `ds2`, `ak2`) sind als historisch markiert und nur namentlich aufrufbar. Offen: Branch-Schutz (nur auf Entscheidung von Master Wayne) und die weitere Absicherung der `lage-box`-Einschränkung (`BEKANNT_NUR`) im Test-Runner.
+3. **5c2:** in zwei Schritten, Daten im Altbestand bleiben erhalten. **5c2a** ist erledigt (Darstellung ausgeblendet, #116). **5c2b** baut auf dem integrierten Stand von 5c2a auf.
 4. **Branch-Bereinigung:** nur nach Abgleich und ausdrücklicher Freigabe.
 5. **Phase 6:** Unix-/Linux-Realismus im Terminal und schrittweise Englischumstellung ([terminal-entwicklungsplan-2026-11.md](terminal-entwicklungsplan-2026-11.md)), Modernisierung der Oberfläche modulweise.
 
@@ -60,13 +60,13 @@ Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Fre
 
 ## 4. Repository, Branches und CI
 
-- 62 Branches (`main` und 61 weitere), 113 Pull Requests: 108 gemergt, 2 offen (#55, #113 dieser Doku-Nachtrag), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches der gemergten PRs #111, #112 und #114 bestehen noch. `main` ist nicht geschützt.
+- **Prüfstand 23.11.2026, unmittelbar vor dem Merge von #116:** 65 Branches (`main` und 64 weitere), 116 Pull Requests: 111 gemergt, 2 offen (#55 und #116 selbst), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
-- Auf `main` liegen der dauerhafte Workflow `ci.yml` (Pull Requests gegen `main`, Push auf `main`, manuell) und zwölf phasenbezogene Workflows (5a, 5b1 bis 5b9, 5c1a, 5c1b), die ausschließlich bei Pushes auf ihre gemergten Entwicklungsbranches auslösen und damit praktisch wirkungslos sind; ihre Entfernung steht aus.
+- Workflows: ausschließlich `ci.yml`. Die früheren zwölf `phase5*-regression.yml` wurden mit #115 entfernt; ihre damaligen Läufe (zuletzt 5c1b, 45067956391) bleiben als Nachweis auf GitHub einsehbar.
 
 ## 5. Offene Entscheidungen und Produktideen
 
-1. **Alte Missionsdaten in der Darstellung:** entschieden am 22.11.2026 (Option C, ausblenden; Daten bleiben unverändert in `STATE.altbestand`). Umsetzung als Draft 5c2a (Abschnitt 8c in [phase5c-schemainventar.md](phase5c-schemainventar.md)); die Entfernung des Rest-Codes folgt als 5c2b.
+1. **Alte Missionsdaten in der Darstellung:** entschieden am 22.11.2026 (Option C, ausblenden; Daten bleiben unverändert in `STATE.altbestand`) und mit 5c2a (#116) umgesetzt (Abschnitt 8c in [phase5c-schemainventar.md](phase5c-schemainventar.md)); die Entfernung des Rest-Codes folgt als 5c2b.
 2. **Passwortsperre für das Modul Profil** (Produktidee, nicht Teil von Phase 5c): analog zur Sperre einzelner Dossiers, Entsperren über Eingabe oder Terminal. Offen für Vorschläge.
 3. **Weitere Vormerkungen:** Notizfelder nur als „Bisherige Notizen“ sichtbar, wenn Text vorhanden ist; Entscheidung zu den Lichtbildern `l-9052` und `l-9053`; lokale Bereitstellung von MapLibre.
 4. **Veraltete Texte im Code** (nicht Gegenstand dieses Dokumentations-PR): der Dateikopf von `akten-modul.js` beschreibt noch Akten, Schwärzungen und Einsichtsanträge, produktiv zeigt die Ablage nur den lokalen Eingang (`renderAkten`); die Startfehlermeldung in `index.html` nennt noch `dialog.js` und `klassifikator.js`, die nicht mehr existieren. Bereinigung gehört zu 5c2 oder einer eigenen Runde. Ebenso trägt der Kopf von `docs/phase5c-schemainventar.md` noch „Reine Bestandsaufnahme, kein Code geändert“ mit Basis `c19b93b`; das Dokument ist Entscheidungshistorie, wird aber seit #111 auch für die Umsetzung herangezogen und sollte im Zuge von 5c2 aktualisiert werden.

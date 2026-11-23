@@ -1,8 +1,8 @@
 name: CI
 
 # Dauerhafte Prüfung: jeder Pull Request gegen main und jeder Push auf main.
-# Ersetzt schrittweise die phasengebundenen Workflows (phase5*-regression.yml),
-# die nur auf ihren inzwischen gemergten Entwicklungsbranches auslösen.
+# Ersetzt die früheren phasengebundenen Workflows (phase5*-regression.yml; in der
+# Git-Historie vor dem Entfernen weiterhin einsehbar).
 
 on:
   pull_request:
