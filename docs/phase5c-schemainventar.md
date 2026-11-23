@@ -1,6 +1,6 @@
 # Phase 5c – Bestandsaufnahme Zustands- und Profilschema
 
-Stand: 22.11.2026, Basis `main` `c19b93b` (nach #108 und #107). **Reine Bestandsaufnahme, kein Code geändert.** Entscheidungen und Anforderungen in Abschnitt 7, Prüfhistorie in Abschnitt 9; Umsetzung erst nach Freigabe durch Master Wayne.
+Stand: 23.11.2026. Die Bestandsaufnahme (Abschnitte 1 bis 7) entstand am 22.11.2026 auf `main` `c19b93b` (nach #108 und #107) und beschreibt diesen Zeitpunkt; sie wurde nicht fortgeschrieben. Seitdem umgesetzt: 5c1a (#110), 5c1b (#111, Abschnitt 8b), 5c2a (#116, Abschnitt 8c); 5c2b (a) mit #118 (Abschnitt 8d). Den aktuellen Stand von `main` nennt ausschließlich [AKTUELL.md](AKTUELL.md). Entscheidungen und Anforderungen in Abschnitt 7, Umsetzungen in Abschnitt 8, Prüfhistorie in Abschnitt 9.
 
 Methode: Empirische Sonde (frischer Stand und geladenes Altprofil aus `tests/fixtures/altprofil-mission.json`: Felder, Typen, Größen), AST-gestützte Zählung aller Lese- und Schreibstellen je Feld und Funktion, gezielte Durchsicht der Lade-, Prüf-, Export- und Importpfade. Wo eine Aussage aus dem Code abgeleitet und nicht ausgeführt wurde, ist das vermerkt.
 
@@ -165,6 +165,19 @@ Test: `tests/phase5c2a-altdaten.js` (Zustand mit Altbestand: keine Aussagentabel
 
 Hinweis: Ein unverändert gespeicherter Erkenntnis-Standardtext wird nicht als eigener Eintrag geführt (`erkWert === null`); nur wer den Text im Dossier ausdrücklich gespeichert hat, behält seinen Wortlaut. Bereits gespeicherte eigene Texte werden nicht verändert.
 
+### 8d. Umsetzung 5c2b (a): stillgelegter Ereignisblock und Helfer (#118, Freigabe Master Wayne 23.11.2026)
+
+Freigegebener Umfang: den Ereignisblock in `tickModule` für `[data-melde]`, `[data-vk]` und `[data-fenster]` und die dadurch funktionslosen Helfer entfernen, soweit die Referenzprüfung ihre ausschließliche Verwendung dort bestätigt; außerdem `widerspruchOffen()`. Ausdrücklich ausgenommen: `IZ()`, `aussagenListe()`, `ALT()`, `LM()`, `KM()`, `MS()`, `missionDef()`, `SCENARIO.missionen`, die Entwicklerkonsole und jede Änderung an gespeicherten Daten.
+
+Referenzprüfung (Quelltextsuche über das gesamte Repository, danach Ausführung):
+- Die Attribute `data-melde`, `data-vk`, `data-fenster` kommen im Produktivcode nur in `tickModule` (Abfrage) und in `fensterZelle` (Lesen) vor; kein Modul, keine Vorlage und keine Szenariodatei erzeugt sie. Dynamisch zusammengesetzte Attributnamen (`'data-' + …`, `dataset[…]`) gibt es für diese Namen nicht. Nutzerinhalte können sie nicht einschleusen: `kurzlageInhalt()` baut Inhalte aus erlaubten Elementen ohne Attribute neu auf (einzige Ausnahme `data-unterlage`).
+- `meldeText` und `meldungLiegtVor` wurden nur im Tick-Block und gegenseitig aufgerufen, `VK` und `vkStatus` nur dort und gegenseitig, `fensterZelle` nur dort, `widerspruchOffen` nirgends.
+- Außerhalb der Standardauswahl verweisen vier Testskripte (`vk`, `flow2`, `kb`, `zz`) auf die entfernten Helfer. Alle vier brachen schon auf unverändertem `main` ab, an Stellen vor dem Zugriff auf diese Helfer und aus anderen Gründen: `vk` wartet auf das längst entfernte Feld `#vk-zweck`, `flow2` benötigt das nicht installierte Paket `jsdom`, `kb` liest einen leeren Wert (`haltung` von `null`), `zz` ruft die nicht mehr vorhandene Funktion `begruendungPruefen` auf. Der Befund ist ausgeführt (Basislauf vor der Änderung, Fehlerstellen `kb.js:7` und `zz.js:6` nach der Änderung unverändert). Die Skripte werden in diesem Schritt nicht verändert; ob sie ausgemustert werden, bleibt eine eigene Entscheidung.
+
+Entfernt in `index.html`: Tick-Block, `meldungLiegtVor`, `meldeText`, `fensterZelle`, der Kommentarblock „Modul 8: Verstärkung“ mit `VK` und `vkStatus`, `widerspruchOffen`. Keine Hinzufügungen. Nicht angefasst, obwohl nun ohne Aufrufer in der Anwendung: `fensterNach`, `fensterListe`, `fristMs`, `fmtRest`, `fmtDauer`; sie gehören nicht zum freigegebenen Umfang und werden bei 5c2b (b) bzw. (c) neu bewertet (Aufruferprüfung dann erneut).
+
+Test: `tests/phase5c2b-tickblock.js` (entfernte Funktionen nicht mehr vorhanden, ausgenommene Funktionen erhalten, fremde Elemente mit den früheren Attributen bleiben unberührt, Takt ohne Seitenfehler, Altbestand mit Aussagen, Widerspruch, Berichten, Einschätzung und Verstärkungseintrag im Speicher und gespeichert unverändert, auch nach Neuladen, Karte und Terminal funktionsfähig). Rot-vor-Grün: Gegen `index.html` von `main` rot, nach der Änderung grün; der Tick-Abschnitt allein ist auf `main` ebenfalls rot (`data-melde` wird dort tatsächlich beschrieben).
+
 ## 9. Prüfhistorie
 
 - 22.11.2026: Bestandsaufnahme (Claude, `f29bad8`).
@@ -173,6 +186,8 @@ Hinweis: Ein unverändert gespeicherter Erkenntnis-Standardtext wird nicht als e
 - 22.11.2026: Entscheidung E2.7 („Profil leeren“ löscht die Profiltexte mit) durch Master Wayne; Beginn 5c1a.
 - 22.11.2026: Review von ChatGPT zu #110 (Leerstand beim Profilimport, Spiegelzeitpunkt); korrigiert, Merge-Freigabe durch Master Wayne nach erfolgreicher Prüfung.
 - 22.11.2026: Beginn 5c1b auf Anweisung Master Wayne; Umsetzung als Draft (Abschnitt 8b).
+- 23.11.2026: Freigabe von 5c2b (a) durch Master Wayne (Umfang und Ausschlüsse in Abschnitt 8d); Grundsatz: Entfernung nur bei nachgewiesener Unerreichbarkeit oder fehlender fachlicher Bedeutung, nicht bei bloß wenigen Referenzen. Umsetzung als Draft #118. Für 5c2b (b) gilt: bei `IZ()` je Test unterscheiden, ob er historisches Verhalten dokumentiert oder eine produktive Funktion absichert; kein pauschales Ersetzen. 5c2b (c) bleibt zurückgestellt.
+- 23.11.2026: Unabhängige Prüfung von #118 durch ChatGPT (Review 6021844935 auf Head `c40b5b9`): vollständige CI anhand des GitHub-Protokolls bestätigt (94 grün); die lokalen Rot-vor-Grün-Gegenproben wurden nicht wiederholt; kein weiteres Windows-Testpaket nötig. Merge-Freigabe durch Master Wayne, Merge erst nach diesem Dokumentationsnachtrag und grüner CI auf dem Nachtragsstand.
 - 22.11.2026: Unabhängiges Review von ChatGPT zu #111 (Review 6014052284, Head `2cb4185`): Blocker (Ladepfad `Store.load` → `init`) und drei Absicherungen; von Claude gegen den Code geprüft und am Verhalten reproduziert (Test A auf dem alten Stand: vorhandener Zustand durch einen frischen ersetzt). Korrektur in Abschnitt 8b. Keine Merge-Freigabe.
 - 22.11.2026: Nachprüfung von ChatGPT zu #111 (Review 6014282037, Head `978d7a2`): Hauptpfade behoben, Restfall leerer Schlüssel; von Claude am Code bestätigt und korrigiert (siehe 8b). Keine Merge-Freigabe.
 - 22.11.2026: Entscheidung E8 (Option C) durch Master Wayne; Beginn 5c2a (Abschnitt 8c).
