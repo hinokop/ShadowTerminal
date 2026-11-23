@@ -1,6 +1,6 @@
 # Shadow Terminal – aktueller Stand
 
-**Stand:** 22.11.2026. Zuletzt geprüft gegen `main` `036f4ebc43e14d27f4f8d8772b66ec93674a3137` (Merge von #115; davor #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`); für #116 ist der Merge-Commit nachzutragen, sobald vorhanden und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
+**Stand:** 23.11.2026. Zuletzt geprüft gegen `main` `ebe44f6b66a68ae74272274d6003f25216529bc9` (Merge von #116; davor #115 als `036f4eb`, #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
 
 Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **in `main`** gilt, und dem, was nur in **offenen Pull Requests** vorliegt. Pflege: bei jedem Merge in `main` aktualisieren, Stand und `main`-Commit nachführen. Entwicklungsregeln stehen in [CLAUDE.md](../CLAUDE.md), nicht hier.
 
@@ -43,14 +43,18 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 | PR | Inhalt | Stand |
 |---|---|---|
 | #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
+| 5c2b (a) | stillgelegter Ereignisblock in `tickModule` und seine Helfer (`meldeText`, `meldungLiegtVor`, `VK`, `vkStatus`, `fensterZelle`) sowie `widerspruchOffen()` entfernt; neuer Test `phase5c2b-tickblock` (Standardauswahl dann 94 Skripte); Details: Abschnitt 8d in [phase5c-schemainventar.md](phase5c-schemainventar.md) | Draft, wartet auf unabhängige Prüfung; kein Merge freigegeben. Pull-Request-Nummer: siehe GitHub |
 
-Zurzeit ist außer #55 kein Pull Request offen. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
+Außer diesen beiden ist kein Pull Request offen. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
 Erledigt, jeweils in `main`: #111 (Phase 5c1b), die Dokumentationsstände #112 und #113, die dauerhafte CI #114, die Entfernung der phasengebundenen Workflows #115, die Tageszeit-Korrektur des Tests `terminal-link-kette` #117 und Phase 5c2a #116 (verbliebene Missionsdaten im Dossier ausgeblendet, Entscheidung C).
 
-1. **5c2b:** ungenutzte Funktionen (`IZ()`, `aussagenListe()`, `widerspruchOffen()`) und verbliebenen `ALT()`-Rest-Code nach Referenzprüfung entfernen; Altformatmigration (`SCENARIO.missionen`, `buildInitialStateV4`) und gespeicherter Altbestand bleiben geschützt (Punkt 3).
+1. **5c2b** (verbliebenen `ALT()`-Rest-Code nach Referenzprüfung entfernen; Altformatmigration `SCENARIO.missionen`, `buildInitialStateV4` und gespeicherter Altbestand bleiben geschützt, Punkt 3). Grundsatz (Master Wayne, 23.11.2026): Eine Funktion wird nur bei nachgewiesener Unerreichbarkeit oder fehlender fachlicher Bedeutung entfernt, nicht wegen weniger Referenzen. Aufteilung:
+   - **(a)** stillgelegter Tick-Block, seine Helfer und `widerspruchOffen()`: freigegeben, als Draft in Prüfung (Abschnitt 2).
+   - **(b)** `aussagenListe()` und `IZ()`: Tests auf direkte Altbestand-Zugriffe umstellen; bei `IZ()` je Test unterscheiden, ob er historisches Verhalten dokumentiert oder eine produktive Funktion absichert, kein pauschales Ersetzen. Noch nicht begonnen.
+   - **(c)** Entwicklerkonsole (`Dev.startJetzt()`, `START_VORGEZOGEN`, `einsatzLaeuft()`) und Texte in `SCENARIO.abfragen.aussagen`: zurückgestellt, eigene Entscheidung nötig.
 2. **CI-Konsolidierung** (abgeschlossen mit #114 und #115): `.github/workflows/ci.yml` ist der einzige Workflow (Pull Requests gegen `main`, Push auf `main`, manuell; Python-Brückentest, Syntaxprüfung, vollständige Standardauswahl). Die zwölf früheren phasengebundenen Workflows sind entfernt und in der Git-Historie einsehbar. Der Sonderlauf von `dossier-sperre` ist in die Standardauswahl übernommen; die übrigen Sondertests der alten Workflows (`zn`, `zev`, `al`, `zb`, `ds2`, `ak2`) sind als historisch markiert und nur namentlich aufrufbar. Offen: Branch-Schutz (nur auf Entscheidung von Master Wayne) und die weitere Absicherung der `lage-box`-Einschränkung (`BEKANNT_NUR`) im Test-Runner.
 3. **5c2:** in zwei Schritten, Daten im Altbestand bleiben erhalten. **5c2a** ist erledigt (Darstellung ausgeblendet, #116). **5c2b** baut auf dem integrierten Stand von 5c2a auf.
 4. **Branch-Bereinigung:** nur nach Abgleich und ausdrücklicher Freigabe.
@@ -60,7 +64,7 @@ Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Fre
 
 ## 4. Repository, Branches und CI
 
-- **Prüfstand 23.11.2026, unmittelbar vor dem Merge von #116:** 65 Branches (`main` und 64 weitere), 116 Pull Requests: 111 gemergt, 2 offen (#55 und #116 selbst), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
+- **Prüfstand 23.11.2026, vor Eröffnung des Drafts zu 5c2b (a):** 65 Branches (`main` und 64 weitere), 116 Pull Requests: 112 gemergt, 1 offen (#55), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
 - Workflows: ausschließlich `ci.yml`. Die früheren zwölf `phase5*-regression.yml` wurden mit #115 entfernt; ihre damaligen Läufe (zuletzt 5c1b, 45067956391) bleiben als Nachweis auf GitHub einsehbar.
 
