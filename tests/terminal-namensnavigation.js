@@ -165,19 +165,19 @@ const { APP } = require('./_pfad');
       dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' });
       dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
       const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.mission === 'STD' &&
-        !IZ()[x.id] && x.name && !dossierGesperrt(x));
+        x.name && !dossierGesperrt(x));
       if (!e) return null;
-      IZ()[e.id] = { status: 'bekannt' };
+      /* Phase 5c2b (b): In diesem Zustand gibt es keinen Altbestand; der frühere Schreibzugriff über die Hilfsfunktion IZ veränderte nur ein temporäres Objekt und ist entfallen. */
       const z = zielZugang(e.id);
       return { id: e.id, name: e.name, status: wissen(e), info: (typeof infoGesperrt === 'function' && infoGesperrt(e)),
         zugang: z && { id: z.id, info: z.info, gesperrt: z.gesperrt },
         recherche: dossierRechercheBestand().some(x => x.id === e.id),
         nameTreffer: terminalZielNamen('open', e.name).some(x => x.id === e.id) };
     });
-    assert.ok(historisch && historisch.name, 'Test benötigt ein historisch eingeschränktes Dossier');
+    assert.ok(historisch && historisch.name, 'Test benötigt ein benanntes Standarddossier ohne manuelle Sperre');
     /* Phase 5b7: Das gespeicherte Merkmal bleibt erhalten, der stillgelegte Missionsbetrieb wirkt nicht mehr. */
-    assert.equal(historisch.status, 'frei', 'gespeicherter Wissensstand ohne Wirkung');
-    assert.equal(historisch.info, false, 'historische Freigabe ohne Wirkung');
+    assert.equal(historisch.status, 'frei', 'Wissensstand ohne Wirkung (Zustand ohne Altbestand)');
+    assert.equal(historisch.info, false, 'Freigabe ohne Wirkung (Zustand ohne Altbestand)');
     assert.deepEqual(historisch.zugang, { id: historisch.id, info: false, gesperrt: false },
       'Terminalzugang beruht allein auf der manuellen Sperre');
     assert.equal(historisch.recherche && historisch.nameTreffer, true,

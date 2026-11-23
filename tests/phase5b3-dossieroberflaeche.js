@@ -24,7 +24,7 @@ const { APP } = require('./_pfad');
       const known = SCENARIO.standard.dossiers.find(e => e.typ === 'Person');
       if (!known) return null;
       /* Phase 5c1b: alter Kenntnisstand liegt nur noch im Altbestand */ STATE.altbestand = Object.assign(STATE.altbestand || {}, { infozugang: Object.assign((STATE.altbestand && STATE.altbestand.infozugang) || {}, { [known.id]: { status: 'bekannt' } }) });
-      const unknown = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && e.id !== known.id && !IZ()[e.id]);
+      const unknown = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && e.id !== known.id && !((STATE.altbestand && STATE.altbestand.infozugang) || {})[e.id]);
       const unaccepted = SCENARIO.entitaeten.find(e => e.typ === 'Person' && e.id === 'P-0001' && !freigeschaltet('M1'));   /* Phase 5c1b: früheres Missionsdossier, Auftrag nicht angenommen */
       if (!unknown || !unaccepted) return null;
       return { known: known.id, unknown: unknown.id, unaccepted: unaccepted.id,

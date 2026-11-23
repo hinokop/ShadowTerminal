@@ -105,7 +105,7 @@ function v4Eingang() {
         pt: JSON.parse(JSON.stringify(PROFIL.profiltexte)), dd: JSON.parse(JSON.stringify(PROFIL.dossierDaten)),
         sperre: zielZugang('P-0005') && zielZugang('P-0005').gesperrt, eigene: STATE.dossiers.eigene.map(e => e.id),
         pins: PROFIL.pins.map(x => x.id + ':' + (x.dossier || '')), zonen: PROFIL.zonen.map(z => z.id), faelle: PROFIL.recherche.faelle.map(f => f.id),
-        aussagen: aussagenListe().length };
+        aussagen: ((STATE.altbestand && STATE.altbestand.aussagen) || []).length };
     }, roh.state);
     assert.equal(m.v, 5, 'überführter Zustand im Format 5');
     assert.equal(m.gesp, 5, 'überführter Zustand gespeichert');
