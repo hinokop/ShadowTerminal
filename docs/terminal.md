@@ -56,3 +56,13 @@ Die Shell läuft als gewöhnlicher Benutzer `raizo` (Prompt `raizo@terminal:/$`,
 - `pon`, `poff`, `plog` und `tail /var/log/syslog` laufen wie bisher. Unter Ubuntu ist der erste angelegte Benutzer unter anderem in den Gruppen `adm` (Protokolle lesen) und `dip` (pppd starten); das ist angenommen, nicht am System geprüft.
 - `wg-quick` läuft ohne Rückfrage. Abweichung vom Original: wg-quick startet sich als Nicht-root über sudo neu und fragt nach dem Kennwort (`wg-quick/linux.bash`, Zeile 86 in wireguard-tools).
 - nmap ist ohnehin das echte Programm des PCs mit den Rechten des Windows-Benutzers.
+
+## pwd (Bash-Builtin, Phase 6a-1)
+
+`pwd` bildet das Bash-Builtin nach (Referenz bash 5.2.21, lokal gemessen), nicht das externe `/usr/bin/pwd` (dessen `--help` endet mit Rückgabewert 0).
+
+- `-L` und `-P` (auch kombiniert oder wiederholt) werden akzeptiert; im Terminal gibt es keine symbolischen Links, beide liefern denselben Pfad.
+- `--` beendet die Optionen; der erste Nicht-Optionswert beendet die Optionsauswertung; Operanden werden ignoriert (`pwd x` gibt den Pfad aus, Rückgabewert 0).
+- Ungültige Option (`pwd -x`, auch `--x` und `-L-`, dort als `--` gemeldet): `bash: pwd: -x: invalid option` und `pwd: usage: pwd [-LP]`, Rückgabewert 2.
+- `pwd --help`: Hilfetext des Builtins auf stdout, Rückgabewert 2. Die Optionen werden der Reihe nach ausgewertet.
+- Abweichungen: `$PWD` und `$OLDPWD` gibt es noch nicht (geplant 6a-5); `-L` richtet sich deshalb nicht nach `$PWD`. Das Arbeitsverzeichnis `/` ist zugleich Heimatverzeichnis (siehe Benutzer). Die Schreibweise von Archivpfaden unter Windows (Brücke ohne Unterscheidung der Groß- und Kleinschreibung) gehört zur Etappe `cd`.
