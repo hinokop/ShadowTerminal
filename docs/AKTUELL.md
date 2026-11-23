@@ -1,6 +1,6 @@
 # Shadow Terminal – aktueller Stand
 
-**Stand:** 23.11.2026. Zuletzt geprüft gegen `main` `67e12794ba25e0effbba948ddd1860f241e95f57` (Merge von #123; davor #120 als `072c2d3`, #122 als `d6753b8`, #121 als `5501b38`, #119 als `5c5a545`, #118 als `1cb1195`, #116 als `ebe44f6`, #115 als `036f4eb`, #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
+**Stand:** 23.11.2026. Zuletzt geprüft gegen `main` `696784b6ce9cd56a9e8a4d9de1d4b4872e9170ff` (Merge von #124; davor #123 als `67e1279`, #120 als `072c2d3`, #122 als `d6753b8`, #121 als `5501b38`, #119 als `5c5a545`, #118 als `1cb1195`, #116 als `ebe44f6`, #115 als `036f4eb`, #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
 
 Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **in `main`** gilt, und dem, was nur in **offenen Pull Requests** vorliegt. Pflege: bei jedem Merge in `main` aktualisieren, Stand und `main`-Commit nachführen. Entwicklungsregeln stehen in [CLAUDE.md](../CLAUDE.md), nicht hier.
 
@@ -50,8 +50,10 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 | PR | Inhalt | Stand |
 |---|---|---|
 | #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
+| #125 | Sichtungs-TXT-Export: Güte (gespeicherte Bewertung) und Aktualität (Alter) getrennt, Objekttext `[object HTMLSpanElement]` behoben; Produktcode in `karte-modul.js`, Tests `phase5c2b-sichtungtext` und `sichtung-export` | Draft, wartet auf CI-Prüfung und Freigabe |
+| #126 | Phase 6a: Plan zur Unix-Semantik von `pwd`, `cd`, `ls` ([phase6a-plan-pwd-cd-ls.md](phase6a-plan-pwd-cd-ls.md)); nur Dokumentation und nicht registrierte Messsonde | Draft, wartet auf Prüfung und Entscheidungen von Master Wayne |
 
-Zurzeit ist außer #55 kein Pull Request offen (Zielstand nach dem Merge von #124). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
+Zurzeit sind außer #55, #125 und #126 keine Pull Requests offen. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
@@ -64,13 +66,13 @@ Phase 5 gilt mit dem Merge von #124 als abgeschlossen (Reihenfolge: zuerst #123,
 2. **CI-Konsolidierung** (abgeschlossen mit #114 und #115): `.github/workflows/ci.yml` ist der einzige Workflow (Pull Requests gegen `main`, Push auf `main`, manuell; Python-Brückentest, Syntaxprüfung, vollständige Standardauswahl). Die zwölf früheren phasengebundenen Workflows sind entfernt und in der Git-Historie einsehbar. Der Sonderlauf von `dossier-sperre` ist in die Standardauswahl übernommen; die übrigen Sondertests der alten Workflows (`zn`, `zev`, `al`, `zb`, `ds2`, `ak2`) sind als historisch markiert und nur namentlich aufrufbar. Offen: Branch-Schutz (nur auf Entscheidung von Master Wayne) und die weitere Absicherung der `lage-box`-Einschränkung (`BEKANNT_NUR`) im Test-Runner.
 3. **5c2:** in zwei Schritten, Daten im Altbestand bleiben erhalten. **5c2a** ist erledigt (Darstellung ausgeblendet, #116). **5c2b** baut auf dem integrierten Stand von 5c2a auf; (a) und (b) sind erledigt (#118, #119, Teststärkung #121), (c) ist analysiert (#120) und mit D2 (#123) teilweise umgesetzt.
 4. **Branch-Bereinigung:** nur nach Abgleich und ausdrücklicher Freigabe.
-5. **Phase 6 (eröffnet):** Unix-/Linux-Realismus im Terminal und schrittweise Englischumstellung ([terminal-entwicklungsplan-2026-11.md](terminal-entwicklungsplan-2026-11.md)), Modernisierung der Oberfläche modulweise.
+5. **Phase 6 (eröffnet):** Unix-/Linux-Realismus im Terminal und schrittweise Englischumstellung ([terminal-entwicklungsplan-2026-11.md](terminal-entwicklungsplan-2026-11.md)), Modernisierung der Oberfläche modulweise. Phase 6a (Beginn mit `pwd`, `cd`, `ls`): Plan als Draft #126, Freigabe für die Umsetzung der Shell steht aus; die Entscheidung zum Sichtungs-Export (Güte und Aktualität getrennt) ist am 23.11.2026 getroffen und als Draft #125 umgesetzt.
 
 Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Freigabe für Merge oder Löschung.
 
 ## 4. Repository, Branches und CI
 
-- **Prüfstand 23.11.2026, Zielstand nach dem Merge von #124:** 72 Branches (`main` und 71 weitere), 123 Pull Requests: 119 gemergt, 1 offen (#55), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
+- **Prüfstand 23.11.2026, nach dem Merge von #124 und dem Eröffnen von #125 und #126:** 74 Branches (`main` und 73 weitere), 125 Pull Requests: 119 gemergt, 3 offen (#55, #125, #126), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
 - Workflows: ausschließlich `ci.yml`. Die früheren zwölf `phase5*-regression.yml` wurden mit #115 entfernt; ihre damaligen Läufe (zuletzt 5c1b, 45067956391) bleiben als Nachweis auf GitHub einsehbar.
 
