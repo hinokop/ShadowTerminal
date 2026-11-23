@@ -165,3 +165,17 @@ Maßstab ist eine in sich stimmige virtuelle Betriebsumgebung: ein angelegtes Ve
 - Die Umsetzung der Sichtbarkeitsregel (9.3, Variante B) ist Voraussetzung für 6a-3 (`ls`-Operanden) und für Namensauflösungen mit Platzhaltern, nicht für 6a-0 und 6a-1.
 - Fiktive Rechte und Eigentümer (Frage 3 aus Abschnitt 7) sind für `stat` und `ls -l` Voraussetzung und noch nicht entschieden.
 - Die Annahme Ubuntu 24.04 (bash 5.2.21, coreutils 9.4) als Referenz bleibt eine Annahme.
+
+### 9.8 Stand der Umsetzung von 6a-0 (Draft #128)
+
+Umgesetzt in `profil-modul.js`: `TERMINAL_FS` (`resolve`, `stat`, `readdir`, `readFile`, `writeFile` als Stub `EROFS`, Haken `sichtbar`), `terminalBefehlLauf` mit Kontext `{ args, arg, cwd, env, fs }` und Ergebnis `{ code, stdout, stderr, cwd? }`, Verbraucher `pwd`, `cd`, `ls`. `terminalDateiBefehl` behält `cat`, `head`, `tail`, `wget`; die Tab-Ergänzung nutzt die Schnittstelle noch nicht (bewusst, nicht migriert). Die Brücke kennt kein `stat`: `cd` prüft über die Brückenoperation `cd`, `ls` ruft im Archiv ohne Vorprüfung `ls` auf (Brückenaufrufe wie zuvor).
+
+Laufzeitmessung zur Sichtbarkeit (9.3), gemockte Brücke: Namen gesperrter Pin- und Sichtungs-Exportdateien erscheinen in `ls`, und Tab ergänzt den Namen; `cat` liefert `Permission denied` (`tests/terminal-fs-ist.js`, bei Umsetzung von Variante B bewusst umzukehren). Unter Windows nicht gemessen.
+
+Verhaltensgleichheit: `tests/terminal-fs-vergleich.js` vergleicht 75 Befehle (Aufnahme vor der Umstellung, `tests/_golden-shell-6a0.json`, Zeitstempel normalisiert) nach Ausgabe, `$?` und Prompt.
+
+Korrekturen nach dem Review von #128: Die tatsächlichen `args` der Shell werden an `cd` und `ls` durchgereicht (`TERMINAL_DATEI`, `terminalDateiAusfuehren`); die Pfadauflösung erhält das Arbeitsverzeichnis ausdrücklich (`fs.resolve(pfad, { cwd })`, reine Funktion `terminalPfadAufloesen`), `cd` und `ls` übergeben `ctx.cwd`. Ohne `opt.cwd` gilt weiterhin der Zustand der einen Shell (Altverhalten, für `cat` usw.). Abgesichert in `tests/terminal-fs-schnittstelle.js` durch echte Shell-Aufrufe (Mitschnitt von `ctx.args`, `ctx.cwd`) und ein vom globalen Arbeitsverzeichnis abweichendes explizites `cwd`.
+
+Bekannte Grenzen von 6a-0 (kein Merge-Blocker, vor breiterer Nutzung zu beheben): `sichtbar` greift nur in `readdir` (Archiv), nicht in `stat` und `readFile`; vor `find`/`stat`-Verbrauchern ist eine zentrale Operationsregel (`discover`, `stat`, `read`, `write`) auch für Aliasnamen, Tab und nachträgliche Sperren festzulegen. Archiv-`stat` ohne `pruefen` liefert `typ: null` auch für nicht vorhandene Ziele. `readdir` auf eine virtuelle Datei meldet `ENOENT` statt `ENOTDIR`. `stdout` und `stderr` sind getrennt, werden aber gemeinsam ausgegeben; Pipes und Ströme fehlen, es gibt keine vollständige Unix-Shell.
+
+Windows-Rückmeldung (Master Wayne): Befehle wie erwartet. Bei `cd DOSSIERS` übernimmt der Shell-Pfad die getippte Schreibweise (`/DOSSIERS`), weil die Brücke unter Windows Groß- und Kleinschreibung nicht unterscheidet. Das ist Altverhalten (ALT wie NEU) und kein Fehler von 6a-0; unter Unix würde ein anderer Name als `Datei nicht gefunden` gelten. Ob der Pfad künftig den echten Namen der Brücke zeigen oder die Schreibweise streng prüfen soll, ist offen und gehört in die `cd`-Etappe.

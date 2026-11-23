@@ -231,10 +231,15 @@ function terminalPfad(arg) {
 }
 // Pfade der Oberfläche beginnen an einer virtuellen Wurzel. Nur der Archivzweig geht an die Brücke.
 function terminalShellPfad(arg) {
-  if (/[:\\]|[\u0000-\u001f\u007f]/.test(arg)) return null;
   const ort = TERMINAL_ZUSTAND.ort;
+  return terminalPfadAufloesen(arg, ort ? [TERMINAL_DB].concat(ort) : (TERMINAL_ZUSTAND.virtuellerOrt || []));
+}
+/* Reine Pfadauflösung: Segmentliste ab der Wurzel aus Eingabe und ausdrücklich übergebenem Arbeitsverzeichnis (Segmente);
+   liest keinen globalen Zustand. null bei unzulässigen Zeichen. */
+function terminalPfadAufloesen(arg, cwdSegmente) {
+  if (/[:\\]|[\u0000-\u001f\u007f]/.test(arg)) return null;
   const absolut = arg.startsWith('/') || arg === '~' || arg.startsWith('~/');
-  const out = absolut ? [] : ort ? [TERMINAL_DB].concat(ort) : (TERMINAL_ZUSTAND.virtuellerOrt || []).slice();
+  const out = absolut ? [] : cwdSegmente.slice();
   for (const name of (arg === '~' || arg.startsWith('~/') ? arg.slice(1) : arg).split('/')) {
     if (!name || name === '.') continue;
     if (name === '..') out.pop();
@@ -441,30 +446,21 @@ function terminalWgetProtokoll(antwort, pfad, von, bytes) {
 }
 async function terminalDateiBefehl(befehl, arg, version) {
   const t = TERMINAL_ZUSTAND;
-  const lsLang = befehl === 'ls' && ['-l', '-la', '-al'].includes(arg);
-  const lsAlle = befehl === 'ls' && ['-a', '-la', '-al'].includes(arg);
   const name = terminalName(arg);
   if (name === null) { terminalAusgabe(befehl + ': unterminated quote'); return 1; }
-  if (befehl === 'ls' && arg.startsWith('-') && !lsLang && !lsAlle) {
-    terminalAusgabe("ls: unrecognized option '" + arg + "'"); return 1;
-  }
   if (!name && ['cat', 'head', 'tail', 'wget'].includes(befehl)) { terminalAusgabe(befehl + ': missing file operand'); return 1; }
-  const virtuell = terminalShellPfad(befehl === 'cd' && !name ? '/' : lsLang || lsAlle ? '' : name);
+  const virtuell = terminalShellPfad(name);
   const nichtGefunden = befehl + ': ' + name + ': No such file or directory';
   if (!virtuell) { terminalAusgabe(befehl + ': ' + name + ': Permission denied'); return 1; }
   const voll = '/' + virtuell.join('/');
   const listing = !virtuell.length ? ['etc/', 'var/', TERMINAL_DB + '/'] : TERMINAL_TLE_DIRS.get(voll);
   if (listing) {
-    if (befehl === 'cd') { t.ort = null; t.virtuellerOrt = virtuell; terminalKanalPromptSync(); return 0; }
-    if (befehl === 'ls') { terminalAusgabe(listing.join('\n')); return 0; }
     terminalAusgabe(befehl + ': ' + name + ': Is a directory');
     return 1;
   }
   if (voll === '/var/log/syslog' || TERMINAL_VIRT_DATEIEN.has(voll)) {
-    if (befehl === 'cd') { terminalAusgabe('cd: ' + name + ': Not a directory'); return 1; }
     if (befehl === 'wget') { terminalAusgabe('wget: ' + name + ': unsupported source'); return 1; }
-    if (befehl === 'ls') terminalAusgabe(virtuell.at(-1));
-    else if (voll === '/var/log/syslog') terminalSyslog(befehl === 'cat' ? 60 : 10);
+    if (voll === '/var/log/syslog') terminalSyslog(befehl === 'cat' ? 60 : 10);
     else {
       const zeilen = TERMINAL_VIRT_DATEIEN.get(voll)().split('\n');
       terminalAusgabe(befehl === 'head' ? zeilen.slice(0, 10) : befehl === 'tail' ? zeilen.slice(-10) : zeilen);
@@ -474,23 +470,13 @@ async function terminalDateiBefehl(befehl, arg, version) {
   if (virtuell[0] !== TERMINAL_DB) { terminalAusgabe(nichtGefunden); return 1; }
   const pfad = virtuell.slice(1);
   const wgetStart = befehl === 'wget' ? new Date() : null;
-  const antwort = await terminalBruecke(befehl, pfad, lsAlle);
+  const antwort = await terminalBruecke(befehl, pfad, false);
   if (t.version !== version) return 1;
   if (antwort.error) {
     terminalAusgabe(antwort.error === 'Datei oder Ordner nicht gefunden' ? nichtGefunden : befehl + ': ' + antwort.error);
     return 1;
   }
-  if (befehl === 'cd') {
-    t.ort = pfad;
-    t.virtuellerOrt = null;
-    terminalKanalPromptSync();
-  } else if (befehl === 'ls') {
-    const zeilen = antwort.entries.map(function (x) {
-      return lsLang ? (x.dir ? 'dr-x' : '-r--') + '  ' + String(x.bytes).padStart(8) + '  ' + fmtZ(x.mtime * 1000) + '  ' + x.name + (x.dir ? '/' : '') :
-        x.name + (x.dir ? '/' : '');
-    });
-    terminalAusgabe(zeilen.join('\n') || '(leer)');
-  } else if (befehl === 'wget') {
+  if (befehl === 'wget') {
     const daten = Uint8Array.from(atob(antwort.data), function (c) { return c.charCodeAt(0); });
     const bytes = daten.byteLength;
     terminalAusgabe(terminalWgetProtokoll(antwort, pfad, wgetStart, bytes));
@@ -501,6 +487,110 @@ async function terminalDateiBefehl(befehl, arg, version) {
     terminalAusgabe([fertig, 'Empfangen [' + bytes + '/' + bytes + '] · Download gestartet']);
   } else terminalAusgabe(antwort.text, terminalArchivZiele(befehl, pfad, antwort).at(-1) || null);
   return 0;
+}
+
+/* Phase 6a-0: gemeinsame Dateisystem-Schnittstelle (Entwurf: docs/phase6a-plan-pwd-cd-ls.md, Abschnitt 9).
+   Alle Operationen sind asynchron, weil die Archivbrücke asynchron ist. Zwei Adapter hinter einer Wurzel "/":
+   der virtuelle Baum (TERMINAL_TLE_DIRS, TERMINAL_VIRT_DATEIEN, Wurzel) und die Archivbrücke (TERMINAL_DB, nur lesend).
+   Fehler sind Objekte { fehler: 'ENOENT' | 'EROFS' | 'ENOSYS' | <Text der Brücke> }, keine Ausnahmen.
+   Bewusst noch NICHT auf dieser Schnittstelle: cat, head, tail, wget (terminalDateiBefehl) und die Tab-Ergänzung. */
+const TERMINAL_WURZEL_LISTE = ['etc/', 'var/', TERMINAL_DB + '/'];
+const TERMINAL_FS = {
+  /* Sichtbarkeitsregel gesperrter Archivobjekte: zentraler Haken. Ist-Stand (tests/terminal-fs-ist.js): Namen bleiben sichtbar.
+     Variante B (Name ebenfalls geschützt) wird hier umgesetzt, nicht in den Befehlen. */
+  sichtbar: function (seg) { return true; },
+  /* Zeichenkette -> Segmentliste ab der Wurzel; null bei unzulässigen Zeichen. Mit opt.cwd (Zeichenkette, z. B. '/etc/ppp') relativ zu
+     diesem Arbeitsverzeichnis, ohne den globalen Terminalzustand zu lesen; ohne opt.cwd relativ zum Zustand der einen Shell (Altverhalten). */
+  resolve: async function (arg, opt) {
+    return opt && typeof opt.cwd === 'string' ? terminalPfadAufloesen(arg, opt.cwd.split('/').filter(Boolean)) : terminalShellPfad(arg);
+  },
+  /* Art des Ziels. Die Brücke kennt kein stat: ohne opt.pruefen bleibt die Art im Archiv unbekannt (typ null),
+     mit opt.pruefen wird sie über die Brückenoperation "cd" festgestellt (nur Verzeichnisse gelingen). */
+  stat: async function (seg, opt) {
+    const voll = '/' + seg.join('/');
+    if (!seg.length || TERMINAL_TLE_DIRS.has(voll)) return { adapter: 'virtuell', typ: 'dir' };
+    if (voll === '/var/log/syslog' || TERMINAL_VIRT_DATEIEN.has(voll)) return { adapter: 'virtuell', typ: 'file' };
+    if (seg[0] !== TERMINAL_DB) return { fehler: 'ENOENT' };
+    if (opt && opt.pruefen) {
+      const antwort = await terminalBruecke('cd', seg.slice(1), false);
+      return antwort.error ? { adapter: 'archiv', fehler: antwort.error } : { adapter: 'archiv', typ: 'dir' };
+    }
+    return { adapter: 'archiv', typ: null };
+  },
+  /* Einträge { name, dir [, bytes, mtime] } eines Verzeichnisses; opt.versteckt nur im Archiv wirksam */
+  readdir: async function (seg, opt) {
+    const voll = '/' + seg.join('/');
+    if (!seg.length || TERMINAL_TLE_DIRS.has(voll)) {
+      const liste = !seg.length ? TERMINAL_WURZEL_LISTE : TERMINAL_TLE_DIRS.get(voll);
+      return { eintraege: liste.map(function (x) { return x.endsWith('/') ? { name: x.slice(0, -1), dir: true } : { name: x, dir: false }; }) };
+    }
+    if (seg[0] !== TERMINAL_DB) return { fehler: 'ENOENT' };
+    const antwort = await terminalBruecke('ls', seg.slice(1), !!(opt && opt.versteckt));
+    if (antwort.error) return { fehler: antwort.error };
+    return { eintraege: antwort.entries.filter(function (e) { return TERMINAL_FS.sichtbar(seg.concat(e.name)); }) };
+  },
+  /* Textinhalt. Noch kein Verbraucher in 6a-0; die Syslog-Datei wird derzeit direkt vom Befehl erzeugt (ENOSYS). */
+  readFile: async function (seg) {
+    const voll = '/' + seg.join('/');
+    if (TERMINAL_VIRT_DATEIEN.has(voll)) return { text: TERMINAL_VIRT_DATEIEN.get(voll)() };
+    if (!seg.length || TERMINAL_TLE_DIRS.has(voll)) return { fehler: 'EISDIR' };
+    if (voll === '/var/log/syslog') return { fehler: 'ENOSYS' };
+    if (seg[0] !== TERMINAL_DB) return { fehler: 'ENOENT' };
+    const antwort = await terminalBruecke('cat', seg.slice(1), false);
+    return antwort.error ? { fehler: antwort.error } : { text: antwort.text };
+  },
+  /* Nur entworfen: beide Adapter sind schreibgeschützt. */
+  writeFile: async function () { return { fehler: 'EROFS' }; }
+};
+function terminalFsFehlerText(befehl, name, fehler) {
+  if (fehler === 'ENOENT' || fehler === 'Datei oder Ordner nicht gefunden') return befehl + ': ' + name + ': No such file or directory';
+  return befehl + ': ' + fehler;
+}
+/* Befehlskontext und Ergebnis: eine Befehlsfunktion erhält { args, arg, cwd, env, fs } und liefert
+   { code, stdout: [...], stderr: [...], cwd?: { ort, virtuellerOrt } }. Der Aufrufer setzt das Arbeitsverzeichnis und schreibt die
+   Ausgabe. Keine Pipes, Ströme oder Prozesse. */
+async function terminalBefehlLauf(fn, args, arg, version) {
+  const t = TERMINAL_ZUSTAND;
+  const res = await fn({ args: args, arg: arg || '', cwd: terminalArbeitsverzeichnis(), env: {}, fs: TERMINAL_FS });
+  if (t.version !== version) return 1;
+  if (res.cwd) { t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; terminalKanalPromptSync(); }
+  const zeilen = (res.stdout || []).concat(res.stderr || []);
+  if (zeilen.length) terminalAusgabe(zeilen);
+  return res.code;
+}
+function terminalBefehlFehler(text) { return { code: 1, stdout: [], stderr: [text] }; }
+function terminalBefehlPwd(ctx) {
+  if (ctx.arg) return { code: 2, stdout: [], stderr: ['usage: pwd'] };
+  return { code: 0, stdout: [ctx.cwd], stderr: [] };
+}
+async function terminalBefehlCd(ctx) {
+  const name = terminalName(ctx.arg);
+  if (name === null) return terminalBefehlFehler('cd: unterminated quote');
+  const seg = await ctx.fs.resolve(name || '/', { cwd: ctx.cwd });
+  if (!seg) return terminalBefehlFehler('cd: ' + name + ': Permission denied');
+  const st = await ctx.fs.stat(seg, { pruefen: true });
+  if (st.fehler) return terminalBefehlFehler(terminalFsFehlerText('cd', name, st.fehler));
+  if (st.typ === 'file') return terminalBefehlFehler('cd: ' + name + ': Not a directory');
+  return { code: 0, stdout: [], stderr: [], cwd: st.adapter === 'archiv' ? { ort: seg.slice(1), virtuellerOrt: null } : { ort: null, virtuellerOrt: seg } };
+}
+async function terminalBefehlLs(ctx) {
+  const arg = ctx.arg, lang = ['-l', '-la', '-al'].includes(arg), alle = ['-a', '-la', '-al'].includes(arg);
+  const name = terminalName(arg);
+  if (name === null) return terminalBefehlFehler('ls: unterminated quote');
+  if (arg.startsWith('-') && !lang && !alle) return terminalBefehlFehler("ls: unrecognized option '" + arg + "'");
+  const seg = await ctx.fs.resolve(lang || alle ? '' : name, { cwd: ctx.cwd });
+  if (!seg) return terminalBefehlFehler('ls: ' + name + ': Permission denied');
+  const st = await ctx.fs.stat(seg);
+  if (st.fehler) return terminalBefehlFehler(terminalFsFehlerText('ls', name, st.fehler));
+  if (st.typ === 'file') return { code: 0, stdout: [seg.at(-1)], stderr: [] };
+  const dir = await ctx.fs.readdir(seg, { versteckt: alle });
+  if (dir.fehler) return terminalBefehlFehler(terminalFsFehlerText('ls', name, dir.fehler));
+  if (st.adapter === 'virtuell') return { code: 0, stdout: [dir.eintraege.map(function (x) { return x.name + (x.dir ? '/' : ''); }).join('\n')], stderr: [] };
+  const zeilen = dir.eintraege.map(function (x) {
+    return lang ? (x.dir ? 'dr-x' : '-r--') + '  ' + String(x.bytes).padStart(8) + '  ' + fmtZ(x.mtime * 1000) + '  ' + x.name + (x.dir ? '/' : '') :
+      x.name + (x.dir ? '/' : '');
+  });
+  return { code: 0, stdout: [zeilen.join('\n') || '(leer)'], stderr: [] };
 }
 
 const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null, nmap: null };
@@ -2073,13 +2163,14 @@ async function terminalEinzelbefehl(woerter) {
 }
 // Aufruffehler einfacher Befehle: usage-Zeile, Rückgabewert 2.
 function terminalUsage(text) { terminalAusgabe('usage: ' + text); return 2; }
-async function terminalDateiAusfuehren(befehl, arg) {
+async function terminalDateiAusfuehren(befehl, arg, args) {
   const t = TERMINAL_ZUSTAND;
   if (t.dateiLaeuft) { terminalAusgabe('Datenbankanfrage läuft bereits'); return 1; }
   t.dateiLaeuft = true;
   const version = t.version;
   try {
-    return await terminalDateiBefehl(befehl, arg, version);
+    const fn = befehl === 'cd' ? terminalBefehlCd : befehl === 'ls' ? terminalBefehlLs : null;
+    return fn ? await terminalBefehlLauf(fn, args || [], arg, version) : await terminalDateiBefehl(befehl, arg, version);
   } catch (e) {
     if (t.version === version) terminalAusgabe('Dateioperation fehlgeschlagen');
     return 1;
@@ -2592,7 +2683,7 @@ function terminalHilfe() {
    Tab-Arten: pfad (Dateien und Ordner), fest (feste Argumentfolgen), optionen (Optionen ohne Leerzeichen danach),
    predict (Optionen und Satellitennamen), tail (-n mit Syslog, sonst pfad). Dynamische Kandidaten bleiben Funktionen. */
 const TERMINAL_PPP = function (name) { return function (args, arg) { return terminalPppShell(name, arg, args); }; };
-const TERMINAL_DATEI = function (name) { return function (args, arg) { return terminalDateiAusfuehren(name, arg); }; };
+const TERMINAL_DATEI = function (name) { return function (args, arg) { return terminalDateiAusfuehren(name, arg, args); }; };
 const TERMINAL_TABELLE = [
   { name: 'ls', hilfe: [[0, 0, 'ls [-a|-l|-la]']], tab: { art: 'pfad', optionen: ['-a', '-l', '-la'] }, aus: TERMINAL_DATEI('ls') },
   { name: 'cd', hilfe: [[0, 1, 'cd <ordner>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('cd') },
@@ -2604,7 +2695,7 @@ const TERMINAL_TABELLE = [
   } },
   { name: 'wget', hilfe: [[0, 6, 'wget <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('wget') },
   { name: 'help', aus: function (args, arg) { if (arg) return terminalUsage('help'); terminalAusgabe(terminalHilfe()); return 0; } },
-  { name: 'pwd', hilfe: [[0, 2, 'pwd']], aus: function (args, arg) { if (arg) return terminalUsage('pwd'); terminalAusgabe(terminalArbeitsverzeichnis()); return 0; } },
+  { name: 'pwd', hilfe: [[0, 2, 'pwd']], aus: function (args, arg) { return terminalBefehlLauf(terminalBefehlPwd, args, arg, TERMINAL_ZUSTAND.version); } },
   { name: 'whoami', hilfe: [[0, 10, 'whoami']], aus: function (args, arg) { if (arg) return terminalUsage('whoami'); terminalAusgabe(TERMINAL_BENUTZER); return 0; } },
   { name: 'uname', hilfe: [[0, 11, 'uname -a']], tab: { art: 'optionen', werte: ['-a'] },
     aus: function (args, arg) { if (arg !== '-a') return terminalUsage('uname -a'); terminalAusgabe(TERMINAL_UBUNTU); return 0; } },
