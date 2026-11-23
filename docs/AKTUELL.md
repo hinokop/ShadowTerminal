@@ -37,6 +37,7 @@ Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **
 | 5c2b (c), D2 | Überlagerte zweite Deklaration `sichtungText(e)` aus `index.html` entfernt; neuer Standardtest `phase5c2b-sichtungtext` (Merge-Commit `67e1279`) | #123 |
 | 5c2b, Export | Sichtungs-TXT-Export: `Güte` (gespeicherte Bewertung) und `Aktualität` (Alter) getrennt, Objekttext `[object HTMLSpanElement]` behoben; Standardtests `phase5c2b-sichtungtext` und `sichtung-export` angepasst | #125 |
 | 6a, Plan | Plan zur Unix-Semantik von `pwd`, `cd`, `ls` ([phase6a-plan-pwd-cd-ls.md](phase6a-plan-pwd-cd-ls.md)) und Messsonde; nur Dokumentation, Entwurf | #126 |
+| 6a, Architektur | Abschnitt 9 des Plans: Dateisystem-Schnittstelle, Befehlskontext, Zugriffsentscheidung, Konformitätsklassen, Etappe 6a-0 (vertikaler Durchstich); nur Dokumentation, Draft | dieser PR |
 | 5c2b, Inventur | 50 Nicht-Standardskripte mit `IZ(` ([phase5c2b-inventur-nichtstandard.md](phase5c2b-inventur-nichtstandard.md)); Dokumentation und Messwerkzeuge | #122 |
 
 Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Baseline und Entwicklungsplan (#93 bis #97); Doku zu Karten-Konsolenbefunden (#107). Manuelle Dossiersperren, Pin- und Zonenzugriff über `zielZugang` und Profilkompatibilität sind erhalten.

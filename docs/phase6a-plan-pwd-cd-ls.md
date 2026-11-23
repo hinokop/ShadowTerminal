@@ -95,6 +95,8 @@ Rückwärtskompatibilität: Gespeicherte Daten sind nicht betroffen (Terminalzus
 
 ## 7. Entscheidungsfragen an Master Wayne
 
+*Ergänzung vom 23.11.2026: Zur Reihenfolge (Frage 6) und zur Architektur gilt Abschnitt 9; die übrigen Fragen sind weiterhin nicht beantwortet.*
+
 1. Umfang der Nachbildung: nur die vorgeschlagene Teilmenge, oder strengere Vollständigkeit?
 2. Verzeichnismarke: `ls` ohne `/` (wie echtes `ls` ohne `-F`; Unterscheidung nur über `-F` oder Farbe) oder die heutige Darstellung mit `/` beibehalten?
 3. Rechte und Eigentümer im Langformat: fiktive, einheitliche Werte (`drwxr-xr-x raizo raizo`) oder nichts darstellen?
@@ -105,3 +107,59 @@ Rückwärtskompatibilität: Gespeicherte Daten sind nicht betroffen (Terminalzus
 ## 8. Nicht geprüft
 
 Mehrspaltige und farbige Ausgabe auf einem TTY; Verhalten bei anderen Locales; Windows-Besonderheiten der Brücke (Kurznamen, Groß- und Kleinschreibung) für die neuen Fälle; die Wirkung gesperrter Objekte auf die heutige `ls`-Ausgabe; die Übereinstimmung von bash 5.2.21 und coreutils 9.4 mit dem im Terminal angedeuteten System.
+
+## 9. Architektur und Etappe 6a-0 (Ergänzung vom 23.11.2026)
+
+Status: Entwurf zur Prüfung. Grundlage ist der Vorschlag der unabhängigen Prüfung (zuerst Architektur, dann Einzelbefehle), die Einwände dagegen und die Entscheidung von Master Wayne („Lassen wir es uns so machen.“) für einen **kleinen, funktionsfähigen vertikalen Durchstich** statt einer vorgezogenen Gesamtarchitektur.
+
+### 9.1 Entscheidung zur Reihenfolge
+
+Zwei Fassungen standen zur Wahl: (a) `pwd` zuerst (Abschnitt 5), jede Etappe isoliert; (b) zuerst eine gemeinsame Architektur, dann die Befehle. Entschieden ist ein Mittelweg: Etappe **6a-0** liefert die gemeinsame Schnittstelle zusammen mit ihren ersten Verbrauchern (`pwd`, `cd`, `ls`), ohne Verhaltensänderung. Die GNU-konformen Verhaltensänderungen folgen danach in getrennten, kleineren PRs (6a-1 bis 6a-4 wie in Abschnitt 5, Reihenfolge dort anzupassen). Eine Architektur ohne Verbraucher wird nicht gebaut, weil sie ungeprüft bliebe.
+
+### 9.2 Dateisystem-Schnittstelle
+
+Operationen (asynchron, weil die Archivbrücke asynchron ist):
+
+- `resolve(pfad)`: normalisiert gegen das Arbeitsverzeichnis, löst `.`/`..` auf, liefert einen Pfad im Dateisystem oder einen Fehler.
+- `stat(pfad)`: Art (Datei/Verzeichnis), Größe, Änderungszeit, fiktive Rechte und Eigentümer; Fehler `ENOENT`, `ENOTDIR`, `EACCES`.
+- `readdir(pfad)`: Einträge mit Namen und `stat`-Daten; die Brücken-Paginierung (500 je Seite) bleibt im Adapter.
+- `readFile(pfad)`: Textinhalt.
+- `writeFile(pfad, inhalt)`: **nur entworfen, in 6a-0 nicht implementiert**; das Archiv bleibt schreibgeschützt.
+
+Zwei Adapter: der **virtuelle Baum** (heute `TERMINAL_TLE_DIRS`, `TERMINAL_VIRT_DATEIEN`) und die **Archivbrücke** (`terminalBruecke`, `terminalBrueckeLsAlle`). Die Schnittstelle bildet beide unter einer Wurzel `/` ab, wie das Terminal es heute zeigt (Archivwurzel `pgcl-eu3.arch07`).
+
+### 9.3 Zugriffsentscheidung
+
+Eine zentrale Stelle entscheidet jeden Zugriff. Zwei Dimensionen, beide je Zugriff zu berücksichtigen:
+
+1. **Virtuelle Unix-Rechte** (Eigentümer, Gruppe, `rwx`): fiktiv, aber funktional konsistent (eine geänderte Berechtigung wirkt auf `cat`, `stat`, `ls`).
+2. **Anwendungsberechtigungen:** manuelle Dossiersperren (maßgebliche Zugangskontrolle, unverändert), geschützte Pins und Zonen, verknüpfte Archivinformationen (heute `terminalArchivZielGesperrt`).
+
+Das Archiv bleibt schreibgeschützt. Die vorhandene Prüfung (`Permission denied`, Maskierung des Scrollbacks) darf in 6a-0 nicht schwächer werden.
+
+**Sichtbarkeit gesperrter Objekte: offen, nicht von Claude entschieden.** Zur Wahl stehen (A) Name sichtbar, Inhalt gesperrt (wie ein Unix-Verzeichnis ohne Leserecht auf die Datei) oder (B) Name ebenfalls geschützt. Die Entscheidung betrifft `ls`, `find`, Tab-Ergänzung, `stat` und Platzhalter und muss zentral umgesetzt werden. **Heutiger Stand (statisch aus dem Quelltext gelesen, nicht zur Laufzeit gemessen):** `terminalBruecke` gibt für `ls` vor der Sperrprüfung zurück; die Sperrprüfung (`terminalArchivZiele`) gilt nur für `cat`, `head`, `tail`, `wget`, `send`. Demnach würden Namen von Export-Dateien gesperrter Objekte heute aufgelistet, sofern die Brücke sie liefert; der Inhalt ist geschützt. Laufzeitbeleg und Tab-Verhalten stehen aus und sind vor 6a-0 mit `terminal-archiv-zugriff` zu messen. 6a-0 behält das heutige Verhalten bei (Variante A de facto), bis entschieden ist.
+
+### 9.4 Befehlskontext und Ausführung
+
+Jeder Befehl erhält einen Kontext `{ args: [...], cwd: "...", env: {}, fs: dateisystem }` und liefert Exit-Code, **getrennt** `stdout` und `stderr`. In 6a-0 gibt es keine Pipes, Streams oder Prozesse; die Shell (`terminalKetteAusfuehren`) setzt `$?` aus dem Exit-Code wie bisher. `pwd`, `cd` und `ls` sind die ersten Verbraucher; alle übrigen Befehle laufen unverändert über die bestehende Tabelle (`TERMINAL_TABELLE`), bis sie einzeln umgestellt werden.
+
+### 9.5 Rückwärtskompatibilität von 6a-0
+
+6a-0 darf keine Funktion verlieren und keine sichtbare Ausgabe ändern. Zu erhalten und zu testen: alle Terminalbefehle, Archivzugriff und Paginierung, manuelle Dossiersperren samt Scrollback-Maskierung, Tab-Ergänzung und Vorschläge, `sudo`, Nmap-Integration. Regressionstests mindestens: `terminal-lokal`, `terminal-archiv-zugriff`, `terminal-befehlstabelle`, `terminal-auswahlliste`, `terminal-vorschlag-ergaenzung`, `terminal-sudo`, `terminal-shell-kern`, `terminal-nmap`. Zusätzlich ein Test, der die Ausgabe der drei Befehle vor und nach der Umstellung vergleicht (Messsonde aus `tests/_sonde-shell-6a.js` als Grundlage).
+
+### 9.6 Konformitätsklassen
+
+Die Messsonde wird zur Konformitätsprüfung gegen bash/coreutils ausgebaut. Jeder Fall erhält genau eine Klasse:
+
+- **Konform:** Ausgabe und Exit-Code stimmen mit der Referenz überein.
+- **Bewusste Abweichung:** mit dokumentiertem Architekturgrund (etwa Heimatverzeichnis `/`, virtuelles Dateisystem, kontrollierte Archivbrücke).
+- **Nicht implementiert:** bekannt und aufgeführt, nicht still ignoriert.
+
+Maßstab ist eine in sich stimmige virtuelle Betriebsumgebung: ein angelegtes Verzeichnis existiert für `ls`, `cd` und `find`; eine geänderte Berechtigung wirkt auf `cat` und `stat`; Prozesse sind für `ps` sichtbar. Dieser Maßstab ist Richtung, nicht Umfang von 6a.
+
+### 9.7 Schwächen und Ungeprüftes dieses Entwurfs
+
+- Der Aufwand von 6a-0 ist nicht gemessen; die Umstellung dreier Befehle samt zweier Adapter berührt mit Tab-Ergänzung und Archivschutz sicherheitsrelevante Pfade. Deshalb: Draft, kleine Commits, volle Standardauswahl vor Merge.
+- Die Sichtbarkeitsfrage (9.3) blockiert 6a-3 (`ls`-Operanden) und alle Namensauflösungen mit Platzhaltern, nicht 6a-0 und 6a-1.
+- Fiktive Rechte und Eigentümer (Frage 3 aus Abschnitt 7) sind für `stat` und `ls -l` Voraussetzung und noch nicht entschieden.
+- Die Annahme Ubuntu 24.04 (bash 5.2.21, coreutils 9.4) als Referenz bleibt eine Annahme.
