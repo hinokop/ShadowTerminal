@@ -151,7 +151,7 @@ Commitfolge auf `refactor/phase5c1b-zustandsformat-20261122`: Store → E7 → E
   - *Hinweis aus dem Review zu 5c2:* `buildInitialStateV4` und die Migration von Format 2 und 3 brauchen weiterhin `SCENARIO.missionen`; diese Definitionen werden in 5c2 nicht entfernt, solange keine gleichwertige, getestete Altformat-Interpretation vorhanden ist.
 - **Vor der realen Windows-Migration (E1.8):** externer Export von Zustand (Kopfzeile „Export“) und Profil (Profilexport); Anhänge in IndexedDB zusätzlich über Fallpakete.
 
-## 8c. Umsetzung 5c2a (Draft): Darstellung der verbliebenen Missionsdaten
+## 8c. Umsetzung 5c2a: Darstellung der verbliebenen Missionsdaten
 
 **E8 – Entschieden (Master Wayne, 22.11.2026): Option C, ausblenden.** Anzeige und Zählung der verbliebenen Missionsdaten im Dossier entfallen; die Daten bleiben unverändert in `STATE.altbestand` (Speicher, Export und Zustandsimport unberührt). Anlass der Wahl: Der echte Datenbestand besteht nach Angabe von Master Wayne nur aus Test-Dossiers, Pins und Zonen. Ob der echte Altbestand tatsächlich leer ist, wurde nicht ausgelesen.
 
@@ -161,7 +161,7 @@ Umgesetzt in `index.html` (zwei Stellen):
 
 Bewusst nicht in 5c2a: Entfernen der danach ungenutzten Funktionen (`IZ()`, `aussagenListe()`, `widerspruchOffen()`) und des übrigen `ALT()`-Rest-Codes (Funkstille, Verstärkung, Plan, Briefing-Pfad, Entwicklerkonsole) sowie der Texte in `SCENARIO.abfragen.aussagen`; das folgt als 5c2b nach Referenzprüfung. Die Aussagen in `PROFIL.recherche.aussagen` (Fallpaket, ohne Oberfläche) sind nicht betroffen.
 
-Test: `tests/phase5c2a-altdaten.js` (Zustand mit Altbestand: keine Aussagentabelle, kein Widerspruchshinweis, Erkenntnislage zählt nur die Sichtung, Altbestand im Speicher und gespeichert unverändert). Rot-vor-Grün gegen den Stand vor der Änderung belegt; Gegenprobe mit nur halber Änderung ist ebenfalls rot.
+Test: `tests/phase5c2a-altdaten.js` (Zustand mit Altbestand: keine Aussagentabelle, kein Widerspruchshinweis, Erkenntnislage zählt nur die Sichtung, Altbestand im Speicher und gespeichert unverändert, auch nach echtem Neuladen). Rot-vor-Grün gegen den Stand vor der Änderung belegt; Gegenprobe mit nur halber Änderung ist ebenfalls rot.
 
 Hinweis: Ein unverändert gespeicherter Erkenntnis-Standardtext wird nicht als eigener Eintrag geführt (`erkWert === null`); nur wer den Text im Dossier ausdrücklich gespeichert hat, behält seinen Wortlaut. Bereits gespeicherte eigene Texte werden nicht verändert.
 
