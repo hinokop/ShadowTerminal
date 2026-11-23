@@ -8,6 +8,7 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const { chromium } = require('playwright');
 const PF = require('./_pfad');
+const { altzustandOeffnen, altbestandPruefen, altbestandUnveraendert } = require('./_altzustand');
 (async () => {
   const temp = await mkdtemp(join(tmpdir(), 'shadow-si-')), root = join(temp, 'pgcl-eu3.arch07');
   let helper, browser;
@@ -162,6 +163,53 @@ const PF = require('./_pfad');
     assert.equal(await readFile(datei(n2), 'utf8'), alt2, 'Datei ohne bekannte Kennung wird nicht ersetzt');
     assert.match(await readFile(datei('sichtung-' + z.d2 + '-SI-001-v2.txt'), 'utf8'), /Zwei B/);
     await exportVia(z.d2, 'unverändert');                                                   /* ab jetzt mit Kennung: Wiederholung wie gewohnt */
+    /* Teststärkung (Phase 5c2b-Nachtrag): Sichtungs-Export gegen einen migrierten Format-4-Zustand mit tatsächlich vorhandenen
+       historischen Freigabestufen (bekannt, frei, unbekannt = kein Eintrag). Historische Freigaben dürfen den Export nicht
+       beeinflussen; eine manuelle Sperre blockiert ihn auch bei historischer Freigabe 'frei'. Der Altbestand bleibt unverändert. */
+    {
+      const a = await browser.newPage({ viewport: { width: 1500, height: 1000 }, acceptDownloads: true });
+      const afehler = [];
+      a.on('pageerror', e => afehler.push(e.message));
+      await a.route(/^https?:/, r => r.abort());
+      const o = await altzustandOeffnen(a, PF.APP), ids = o.ids, alle = [ids.bekannt, ids.frei, ids.unbekannt, ids.gesperrtFrei];
+      const alt = await altbestandPruefen(a, assert, ids);
+      const vor = await a.evaluate(alle => {
+        STATE.missionsbetrieb = true;
+        return alle.map(id => {
+          const e = entitaet(id);
+          STATE.dossiers.entitaeten[id].sichtungen = (STATE.dossiers.entitaeten[id].sichtungen || []).concat([{ id: 'SI-090', uid: 'a5b6c7d8e9f' + alle.indexOf(id), t: nowIso(), ort: '52.5000, 13.4000',
+            text: 'Sichtungsbeleg bei Altbestand ' + id, guete: 'unbewertet', quelle: 'Eintrag' }]);
+          return { id, wissen: wissen(e), info: typeof infoGesperrt === 'function' && infoGesperrt(e), gesperrt: dossierGesperrt(e) };
+        });
+      }, alle);
+      for (const v of vor) assert.deepEqual([v.wissen, v.info, v.gesperrt], ['frei', false, false], 'historische Stufe ohne Wirkung, keine manuelle Sperre: ' + v.id);
+      for (const id of alle.slice(0, 3)) {
+        const [dl] = await Promise.all([a.waitForEvent('download'), a.evaluate(i => kartenTxtExport('sichtung', 'SI-090', i), id)]);
+        assert.equal(dl.suggestedFilename(), 'sichtung-' + id + '-SI-090.txt', 'Export bei historischer Stufe nicht blockiert: ' + id);
+        assert.match(await readFile(await dl.path(), 'utf8'), new RegExp('Sichtungsbeleg bei Altbestand ' + id));
+      }
+      /* Manuelle Sperre bei historischer Freigabe 'frei': Export blockiert, kein Download */
+      const verboten = [];
+      const beiDl = d => verboten.push(d.suggestedFilename());
+      a.on('download', beiDl);
+      await a.evaluate(id => { dispatch({ type: 'DOSSIER_SPERREN', id }); kartenTxtExport('sichtung', 'SI-090', id); }, ids.gesperrtFrei);
+      await a.waitForTimeout(200);
+      assert.match(await a.locator('#sys-msg').innerText(), /TXT-Export blockiert/, 'manuelle Sperre blockiert trotz historischer Freigabe');
+      assert.deepEqual(verboten, [], 'kein Download trotz manueller Sperre');
+      a.off('download', beiDl);
+      /* Die anderen Stufen bleiben exportierbar, nach Entsperren auch das gesperrte Dossier */
+      const [dl2] = await Promise.all([a.waitForEvent('download'), a.evaluate(i => kartenTxtExport('sichtung', 'SI-090', i), ids.bekannt)]);
+      assert.equal(dl2.suggestedFilename(), 'sichtung-' + ids.bekannt + '-SI-090.txt', 'Sperre wirkt nur auf das gesperrte Dossier');
+      await a.evaluate(id => dispatch({ type: 'DOSSIER_ENTSPERREN', id }), ids.gesperrtFrei);
+      const [dl3] = await Promise.all([a.waitForEvent('download'), a.evaluate(i => kartenTxtExport('sichtung', 'SI-090', i), ids.gesperrtFrei)]);
+      assert.equal(dl3.suggestedFilename(), 'sichtung-' + ids.gesperrtFrei + '-SI-090.txt', 'nach Entsperren exportierbar');
+
+      const nach = await altbestandUnveraendert(a, assert, alt, 'sichtung-export');
+      assert.deepEqual(nach.ls, alt, 'Altbestand im gespeicherten Zustand unverändert');
+      assert.deepEqual(afehler, [], 'keine Browserfehler im Altbestandszustand');
+      await a.close();
+    }
+
     assert.deepEqual(fehler, []);
     console.log('OK: Popup-Breite, Sichtungs-TXT und Archivbrücke');
   } finally { if (browser) await browser.close(); if (helper) helper.kill(); await rm(temp, { recursive: true, force: true }); }

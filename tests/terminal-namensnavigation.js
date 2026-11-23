@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
+const { altzustandOeffnen, altbestandPruefen, altbestandUnveraendert } = require('./_altzustand');
 
 (async () => {
   const browser = await chromium.launch();
@@ -204,6 +205,87 @@ const { APP } = require('./_pfad');
     await cmd('open Geheime Quellakte Annex');
     assert.equal((await modul()).dossier, kollisionsziel);
     await back();
+
+    /* Teststärkung (Phase 5c2b-Nachtrag): Namensnavigation gegen einen migrierten Format-4-Zustand mit tatsächlich vorhandenen
+       historischen Freigabestufen (bekannt, frei, unbekannt = kein Eintrag). Historische Freigaben dürfen die Namensauflösung nicht
+       beeinflussen; eine manuelle Sperre schlägt auch die historische Freigabe 'frei'. Der Altbestand bleibt unverändert. */
+    {
+      const q = await (await browser.newContext({ viewport: { width: 1500, height: 1000 }, reducedMotion: 'reduce' })).newPage();
+      q.setDefaultTimeout(15000);
+      const qfehler = [];
+      q.on('pageerror', e => qfehler.push(e.message));
+      await q.route(/^https?:/, r => r.abort());
+      const o = await altzustandOeffnen(q, APP), ids = o.ids, alle = [ids.bekannt, ids.frei, ids.unbekannt, ids.gesperrtFrei];
+      const alt = await altbestandPruefen(q, assert, ids);
+      const namen = await q.evaluate(alle => alle.map(id => entitaet(id).name), alle);
+      const nm = { bekannt: namen[0], frei: namen[1], unbekannt: namen[2], gesperrtFrei: namen[3] };
+      assert.equal(new Set(namen).size, 4, 'vier verschiedene Namen');
+
+      await q.evaluate(() => { STATE.missionsbetrieb = true; dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule(); });
+      await q.click('#profil-terminal-oeffnen');
+      const qin = q.locator('#profil-terminal-eingabe'), qout = q.locator('#profil-terminal-ausgabe');
+      const qcmd = async zeile => {
+        await qin.fill(zeile); await qin.press('Enter');
+        await q.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
+        return await qout.textContent();
+      };
+      const qmodul = () => q.evaluate(() => ({ name: STATE.ui.modul, dossier: STATE.dossiers.auswahl }));
+      const qzurueck = async () => {
+        assert.equal(await q.evaluate(() => document.getElementById('profil-terminal').classList.contains('minimiert')), true, 'Terminal nach Navigation minimiert');
+        await q.click('#profil-terminal-minimieren');
+        await q.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule(); });
+      };
+
+      /* Zugang und Namensauflösung der drei freigegebenen Stufen: nur die manuelle Sperre zählt */
+      const vor = await q.evaluate(({ alle, nm }) => alle.map((id, i) => {
+        const e = entitaet(id), z = zielZugang(id), name = Object.values(nm)[i];
+        return { id, wissen: wissen(e), info: typeof infoGesperrt === 'function' && infoGesperrt(e),
+          zugang: z && { gesperrt: z.gesperrt, info: z.info },
+          recherche: dossierRechercheBestand().some(x => x.id === id),
+          treffer: terminalZielNamen('open', name).some(x => x.id === id) };
+      }), { alle, nm });
+      for (const v of vor) {
+        assert.equal(v.wissen, 'frei', 'historische Stufe ohne Wirkung auf wissen(): ' + v.id);
+        assert.equal(v.info, false, 'historische Stufe ohne Wirkung auf die Freigabe: ' + v.id);
+        assert.deepEqual(v.zugang, { gesperrt: false, info: false }, 'Terminalzugang allein nach manueller Sperre: ' + v.id);
+        assert.equal(v.recherche && v.treffer, true, 'Name auflösbar unabhängig von der historischen Stufe: ' + v.id);
+      }
+      for (const [stufe, id] of [['bekannt', ids.bekannt], ['frei', ids.frei], ['unbekannt', ids.unbekannt]]) {
+        await qcmd('open "' + nm[stufe] + '"');
+        assert.equal((await qmodul()).dossier, id, 'open per Name navigiert (Stufe ' + stufe + ')');
+        await qzurueck();
+        await qin.fill('open ' + nm[stufe]); await qin.press('Tab');
+        assert.equal(await qin.inputValue(), 'open ' + id, 'Tab ergänzt den Namen (Stufe ' + stufe + ')');
+        await qin.fill('');
+      }
+
+      /* Manuelle Sperre auf das Dossier mit historischer Freigabe 'frei' */
+      await q.evaluate(id => dispatch({ type: 'DOSSIER_SPERREN', id }), ids.gesperrtFrei);
+      for (const zeile of ['open "' + nm.gesperrtFrei + '"', 'sudo open "' + nm.gesperrtFrei + '"']) {
+        const t = await qcmd(zeile);
+        assert.match(t, /No such file or directory/, zeile);
+        assert.equal((await qmodul()).name, 'profil', zeile);
+        assert.equal(await q.evaluate(() => !!TERMINAL_ZUSTAND.sudo), false, 'keine Kennwortabfrage via Namen');
+      }
+      assert.equal(await q.evaluate(({ n, id }) => terminalZielNamen('open', n).some(x => x.id === id), { n: nm.gesperrtFrei, id: ids.gesperrtFrei }), false,
+        'gesperrter Name trotz historischer Freigabe nicht auflösbar');
+      await qin.fill('open ' + nm.gesperrtFrei); await qin.press('Tab');
+      assert.equal(await qin.inputValue(), 'open ' + nm.gesperrtFrei, 'gesperrter Name niemals im Tab');
+      assert.doesNotMatch(await qout.textContent(), new RegExp(nm.gesperrtFrei.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'sichtbarer Scrollback maskiert');
+      await qin.fill('');
+      for (const [stufe, id] of [['bekannt', ids.bekannt], ['frei', ids.frei], ['unbekannt', ids.unbekannt]]) {
+        await qcmd('open "' + nm[stufe] + '"');
+        assert.equal((await qmodul()).dossier, id, 'Sperre wirkt nur auf das gesperrte Dossier (Stufe ' + stufe + ')');
+        await qzurueck();
+      }
+      await q.evaluate(id => dispatch({ type: 'DOSSIER_ENTSPERREN', id }), ids.gesperrtFrei);
+      await qcmd('open "' + nm.gesperrtFrei + '"');
+      assert.equal((await qmodul()).dossier, ids.gesperrtFrei, 'nach Entsperren live navigierbar');
+
+      const nach = await altbestandUnveraendert(q, assert, alt, 'terminal-namensnavigation');
+      assert.deepEqual(nach.ls, alt, 'Altbestand im gespeicherten Zustand unverändert');
+      assert.deepEqual(qfehler, [], 'keine Browserfehler im Altbestandszustand');
+    }
 
     assert.deepEqual(errors, []);
     console.log('OK: direkte Namen, Präfix, Alias, Mehrdeutigkeit, Sperren und Dossier-Tab');

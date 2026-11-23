@@ -1,6 +1,6 @@
 # Phase 5c – Bestandsaufnahme Zustands- und Profilschema
 
-Stand: 23.11.2026. Die Bestandsaufnahme (Abschnitte 1 bis 7) entstand am 22.11.2026 auf `main` `c19b93b` (nach #108 und #107) und beschreibt diesen Zeitpunkt; sie wurde nicht fortgeschrieben. Seitdem umgesetzt: 5c1a (#110), 5c1b (#111, Abschnitt 8b), 5c2a (#116, Abschnitt 8c); 5c2b (a) mit #118 (Abschnitt 8d); 5c2b (b) mit #119 (Abschnitt 8e). Den aktuellen Stand von `main` nennt ausschließlich [AKTUELL.md](AKTUELL.md). Entscheidungen und Anforderungen in Abschnitt 7, Umsetzungen in Abschnitt 8, Prüfhistorie in Abschnitt 9.
+Stand: 23.11.2026. Die Bestandsaufnahme (Abschnitte 1 bis 7) entstand am 22.11.2026 auf `main` `c19b93b` (nach #108 und #107) und beschreibt diesen Zeitpunkt; sie wurde nicht fortgeschrieben. Seitdem umgesetzt: 5c1a (#110), 5c1b (#111, Abschnitt 8b), 5c2a (#116, Abschnitt 8c); 5c2b (a) mit #118 (Abschnitt 8d); 5c2b (b) mit #119 (Abschnitt 8e); Teststärkung der Entkopplungstests in Abschnitt 8f. Den aktuellen Stand von `main` nennt ausschließlich [AKTUELL.md](AKTUELL.md). Entscheidungen und Anforderungen in Abschnitt 7, Umsetzungen in Abschnitt 8, Prüfhistorie in Abschnitt 9.
 
 Methode: Empirische Sonde (frischer Stand und geladenes Altprofil aus `tests/fixtures/altprofil-mission.json`: Felder, Typen, Größen), AST-gestützte Zählung aller Lese- und Schreibstellen je Feld und Funktion, gezielte Durchsicht der Lade-, Prüf-, Export- und Importpfade. Wo eine Aussage aus dem Code abgeleitet und nicht ausgeführt wurde, ist das vermerkt.
 
@@ -200,6 +200,42 @@ Außerhalb der Standardauswahl nutzen 50 weitere Skripte `IZ()` (11 als historis
 
 Neue Tests: `tests/phase5c2b-frischer-zustand.js` (beide Funktionen entfernt, `ALT()` ohne Altbestand eingefroren leer, frischer Zustand bleibt nach der Vorbereitung der früheren Gruppe-3-Tests, Speichern und Neuladen ohne Altbestand, die umgestellten Skripte enthalten weder `IZ(` noch `altbestand`) und `tests/phase5c2b-karte-altbestand.js` (Karte gegen den Altbestand der Fixture `altprofil-mission.json`: Pin-, Dossier- und Sichtungsmarker, Markermenge mit und ohne Altbestand identisch, Altbestand unverändert auch nach Neuladen). Mutationsproben (jeweils rot): Produktivcode vor der Entfernung, `ALT()` legt Altbestand an, ein Gruppe-3-Skript enthält `altbestand`, die Karte blendet bei Altbestand einen Marker aus, die Karte verändert den Altbestand.
 
+### 8f. Teststärkung 5c2b (b): Entkopplungstests gegen migrierten Altbestand (Freigabe Master Wayne 23.11.2026)
+
+Anlass: Die Entkopplungsnachweise `phase5b4-arbeitszugang`, `sichtung-export` und `terminal-namensnavigation` liefen seit 5c1b auf einem Zustand ohne Altbestand (Abschnitt 8e). Auf Weisung von Master Wayne erhalten sie zusätzlich einen migrierten Format-4-Zustand mit tatsächlich vorhandenen historischen Freigabestufen. Die bestehenden Frischzustandsprüfungen bleiben unverändert; Produktivcode, Altbestand, Export und Migration wurden nicht geändert.
+
+Aufbau: Neuer Helfer `tests/_altzustand.js` schreibt die Fixture `tests/fixtures/altprofil-mission.json` (Format 4) vor der Anmeldung in den Speicher und ergänzt `infozugang` für vier Standard-Personendossiers (die ersten vier Personen des Szenarios, im Lauf `P-0004` bis `P-0007`):
+
+| Dossier | historische Stufe | Eintrag in `infozugang` | später |
+|---|---|---|---|
+| `P-0004` | bekannt | `{ status: 'bekannt' }` | – |
+| `P-0005` | frei | `{ status: 'frei' }` | – |
+| `P-0006` | unbekannt | kein Eintrag (so ergab `wissen()` vor 5b7 die Stufe) | – |
+| `P-0007` | frei | `{ status: 'frei' }` | manuell gesperrt |
+
+Die Stufen wurden aus der Fassung von `wissen()` vor 5b7 (Commit `c7d9c2d`) abgeleitet: Einträge mit `status: 'frei'` und `'bekannt'`; ein Standarddossier ohne Eintrag galt als `unbekannt`. Ein ausdrücklich gespeicherter Status `'unbekannt'` wurde nicht erfunden und nicht getestet.
+
+Jeder Test prüft zuerst, dass die Migration tatsächlich `STATE.altbestand.infozugang` mit allen drei Stufen erzeugt hat (sonst wäre der Abschnitt wieder wirkungslos), und danach:
+
+- `phase5b4-arbeitszugang`: `wissen()` 'frei', keine Freigabesperre, `zielZugang` nur nach manueller Sperre, Fall-X-Auswahl und Verknüpfung, Arbeitsstand und Ablage-Eingang für alle vier Dossiers; manuelle Sperre auf `P-0007` (historisch 'frei') bleibt in Fall, Arbeitsstand, Recherche und Eingang wirksam, die anderen Dossiers bleiben zugänglich; Entsperren stellt den Zugriff wieder her.
+- `sichtung-export`: Export einer Sichtung (`kartenTxtExport`) für die drei nicht gesperrten Stufen nicht blockiert; manuelle Sperre auf `P-0007` blockiert ohne Download; nach dem Entsperren exportierbar.
+- `terminal-namensnavigation`: `open "<Name>"` und Tab-Ergänzung für alle Stufen; gesperrter Name auch mit historischer Freigabe weder per `open`, `sudo open` noch per Tab auflösbar und im Scrollback maskiert; nach dem Entsperren live navigierbar.
+- Alle drei: der Altbestand ist am Ende im Speicher und im gespeicherten Zustand gleich dem Zustand nach der Migration; keine Seitenfehler.
+
+Gegenproben (temporäre Änderung, danach per Kopie zurückgestellt; die alten Testfassungen aus `5c5a545` liefen zum Vergleich mit):
+
+| Mutation | alte Fassung | neue Fassung |
+|---|---|---|
+| M2: `dossierGesperrt` sperrt zusätzlich bei historischer Stufe 'bekannt' | grün (alle drei) | rot (alle drei: `phase5b4-arbeitszugang`, `sichtung-export`, `terminal-namensnavigation`) |
+| M3: `dossierGesperrt` ignoriert die manuelle Sperre bei historischer Stufe 'frei' | grün (alle drei) | rot in `phase5b4-arbeitszugang` und `terminal-namensnavigation`; `sichtung-export` bleibt grün |
+| M3b: dasselbe nur in der ersten Sperrprüfung von `kartenTxtExport` (`PROFIL.gesperrt`) | grün | `sichtung-export` bleibt grün |
+| M3c: M3 und M3b zugleich | grün | `sichtung-export` rot („manuelle Sperre blockiert trotz historischer Freigabe“) |
+| M2b: `kartenTxtExport` sperrt zusätzlich bei historischer Stufe 'bekannt' | grün | `sichtung-export` rot (Zeitüberschreitung beim Warten auf den Download) |
+
+Befund zu M3/M3b: Der Sichtungs-Export prüft die manuelle Sperre zweifach (direkt über `PROFIL.gesperrt` und über `dossierGesperrt`). Eine Mutation nur einer der beiden Prüfungen wird von der jeweils anderen aufgefangen; erst beide zusammen (M3c) lassen die historische Freigabe wirken, und das erkennt der Test. Das ist eine bewusste Doppelabsicherung im Produktivcode und kein Testmangel.
+
+Grenzen: Geprüft wird ein kontrollierter Migrationsbestand aus der Fixture, nicht ein echtes Nutzerprofil. Der lokale Volllauf kann acht Standardtests wegen der Sandbox-Umgebung nicht bestätigen (identisch auf unverändertem `main`); maßgeblich ist die CI.
+
 ## 9. Prüfhistorie
 
 - 22.11.2026: Bestandsaufnahme (Claude, `f29bad8`).
@@ -216,3 +252,4 @@ Neue Tests: `tests/phase5c2b-frischer-zustand.js` (beide Funktionen entfernt, `A
 - 23.11.2026: Unabhängige Prüfung von #118 durch ChatGPT (Review 6021844935 auf Head `c40b5b9`): vollständige CI anhand des GitHub-Protokolls bestätigt (94 grün); die lokalen Rot-vor-Grün-Gegenproben wurden nicht wiederholt; kein weiteres Windows-Testpaket nötig. Merge-Freigabe durch Master Wayne, Merge erst nach diesem Dokumentationsnachtrag und grüner CI auf dem Nachtragsstand.
 - 23.11.2026: Freigabe von 5c2b (b) durch Master Wayne mit den Vorgaben aus Abschnitt 8e (Gruppe 3 nur nach Einzelnachweis entfernen, keine neuen Schreibzugriffe auf den Altbestand, Einzelklassifikation, getrennte Commits, gezielter Test für den frischen Zustand, Karte mit Altbestand per Fixture prüfen). Umsetzung als Draft #119.
 - 23.11.2026: Unabhängige Tiefenprüfung von #119 durch ChatGPT (Review 6025309864 auf Head `484ec7c`): Produktivcode unverändert ausreichend, vollständige CI (96 grün) bestätigt. Als verbleibende Risiken genannt: die 50 Nicht-Standardskripte wurden nicht unabhängig reproduziert und sind, besonders die 39 nicht als historisch klassifizierten, einzeln zu bewerten, bevor sie ausgemustert werden; drei Entkopplungstests prüfen nur den Zustand ohne Altbestand. Merge-Freigabe durch Master Wayne nach Kontrolle; Merge erst nach diesem Dokumentationsnachtrag und grüner CI auf dem Nachtragsstand.
+- 23.11.2026: Freigabe der Teststärkung (Abschnitt 8f) durch Master Wayne; Umsetzung als Draft. Merge-Commit von #119: `5c5a545af952a85c2aef53ced2b489e1306975f1`.
