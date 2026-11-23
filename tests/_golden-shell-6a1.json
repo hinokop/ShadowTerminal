@@ -7,31 +7,31 @@
  },
  {
   "befehl": "pwd -P",
-  "ausgabe": "usage: pwd",
-  "status": "2",
+  "ausgabe": "/",
+  "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "pwd -L",
-  "ausgabe": "usage: pwd",
-  "status": "2",
+  "ausgabe": "/",
+  "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "pwd x",
-  "ausgabe": "usage: pwd",
-  "status": "2",
+  "ausgabe": "/",
+  "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "pwd -x",
-  "ausgabe": "usage: pwd",
+  "ausgabe": "bash: pwd: -x: invalid option\npwd: usage: pwd [-LP]",
   "status": "2",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "pwd --help",
-  "ausgabe": "usage: pwd",
+  "ausgabe": "pwd: pwd [-LP]\n    Print the name of the current working directory.\n    \n    Options:\n      -L\tprint the value of $PWD if it names the current working\n    \t\tdirectory\n      -P\tprint the physical directory, without any symbolic links\n    \n    By default, `pwd' behaves as if `-L' were specified.\n    \n    Exit Status:\n    Returns 0 unless an invalid option is given or the current directory\n    cannot be read.",
   "status": "2",
   "promptDanach": "raizo@terminal:/$"
  },

@@ -32,7 +32,7 @@ const { APP } = require('./_pfad');
       "tmux · tmux split-window -bd predict · tmux split-window -bd plog -f · Ctrl+B ↑/↓ switch pane · tmux kill-pane -t '{up-of}'",
       'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);
     /* Aufruffehler und Rückgabewerte wie bisher */
-    for (const [z, erwartet, code] of [['help x', 'usage: help', '2'], ['pwd x', 'usage: pwd', '2'], ['uname', 'usage: uname -a', '2'],
+    for (const [z, erwartet, code] of [['help x', 'usage: help', '2'], ['uname', 'usage: uname -a', '2'],
       ['date x', 'usage: date', '2'], ['true x', 'usage: true', '2'], ['clear x', 'usage: clear', '2'], ['foo', 'foo: command not found', '127'],
       ['ping', 'ping: usage: ping <destination>', '1'], ['ping x', 'ping: x: Name or service not known', '2']]) {
       assert.deepEqual(await nach(z), [erwartet], z);

@@ -1,7 +1,7 @@
-/* Phase 6a-0: Verhaltensgleichheit von pwd, cd und ls. Führt die Messsonde (_sonde-shell-6a.js, 75 Befehle gegen die echte lokale
-   Brücke mit Beispielarchiv) aus und vergleicht Ausgabe, Rückgabewert ($?) und Prompt Befehl für Befehl mit der Aufnahme VOR der
-   Umstellung (_golden-shell-6a0.json; Zeitstempel normalisiert). Absichtliche Verhaltensänderungen späterer Etappen (6a-1 ff.)
-   müssen die Aufnahme bewusst anpassen. */
+/* Verhaltensaufnahme von pwd, cd und ls. Führt die Messsonde (_sonde-shell-6a.js, 75 Befehle gegen die echte lokale Brücke mit
+   Beispielarchiv) aus und vergleicht Ausgabe, Rückgabewert ($?) und Prompt Befehl für Befehl mit der Aufnahme _golden-shell-6a1.json
+   (Zeitstempel normalisiert). Stand: 6a-0 (Umbau ohne Verhaltensänderung, Aufnahme vorher erzeugt) plus 6a-1: nur die fünf pwd-Fälle
+   -P, -L, x, -x und --help wurden gegenüber der Aufnahme von 6a-0 bewusst geändert. Spätere Etappen passen die Aufnahme bewusst an. */
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -12,7 +12,7 @@ try {
   execFileSync(process.execPath, [path.join(__dirname, '_sonde-shell-6a.js'), tmp], { stdio: 'inherit', timeout: 240000 });
   const norm = e => Object.assign({}, e, { ausgabe: e.ausgabe.replace(/\d\d\.\d\d\.\d{4} \d\d:\d\d:\d\dZ/g, '<ZEIT>') });
   const ist = JSON.parse(fs.readFileSync(tmp, 'utf8')).map(norm);
-  const soll = JSON.parse(fs.readFileSync(path.join(__dirname, '_golden-shell-6a0.json'), 'utf8'));
+  const soll = JSON.parse(fs.readFileSync(path.join(__dirname, '_golden-shell-6a1.json'), 'utf8'));
   assert.equal(ist.length, soll.length, 'Anzahl der Befehle');
   ist.forEach((e, i) => assert.deepEqual(e, soll[i], 'Befehl ' + i + ': ' + soll[i].befehl));
   console.log('OK: pwd/cd/ls unverändert gegenüber der Aufnahme (' + ist.length + ' Befehle)');

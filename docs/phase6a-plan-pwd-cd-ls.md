@@ -95,7 +95,7 @@ Rückwärtskompatibilität: Gespeicherte Daten sind nicht betroffen (Terminalzus
 
 ## 7. Entscheidungsfragen an Master Wayne
 
-*Ergänzung vom 23.11.2026: Zur Reihenfolge (Frage 6) und zur Architektur gilt Abschnitt 9; die übrigen Fragen sind weiterhin nicht beantwortet.*
+*Ergänzung vom 23.11.2026: Zur Reihenfolge (Frage 6) und zur Architektur gilt Abschnitt 9. Die sechs Fragen sind am 23.11.2026 von Master Wayne nach der Empfehlung der unabhängigen Prüfung entschieden (siehe 7.1).*
 
 1. Umfang der Nachbildung: nur die vorgeschlagene Teilmenge, oder strengere Vollständigkeit?
 2. Verzeichnismarke: `ls` ohne `/` (wie echtes `ls` ohne `-F`; Unterscheidung nur über `-F` oder Farbe) oder die heutige Darstellung mit `/` beibehalten?
@@ -103,6 +103,19 @@ Rückwärtskompatibilität: Gespeicherte Daten sind nicht betroffen (Terminalzus
 4. Shell-Variablen `$HOME`, `$PWD`, `$OLDPWD` (und `${…}`) als eigene Etappe 6a-5? Sie betreffen die Wortzerlegung der Shell (`terminal-shell-kern`) und damit mehr als die drei Befehle.
 5. Fehlerpräfix: nur bei Builtins (`bash: cd: …`, wie im Vorbild), externe Programme (`ls: …`) unverändert?
 6. Reihenfolge: wie in Abschnitt 5, oder zuerst `ls`?
+
+### 7.1 Entscheidungen (Master Wayne, 23.11.2026, nach Empfehlung der unabhängigen Prüfung)
+
+| Nr. | Frage | Entscheidung |
+|---|---|---|
+| 1 | Umfang | Breite Shell als Zielarchitektur; GNU-/Bash-Verhalten schrittweise möglichst vollständig innerhalb des unterstützten Funktionsumfangs. |
+| 2 | Verzeichnismarke | Unix-konform: `ls` ohne `/` im Standardmodus; mit `ls -F` wird `/` angezeigt. |
+| 3 | Rechte und Eigentümer | Anzeigen, aber konsistent modellieren; virtuelle Rechte sollen später auch tatsächliche Auswirkungen in der Simulation haben. |
+| 4 | Variablen | `$HOME`, `$PWD`, `$OLDPWD`, `${…}` als eigene Etappe 6a-5; die Architektur berücksichtigt sie bereits, die vollständige Expansion folgt separat. |
+| 5 | Fehlerpräfix | Bash-Builtins (`cd`, `pwd`) mit Bash-typischen Meldungen (`bash: pwd: -x: invalid option`); externe Programme wie `ls` mit GNU-coreutils-Meldungen. |
+| 6 | Reihenfolge | Wie in Abschnitt 5: 6a-0 erledigt, dann `pwd`, `cd`, `ls`, danach die Variablenexpansion. Vor 6a-3 ein kleiner Sicherheits-PR für Variante B (Namen gesperrter Archivobjekte). |
+
+`pwd` bildet das **Bash-Builtin** nach, nicht `/usr/bin/pwd` (das externe Programm beendet `--help` mit Rückgabewert 0, das Builtin mit 2).
 
 ## 8. Nicht geprüft
 
@@ -179,3 +192,7 @@ Korrekturen nach dem Review von #128: Die tatsächlichen `args` der Shell werden
 Bekannte Grenzen von 6a-0 (kein Merge-Blocker, vor breiterer Nutzung zu beheben): `sichtbar` greift nur in `readdir` (Archiv), nicht in `stat` und `readFile`; vor `find`/`stat`-Verbrauchern ist eine zentrale Operationsregel (`discover`, `stat`, `read`, `write`) auch für Aliasnamen, Tab und nachträgliche Sperren festzulegen. Archiv-`stat` ohne `pruefen` liefert `typ: null` auch für nicht vorhandene Ziele. `readdir` auf eine virtuelle Datei meldet `ENOENT` statt `ENOTDIR`. `stdout` und `stderr` sind getrennt, werden aber gemeinsam ausgegeben; Pipes und Ströme fehlen, es gibt keine vollständige Unix-Shell.
 
 Windows-Rückmeldung (Master Wayne): Befehle wie erwartet. Bei `cd DOSSIERS` übernimmt der Shell-Pfad die getippte Schreibweise (`/DOSSIERS`), weil die Brücke unter Windows Groß- und Kleinschreibung nicht unterscheidet. Das ist Altverhalten (ALT wie NEU) und kein Fehler von 6a-0; unter Unix würde ein anderer Name als `Datei nicht gefunden` gelten. Ob der Pfad künftig den echten Namen der Brücke zeigen oder die Schreibweise streng prüfen soll, ist offen und gehört in die `cd`-Etappe.
+
+### 9.9 Etappe 6a-1: `pwd` als Bash-Builtin (Draft)
+
+Referenz bash 5.2.21 (lokal mit `bash -c` gemessen, nicht TTY, Skriptmodus-Präfix `bash: line 1:` durch das interaktive `bash:` ersetzt). Verbindlich: `-L`, `-P` (auch kombiniert und wiederholt) liefern ohne symbolische Links denselben Pfad; `--` beendet die Optionen; der erste Nicht-Optionswert beendet die Optionsauswertung; Operanden werden ignoriert (`pwd x` Rückgabewert 0); ungültige Option (auch `--x`, `-L-`, gemeldet als `--`) ergibt `bash: pwd: -x: invalid option` und `pwd: usage: pwd [-LP]` mit Rückgabewert 2; `pwd --help` gibt den Hilfetext aus, Rückgabewert 2; Auswertung der Reihe nach (`pwd --help -x` Hilfe, `pwd -x --help` Fehler). Test: `tests/terminal-pwd-bash.js` (29 Fälle, Verkettung mit `&&`/`||`, virtueller Baum und Archiv). Nicht nachgebildet: `$PWD` und `$OLDPWD` als Quelle von `-L` (Etappe 6a-5), symbolische Links existieren im Terminal nicht. `cd` und `ls` sind unverändert.
