@@ -1893,19 +1893,17 @@ function bewertungAnzeige(v) {
   return h('abbr', { title: bewertungText(b.code) + '. Stand ' + b.fr.text + (b.abgewertet ? '; ursprünglich ' + b.orig + ', durch Alterung abgewertet' : '') + ' (' + b.fr.stufe + ')' },
     b.code, b.fr.stufe === 'aktuell' ? null : h('span', { class: 'dim' }, b.fr.stufe === 'veraltet' ? ' ⌛' : ' ·'));
 }
-/* Jüngste Spur zu einer Person oder Organisation (Sichtung, Beleg, Bericht, Einschätzung) mit ihrer Frische */
+/* Jüngste Spur zu einer Person oder Organisation (eigene Sichtungen) mit ihrer Frische.
+   Phase 5c2a: Belege, Berichte und Einschätzungen der alten Mission fließen nicht mehr ein; sie bleiben unverändert in STATE.altbestand. */
 function erkenntnisLage(e) {
-  const d = STATE.dossiers.entitaeten[e.id], x = IZ()[e.id] || {}, def = LM(), ms = def ? MS(def.id) : null, L = [];
+  const d = STATE.dossiers.entitaeten[e.id], L = [];
   ((d && d.sichtungen) || []).forEach(function (s) { L.push({ t: s.t, q: 'E', art: 'Sichtung' }); });
-  if (ms) ms.dokumente.filter(function (z) { return z.entitaet === e.id; }).forEach(function (z) { L.push({ t: z.t, q: 'C', art: 'Beleg' }); });
-  (ALT().berichte || []).forEach(function (b) { if (b.text && b.text.indexOf(e.id) >= 0) L.push({ t: b.t, q: 'C', art: 'Bericht' }); });
-  if (x.einschaetzung) L.push({ t: x.einschaetzung.t, q: x.einschaetzung.quelle, art: 'Einschätzung' });
   L.forEach(function (z) { z.fr = frische(z.q, z.t); });
   const frisch = L.filter(function (z) { return z.fr.stufe !== 'veraltet'; }).sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   const alle = L.slice().sort(function (a, b) { return Date.parse(b.t) - Date.parse(a.t); });
   return { aktuell: !!frisch.length, juengste: alle[0] || null, frisch: frisch[0] || null, anzahl: L.length };
 }
-/* Erkenntnislage als Text: eigener Eintrag des Dossiers, sonst die Zusammenfassung der vorhandenen Spuren (Sichtungen, Belege, Berichte, Einschätzung) */
+/* Erkenntnislage als Text: eigener Eintrag des Dossiers, sonst die Zusammenfassung der eigenen Sichtungen */
 function erkenntnisText(e) {
   const el = erkenntnisLage(e);
   return el.anzahl ? el.anzahl + (el.anzahl === 1 ? ' Spur' : ' Spuren') + ', jüngste: ' + el.juengste.art + ' vom ' + fmtZ(el.juengste.t) : 'Keine Erkenntnis erfasst.';
@@ -3367,13 +3365,6 @@ function sichtungenBlock(e) {
       return [td('nw', fmtZ(x.t)), td('nw', x.id), td('nw', [gueteLabel(sichtungGuete(x)), ' ', h('select', { id: 'si-g-' + x.id, 'aria-label': 'Güte von ' + x.id, onchange: function (ev) { dispatch({ type: 'SICHTUNG_BEWERTET', id: e.id, sid: x.id, guete: ev.target.value }); } }, SICHTUNG_BEWERTUNGEN.map(function (g) { return h('option', { value: g, selected: (x.guete || 'unbewertet') === g }, SCENARIO.guete[g].label); }))]), td('txt', x.ort || '–'), td('txt', x.text || '–'),
               td('nw', h('button', { type: 'button', class: 'link', id: 'si-del-' + x.id, onclick: function () { dispatch({ type: 'SICHTUNG_ENTFERNT', id: e.id, sid: x.id }); } }, 'entfernen'))];
     }), 'Keine Sichtungen eingetragen.'),
-    (function () {
-      const A = aussagenListe().filter(function (a) { return a.entitaet === e.id; }), wd = widerspruchOffen();
-      return [wd && wd.entitaet === e.id ? h('p', { class: 'note pad' }, h('span', { class: 'label s-crit' }, 'offener Widerspruch'), ' ARGUS wartet auf eine Klärung im Kanal Ansprechpartner.') : null,
-        A.length ? [h('h3', null, 'Aussagen des Agenten (' + A.length + ')'), tabelle(['Zeit (UTC)', 'ID', 'Aussage', 'Stand'], A.slice().reverse().map(function (a) {
-          return [td('nw', fmtZ(a.t)), td('nw', a.id), td('txt', (a.wert ? SCENARIO.abfragen.aussagen.wissenJa : SCENARIO.abfragen.aussagen.wissenNein) + ' (' + a.text + ')'), td('nw', h('span', { class: 'label ' + (a.status === 'gilt' ? 's-accent' : a.status === 'unklar' ? 's-warn' : 's-dim') }, a.status))];
-        }), '')] : null];
-    })(),
     sichtungsEntwuerfe(e),
     h('div', { class: 'row top' }, h('button', { type: 'button', id: 'btn-si', onclick: function () { sichtungDialog(e); } }, 'Sichtung hinzufügen'))
   ];
