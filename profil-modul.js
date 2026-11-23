@@ -231,10 +231,15 @@ function terminalPfad(arg) {
 }
 // Pfade der Oberfläche beginnen an einer virtuellen Wurzel. Nur der Archivzweig geht an die Brücke.
 function terminalShellPfad(arg) {
-  if (/[:\\]|[\u0000-\u001f\u007f]/.test(arg)) return null;
   const ort = TERMINAL_ZUSTAND.ort;
+  return terminalPfadAufloesen(arg, ort ? [TERMINAL_DB].concat(ort) : (TERMINAL_ZUSTAND.virtuellerOrt || []));
+}
+/* Reine Pfadauflösung: Segmentliste ab der Wurzel aus Eingabe und ausdrücklich übergebenem Arbeitsverzeichnis (Segmente);
+   liest keinen globalen Zustand. null bei unzulässigen Zeichen. */
+function terminalPfadAufloesen(arg, cwdSegmente) {
+  if (/[:\\]|[\u0000-\u001f\u007f]/.test(arg)) return null;
   const absolut = arg.startsWith('/') || arg === '~' || arg.startsWith('~/');
-  const out = absolut ? [] : ort ? [TERMINAL_DB].concat(ort) : (TERMINAL_ZUSTAND.virtuellerOrt || []).slice();
+  const out = absolut ? [] : cwdSegmente.slice();
   for (const name of (arg === '~' || arg.startsWith('~/') ? arg.slice(1) : arg).split('/')) {
     if (!name || name === '.') continue;
     if (name === '..') out.pop();
@@ -494,8 +499,11 @@ const TERMINAL_FS = {
   /* Sichtbarkeitsregel gesperrter Archivobjekte: zentraler Haken. Ist-Stand (tests/terminal-fs-ist.js): Namen bleiben sichtbar.
      Variante B (Name ebenfalls geschützt) wird hier umgesetzt, nicht in den Befehlen. */
   sichtbar: function (seg) { return true; },
-  /* Zeichenkette, relativ zum Arbeitsverzeichnis -> Segmentliste ab der Wurzel; null bei unzulässigen Zeichen */
-  resolve: async function (arg) { return terminalShellPfad(arg); },
+  /* Zeichenkette -> Segmentliste ab der Wurzel; null bei unzulässigen Zeichen. Mit opt.cwd (Zeichenkette, z. B. '/etc/ppp') relativ zu
+     diesem Arbeitsverzeichnis, ohne den globalen Terminalzustand zu lesen; ohne opt.cwd relativ zum Zustand der einen Shell (Altverhalten). */
+  resolve: async function (arg, opt) {
+    return opt && typeof opt.cwd === 'string' ? terminalPfadAufloesen(arg, opt.cwd.split('/').filter(Boolean)) : terminalShellPfad(arg);
+  },
   /* Art des Ziels. Die Brücke kennt kein stat: ohne opt.pruefen bleibt die Art im Archiv unbekannt (typ null),
      mit opt.pruefen wird sie über die Brückenoperation "cd" festgestellt (nur Verzeichnisse gelingen). */
   stat: async function (seg, opt) {
@@ -558,7 +566,7 @@ function terminalBefehlPwd(ctx) {
 async function terminalBefehlCd(ctx) {
   const name = terminalName(ctx.arg);
   if (name === null) return terminalBefehlFehler('cd: unterminated quote');
-  const seg = await ctx.fs.resolve(name || '/');
+  const seg = await ctx.fs.resolve(name || '/', { cwd: ctx.cwd });
   if (!seg) return terminalBefehlFehler('cd: ' + name + ': Permission denied');
   const st = await ctx.fs.stat(seg, { pruefen: true });
   if (st.fehler) return terminalBefehlFehler(terminalFsFehlerText('cd', name, st.fehler));
@@ -570,7 +578,7 @@ async function terminalBefehlLs(ctx) {
   const name = terminalName(arg);
   if (name === null) return terminalBefehlFehler('ls: unterminated quote');
   if (arg.startsWith('-') && !lang && !alle) return terminalBefehlFehler("ls: unrecognized option '" + arg + "'");
-  const seg = await ctx.fs.resolve(lang || alle ? '' : name);
+  const seg = await ctx.fs.resolve(lang || alle ? '' : name, { cwd: ctx.cwd });
   if (!seg) return terminalBefehlFehler('ls: ' + name + ': Permission denied');
   const st = await ctx.fs.stat(seg);
   if (st.fehler) return terminalBefehlFehler(terminalFsFehlerText('ls', name, st.fehler));
@@ -2155,14 +2163,14 @@ async function terminalEinzelbefehl(woerter) {
 }
 // Aufruffehler einfacher Befehle: usage-Zeile, Rückgabewert 2.
 function terminalUsage(text) { terminalAusgabe('usage: ' + text); return 2; }
-async function terminalDateiAusfuehren(befehl, arg) {
+async function terminalDateiAusfuehren(befehl, arg, args) {
   const t = TERMINAL_ZUSTAND;
   if (t.dateiLaeuft) { terminalAusgabe('Datenbankanfrage läuft bereits'); return 1; }
   t.dateiLaeuft = true;
   const version = t.version;
   try {
     const fn = befehl === 'cd' ? terminalBefehlCd : befehl === 'ls' ? terminalBefehlLs : null;
-    return fn ? await terminalBefehlLauf(fn, [], arg, version) : await terminalDateiBefehl(befehl, arg, version);
+    return fn ? await terminalBefehlLauf(fn, args || [], arg, version) : await terminalDateiBefehl(befehl, arg, version);
   } catch (e) {
     if (t.version === version) terminalAusgabe('Dateioperation fehlgeschlagen');
     return 1;
@@ -2675,7 +2683,7 @@ function terminalHilfe() {
    Tab-Arten: pfad (Dateien und Ordner), fest (feste Argumentfolgen), optionen (Optionen ohne Leerzeichen danach),
    predict (Optionen und Satellitennamen), tail (-n mit Syslog, sonst pfad). Dynamische Kandidaten bleiben Funktionen. */
 const TERMINAL_PPP = function (name) { return function (args, arg) { return terminalPppShell(name, arg, args); }; };
-const TERMINAL_DATEI = function (name) { return function (args, arg) { return terminalDateiAusfuehren(name, arg); }; };
+const TERMINAL_DATEI = function (name) { return function (args, arg) { return terminalDateiAusfuehren(name, arg, args); }; };
 const TERMINAL_TABELLE = [
   { name: 'ls', hilfe: [[0, 0, 'ls [-a|-l|-la]']], tab: { art: 'pfad', optionen: ['-a', '-l', '-la'] }, aus: TERMINAL_DATEI('ls') },
   { name: 'cd', hilfe: [[0, 1, 'cd <ordner>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('cd') },

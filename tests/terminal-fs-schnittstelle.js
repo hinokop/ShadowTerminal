@@ -127,6 +127,36 @@ const { APP } = require('./_pfad');
     await p.evaluate(() => terminalBefehlLauf(async () => ({ code: 0, stdout: ['NIE'], stderr: [], cwd: { ort: null, virtuellerOrt: ['var'] } }), [], '', -1));
     assert.equal(await p.evaluate(() => terminalArbeitsverzeichnis()), '/etc');
     assert.ok(!(await out.textContent()).includes('NIE'));
+    /* Echte Befehlsaufrufe: ctx.args und ctx.arg kommen aus der Shell (Befehlsfunktionen werden zum Mitschnitt umhüllt) */
+    await cmd('cd /');
+    await p.evaluate(() => {
+      window.__ctx = [];
+      for (const n of ['terminalBefehlCd', 'terminalBefehlLs']) { const orig = window[n]; window[n] = c => { window.__ctx.push({ n, args: c.args, arg: c.arg, cwd: c.cwd }); return orig(c); }; }
+    });
+    await cmd('cd /etc'); await cmd('ls -la'); await cmd('ls "/etc/ppp"'); await cmd('cd /'); await cmd('ls /etc /var');
+    const ctxs = await p.evaluate(() => window.__ctx);
+    assert.deepEqual(ctxs.map(c => [c.n, c.args]), [
+      ['terminalBefehlCd', ['/etc']], ['terminalBefehlLs', ['-la']], ['terminalBefehlLs', ['/etc/ppp']],
+      ['terminalBefehlCd', ['/']], ['terminalBefehlLs', ['/etc', '/var']]], 'tatsächliche args aus der Shell');
+    assert.deepEqual(ctxs.slice(0).map(c => c.cwd), ['/', '/etc', '/etc', '/etc', '/'], 'cwd des Aufrufs');
+    assert.equal(ctxs[2].arg, '/etc/ppp', 'arg: Anführungszeichen der Shell sind bereits aufgelöst');
+    /* Explizites cwd: weicht vom globalen Arbeitsverzeichnis (/) ab und bestimmt die Auflösung relativer Pfade */
+    assert.equal(await p.evaluate(() => terminalArbeitsverzeichnis()), '/');
+    assert.deepEqual(await r('resolve', 'ppp', { cwd: '/etc' }), ['etc', 'ppp']);
+    assert.deepEqual(await r('resolve', '..', { cwd: '/etc/ppp' }), ['etc']);
+    assert.deepEqual(await r('resolve', '/var', { cwd: '/etc' }), ['var'], 'absolut ignoriert cwd');
+    assert.deepEqual(await r('resolve', 'ops', { cwd: '/' + db }), [db, 'ops']);
+    assert.deepEqual(await r('resolve', 'ppp'), ['ppp'], 'ohne cwd gilt der globale Zustand (hier /)');
+    const direkt = await p.evaluate(async () => {
+      const ctx = arg => ({ args: [arg], arg, cwd: '/etc/ppp', env: {}, fs: TERMINAL_FS });
+      return { ls: await terminalBefehlLs(ctx('peers')), lsLeer: await terminalBefehlLs(ctx('-l')), cd: await terminalBefehlCd(ctx('peers')),
+        cdPunkt: await terminalBefehlCd(ctx('..')), global: terminalArbeitsverzeichnis() };
+    });
+    assert.deepEqual(direkt.ls.stdout, ['kestrel'], 'ls löst relativ zum Kontext-cwd auf');
+    assert.deepEqual(direkt.lsLeer.stdout, ['peers/'], 'ls ohne Operand listet das Kontext-cwd');
+    assert.deepEqual(direkt.cd.cwd, { ort: null, virtuellerOrt: ['etc', 'ppp', 'peers'] }, 'cd relativ zum Kontext-cwd');
+    assert.deepEqual(direkt.cdPunkt.cwd, { ort: null, virtuellerOrt: ['etc'] });
+    assert.equal(direkt.global, '/', 'globaler Zustand unverändert (cd liefert nur ein Ergebnis)');
     assert.deepEqual(errors, []);
     console.log('OK: Dateisystem-Schnittstelle (resolve, stat, readdir, readFile, writeFile), Haken, Befehlskontext');
   } finally { await browser.close(); }
