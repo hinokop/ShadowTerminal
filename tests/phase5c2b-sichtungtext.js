@@ -1,7 +1,7 @@
 /* Phase 5c2b D2: genau eine globale Deklaration von sichtungText (karte-modul.js) und unveränderter Sichtungstext.
    Statisch: in den geladenen Anwendungsskripten steht genau eine Deklaration function sichtungText(…), und zwar in karte-modul.js.
    Laufzeit: sichtungText hat zwei Parameter; der Text einer bestätigten Sichtung mit Entwurfs-Pin entspricht dem festgehaltenen Wortlaut
-   (Zeitzone UTC, Sichtungszeit fest gesetzt). Der Wortlaut wurde vor der Entfernung der überlagerten Variante aus index.html auf main erzeugt. Exit-Code 1 bei Fehlschlag. */
+   (Zeitzone UTC, Sichtungszeit fest gesetzt). Güte und Aktualität: gespeicherte Bewertung und Alterseinstufung getrennt (Entscheidung Master Wayne, 23.11.2026). Exit-Code 1 bei Fehlschlag. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -20,8 +20,8 @@ for (const [name, text] of quellen) for (const m of text.matchAll(/^[ \t]*functi
 assert.ok(quellen.some(q => q[0] === 'karte-modul.js'), 'karte-modul.js wird von index.html geladen');
 assert.deepEqual(treffer, ['karte-modul.js'], 'genau eine Deklaration von sichtungText, in karte-modul.js: ' + JSON.stringify(treffer));
 
-/* Normalisiert: „Güte“ (Wert derzeit ein Elementobjekt als Text, bekannte Abweichung außerhalb von D2, siehe Dokumentation) und „Angelegt“ (Erfassungszeit) */
-const SOLL = "<SI> · Dossier <D> Textperson\nZeit: 02.01.2026 03:04:05Z\nOrt laut Meldung: 52.5000, 13.4000\nPosition: 52.50000, 13.40000 (ungefähr, aus Koordinate)\nGüte: <Wert>\nBeobachtung: Person gesehen\n\nEntwurf: <PIN> Treffpunkt Nord\nPosition: 52.50000, 13.40000\nZweck: Treffpunkt\n\nZufahrten und Wege: zwei Zufahrten\nSichtlinien: –\nFluchtmöglichkeiten: –\nPublikumsverkehr: –\nKameras, Beleuchtung: –\nNachbarschaft, Gewerbe: –\n\nNotiz: Notiz vom Entwurf\n\nAngelegt: <Zeit>";
+/* Normalisiert ist nur „Angelegt“ (Erfassungszeit des Entwurfs) */
+const SOLL = "<SI> · Dossier <D> Textperson\nZeit: 02.01.2026 03:04:05Z\nOrt laut Meldung: 52.5000, 13.4000\nPosition: 52.50000, 13.40000 (ungefähr, aus Koordinate)\nGüte: gesichert\nAktualität: veraltet\nBeobachtung: Person gesehen\n\nEntwurf: <PIN> Treffpunkt Nord\nPosition: 52.50000, 13.40000\nZweck: Treffpunkt\n\nZufahrten und Wege: zwei Zufahrten\nSichtlinien: –\nFluchtmöglichkeiten: –\nPublikumsverkehr: –\nKameras, Beleuchtung: –\nNachbarschaft, Gewerbe: –\n\nNotiz: Notiz vom Entwurf\n\nAngelegt: <Zeit>";
 
 (async () => {
   const browser = await chromium.launch();
@@ -38,10 +38,24 @@ const SOLL = "<SI> · Dossier <D> Textperson\nZeit: 02.01.2026 03:04:05Z\nOrt la
       dispatch({ type: 'SICHTUNG_HINZU', id: d, ort: '52.5000, 13.4000', text: 'Person gesehen', guete: 'gesichert', pin: pin.id });
       const e = entitaet(d), si = STATE.dossiers.entitaeten[d].sichtungen[0];
       si.t = '2026-01-02T03:04:05.000Z'; pin.stand = '2026-01-02T03:04:05.000Z';
-      return { laenge: sichtungText.length, text: sichtungText(e, si).split(d).join('<D>').split(si.id).join('<SI>').split(pin.id).join('<PIN>').replace(/^Güte: .*$/m, 'Güte: <Wert>').replace(/^Angelegt: .*$/m, 'Angelegt: <Zeit>') };
+      return { laenge: sichtungText.length, text: sichtungText(e, si).split(d).join('<D>').split(si.id).join('<SI>').split(pin.id).join('<PIN>').replace(/^Angelegt: .*$/m, 'Angelegt: <Zeit>') };
     });
     assert.equal(r.laenge, 2, 'sichtungText(e, si) ist die wirksame Variante');
     assert.equal(r.text, SOLL, 'Sichtungstext unverändert:\n' + r.text);
+    /* Güte (gespeicherte Bewertung) und Aktualität (Alter) getrennt, beide Zeilen immer vorhanden */
+    const m = await p.evaluate(() => {
+      const d = STATE.dossiers.auswahl, e = entitaet(d), si = STATE.dossiers.entitaeten[d].sichtungen[0], h = 3600000, jetzt = Date.now();
+      const zeile = (guete, vor, zeit) => { si.guete = guete; si.t = zeit !== undefined ? zeit : new Date(jetzt - vor * h).toISOString(); const t = sichtungText(e, si); return { g: (t.match(/^Güte: (.*)$/m) || [])[1], a: (t.match(/^Aktualität: (.*)$/m) || [])[1], objekt: t.includes('[object') }; };
+      return { frisch: zeile('plausibel', 1), alternd: zeile('unbestaetigt', 18), veraltet: zeile('gesichert', 48), unbewertet: zeile('unbewertet', 1), fehlt: zeile(undefined, 1), unbekannt: zeile('constructor', 1), undatiert: zeile('gesichert', 0, 'unklar'), widerspruch: zeile('widerspruechlich', 30) };
+    });
+    assert.deepEqual(m.frisch, { g: 'plausibel', a: 'aktuell', objekt: false });
+    assert.deepEqual(m.alternd, { g: 'unbestätigt', a: 'alternd', objekt: false });
+    assert.deepEqual(m.veraltet, { g: 'gesichert', a: 'veraltet', objekt: false }, 'ursprünglich gesicherte, alte Sichtung: Güte bleibt, Aktualität veraltet');
+    assert.deepEqual(m.unbewertet, { g: 'unbewertet', a: 'aktuell', objekt: false });
+    assert.deepEqual(m.fehlt, { g: 'unbewertet', a: 'aktuell', objekt: false }, 'fehlende Güte gilt als unbewertet');
+    assert.deepEqual(m.unbekannt, { g: 'unbewertet', a: 'aktuell', objekt: false }, 'unbekannter Gütewert gilt als unbewertet');
+    assert.deepEqual(m.undatiert, { g: 'gesichert', a: '–', objekt: false }, 'ohne auswertbare Zeit: Aktualität „–“');
+    assert.deepEqual(m.widerspruch, { g: 'widersprüchlich', a: 'veraltet', objekt: false });
     assert.deepEqual(fehler, [], 'keine Browserfehler');
     console.log('phase5c2b-sichtungtext: OK');
   } finally { await browser.close(); }

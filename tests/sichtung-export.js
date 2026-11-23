@@ -52,6 +52,8 @@ const { altzustandOeffnen, altbestandPruefen, altbestandUnveraendert } = require
     assert.equal(dl.suggestedFilename(), 'sichtung-' + s.d + '-' + s.si + '.txt');
     const txt = await readFile(await dl.path(), 'utf8');
     for (const f of [s.si, 'Exportperson', 'Person gesehen', 'Güte', 'Treffpunkt Nord', 'zwei Zufahrten']) assert.ok(txt.includes(f), 'TXT enthält ' + f);
+    /* Güte (gespeicherte Bewertung) und Aktualität (Alter) getrennt; kein Elementobjekt als Text */
+    assert.match(txt, /^Güte: unbewertet$/m); assert.match(txt, /^Aktualität: aktuell$/m); assert.ok(!txt.includes('[object'), 'kein Objekttext im Export: ' + txt);
 
     /* Phase 5b1: Ein altes Ansprechpartner-/Missionsmerkmal darf die Ausgabe
        einer vorhandenen Sichtung nicht sperren. Die manuelle Dossiersperre
