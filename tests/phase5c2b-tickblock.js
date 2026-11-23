@@ -1,7 +1,7 @@
 /* Phase 5c2b (a): Entfernung des stillgelegten Ereignisblocks in tickModule (data-melde, data-vk, data-fenster) und der danach
    funktionslosen Helfer meldeText, meldungLiegtVor, VK, vkStatus, fensterZelle sowie widerspruchOffen.
    Belegt wird:
-   (1) die entfernten Funktionen sind nicht mehr vorhanden, die ausdrücklich ausgenommenen (ALT, LM, KM, MS, missionDef, IZ, aussagenListe,
+   (1) die entfernten Funktionen sind nicht mehr vorhanden, die ausdrücklich ausgenommenen (ALT, LM, KM, MS, missionDef,
        einsatzLaeuft, einsatzBeginn) bleiben;
    (2) tickModule fasst Elemente mit den früheren Attributen nicht mehr an (vorher: Textersetzung bzw. Fehler) und läuft über mehrere
        Sekunden ohne Seitenfehler;
@@ -51,11 +51,11 @@ async function anmeldenMit(p) {
     const typen = await p.evaluate(() => {
       const t = {};
       ['meldeText', 'meldungLiegtVor', 'VK', 'vkStatus', 'fensterZelle', 'widerspruchOffen',
-        'ALT', 'LM', 'KM', 'MS', 'missionDef', 'IZ', 'aussagenListe', 'einsatzLaeuft', 'einsatzBeginn', 'tickModule'].forEach(n => { t[n] = typeof window[n]; });
+        'ALT', 'LM', 'KM', 'MS', 'missionDef', 'einsatzLaeuft', 'einsatzBeginn', 'tickModule'].forEach(n => { t[n] = typeof window[n]; });
       return t;
     });
     ['meldeText', 'meldungLiegtVor', 'VK', 'vkStatus', 'fensterZelle', 'widerspruchOffen'].forEach(n => assert.equal(typen[n], 'undefined', n + ' ist entfernt'));
-    ['ALT', 'LM', 'KM', 'MS', 'missionDef', 'IZ', 'aussagenListe', 'einsatzLaeuft', 'einsatzBeginn', 'tickModule'].forEach(n => assert.equal(typen[n], 'function', n + ' bleibt erhalten'));
+    ['ALT', 'LM', 'KM', 'MS', 'missionDef', 'einsatzLaeuft', 'einsatzBeginn', 'tickModule'].forEach(n => assert.equal(typen[n], 'function', n + ' bleibt erhalten'));
 
     /* (3, Ausgangsstand) Altbestand vor allen weiteren Handlungen */
     const vor = await p.evaluate(() => JSON.parse(JSON.stringify(STATE.altbestand)));

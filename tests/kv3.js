@@ -4,7 +4,7 @@ const net=[];p.on('response',r=>{if(/cartocdn|openstreetmap/.test(r.url()))net.p
 await p.goto(require('./_pfad.js').APP);await p.waitForTimeout(5200);await p.keyboard.press('Space');await p.fill('#gate-pw','pw-test-123');await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
 await p.waitForFunction(()=>!document.body.classList.contains('locked'),null,{timeout:20000});
 await p.evaluate(()=>{dispatch({type:'KENNWORT_SCHALTER',an:false});dispatch({type:'STATUS_GESETZT',status:'Standby'});dispatch({type:'MISSION_ZUGEWIESEN',id:'M1'});dispatch({type:'MISSION_ANGENOMMEN',id:'M1'});dispatch({type:'MISSION_BEGINN_JETZT'});
- ['P-0002','P-0003','P-0007','P-0016','O-0001','P-0006'].forEach(i=>{IZ()[i]={status:'frei'}});dispatch({type:'NAVIGATION',modul:'karte'});});
+dispatch({type:'NAVIGATION',modul:'karte'});});
 await p.waitForTimeout(500);
 await p.click('#k-b-carto');await p.evaluate(()=>{VIEW.karte.zoom=11;VIEW.karte.lat=52.46;VIEW.karte.lon=13.45;zeichneKarte($('k-svg'))});await p.waitForTimeout(2500);
 const box=await p.locator('.k-marker[data-id="P-0007"] .k-treffer').boundingBox();

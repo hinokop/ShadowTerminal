@@ -58,9 +58,9 @@ const PF = require('./_pfad');
     const historisch = await p.evaluate(() => {
       dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' });
       dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
-      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.mission === 'STD' && !IZ()[x.id] && !dossierGesperrt(x));
+      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.mission === 'STD' && !dossierGesperrt(x));
       if (!e) return null;
-      IZ()[e.id] = { status: 'bekannt' };
+      /* Phase 5c2b (b): In diesem Zustand gibt es keinen Altbestand; der frühere Schreibzugriff über die Hilfsfunktion IZ veränderte nur ein temporäres Objekt und ist entfallen. */
       const d = STATE.dossiers.entitaeten[e.id];
       if (!d) return null;
       d.sichtungen = d.sichtungen || [];
@@ -68,10 +68,10 @@ const PF = require('./_pfad');
         text: 'Historischer Sichtungsbeleg ohne Ansprechpartnerfreigabe', guete: 'unbewertet', quelle: 'Eintrag' });
       return { id: e.id, info: (typeof infoGesperrt === 'function' && infoGesperrt(e)), wissen: wissen(e), gesperrt: dossierGesperrt(e) };
     });
-    assert.ok(historisch, 'historisches Standarddossier mit früherer Freigabesperre benötigt');
+    assert.ok(historisch, 'Standarddossier ohne manuelle Sperre benötigt');
     /* Phase 5b7: Das gespeicherte Ansprechpartnermerkmal bleibt, wirkt aber nicht mehr. */
     assert.deepEqual([historisch.wissen, historisch.info, historisch.gesperrt], ['frei', false, false],
-      'historisches Merkmal gespeichert, ohne Wirkung; manuelle Sperre nicht gesetzt');
+      'Freigabestufen ohne Wirkung (Zustand ohne Altbestand); manuelle Sperre nicht gesetzt');
     const [legacyDownload] = await Promise.all([
       p.waitForEvent('download'),
       p.evaluate(id => kartenTxtExport('sichtung', 'SI-090', id), historisch.id)

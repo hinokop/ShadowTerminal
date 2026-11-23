@@ -1977,7 +1977,6 @@ function dossierStatusSetzen(e, status, anlass, out) {
    Zugriffsstufe 1: Anlass, Beleg oder Nutzen (zwei von drei). 2: zusätzlich keine bloße Sorge, mind. 50 Zeichen, Vertrauen ab 30.
    3: alle drei Punkte, mind. 60 Zeichen, Vertrauen ab 50. Zuordnung zum Auftrag oder bewilligte Verstärkung/Freigabe öffnet das Dossier ebenfalls.
    ===================================================================== */
-function IZ() { return ALT().infozugang || {}; }   /* Phase 5c1b: alte Einschätzungen nur lesend */
 /* Wissensstand einer Entität. Historisch 'frei', 'bekannt' (Rudiment) oder 'unbekannt'; seit 5b9 stets 'frei'. */
 function wissen(e) { return 'frei'; }   /* Phase 5b9: ohne Missionsbetrieb stets voller Zugang */
 /* Kennungen nicht freigegebener Entitäten in Fließtexten ersetzen: bekannt gibt den Namen, unbekannt eine neutrale Umschreibung */
@@ -2067,7 +2066,6 @@ function dossierBelege(e) {
 }
 
 
-function aussagenListe() { return STATE.aussagen || ALT().aussagen || []; }   /* Phase 5c1b: frühere Aussagen nur lesend, ohne Anlage eines Felds */
 /* Bilder: Pfad aus dem Feld bild oder, bei bilder.automatisch, aus der Kennung. Kein Bild oder Ladefehler: Platzhalter. */
 function bildPfad(obj, kennung) {
   const B = SCENARIO.bilder || {};

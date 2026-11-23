@@ -25,8 +25,8 @@ const { APP } = require('./_pfad');
       STATE.automatik = false;
       const bekannt = SCENARIO.standard.dossiers.find(e => e.typ === 'Person' && !e.eigen);
       if (!bekannt) return null;
-      IZ()[bekannt.id] = { status: 'bekannt' };
-      const unbekannt = SCENARIO.standard.dossiers.find(e => e.id !== bekannt.id && e.typ === 'Person' && !IZ()[e.id]);
+      /* Phase 5c2b (b): In diesem Zustand gibt es keinen Altbestand; der frühere Schreibzugriff über die Hilfsfunktion IZ veränderte nur ein temporäres Objekt und ist entfallen. */
+      const unbekannt = SCENARIO.standard.dossiers.find(e => e.id !== bekannt.id && e.typ === 'Person');
       if (!unbekannt) return null;
       const f = xAnlegen({ titel: '5b4 Fallbezug' }); profilSpeichern();
       return { bekannt: bekannt.id, unbekannt: unbekannt.id, fall: f.id,
@@ -36,7 +36,7 @@ const { APP } = require('./_pfad');
     assert.ok(fx, 'Testdossiers aus Standardbestand vorhanden');
     /* Phase 5b7: Altfelder bleiben gespeichert, wirken aber nicht mehr. */
     assert.deepEqual([fx.wissenBekannt, fx.infoBekannt, fx.wissenUnbekannt, fx.infoUnbekannt],
-      ['frei', false, 'frei', false], 'gespeicherte historische Freigabestufen ohne Wirkung');
+      ['frei', false, 'frei', false], 'Freigabestufen ohne Wirkung (Zustand ohne Altbestand)');
 
     /* Fall X: beide historischen Freigabestufen erscheinen im Dossierpicker. */
     const fall = await p.evaluate(fx => {
@@ -91,7 +91,7 @@ const { APP } = require('./_pfad');
       return { id: b.id, dos: b.dossiers, fall: PROFIL.recherche.faelle.find(f => f.titel === '5b4 Eingangsdokument')?.id || null };
     }, fx.bekannt);
     assert.ok(beleg.id && beleg.fall && beleg.dos.includes(fx.bekannt),
-      'Eingang schreibt unter historischem Freigabestatus');
+      'Eingang schreibt ohne Freigabestatus');
 
     /* Recherche-Zuordnung löschen. Dabei bleibt ein evtl. gemeinsamer Beleg
        erhalten; eine manuell gesperrte Dossierzuordnung kann nicht gelöscht werden. */

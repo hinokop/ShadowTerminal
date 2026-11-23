@@ -121,7 +121,7 @@ const { APP } = require('./_pfad');
     /* sudo hebt nur die manuelle Sperre auf; das gespeicherte Ansprechpartnermerkmal bleibt (seit 5b7 wirkungslos) */
     const info = await p.evaluate(() => {
       dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
-      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.mission === 'STD' && !IZ()[x.id] && !dossierGesperrt(x));
+      const e = poolAlle().find(x => !x.eigen && x.typ === 'Person' && x.mission === 'STD' && !dossierGesperrt(x));   /* Phase 5c2b (b): vor dem Schreiben des Altbestands gibt es keinen Eintrag; die frühere Bedingung über die Hilfsfunktion IZ war immer wahr */
       /* Phase 5c1b: alter Kenntnisstand liegt nur noch im Altbestand */ STATE.altbestand = Object.assign(STATE.altbestand || {}, { infozugang: Object.assign((STATE.altbestand && STATE.altbestand.infozugang) || {}, { [e.id]: { status: 'bekannt' } }) });
       dispatch({ type: 'DOSSIER_SPERREN', id: e.id }); dispatch({ type: 'NAVIGATION', modul: 'profil' }); renderModule();
       return { id: e.id, wissen: wissen(e), info: (typeof infoGesperrt === 'function' && infoGesperrt(e)) };

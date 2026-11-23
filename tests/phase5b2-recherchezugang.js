@@ -37,7 +37,7 @@ const { APP } = require('./_pfad');
       VIEW.karte.ebenen.sichtungen = true;
       const marker = karteMarker();
       const v = { alt: alt.id, zweite: andereMission.id,
-        altfeld: STATE.missionsbetrieb === true && IZ()[alt.id].status === 'bekannt', mb: missionsbetrieb(),
+        altfeld: STATE.missionsbetrieb === true && ((STATE.altbestand && STATE.altbestand.infozugang) || {})[alt.id].status === 'bekannt', mb: missionsbetrieb(),
         wissen: wissen(alt), info: (typeof infoGesperrt === 'function' && infoGesperrt(alt)), zweiteOffen: dossierOffen(andereMission.mission),
         altMarker: marker.some(m => m.id === alt.id && m.entitaet),
         zweiteMarker: marker.some(m => m.id === andereMission.id && m.entitaet),
