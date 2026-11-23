@@ -681,9 +681,11 @@ function eigeneZoneText(x) {
 /* Bestätigte Sichtung als Textblatt: Sichtungsdaten und, falls vorhanden, die Daten des Entwurfs-Pins, aus dem sie entstand */
 function sichtungText(e, si) {
   const k = sichtungKoord(si), pin = sichtungPin(si, e.id);
+  /* Güte = gespeicherte Bewertung der Sichtung (Beschriftung aus SCENARIO.guete, ohne Angabe „unbewertet“); Aktualität = Einstufung nach Alter (frische) */
+  const gueteDef = Object.prototype.hasOwnProperty.call(SCENARIO.guete, si.guete) ? SCENARIO.guete[si.guete] : SCENARIO.guete.unbewertet, aktualitaet = isFinite(Date.parse(si.t)) ? frische('E', si.t).stufe : '–';
   const z = [si.id + ' · Dossier ' + e.id + ' ' + e.name, 'Zeit: ' + fmtZ(si.t), 'Ort laut Meldung: ' + (si.ort || '–'),
     'Position: ' + (k ? k.ll[0].toFixed(5) + ', ' + k.ll[1].toFixed(5) + ' (ungefähr, aus ' + k.genau + ')' : '–'),
-    'Güte: ' + gueteLabel(sichtungGuete(e, si)), 'Beobachtung: ' + (si.text || '–')];
+    'Güte: ' + gueteDef.label, 'Aktualität: ' + aktualitaet, 'Beobachtung: ' + (si.text || '–')];
   if (pin) z.push('', 'Entwurf: ' + pinText(pin));
   return z.join('\n');
 }
