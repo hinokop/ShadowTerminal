@@ -1,6 +1,6 @@
 # Shadow Terminal – aktueller Stand
 
-**Stand:** 23.11.2026. Zuletzt geprüft gegen `main` `696784b6ce9cd56a9e8a4d9de1d4b4872e9170ff` (Merge von #124; davor #123 als `67e1279`, #120 als `072c2d3`, #122 als `d6753b8`, #121 als `5501b38`, #119 als `5c5a545`, #118 als `1cb1195`, #116 als `ebe44f6`, #115 als `036f4eb`, #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
+**Stand:** 23.11.2026. Zuletzt geprüft gegen `main` `c6dd00dc09f9` (Merge von #126; davor #125 als `4db60d6`, #124 als `696784b6ce9c`, #123 als `67e1279`, #120 als `072c2d3`, #122 als `d6753b8`, #121 als `5501b38`, #119 als `5c5a545`, #118 als `1cb1195`, #116 als `ebe44f6`, #115 als `036f4eb`, #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
 
 Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **in `main`** gilt, und dem, was nur in **offenen Pull Requests** vorliegt. Pflege: bei jedem Merge in `main` aktualisieren, Stand und `main`-Commit nachführen. Entwicklungsregeln stehen in [CLAUDE.md](../CLAUDE.md), nicht hier.
 
@@ -37,7 +37,6 @@ Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **
 | 5c2b (c), D2 | Überlagerte zweite Deklaration `sichtungText(e)` aus `index.html` entfernt; neuer Standardtest `phase5c2b-sichtungtext` (Merge-Commit `67e1279`) | #123 |
 | 5c2b, Export | Sichtungs-TXT-Export: `Güte` (gespeicherte Bewertung) und `Aktualität` (Alter) getrennt, Objekttext `[object HTMLSpanElement]` behoben; Standardtests `phase5c2b-sichtungtext` und `sichtung-export` angepasst | #125 |
 | 6a, Plan | Plan zur Unix-Semantik von `pwd`, `cd`, `ls` ([phase6a-plan-pwd-cd-ls.md](phase6a-plan-pwd-cd-ls.md)) und Messsonde; nur Dokumentation, Entwurf | #126 |
-| 6a, Architektur | Abschnitt 9 des Plans: Dateisystem-Schnittstelle, Befehlskontext, Zugriffsentscheidung, Konformitätsklassen, Etappe 6a-0 (vertikaler Durchstich); nur Dokumentation, Draft | dieser PR |
 | 5c2b, Inventur | 50 Nicht-Standardskripte mit `IZ(` ([phase5c2b-inventur-nichtstandard.md](phase5c2b-inventur-nichtstandard.md)); Dokumentation und Messwerkzeuge | #122 |
 
 Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Baseline und Entwicklungsplan (#93 bis #97); Doku zu Karten-Konsolenbefunden (#107). Manuelle Dossiersperren, Pin- und Zonenzugriff über `zielZugang` und Profilkompatibilität sind erhalten.
@@ -52,9 +51,10 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 
 | PR | Inhalt | Stand |
 |---|---|---|
+| #127 | Phase 6a: Architekturabschnitt (Abschnitt 9) und Etappe 6a-0 im Plan zu `pwd`/`cd`/`ls`; nur Dokumentation | Draft, in Prüfung |
 | #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
 
-Zurzeit ist außer #55 kein Pull Request offen (Zielstand nach dem Merge von #125 und #126). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
+Zurzeit sind nur #127 und #55 offen (Stand 23.11.2026, nach dem Merge von #126). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
@@ -73,7 +73,7 @@ Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Fre
 
 ## 4. Repository, Branches und CI
 
-- **Prüfstand 23.11.2026, Zielstand nach dem Merge von #125 und #126:** 74 Branches (`main` und 73 weitere), 125 Pull Requests: 121 gemergt, 1 offen (#55), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
+- **Prüfstand 23.11.2026, gemessen über die GitHub-Schnittstelle nach Eröffnung von #127:** 75 Branches (`main` und 74 weitere), 126 Pull Requests: 121 gemergt, 2 offen (#127, #55), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
 - Workflows: ausschließlich `ci.yml`. Die früheren zwölf `phase5*-regression.yml` wurden mit #115 entfernt; ihre damaligen Läufe (zuletzt 5c1b, 45067956391) bleiben als Nachweis auf GitHub einsehbar.
 

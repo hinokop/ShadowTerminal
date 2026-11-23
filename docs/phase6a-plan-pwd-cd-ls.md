@@ -137,7 +137,9 @@ Eine zentrale Stelle entscheidet jeden Zugriff. Zwei Dimensionen, beide je Zugri
 
 Das Archiv bleibt schreibgeschützt. Die vorhandene Prüfung (`Permission denied`, Maskierung des Scrollbacks) darf in 6a-0 nicht schwächer werden.
 
-**Sichtbarkeit gesperrter Objekte: offen, nicht von Claude entschieden.** Zur Wahl stehen (A) Name sichtbar, Inhalt gesperrt (wie ein Unix-Verzeichnis ohne Leserecht auf die Datei) oder (B) Name ebenfalls geschützt. Die Entscheidung betrifft `ls`, `find`, Tab-Ergänzung, `stat` und Platzhalter und muss zentral umgesetzt werden. **Heutiger Stand (statisch aus dem Quelltext gelesen, nicht zur Laufzeit gemessen):** `terminalBruecke` gibt für `ls` vor der Sperrprüfung zurück; die Sperrprüfung (`terminalArchivZiele`) gilt nur für `cat`, `head`, `tail`, `wget`, `send`. Demnach würden Namen von Export-Dateien gesperrter Objekte heute aufgelistet, sofern die Brücke sie liefert; der Inhalt ist geschützt. Laufzeitbeleg und Tab-Verhalten stehen aus und sind vor 6a-0 mit `terminal-archiv-zugriff` zu messen. 6a-0 behält das heutige Verhalten bei (Variante A de facto), bis entschieden ist.
+**Sichtbarkeit gesperrter Objekte: entschieden (Variante B als Zielverhalten).** Entscheidung von Master Wayne nach der Empfehlung der unabhängigen Prüfung: Für **anwendungsseitig geschützte Archivdateien** (gesperrte Pin-, Zonen- und Sichtungsobjekte) ist auch der **Name** geschützt; er erscheint weder in `ls`, `find`, Tab-Ergänzung, `stat` noch in Platzhaltern. Für **gewöhnliche Dateien** gilt normales Unix-Verhalten. Die Regel gehört zentral in die Dateisystemschicht, damit jeder spätere Befehl sie ohne eigene Prüfung erbt.
+
+**Heutiger Stand (statisch aus dem Quelltext gelesen, nicht zur Laufzeit gemessen):** `terminalBruecke` gibt für `ls` vor der Sperrprüfung zurück; die Prüfung (`terminalArchivZiele`) gilt nur für `cat`, `head`, `tail`, `wget`, `send`. Demnach würden Namen von Export-Dateien gesperrter Objekte heute aufgelistet, der Inhalt ist geschützt. Das Tab-Verhalten ist nicht untersucht. **6a-0 darf dieses Verhalten vorläufig bewahren** (keine Verhaltensänderung, siehe 9.5); die Umsetzung von Variante B ist eine eigene, getrennte Etappe nach 6a-0 und braucht vorab eine Laufzeitmessung mit `terminal-archiv-zugriff`. Bis dahin ist die Abweichung zwischen Zielverhalten und Ist-Stand als bekannte Lücke geführt, nicht als Zusage.
 
 ### 9.4 Befehlskontext und Ausführung
 
@@ -160,6 +162,6 @@ Maßstab ist eine in sich stimmige virtuelle Betriebsumgebung: ein angelegtes Ve
 ### 9.7 Schwächen und Ungeprüftes dieses Entwurfs
 
 - Der Aufwand von 6a-0 ist nicht gemessen; die Umstellung dreier Befehle samt zweier Adapter berührt mit Tab-Ergänzung und Archivschutz sicherheitsrelevante Pfade. Deshalb: Draft, kleine Commits, volle Standardauswahl vor Merge.
-- Die Sichtbarkeitsfrage (9.3) blockiert 6a-3 (`ls`-Operanden) und alle Namensauflösungen mit Platzhaltern, nicht 6a-0 und 6a-1.
+- Die Umsetzung der Sichtbarkeitsregel (9.3, Variante B) ist Voraussetzung für 6a-3 (`ls`-Operanden) und für Namensauflösungen mit Platzhaltern, nicht für 6a-0 und 6a-1.
 - Fiktive Rechte und Eigentümer (Frage 3 aus Abschnitt 7) sind für `stat` und `ls -l` Voraussetzung und noch nicht entschieden.
 - Die Annahme Ubuntu 24.04 (bash 5.2.21, coreutils 9.4) als Referenz bleibt eine Annahme.
