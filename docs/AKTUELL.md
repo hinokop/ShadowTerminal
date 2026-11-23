@@ -35,6 +35,8 @@ Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **
 | 5c2b (b), Tests | `phase5b4-arbeitszugang`, `sichtung-export`, `terminal-namensnavigation` zusätzlich gegen migrierten Format-4-Zustand mit historischen Freigabestufen | #121 |
 | 5c2b (c), Analyse | Entwicklerkonsole, `SCENARIO.abfragen`, ungenutzte Helfer ([phase5c2b-c-analyse.md](phase5c2b-c-analyse.md)); nur Dokumentation | #120 |
 | 5c2b (c), D2 | Überlagerte zweite Deklaration `sichtungText(e)` aus `index.html` entfernt; neuer Standardtest `phase5c2b-sichtungtext` (Merge-Commit `67e1279`) | #123 |
+| 5c2b, Export | Sichtungs-TXT-Export: `Güte` (gespeicherte Bewertung) und `Aktualität` (Alter) getrennt, Objekttext `[object HTMLSpanElement]` behoben; Standardtests `phase5c2b-sichtungtext` und `sichtung-export` angepasst | #125 |
+| 6a, Plan | Plan zur Unix-Semantik von `pwd`, `cd`, `ls` ([phase6a-plan-pwd-cd-ls.md](phase6a-plan-pwd-cd-ls.md)) und Messsonde; nur Dokumentation, Entwurf | #126 |
 | 5c2b, Inventur | 50 Nicht-Standardskripte mit `IZ(` ([phase5c2b-inventur-nichtstandard.md](phase5c2b-inventur-nichtstandard.md)); Dokumentation und Messwerkzeuge | #122 |
 
 Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Baseline und Entwicklungsplan (#93 bis #97); Doku zu Karten-Konsolenbefunden (#107). Manuelle Dossiersperren, Pin- und Zonenzugriff über `zielZugang` und Profilkompatibilität sind erhalten.
@@ -50,10 +52,8 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 | PR | Inhalt | Stand |
 |---|---|---|
 | #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
-| #125 | Sichtungs-TXT-Export: Güte (gespeicherte Bewertung) und Aktualität (Alter) getrennt, Objekttext `[object HTMLSpanElement]` behoben; Produktcode in `karte-modul.js`, Tests `phase5c2b-sichtungtext` und `sichtung-export` | Draft, wartet auf CI-Prüfung und Freigabe |
-| #126 | Phase 6a: Plan zur Unix-Semantik von `pwd`, `cd`, `ls` ([phase6a-plan-pwd-cd-ls.md](phase6a-plan-pwd-cd-ls.md)); nur Dokumentation und nicht registrierte Messsonde | Draft, wartet auf Prüfung und Entscheidungen von Master Wayne |
 
-Zurzeit sind außer #55, #125 und #126 keine Pull Requests offen. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
+Zurzeit ist außer #55 kein Pull Request offen (Zielstand nach dem Merge von #125 und #126). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
@@ -66,13 +66,13 @@ Phase 5 gilt mit dem Merge von #124 als abgeschlossen (Reihenfolge: zuerst #123,
 2. **CI-Konsolidierung** (abgeschlossen mit #114 und #115): `.github/workflows/ci.yml` ist der einzige Workflow (Pull Requests gegen `main`, Push auf `main`, manuell; Python-Brückentest, Syntaxprüfung, vollständige Standardauswahl). Die zwölf früheren phasengebundenen Workflows sind entfernt und in der Git-Historie einsehbar. Der Sonderlauf von `dossier-sperre` ist in die Standardauswahl übernommen; die übrigen Sondertests der alten Workflows (`zn`, `zev`, `al`, `zb`, `ds2`, `ak2`) sind als historisch markiert und nur namentlich aufrufbar. Offen: Branch-Schutz (nur auf Entscheidung von Master Wayne) und die weitere Absicherung der `lage-box`-Einschränkung (`BEKANNT_NUR`) im Test-Runner.
 3. **5c2:** in zwei Schritten, Daten im Altbestand bleiben erhalten. **5c2a** ist erledigt (Darstellung ausgeblendet, #116). **5c2b** baut auf dem integrierten Stand von 5c2a auf; (a) und (b) sind erledigt (#118, #119, Teststärkung #121), (c) ist analysiert (#120) und mit D2 (#123) teilweise umgesetzt.
 4. **Branch-Bereinigung:** nur nach Abgleich und ausdrücklicher Freigabe.
-5. **Phase 6 (eröffnet):** Unix-/Linux-Realismus im Terminal und schrittweise Englischumstellung ([terminal-entwicklungsplan-2026-11.md](terminal-entwicklungsplan-2026-11.md)), Modernisierung der Oberfläche modulweise. Phase 6a (Beginn mit `pwd`, `cd`, `ls`): Plan als Draft #126, Freigabe für die Umsetzung der Shell steht aus; die Entscheidung zum Sichtungs-Export (Güte und Aktualität getrennt) ist am 23.11.2026 getroffen und als Draft #125 umgesetzt.
+5. **Phase 6 (eröffnet):** Unix-/Linux-Realismus im Terminal und schrittweise Englischumstellung ([terminal-entwicklungsplan-2026-11.md](terminal-entwicklungsplan-2026-11.md)), Modernisierung der Oberfläche modulweise. Phase 6a (Beginn mit `pwd`, `cd`, `ls`): Der Plan (#126) ist in `main`; er ist ein Entwurf. Die Etappenfolge und die Antworten auf Abschnitt 7 sind **nicht** entschieden: die unabhängige Prüfung empfiehlt `pwd` zuerst, ein späteres Votum eine gemeinsame Shell- und Dateisystemarchitektur vor den Einzelbefehlen. Umsetzung der Shell erst nach ausdrücklicher Entscheidung von Master Wayne. Die Entscheidung zum Sichtungs-Export ist mit #125 umgesetzt.
 
 Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Freigabe für Merge oder Löschung.
 
 ## 4. Repository, Branches und CI
 
-- **Prüfstand 23.11.2026, nach dem Merge von #124 und dem Eröffnen von #125 und #126:** 74 Branches (`main` und 73 weitere), 125 Pull Requests: 119 gemergt, 3 offen (#55, #125, #126), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
+- **Prüfstand 23.11.2026, Zielstand nach dem Merge von #125 und #126:** 74 Branches (`main` und 73 weitere), 125 Pull Requests: 121 gemergt, 1 offen (#55), 3 geschlossen ohne Merge (#48, #50, #75). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu erneuern. `main` ist nicht geschützt.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
 - Workflows: ausschließlich `ci.yml`. Die früheren zwölf `phase5*-regression.yml` wurden mit #115 entfernt; ihre damaligen Läufe (zuletzt 5c1b, 45067956391) bleiben als Nachweis auf GitHub einsehbar.
 
