@@ -1049,16 +1049,6 @@ function einsatzBeginn(def) {
   return ms ? (ms.beginn ? Date.parse(ms.beginn) : (ms.angenommenAm ? Date.parse(ms.angenommenAm) : null)) : null;
 }
 function einsatzLaeuft() { const d = LM(); return !!d && Date.now() >= einsatzBeginn(d); }
-function meldungLiegtVor(f) { return Date.parse(STATE.agent.checkin.t) > f.prevD; }
-function meldeText(now) {
-  if (!LM()) return 'ruht · kein laufender Auftrag';
-  if (!einsatzLaeuft()) return 'ruht · Start in ' + fmtRest(einsatzBeginn(LM()) - now);
-  const fs = ALT().funkstille;
-  if (fs && fs.aktiv) return 'ausgesetzt · Funkstille seit ' + dtg(fs.seit);
-  const f = fensterNach(now);
-  const lage = now < f.S ? 'in ' + fmtDauer(f.S - now) : 'Frist läuft, noch ' + fmtDauer(f.D - now);
-  return f.label + ' · ' + lage + ' · ' + (meldungLiegtVor(f) ? 'Meldung liegt vor' : 'Meldung offen');
-}
 
 /* =====================================================================
    PERSISTENZ (localStorage, jeder Zugriff in try/catch)
@@ -2078,7 +2068,6 @@ function dossierBelege(e) {
 
 
 function aussagenListe() { return STATE.aussagen || ALT().aussagen || []; }   /* Phase 5c1b: frühere Aussagen nur lesend, ohne Anlage eines Felds */
-function widerspruchOffen() { const w = STATE.widerspruch || ALT().widerspruch; return w && Date.now() - Date.parse(w.t) < 1800000 ? w : null; }
 /* Bilder: Pfad aus dem Feld bild oder, bei bilder.automatisch, aus der Kennung. Kein Bild oder Ladefehler: Platzhalter. */
 function bildPfad(obj, kennung) {
   const B = SCENARIO.bilder || {};
@@ -2901,27 +2890,9 @@ function renderHeader() {
   Leiste.sync();
 }
 
-/* Zeitfenster-Zelle (Auftrag): Zustand und Restzeit */
-function fensterZelle(zelle, now) {
-  const ms = MS(ALT().kontext), w = ms && ms.zeitfenster ? ms.zeitfenster[zelle.getAttribute('data-fenster')] : null;
-  if (!w) return;
-  const von = Date.parse(w.von), bis = Date.parse(w.bis);
-  if (now < von) zelle.replaceChildren(h('span', { class: 'label s-dim' }, 'bevorstehend'), ' Beginn in ' + fmtRest(von - now));
-  else if (now < bis) zelle.replaceChildren(h('span', { class: 'label s-accent' }, 'läuft'), ' Rest ' + fmtRest(bis - now));
-  else zelle.replaceChildren(h('span', { class: 'label s-dim' }, 'abgelaufen'), ' seit ' + fmtRest(now - bis));
-}
 /* Sekündlich aktualisierte Anzeigen innerhalb des Modulbereichs */
 function tickModule(now) {
   profilAssessmentAktualisieren(now);
-  const melde = document.querySelectorAll('[data-melde]');
-  if (melde.length) { const txt = meldeText(now); melde.forEach(function (e) { if (e.textContent !== txt) e.textContent = txt; }); }
-  document.querySelectorAll('[data-vk]').forEach(function (c) { const v = VK().find(function (x) { return x.id === c.getAttribute('data-vk'); }); if (v && c.textContent !== vkStatus(v, now)) c.textContent = vkStatus(v, now); });
-  document.querySelectorAll('[data-fenster]').forEach(function (z) {
-    const key = Math.floor(now / 60000);
-    if (z.getAttribute('data-min') === String(key)) return;      /* Anzeige in Minutenauflösung */
-    z.setAttribute('data-min', String(key));
-    fensterZelle(z, now);
-  });
 }
 function renderClock() {
   const d = new Date(), now = d.getTime();
@@ -3795,25 +3766,6 @@ function aktualisiereSchreibt() {
     if (offen && war && el.parentNode) el.parentNode.scrollTop = el.parentNode.scrollHeight;
   });
 }
-
-
-/* =====================================================================
-   MODUL 8: VERSTÄRKUNG
-   Kräfte werden beim Ansprechpartner angefordert. Die Entscheidung folgt Regeln (Begründung, Sperren je Auftrag, Kontingent, gleichzeitige Kräfte,
-   Vorlauf, Dringlichkeit, Gefährdung des Bezugsortes) und wird begründet. Genehmigte Kräfte treffen zeitgesteuert ein und werden abgezogen.
-   ===================================================================== */
-function VK() { return ALT().verstaerkung || []; }
-function vkStatus(v, jetzt) {
-  const t = jetzt || Date.now();
-  if (v.zurueck) return 'zurückgezogen';
-  if (t < Date.parse(v.entscheidung)) return 'in Prüfung';
-  if (v.urteil === 'abgelehnt') return 'abgelehnt';
-  if (t < Date.parse(v.ankunft)) return 'unterwegs';
-  if (t < Date.parse(v.ende)) return 'vor Ort';
-  return 'abgeschlossen';
-}
-
-
 
 
 function karteBereinigenPanel() {
