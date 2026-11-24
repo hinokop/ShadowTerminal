@@ -18,7 +18,7 @@ Reale Schnittstellen (Archivbrücke, Nmap) bleiben. Das Hostdateisystem wird nic
 - Befehle liefern `{ code, stdout, stderr }` und eignen sich damit für Umleitungen. Der Shell-Zerleger (`terminalZerlegen`) kennt Quotes, `;`, `&&`, `||`; Umleitungen sind dort nicht vorgesehen.
 - Speicher heute: Zustand und Profil als JSON in `localStorage` (synchron, begrenzt, Monolith); Dateien der Recherche in IndexedDB `fieldterminal.recherche` (Store `dateien`, SHA-256 je Blob); Fallpaket mit Manifest und Prüfsummen. `navigator.storage.persist()` wird nicht aufgerufen.
 - Zugriffsregeln: `zielZugang(id)` ist die gemeinsame Entscheidung für Dossiers, Pins, Zonen; die Sichtbarkeit gesperrter Archivobjekte (Variante B, #133) sitzt zentral in `terminalBruecke('ls')` und als zweite Schranke in `TERMINAL_FS.sichtbar`.
-- Start: `START_TERMINAL.bat` (mit Dateibrücke). `START_3D.bat` wird nach Angabe von Master Wayne nicht mehr verwendet (siehe 6, Folge für die Sicherung). Das Browserprofil liegt bei `START_3D.bat` im Ordner `profil` neben der Startdatei, die Seite wird per `file:///` geöffnet; ob `START_TERMINAL.bat` dasselbe Profilverfahren nutzt, ist nicht geprüft.
+- Start (korrigiert nach Review #136): `START_TERMINAL.bat` startet `terminal_lokal.py`; dieser ruft auf Windows `START_3D.bat` als Edge-Starter auf (`--user-data-dir=profil` neben der Startdatei, Seite per `file:///`). `START_3D.bat` wird also indirekt verwendet und bleibt bestehen; die Dateibrücke läuft im Normalfall. Master Wayne startet sie nicht mehr von Hand.
 
 ## 3. Mount-Tabelle und Richtlinienstufe
 
@@ -67,12 +67,12 @@ Reale Schnittstellen (Archivbrücke, Nmap) bleiben. Das Hostdateisystem wird nic
 **Entwurf der Struktur** (Namen stabil über IDs, englische Pluralnamen; Typen nach Datenvertrag Person, Organisation, Ort, Sache):
 
 ```
-/intel/dossiers/{persons,organizations,locations,things}/<ID>/   dossier.txt, notizen.txt, kennungen.txt, verknuepfungen.txt
+/intel/dossiers/{persons,organizations,locations,things}/<ID>/   dossier.txt, notes.txt, identifiers.txt, links.txt
 /intel/cases/<Fall-ID>/                                           Lesesichten des Falls
 /intel/geospatial/{pins,zones,sightings}/<ID>.txt
 ```
 
-**Schreiben (erste Stufe, D3):** ausschließlich das **Anhängen einer Notiz** an ein Dossier: `echo "..." >> /intel/dossiers/.../notizen.txt` löst die bestehende Aktion `DOSSIER_NOTIZ` (`{ id, text }`) aus. `>` (Überschreiben), Editor und `rm` auf `notizen.txt` sind nicht erlaubt (Notizen sind anhängend). Alles andere (Status, Kennungen, Pins, Zonen, Fälle) bleibt lesend. Weitere Felder folgen einzeln, jeweils mit eigener Aktion, Zugriffsprüfung und Test.
+**Schreiben (erste Stufe, D3):** ausschließlich das **Anhängen einer Notiz** an ein Dossier: `echo "..." >> /intel/dossiers/.../notes.txt` löst die bestehende Aktion `DOSSIER_NOTIZ` (`{ id, text }`) aus. `>` (Überschreiben), Editor und `rm` auf `notes.txt` sind nicht erlaubt (Notizen sind anhängend). Alles andere (Status, Kennungen, Pins, Zonen, Fälle) bleibt lesend. Weitere Felder folgen einzeln, jeweils mit eigener Aktion, Zugriffsprüfung und Test.
 
 **Grundsatz:** Datei-Operation ist eine Absicht, die in eine validierte Anwendungsaktion übersetzt wird (`dispatch`), `STATE` ändert sich, die Sicht wird neu projiziert. Nie direkt auf `PROFIL`, `localStorage` oder interne Zustandsdateien. Eine gerenderte Textdatei zu bearbeiten und zurückzuparsen ist verlustbehaftet; deshalb sind nur ausgewählte Blattdateien, und nur anhängend, schreibbar.
 
@@ -102,14 +102,27 @@ Vorgehen je Paket: gezielte Zwischentests während der Entwicklung, vollständig
 | D2 | Kleiner Editor in Paket 1 | entschieden |
 | D3 | `/intel` zuerst nur anhängende Notizen schreibbar, alles andere lesend | entschieden |
 | D4 | `/home` getrennt vom Fallpaket, eigenes Sicherungspaket | entschieden (nach Empfehlung) |
-| D5 | Archivpfad: `/<Archiv>` behalten, `/mnt/archive` zusätzlich erreichbar, alten Pfad später entfernen | **offen** |
-| D6 | Namen der Sicherungsbefehle, Quotenwerte, Namen der `/intel`-Verzeichnisse | offen |
-| D7 | Folge aus „`START_3D.bat` wird nicht mehr benutzt": Zweitkopie über die Dateibrücke ist der Normalfall; `START_3D.bat` und die Abhängigkeit der 3D-Karte von der GPU-Variante sind separat zu bewerten (Backlog, keine Änderung jetzt) | offen |
+| D5 | Archivpfad: bestehenden Pfad `/<Archiv>` vorerst behalten, Alias `/mnt/archive` später nach Bedarf | entschieden (Review #136) |
+| D6 | Englische Dateinamen bevorzugt; Quotenwerte werden gemessen, nicht geschätzt; Namen der Sicherungsbefehle | teilweise entschieden (Review #136) |
+| D7 | `START_3D.bat` bleibt (wird von `terminal_lokal.py` aufgerufen); Zweitkopie über die Dateibrücke ist der Normalfall | geklärt (Review #136) |
+
+## 9a. Präzisierungen aus dem Architekturreview (verbindlich für Paket 1)
+
+1. **Kein Root-Modell.** Das bestehende `sudo` entsperrt Anwendungsobjekte und ist keine allgemeine Root-Identität. Paket 1 führt keine Root-Rechte im VFS ein. Mountgrenzen und Rechte gelten für beide Pfade von `rename`/`cp`, rekursive Operationen und Mountwurzeln. Über Mountgrenzen hinweg gibt `mv` `EXDEV` (Invalid cross-device link); `cp` hat definierte Semantik (nur lesen aus Quelle, schreiben ins VFS; Quellen mit Anwendungsschutz ausgeschlossen, siehe 11).
+2. **Atomarität.** Wurzelknoten, kanonische Pfade und Quotenprüfung liegen in derselben IDB-Transaktion wie die Änderung. Der `/tmp`-Lebenszyklus ist für mehrere Fenster definiert (Leeren nur durch die letzte beendete Sitzung, Sitzungsregister in `meta`).
+3. **Umleitung ist eine Shell-Operation.** `stdout` wird von der Anzeige getrennt; Quoting und Fehlercodes werden getestet; keine Hostausführung.
+4. **Sicherungen** sind atomar (temporäre Datei, dann Umbenennen), halten mehrere Generationen, werden vor Restore vollständig validiert und überschreiben nie still. Persistenz unter Windows/`file://` ist tatsächlich abzunehmen (Windows-Testpaket).
+5. **Vor Paket 2:** `zielZugang` deckt nur Dossiers, Pins und Zonen ab; Fälle, Sichtungen und indirekte Verweise brauchen explizite Regeln. Autorisierung auch nach asynchronem Lesen und vor Anzeige oder Übernahme; strukturierte Herkunftsmetadaten für Scrollback und Tab; Entscheidung zu Kopien und Umleitungen geschützter Daten. `DOSSIER_NOTIZ` existiert, `dispatch` liefert aber keinen dauerhaften Erfolgsstatus: ein Speicherfehler darf nicht als Erfolg gemeldet werden, nötig ist ein validierter Schreibpfad mit Fehler- und Rollbackvertrag.
+6. Paket 1 ist ein zusammenhängender Meilenstein mit gezielten Zwischentests und einem Sicherheits- und Restore-Gate vor der Integration.
 
 ## 10. Risiken und Ungeprüftes
 
-- Datenverlust bei verlorenem oder nicht mitkopiertem Browserprofil; Maßnahmen siehe 4. Das Speicherverhalten von `file:///` unter dem eingesetzten Profil ist nicht gemessen.
+- Datenverlust bei verlorenem oder nicht mitkopiertem Browserprofil (`profil`); Maßnahmen siehe 4. Das Speicherverhalten von `file:///` unter dem eingesetzten Profil ist nicht gemessen und tatsächlich abzunehmen.
 - Neue Top-Level-Verzeichnisse ändern die Wurzelliste und die Golden-Aufnahme (beabsichtigt, additiv).
 - Parser-Erweiterung um Umleitungen berührt alle Befehle; Regressionstests nötig.
 - Konsistenz der doppelten Darstellung (`/intel` und Archivexporte) ist offen.
 - Nicht verifiziert: Verschlüsselung der Passwortschranke, Windows-Verhalten der Sicherung, tatsächliche Quotengrenzen.
+
+## 11. Entscheidung für Paket 1: geschützte Anwendungsdaten und Kopien
+
+Bis zur Entscheidung vor Paket 2 gilt in Paket 1: Inhalte, die der Anwendungsschutz erfasst (Archivdateien mit Namen der Exportobjekte `lageblatt-PIN-…`, `zone-ZO-…`, `sichtung-…`), werden weder per Umleitung noch per `cp` in das VFS übernommen (`Operation not permitted`). Gewöhnliche Archivdateien und simulierte Systemdateien dürfen gelesen und nach `/home` und `/tmp` kopiert werden. Begründung: Eine Kopie überlebt eine spätere Sperre des Dossiers.
