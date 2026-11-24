@@ -24,10 +24,10 @@ const { APP } = require('./_pfad');
     assert.equal(new Set(info.namen).size, info.namen.length);
     assert.deepEqual(info.ohneAus, []);
     assert.deepEqual(info.namen, ['ls', 'cd', 'cat', 'head', 'tail', 'wget', 'help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit',
-      'predict', 'pon', 'pppd', 'poff', 'plog', 'nmap', 'exports', 'map', 'open', 'sudo', 'touch', 'mkdir', 'rmdir', 'rm', 'cp', 'mv', 'nano', 'home-backup', 'home-restore', 'home-export', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
+      'predict', 'pon', 'pppd', 'poff', 'plog', 'nmap', 'exports', 'map', 'open', 'sudo', 'touch', 'mkdir', 'rmdir', 'rm', 'cp', 'mv', 'nano', 'home-backup', 'home-restore', 'home-import', 'home-export', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
     /* Hilfe aus der Tabelle erzeugt (map, open und sudo neu) */
     assert.deepEqual(await nach('help'), [
-      'ls [OPTION]... [FILE]... · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · nmap <options> <target> · exports [query] · map [pins [query]|zones [query]|PIN-nnn|ZO-nnn|name] · open <id|name|export name> · sudo <command> · touch <file>... · mkdir [-p] <dir>... · rmdir <dir>... · rm [-rf] <path>... · cp [-r] <src>... <dest> · mv <src>... <dest> · nano <file> · home-backup [list] · home-restore [--yes] [name] · home-export · echo [> file | >> file] · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
+      'ls [OPTION]... [FILE]... · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · nmap <options> <target> · exports [query] · map [pins [query]|zones [query]|PIN-nnn|ZO-nnn|name] · open <id|name|export name> · sudo <command> · touch <file>... · mkdir [-p] <dir>... · rmdir <dir>... · rm [-rf] <path>... · cp [-r] <src>... <dest> · mv <src>... <dest> · nano <file> · home-backup [list] · home-restore [--yes] [name] · home-import [--yes] · home-export · echo [> file | >> file] · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
       'predict · pon kestrel · pppd call kestrel [updetach] · poff [kestrel] · plog [-n N] [-f] · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
       "tmux · tmux split-window -bd predict · tmux split-window -bd plog -f · Ctrl+B ↑/↓ switch pane · tmux kill-pane -t '{up-of}'",
       'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);
