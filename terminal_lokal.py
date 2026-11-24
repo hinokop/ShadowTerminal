@@ -31,8 +31,10 @@ MAX_TEXT = 64 * 1024
 MAX_EXPORT_REQUEST = 2 * MAX_TEXT + 1024
 HOME_FOLDER = "terminal-home"   # backups of /home/raizo of the virtual terminal, next to the starter (fixed name, never client-supplied)
 HOME_NAME = re.compile(r"home-([0-9]{8}T[0-9]{6}Z)(?:-([0-9]))?\.json")
-MAX_HOME = 24 * 1024 * 1024
-MAX_HOME_REQUEST = MAX_HOME + 4096
+# Worst case of the virtual file system (16 MiB of content, every byte a control character): 6 bytes per byte in the backup file, 7 in the request
+# (the package is a JSON string inside the JSON request). Must match TERMINAL_HOME_MAX / TERMINAL_HOME_ANFRAGE_MAX in terminal-dateibefehle.js.
+MAX_HOME = 112 * 1024 * 1024
+MAX_HOME_REQUEST = 128 * 1024 * 1024
 HOME_KEEP = 10
 HOME_LOCK = threading.Lock()
 EXPORT_IDS = {"pin": re.compile(r"PIN-[0-9]{3,15}"), "zone": re.compile(r"ZO-[0-9]{3,15}"), "sichtung": re.compile(r"[POL]-[0-9]{4,15}-SI-[0-9]{3,15}")}

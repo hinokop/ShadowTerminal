@@ -39,15 +39,24 @@ const TERMINAL_VFS = (function () {
     }).catch(function (e) { dbp = null; throw e; });
     return dbp;
   }
-  /* Eine Transaktion; fn(knoten, meta) liefert ein Ergebnis. Ein Ergebnis mit "fehler" bricht die Transaktion ab (nichts bleibt geändert). */
-  function tx(modus, fn) {
+  /* Eine Transaktion; fn(knoten, meta) liefert ein Ergebnis. Ein Ergebnis mit "fehler" bricht die Transaktion ab (nichts bleibt geändert).
+     Schreibende Transaktionen erhöhen in derselben Transaktion die Generation ("gen" in meta); opt.ohneGen (Sitzungsverwaltung, Selbstprüfung)
+     lässt sie unverändert, opt.gen verlangt eine bestimmte Generation (EBUSY, wenn ein anderes Fenster inzwischen geändert hat). */
+  function tx(modus, fn, opt) {
     return oeffnen().then(function (db) {
       return new Promise(function (ok) {
         const t = db.transaction(['knoten', 'meta'], modus);
         let erg;
         t.oncomplete = function () { ok(erg); };
         t.onabort = function () { ok(erg && erg.fehler ? erg : { fehler: 'EIO' }); };
-        Promise.resolve().then(function () { return fn(t.objectStore('knoten'), t.objectStore('meta')); }).then(function (r) {
+        Promise.resolve().then(async function () {
+          if (modus === 'readwrite' && !(opt && opt.ohneGen)) {
+            const g = await anf(t.objectStore('meta').get('gen')), alt = g ? g.wert : 0;
+            if (opt && opt.gen !== undefined && opt.gen !== alt) return { fehler: 'EBUSY' };
+            t.objectStore('meta').put({ key: 'gen', wert: alt + 1 });
+          }
+          return fn(t.objectStore('knoten'), t.objectStore('meta'));
+        }).then(function (r) {
           erg = r;
           if (r && r.fehler) { try { t.abort(); } catch (e) { /* bereits beendet */ } }
         }, function () { erg = { fehler: 'EIO' }; try { t.abort(); } catch (e) { /* bereits beendet */ } });
@@ -77,6 +86,8 @@ const TERMINAL_VFS = (function () {
     for (const s of seg) { const f = nameFehler(s); if (f) return f; }
     return null;
   }
+  /* Relativer Pfad unter /home/raizo: Namen und Tiefe wie bei jeder Operation, also einschließlich des Präfixes */
+  function terminalVfsPfadFehlerHeim(teile) { return pfadFehler(TERMINAL_HEIM.concat(teile)); }
   async function zaehlerLesen(m) { return (await anf(m.get('zaehler'))) || { key: 'zaehler', bytes: 0, knoten: 0 }; }
   function neuerKnoten(eltern, name, typ, fl, inhalt) {
     const jetzt = Date.now();
@@ -97,7 +108,8 @@ const TERMINAL_VFS = (function () {
   }
   function eintragAnzeige(n) { return { name: n.name, dir: n.typ === 'dir', bytes: n.typ === 'dir' ? 4096 : n.groesse, mtime: Math.floor(n.geaendert / 1000) }; }
   async function pruefenKern(k, m) {
-    /* Selbstprüfung (Architektur 4): verwaiste Knoten nach /home/raizo/lost+found, Zähler aus den Daten neu berechnen */
+    /* Selbstprüfung (Architektur 4): verwaiste Knoten nach /home/raizo/lost+found, Zähler aus dem Endbestand neu berechnen.
+       Ist "lost+found" vorhanden, aber kein Verzeichnis, wird nichts still umgebaut: Fehler EIO (der Bestand bleibt unverändert). */
     const alle = await anf(k.getAll()), karte = new Map(alle.map(function (n) { return [n.id, n]; }));
     let repariert = 0, ziel = null;
     for (const n of alle) {
@@ -106,13 +118,14 @@ const TERMINAL_VFS = (function () {
       if (e && e.typ === 'dir') continue;
       if (!ziel) {
         ziel = await anf(k.index('ename').get([RAIZO, 'lost+found']));
+        if (ziel && ziel.typ !== 'dir') return { fehler: 'EIO' };
         if (!ziel) { const nk = neuerKnoten(RAIZO, 'lost+found', 'dir', false); const id = await anf(k.add(nk)); ziel = Object.assign({ id: id }, nk); }
       }
       n.eltern = ziel.id; n.name = n.name + '.' + n.id; n.fluechtig = false;
       k.put(n); repariert++;
     }
     const z = { key: 'zaehler', bytes: 0, knoten: 0 };
-    for (const n of alle) if (n.id > TMP) { z.knoten++; if (n.typ === 'file') z.bytes += n.groesse; }
+    for (const n of await anf(k.getAll())) if (n.id > TMP) { z.knoten++; if (n.typ === 'file') z.bytes += n.groesse; }
     const alt = await zaehlerLesen(m);
     if (alt.bytes !== z.bytes || alt.knoten !== z.knoten) m.put(z);
     return { repariert: repariert };
@@ -160,6 +173,7 @@ const TERMINAL_VFS = (function () {
     zugehoerig: zugehoerig,
     schreibrecht: schreibrecht,
     pfadFehler: pfadFehler,
+    pfadFehlerHeim: terminalVfsPfadFehlerHeim,
     /* Sitzung (D1, Review 9a.2): Beim Start wird /tmp geleert, wenn kein anderes Fenster lebt (auch nach unsauberem Ende); beim Ende
        leert die letzte Sitzung /tmp. Ein Herzschlag in "meta" kennzeichnet lebende Fenster; Einträge ohne Herzschlag verfallen. */
     sitzungStart: async function () {
@@ -171,11 +185,12 @@ const TERMINAL_VFS = (function () {
         if (!fremde.length) await tmpLeerenKern(k, m);
         e.wert[meine] = Date.now(); m.put(e);
         const p = await pruefenKern(k, m);
+        if (p.fehler) return p;
         return { ok: true, repariert: p.repariert, fremde: fremde.length };
-      }).then(function (r) {
+      }, { ohneGen: true }).then(function (r) {
         if (!r.fehler && !beat) {
           beat = setInterval(function () {
-            void tx('readwrite', async function (k, m) { const e = await aktiveSitzungen(m, true); e.wert[meine] = Date.now(); m.put(e); return { ok: true }; });
+            void tx('readwrite', async function (k, m) { const e = await aktiveSitzungen(m, true); e.wert[meine] = Date.now(); m.put(e); return { ok: true }; }, { ohneGen: true });
           }, TERMINAL_VFS_TAKT);
           if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) { try { void navigator.storage.persist(); } catch (e) { /* best effort */ } }
         }
@@ -192,7 +207,7 @@ const TERMINAL_VFS = (function () {
         delete e.wert[meine]; m.put(e);
         if (sperrenFremd !== null ? sperrenFremd === 0 : !lebend(e).length) await tmpLeerenKern(k, m);
         return { ok: true };
-      });
+      }, { ohneGen: true });
     },
     stat: function (seg) {
       return tx('readonly', async function (k) {
@@ -367,7 +382,7 @@ const TERMINAL_VFS = (function () {
     zaehler: function () { return tx('readonly', async function (k, m) { const z = await zaehlerLesen(m); return { bytes: z.bytes, knoten: z.knoten }; }); },
     /* Sicherung (Abschnitt 4): Inhalt von /home/raizo, ohne /tmp; Pfade relativ, Eltern vor Kindern */
     exportieren: function () {
-      return tx('readonly', async function (k) {
+      return tx('readonly', async function (k, m) {
         const eintraege = [], rek = async function (id, vor) {
           const kinder = (await anf(k.index('eltern').getAll(IDBKeyRange.only(id)))).sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
           for (const c of kinder) {
@@ -378,29 +393,47 @@ const TERMINAL_VFS = (function () {
           }
         };
         await rek(RAIZO, '');
-        return { eintraege: eintraege };
+        const g = await anf(m.get('gen'));
+        return { eintraege: eintraege, gen: g ? g.wert : 0 };
       });
     },
-    /* Wiederherstellung: ersetzt den Inhalt von /home/raizo vollständig und atomar; ungültige Eingaben ändern nichts */
-    importieren: function (eintraege) {
+    /* Wiederherstellung: ersetzt den Inhalt von /home/raizo vollständig und atomar. Die Struktur wird in derselben Transaktion vollständig
+       geprüft (Namen, Tiefe samt Präfix /home/raizo, Eltern müssen vorhandene Verzeichnisse sein, Arten, Inhalte, Grenzen); jede Verletzung
+       bricht ab, der bisherige Bestand bleibt unverändert. opt.gen: erwartete Generation (EBUSY bei Änderung durch ein anderes Fenster). */
+    importieren: function (eintraege, opt) {
       return tx('readwrite', async function (k, m) {
-        const vorhanden = new Map([['', RAIZO]]), z = { key: 'zaehler', bytes: 0, knoten: 0 };
+        if (!Array.isArray(eintraege) || eintraege.length > TERMINAL_VFS_GRENZE.knoten) return { fehler: 'ENOSPC' };
+        const vorhanden = new Map([['', { id: RAIZO, typ: 'dir' }]]), z = { key: 'zaehler', bytes: 0, knoten: 0 };
         const alte = await unterbaum(k, TMP), tmpKnoten = alte.length, tmpBytes = alte.reduce(function (s, x) { return s + (x.typ === 'file' ? x.groesse : 0); }, 0);
-        for (const x of await unterbaum(k, RAIZO)) k.delete(x.id);
+        const zuLoeschen = await unterbaum(k, RAIZO);
         z.knoten = tmpKnoten; z.bytes = tmpBytes;
+        /* Vorabprüfung ohne jede Änderung */
+        const geplant = [];
         for (const e of eintraege) {
-          const teile = e.pfad.split('/'), name = teile[teile.length - 1], elternPfad = teile.slice(0, -1).join('/');
-          const eid = vorhanden.get(elternPfad);
-          if (eid === undefined || vorhanden.has(e.pfad)) return { fehler: 'EINVAL' };
-          const nk = neuerKnoten(eid, name, e.typ, false, e.typ === 'file' ? e.inhalt : '');
-          nk.modus = e.modus; nk.erstellt = e.erstellt; nk.geaendert = e.geaendert;
+          if (!e || typeof e.pfad !== 'string' || (e.typ !== 'dir' && e.typ !== 'file') || !Number.isInteger(e.modus) || e.modus < 0 || e.modus > 0o7777 ||
+            !Number.isFinite(e.erstellt) || !Number.isFinite(e.geaendert) || (e.typ === 'file' && typeof e.inhalt !== 'string')) return { fehler: 'EINVAL' };
+          const teile = e.pfad.split('/');
+          if (!e.pfad || terminalVfsPfadFehlerHeim(teile) || vorhanden.has(e.pfad)) return { fehler: 'EINVAL' };
+          const eltern = vorhanden.get(teile.slice(0, -1).join('/'));
+          if (!eltern || eltern.typ !== 'dir') return { fehler: 'EINVAL' };
+          const nk = neuerKnoten(eltern.id, teile[teile.length - 1], e.typ, false, e.typ === 'file' ? e.inhalt : '');
+          if (nk.groesse > TERMINAL_VFS_GRENZE.datei) return { fehler: 'ENOSPC' };
           z.knoten++; z.bytes += nk.groesse;
-          if (z.knoten > TERMINAL_VFS_GRENZE.knoten || z.bytes > TERMINAL_VFS_GRENZE.gesamt || nk.groesse > TERMINAL_VFS_GRENZE.datei) return { fehler: 'ENOSPC' };
-          vorhanden.set(e.pfad, await anf(k.add(nk)));
+          if (z.knoten > TERMINAL_VFS_GRENZE.knoten || z.bytes > TERMINAL_VFS_GRENZE.gesamt) return { fehler: 'ENOSPC' };
+          vorhanden.set(e.pfad, { id: 0, typ: e.typ });
+          geplant.push({ e: e, nk: nk });
+        }
+        for (const x of zuLoeschen) k.delete(x.id);
+        vorhanden.clear(); vorhanden.set('', { id: RAIZO, typ: 'dir' });
+        for (const g of geplant) {
+          const teile = g.e.pfad.split('/');
+          g.nk.eltern = vorhanden.get(teile.slice(0, -1).join('/')).id;
+          g.nk.modus = g.e.modus; g.nk.erstellt = g.e.erstellt; g.nk.geaendert = g.e.geaendert;
+          vorhanden.set(g.e.pfad, { id: await anf(k.add(g.nk)), typ: g.e.typ });
         }
         m.put(z);
         return { ok: true, anzahl: eintraege.length };
-      });
+      }, opt && opt.gen !== undefined ? { gen: opt.gen } : undefined);
     },
     /* Fehlerbild für die Befehle: Text wie die C-Bibliothek (strerror) */
     fehlerText: function (f) {

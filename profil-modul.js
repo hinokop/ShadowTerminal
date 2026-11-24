@@ -240,11 +240,17 @@ function terminalPfadAufloesen(arg, cwdSegmente) {
   if (/[:\\]|[\u0000-\u001f\u007f]/.test(arg)) return null;
   const absolut = arg.startsWith('/') || arg === '~' || arg.startsWith('~/');
   const out = arg === '~' || arg.startsWith('~/') ? TERMINAL_HEIM.slice() : absolut ? [] : cwdSegmente.slice();
+  /* zwischen: Verzeichnisse, die "..", rein lexikalisch entfernt, überspringt und die erst durch die Eingabe selbst entstanden sind (nicht
+     Teil des Arbeitsverzeichnisses). Schreibende Befehle müssen sie vor jeder Änderung als vorhandene Verzeichnisse prüfen
+     (terminalDateiSeg); sonst würde "fehlt/../datei" die vorhandene Datei treffen statt ENOENT zu liefern. */
+  const zwischen = [];
+  let fest = out.length;
   for (const name of (arg === '~' || arg.startsWith('~/') ? arg.slice(1) : arg).split('/')) {
     if (!name || name === '.') continue;
-    if (name === '..') out.pop();
+    if (name === '..') { if (out.length > fest) zwischen.push(out.slice()); out.pop(); fest = Math.min(fest, out.length); }
     else out.push(name);
   }
+  out.zwischen = zwischen;
   return out;
 }
 const TERMINAL_TLE_DIRS = new Map([['/var', ['cache/', 'log/']], ['/var/cache', ['tle/']],
@@ -413,7 +419,7 @@ async function terminalBrueckeSenden(daten) {
   const bruecke = terminalBrueckenAdresse();
   if (!bruecke) return { error: TERMINAL_BRUECKE_FEHLT };
   const controller = new AbortController();
-  const t = setTimeout(function () { controller.abort(); }, daten.op === 'disconnect' ? 1500 : 7500);
+  const t = setTimeout(function () { controller.abort(); }, daten.op === 'disconnect' ? 1500 : daten.op === 'home-save' || daten.op === 'home-load' ? 120000 : 7500);   /* Sicherungen bis zum Größenlimit brauchen länger */
   try {
     const r = await fetch('http://127.0.0.1:' + bruecke[1] + '/db', {
       method: 'POST', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
@@ -428,16 +434,28 @@ async function terminalBrueckeSenden(daten) {
     return { error: TERMINAL_BRUECKE_FEHLER };
   } finally { clearTimeout(t); }
 }
-function terminalSitzungTrennen() {
-  if (TERMINAL_ZUSTAND.sudo) terminalKetteAbbrechen(130); /* keine offene Kennwortabfrage nach Sitzungsende */
+async function terminalSitzungTrennen() {
+  const t = TERMINAL_ZUSTAND;
+  if (t.sudo) terminalKetteAbbrechen(130); /* keine offene Kennwortabfrage nach Sitzungsende */
   terminalKanalAbbruch();
   terminalNmapEnde(130);
+  /* Offener Editor: Pufferänderungen werden verworfen (sichtbar gemeldet), nichts wird still geschrieben */
+  if (t.editor && typeof t.editor.abbrechen === 'function') {
+    const name = t.editor.name;
+    if (t.editor.abbrechen()) terminalAusgabe('nano: ' + name + ': modified buffer discarded (session ended)');
+  }
+  /* Dateisystem: letzte Sicherung (mit verbundener Brücke) und /tmp der letzten Sitzung VOR dem Trennen der Brücke; Fehler bleiben sichtbar */
+  t.abmeldeFehler = null;
+  try {
+    const r = await terminalVfsEnde();
+    if (r && r.fehler) { t.abmeldeFehler = r.fehler; terminalAusgabe('home-backup: last backup failed: ' + r.fehler); }
+  } catch (e) { t.abmeldeFehler = 'file system session could not be closed'; terminalAusgabe('home-backup: ' + t.abmeldeFehler); }
   /* Shell-Zustand der Sitzung (Arbeitsverzeichnis, vorheriges Verzeichnis) endet mit der Sitzung, auch ohne verbundene Archivbrücke */
-  TERMINAL_ZUSTAND.ort = null;
-  TERMINAL_ZUSTAND.virtuellerOrt = null;
-  TERMINAL_ZUSTAND.oldpwd = null;
+  t.ort = null;
+  t.virtuellerOrt = null;
+  t.oldpwd = null;
   if (!terminalBrueckenAdresse()) return;
-  TERMINAL_ZUSTAND.version++;
+  t.version++;
   terminalTransferStop();
   return terminalBruecke('disconnect');
 }
@@ -625,8 +643,14 @@ const TERMINAL_FS = {
     if (voll === '/var/log/syslog') return { fehler: 'ENOSYS' };
     if (TERMINAL_VFS.zugehoerig(seg)) { await terminalVfsBereit(); return TERMINAL_VFS.readFile(seg); }
     if (seg[0] !== TERMINAL_DB) return { fehler: 'ENOENT' };
+    /* Schutz (Architektur 11), zentral im Anbieter und damit für jeden Verbraucher (cat/head/tail über Umleitung, cp, nano): Exportobjekte der
+       Anwendung (Lageblatt, Zone, Sichtung) werden nie als Text herausgegeben, weder nach dem getippten Namen noch nach dem tatsächlichen
+       Namen der Brücke (Alias, Kurzname) und nicht, solange das Objekt gesperrt ist; die Prüfung steht vor und nach dem Lesen. */
+    if (terminalArchivNameZiel(seg[seg.length - 1]) || !TERMINAL_FS.sichtbar(seg)) return { fehler: 'Permission denied' };   /* Fehlertext wie die Brücke (bisheriger Vertrag) */
     const antwort = await terminalBruecke('cat', seg.slice(1), false);
-    return antwort.error ? { fehler: antwort.error } : { text: antwort.text };
+    if (antwort.error) return { fehler: antwort.error };
+    if (terminalArchivNameZiel(antwort.file) || (antwort.file && !TERMINAL_FS.sichtbar(seg.slice(0, -1).concat(antwort.file))) || !TERMINAL_FS.sichtbar(seg)) return { fehler: 'Permission denied' };
+    return { text: antwort.text };
   },
   /* Schreibende Operationen (Paket 1): nur das persistente VFS (/home/raizo, /tmp) ist beschreibbar; alle übrigen Anbieter weisen ab
      (zentrale Richtlinienstufe: Pfadgültigkeit und Rechte vor dem Anbieter, Quoten im Anbieter selbst in derselben Transaktion). */
@@ -645,10 +669,15 @@ function terminalVfsBereit() {
 }
 async function terminalVfsEnde() {
   clearTimeout(terminalHomeTimer);
-  if (terminalVfsStart && TERMINAL_ZUSTAND.homeAenderung && terminalBrueckenAdresse()) await terminalHomeSichern(true);
-  if (!terminalVfsStart) return;
+  let ergebnis = { ok: true };
+  if (terminalVfsStart && TERMINAL_ZUSTAND.homeAenderung && terminalBrueckenAdresse()) {
+    const r = await terminalHomeSichern(true);
+    if (r.fehler) ergebnis = { fehler: r.fehler };
+  }
+  if (!terminalVfsStart) return ergebnis;
   await TERMINAL_VFS.sitzungEnde();
   terminalVfsStart = null;
+  return ergebnis;
 }
 window.addEventListener('pagehide', function () { if (terminalVfsStart) void TERMINAL_VFS.sitzungEnde(); });
 async function terminalFsAbweisung(seg, ziel) {
@@ -2543,6 +2572,20 @@ async function terminalEinzelbefehl(woerter) {
   return eintrag.aus(args, arg);
 }
 // Aufruffehler einfacher Befehle: usage-Zeile, Rückgabewert 2.
+/* cat/head/tail laufen über die ctx-Schnittstelle nur, wenn ALLE Operanden im persistenten VFS liegen; bei gemischten Operanden (auch
+   mit Archivobjekten) bleibt die alte Archivsemantik samt Schutzmetadaten (terminalDateiBefehl) zuständig. */
+function terminalLeserNurVfs(befehl, args) {
+  if (!args || !args.length) return false;
+  const op = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (befehl !== 'cat' && a === '-n' && i + 1 < args.length) { i++; continue; }
+    if (befehl !== 'cat' && /^-n\d+$/.test(a)) continue;
+    if (a === '--') continue;
+    op.push(a);
+  }
+  return op.length > 0 && op.every(terminalVfsPfad);
+}
 function terminalVfsPfad(name) { const seg = terminalShellPfad(name); return !!seg && TERMINAL_VFS.zugehoerig(seg); }
 function terminalUsage(text) { terminalAusgabe('usage: ' + text); return 2; }
 async function terminalDateiAusfuehren(befehl, arg, args) {
@@ -2552,7 +2595,7 @@ async function terminalDateiAusfuehren(befehl, arg, args) {
   const version = t.version;
   try {
     const fn = befehl === 'cd' ? terminalBefehlCd : befehl === 'ls' ? terminalBefehlLs :
-      (befehl === 'cat' || befehl === 'head' || befehl === 'tail') && args && args.length && terminalVfsPfad(args[args.length - 1]) ? terminalLeser(befehl) :
+      (befehl === 'cat' || befehl === 'head' || befehl === 'tail') && terminalLeserNurVfs(befehl, args) ? terminalLeser(befehl) :
       terminalBefehlDirekt(befehl);
     return fn ? await terminalBefehlLauf(fn, args || [], arg, version) : await terminalDateiBefehl(befehl, arg, version);
   } catch (e) {
@@ -3138,6 +3181,7 @@ const TERMINAL_TABELLE = [
   { name: 'nano', hilfe: [[0, 6.97, 'nano <file>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('nano') },
   { name: 'home-backup', hilfe: [[0, 6.98, 'home-backup [list]']], tab: { art: 'optionen', werte: ['list'] }, aus: TERMINAL_DATEI('home-backup') },
   { name: 'home-restore', hilfe: [[0, 6.985, 'home-restore [--yes] [name]']], aus: TERMINAL_DATEI('home-restore') },
+  { name: 'home-import', hilfe: [[0, 6.987, 'home-import [--yes]']], aus: TERMINAL_DATEI('home-import') },
   { name: 'home-export', hilfe: [[0, 6.99, 'home-export']], aus: TERMINAL_DATEI('home-export') },
   { name: 'echo', hilfe: [[0, 7, 'echo [> file | >> file]']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
