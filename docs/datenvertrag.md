@@ -112,4 +112,4 @@ Profilimport übernimmt Recherchedaten nach derselben Regel; Belegdateien sind n
 
 ## Terminal-Heimverzeichnis (Paket 1)
 
-IndexedDB `fieldterminal.vfs` (Stores knoten, meta) liegt außerhalb von PROFIL und außerhalb des Fallpakets. Sicherungen: `terminal-home/home-*.json` (Manifest mit sha256 über die Einträge, Zählern und Pfaden), eigene Wiederherstellung mit vollständiger Vorabprüfung. Bestehende Profile bleiben unverändert lesbar.
+IndexedDB `fieldterminal.vfs` (Stores knoten, meta) liegt außerhalb von PROFIL und außerhalb des Fallpakets. Sicherungen: `terminal-home/home-*.json`, Format 2 (`version: 2`; Einträge `{ eltern, name, typ, modus, erstellt, geaendert[, inhalt] }`, `eltern` ist der Index eines früheren Eintrags oder -1 für /home/raizo; Manifest mit sha256 über die Einträge, Anzahl und Bytesumme). Format 1 (Einträge mit relativem `pfad`) wird weiterhin gelesen, eigene Wiederherstellung mit vollständiger Vorabprüfung. Bestehende Profile bleiben unverändert lesbar.
