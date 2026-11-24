@@ -365,11 +365,13 @@ function terminalSitzungTrennen() {
   if (TERMINAL_ZUSTAND.sudo) terminalKetteAbbrechen(130); /* keine offene Kennwortabfrage nach Sitzungsende */
   terminalKanalAbbruch();
   terminalNmapEnde(130);
+  /* Shell-Zustand der Sitzung (Arbeitsverzeichnis, vorheriges Verzeichnis) endet mit der Sitzung, auch ohne verbundene Archivbrücke */
+  TERMINAL_ZUSTAND.ort = null;
+  TERMINAL_ZUSTAND.virtuellerOrt = null;
+  TERMINAL_ZUSTAND.oldpwd = null;
   if (!terminalBrueckenAdresse()) return;
   TERMINAL_ZUSTAND.version++;
   terminalTransferStop();
-  TERMINAL_ZUSTAND.ort = null;
-  TERMINAL_ZUSTAND.virtuellerOrt = null;
   return terminalBruecke('disconnect');
 }
 /* Angemeldeter Benutzer der Shell: ein gewöhnlicher Benutzer (kein root), damit sudo ein Kennwort verlangen kann; sudo fragt
@@ -504,16 +506,26 @@ const TERMINAL_FS = {
   resolve: async function (arg, opt) {
     return opt && typeof opt.cwd === 'string' ? terminalPfadAufloesen(arg, opt.cwd.split('/').filter(Boolean)) : terminalShellPfad(arg);
   },
-  /* Art des Ziels. Die Brücke kennt kein stat: ohne opt.pruefen bleibt die Art im Archiv unbekannt (typ null),
-     mit opt.pruefen wird sie über die Brückenoperation "cd" festgestellt (nur Verzeichnisse gelingen). */
+  /* Art des Ziels. Die Brücke kennt kein stat: ohne opt.pruefen bleibt die Art im Archiv unbekannt (typ null); mit opt.pruefen wird sie
+     streng über das Elternverzeichnis festgestellt (siehe unten) und der Zugang über die Brückenoperation "cd" geprüft. */
   stat: async function (seg, opt) {
     const voll = '/' + seg.join('/');
     if (!seg.length || TERMINAL_TLE_DIRS.has(voll)) return { adapter: 'virtuell', typ: 'dir' };
     if (voll === '/var/log/syslog' || TERMINAL_VIRT_DATEIEN.has(voll)) return { adapter: 'virtuell', typ: 'file' };
     if (seg[0] !== TERMINAL_DB) return { fehler: 'ENOENT' };
     if (opt && opt.pruefen) {
+      /* Streng wie unter Unix: der Name muss im Elternverzeichnis genau so (Groß-/Kleinschreibung, kein Kurzname) geführt werden;
+         dabei zeigt sich auch, ob das Ziel eine Datei ist. Danach die Brückenoperation "cd" als Zugangsprüfung (Schutz, Sperren). */
+      if (seg.length > 1) {
+        const eltern = await TERMINAL_FS.readdir(seg.slice(0, -1), { versteckt: true });
+        if (eltern.fehler) return { adapter: 'archiv', fehler: eltern.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : eltern.fehler };
+        const eintrag = eltern.eintraege.find(function (e) { return e.name === seg[seg.length - 1]; });
+        if (!eintrag) return { adapter: 'archiv', fehler: 'ENOENT' };
+        if (!eintrag.dir) return { adapter: 'archiv', typ: 'file' };
+      }
       const antwort = await terminalBruecke('cd', seg.slice(1), false);
-      return antwort.error ? { adapter: 'archiv', fehler: antwort.error } : { adapter: 'archiv', typ: 'dir' };
+      if (antwort.error) return { adapter: 'archiv', fehler: antwort.error === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : antwort.error };
+      return { adapter: 'archiv', typ: 'dir' };
     }
     return { adapter: 'archiv', typ: null };
   },
@@ -551,9 +563,11 @@ function terminalFsFehlerText(befehl, name, fehler) {
    Ausgabe. Keine Pipes, Ströme oder Prozesse. */
 async function terminalBefehlLauf(fn, args, arg, version) {
   const t = TERMINAL_ZUSTAND;
-  const res = await fn({ args: args, arg: arg || '', cwd: terminalArbeitsverzeichnis(), env: {}, fs: TERMINAL_FS });
+  const env = t.oldpwd ? { OLDPWD: t.oldpwd } : {};
+  const cwdVorher = terminalArbeitsverzeichnis();
+  const res = await fn({ args: args, arg: arg || '', cwd: cwdVorher, env: env, fs: TERMINAL_FS });
   if (t.version !== version) return 1;
-  if (res.cwd) { t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; terminalKanalPromptSync(); }
+  if (res.cwd) { t.oldpwd = cwdVorher; t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; terminalKanalPromptSync(); }
   const zeilen = (res.stdout || []).concat(res.stderr || []);
   if (zeilen.length) terminalAusgabe(zeilen);
   return res.code;
@@ -578,15 +592,102 @@ function terminalBefehlPwd(ctx) {
   }
   return { code: 0, stdout: [ctx.cwd], stderr: [] };
 }
+/* cd als Bash-Builtin (Referenz bash 5.2.21, lokal gemessen). Optionen -L, -P, -e werden angenommen (ohne Wirkung: keine symbolischen Links),
+   "--" beendet die Optionen, der erste Nicht-Optionswert beendet die Optionsauswertung; "-@" gilt wie in der Referenz als ungültig.
+   Mehr als ein Operand: "bash: cd: too many arguments" (1). Ohne Operand: Heimatverzeichnis "/" (dokumentierte Abweichung). "cd -" wechselt nach
+   OLDPWD und gibt den Pfad aus ("bash: cd: OLDPWD not set", wenn noch kein Wechsel stattfand). "cd ''" bleibt im Verzeichnis (0). Jeder Wechsel
+   setzt OLDPWD, auch "cd ."; ein Fehler ändert nichts. Pfadkomponenten werden der Reihe nach geprüft (Datei: Not a directory, fehlend: No such
+   file or directory), Archivnamen streng mit Groß-/Kleinschreibung. Nicht nachgebildet: CDPATH, cdable_vars, $HOME-Variable. */
+const TERMINAL_CD_HILFE = [
+  'cd: cd [-L|[-P [-e]] [-@]] [dir]',
+  '    Change the shell working directory.',
+  '    ',
+  '    Change the current directory to DIR.  The default DIR is the value of the',
+  '    HOME shell variable. If DIR is "-", it is converted to $OLDPWD.',
+  '    ',
+  '    The variable CDPATH defines the search path for the directory containing',
+  '    DIR.  Alternative directory names in CDPATH are separated by a colon (:).',
+  '    A null directory name is the same as the current directory.  If DIR begins',
+  '    with a slash (/), then CDPATH is not used.',
+  '    ',
+  '    If the directory is not found, and the shell option `cdable_vars\' is set,',
+  '    the word is assumed to be  a variable name.  If that variable has a value,',
+  '    its value is used for DIR.',
+  '    ',
+  '    Options:',
+  '      -L\tforce symbolic links to be followed: resolve symbolic',
+  '    \t\tlinks in DIR after processing instances of `..\'',
+  '      -P\tuse the physical directory structure without following',
+  '    \t\tsymbolic links: resolve symbolic links in DIR before',
+  '    \t\tprocessing instances of `..\'',
+  '      -e\tif the -P option is supplied, and the current working',
+  '    \t\tdirectory cannot be determined successfully, exit with',
+  '    \t\ta non-zero status',
+  '      -@\ton systems that support it, present a file with extended',
+  '    \t\tattributes as a directory containing the file attributes',
+  '    ',
+  '    The default is to follow symbolic links, as if `-L\' were specified.',
+  '    `..\' is processed by removing the immediately previous pathname component',
+  '    back to a slash or the beginning of DIR.',
+  '    ',
+  '    Exit Status:',
+  '    Returns 0 if the directory is changed, and if $PWD is set successfully when',
+  '    -P is used; non-zero otherwise.'];
+const TERMINAL_CD_USAGE = 'cd: usage: cd [-L|[-P [-e]] [-@]] [dir]';
+function terminalCdCwd(seg) {
+  return seg.length && seg[0] === TERMINAL_DB ? { ort: seg.slice(1), virtuellerOrt: null } : { ort: null, virtuellerOrt: seg };
+}
+/* Zielpfad komponentenweise auflösen und prüfen; liefert { seg } oder { fehler } */
+async function terminalCdAufloesen(ctx, ziel) {
+  const roh = await ctx.fs.resolve(ziel, { cwd: ctx.cwd });
+  if (!roh) return { fehler: 'Permission denied' };
+  const absolut = ziel.startsWith('/') || ziel === '~' || ziel.startsWith('~/');
+  let seg = absolut ? [] : await ctx.fs.resolve('', { cwd: ctx.cwd }), geprueft = null;
+  for (const name of (ziel === '~' || ziel.startsWith('~/') ? ziel.slice(1) : ziel).split('/')) {
+    if (!name || name === '.') continue;
+    if (name === '..') { seg = seg.slice(0, -1); continue; }
+    seg = seg.concat(name);
+    const st = await ctx.fs.stat(seg, { pruefen: true });
+    if (st.fehler) return { fehler: st.fehler };
+    if (st.typ !== 'dir') return { fehler: 'ENOTDIR' };
+    geprueft = seg.join('/');
+  }
+  if (geprueft !== seg.join('/')) {
+    const st = await ctx.fs.stat(seg, { pruefen: true });
+    if (st.fehler) return { fehler: st.fehler };
+    if (st.typ !== 'dir') return { fehler: 'ENOTDIR' };
+  }
+  return { seg: seg };
+}
 async function terminalBefehlCd(ctx) {
-  const name = terminalName(ctx.arg);
-  if (name === null) return terminalBefehlFehler('cd: unterminated quote');
-  const seg = await ctx.fs.resolve(name || '/', { cwd: ctx.cwd });
-  if (!seg) return terminalBefehlFehler('cd: ' + name + ': Permission denied');
-  const st = await ctx.fs.stat(seg, { pruefen: true });
-  if (st.fehler) return terminalBefehlFehler(terminalFsFehlerText('cd', name, st.fehler));
-  if (st.typ === 'file') return terminalBefehlFehler('cd: ' + name + ': Not a directory');
-  return { code: 0, stdout: [], stderr: [], cwd: st.adapter === 'archiv' ? { ort: seg.slice(1), virtuellerOrt: null } : { ort: null, virtuellerOrt: seg } };
+  const args = ctx.args;
+  let i = 0;
+  for (; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--') { i++; break; }
+    if (a === '--help') return { code: 2, stdout: [TERMINAL_CD_HILFE.join('\n')], stderr: [] };
+    if (a.length < 2 || a[0] !== '-') break;
+    for (const c of Array.from(a).slice(1)) {
+      if (!'LPe'.includes(c)) return { code: 2, stdout: [], stderr: ['bash: cd: -' + c + ': invalid option', TERMINAL_CD_USAGE] };
+    }
+  }
+  const operanden = args.slice(i);
+  if (operanden.length > 1) return terminalBefehlFehler('bash: cd: too many arguments');
+  let ziel = operanden.length ? operanden[0] : '/', ausgeben = false;
+  if (ziel === '-') {
+    if (!ctx.env.OLDPWD) return terminalBefehlFehler('bash: cd: OLDPWD not set');
+    ziel = ctx.env.OLDPWD; ausgeben = true;
+  }
+  if (ziel === '') return { code: 0, stdout: [], stderr: [], cwd: terminalCdCwd(await ctx.fs.resolve('', { cwd: ctx.cwd })) };
+  const r = await terminalCdAufloesen(ctx, ziel);
+  if (r.fehler) {
+    const f = r.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : r.fehler;
+    if (f === 'ENOENT') return terminalBefehlFehler('bash: cd: ' + ziel + ': No such file or directory');
+    if (f === 'ENOTDIR') return terminalBefehlFehler('bash: cd: ' + ziel + ': Not a directory');
+    if (f === 'Permission denied') return terminalBefehlFehler('bash: cd: ' + ziel + ': Permission denied');
+    return terminalBefehlFehler('bash: cd: ' + f);
+  }
+  return { code: 0, stdout: ausgeben ? ['/' + r.seg.join('/')] : [], stderr: [], cwd: terminalCdCwd(r.seg) };
 }
 async function terminalBefehlLs(ctx) {
   const arg = ctx.arg, lang = ['-l', '-la', '-al'].includes(arg), alle = ['-a', '-la', '-al'].includes(arg);
@@ -608,7 +709,7 @@ async function terminalBefehlLs(ctx) {
   return { code: 0, stdout: [zeilen.join('\n') || '(leer)'], stderr: [] };
 }
 
-const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null, nmap: null };
+const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, oldpwd: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null, nmap: null };
 // Scrollback der Shell; größer als die längste Einzelausgabe (predict -f), damit nichts still verloren geht.
 const TERMINAL_PUFFER = 1000;
 function terminalAusgabe(zeile, schutzZiel = null) {

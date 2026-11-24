@@ -66,3 +66,16 @@ Die Shell läuft als gewöhnlicher Benutzer `raizo` (Prompt `raizo@terminal:/$`,
 - Ungültige Option (`pwd -x`, auch `--x` und `-L-`, dort als `--` gemeldet): `bash: pwd: -x: invalid option` und `pwd: usage: pwd [-LP]`, Rückgabewert 2.
 - `pwd --help`: Hilfetext des Builtins auf stdout, Rückgabewert 2. Die Optionen werden der Reihe nach ausgewertet.
 - Abweichungen: `$PWD` und `$OLDPWD` gibt es noch nicht (geplant 6a-5); `-L` richtet sich deshalb nicht nach `$PWD`. Das Arbeitsverzeichnis `/` ist zugleich Heimatverzeichnis (siehe Benutzer). Die Schreibweise von Archivpfaden unter Windows (Brücke ohne Unterscheidung der Groß- und Kleinschreibung) gehört zur Etappe `cd`.
+
+## cd (Bash-Builtin, Phase 6a-2)
+
+`cd` bildet das Bash-Builtin nach (Referenz bash 5.2.21, lokal gemessen).
+
+- Optionen `-L`, `-P`, `-e` werden angenommen (ohne Wirkung, keine symbolischen Links); `--` beendet die Optionen; `-@` und andere Optionen: `bash: cd: -x: invalid option`, Usage-Zeile, Rückgabewert 2; `cd --help` Hilfetext, Rückgabewert 2.
+- Mehr als ein Operand: `bash: cd: too many arguments` (1). Ohne Operand: Wechsel nach `/` (Abweichung: es gibt kein Heimatverzeichnis `/home/raizo`, siehe Benutzer). `cd ""` bleibt im Verzeichnis (0).
+- `cd -` wechselt in das vorherige Verzeichnis und gibt den Pfad aus; vor dem ersten Wechsel `bash: cd: OLDPWD not set` (1). Jeder erfolgreiche Wechsel (auch `cd .`) setzt das vorherige Verzeichnis, ein Fehler nicht. `$OLDPWD` als Variable gibt es noch nicht (6a-5).
+- Pfadkomponenten werden der Reihe nach geprüft: Datei als Komponente `Not a directory`, fehlende Komponente `No such file or directory` (auch bei `x/..`). Fehlermeldungen tragen das Präfix `bash: cd:`.
+- Archivpfade werden streng mit Groß- und Kleinschreibung geprüft, auch unter Windows (`cd DOSSIERS` scheitert, ebenso Kurznamen wie `dossi~1`). Die Prüfung liest das Elternverzeichnis über die Brücke; der Zugangsschutz der Brücke gilt weiterhin.
+- Die strenge Namensprüfung gilt nur für `cd`; `ls`, Tab und `cat` nutzen noch die bisherige Brückenlogik (spätere Etappen).
+- Mit dem Sitzungsende (Abmeldung) werden Arbeitsverzeichnis und vorheriges Verzeichnis zurückgesetzt.
+- Nicht nachgebildet: `CDPATH`, `cdable_vars`, Variablen (`$HOME`, `$PWD`, `$OLDPWD`).
