@@ -50,7 +50,7 @@ Simuliert sind Funkstrecke, pppd, WireGuard, der Onion-Server und Profanity. Ech
 
 ## Benutzer
 
-Die Shell läuft als gewöhnlicher Benutzer `raizo` (Prompt `raizo@terminal:/$`, `whoami` gibt `raizo` aus), nicht als root: sudo fragt root nie nach einem Kennwort (sudo, `plugins/sudoers/check.c`), ein Kennwortschutz über sudo setzt also einen anderen Benutzer voraus. Geändert sind nur Name, Prompt und die uid 1000 im tmux-Socket (`/tmp/tmux-1000/default`). Bewusst gleich geblieben:
+Die Shell läuft als gewöhnlicher Benutzer `raizo` (Prompt `raizo@terminal:~$`, Startverzeichnis /home/raizo, `whoami` gibt `raizo` aus), nicht als root: sudo fragt root nie nach einem Kennwort (sudo, `plugins/sudoers/check.c`), ein Kennwortschutz über sudo setzt also einen anderen Benutzer voraus. Geändert sind nur Name, Prompt und die uid 1000 im tmux-Socket (`/tmp/tmux-1000/default`). Bewusst gleich geblieben:
 
 - `~` und das Startverzeichnis sind `/`; ein Heimatverzeichnis `/home/raizo` gibt es nicht.
 - `pon`, `poff`, `plog` und `tail /var/log/syslog` laufen wie bisher. Unter Ubuntu ist der erste angelegte Benutzer unter anderem in den Gruppen `adm` (Protokolle lesen) und `dip` (pppd starten); das ist angenommen, nicht am System geprüft.
@@ -95,3 +95,14 @@ Verbindliche Referenz ist `en_US.UTF-8` (Ubuntu 24.04, GNU coreutils 9.4, glibc 
 - Bewusste Abweichungen (bis 6a-4b): Langformat unverändert (`dr-x`/`-r--`, Größe, Zeit in UTC; keine Zeile `total`), im virtuellen Baum zeigt `-l` nur Namen.
 - Nicht umgesetzte Optionen von ls 9.4 (zum Beispiel `-R`, `-t`, `-r`, `-q`, `--color`) werden wie unbekannte Optionen gemeldet (`invalid option` beziehungsweise `unrecognized option`), obwohl `ls` sie kennt; das ist eine Entscheidung des Plans (Originalmeldung statt Sonderausgabe), kein Abbild des echten Systems. `--help` und `--version`: `--help` druckt einen auf die umgesetzten Optionen gekürzten Text im GNU-Format, `--version` ist nicht umgesetzt.
 - Quoting der Namen in Meldungen: einfache Anführungszeichen, ein Apostroph als `'\''`; weitere Quoting-Stile von `ls` fehlen. Meldungen aus gnulib (`invalid argument ‘x’ for ‘--classify’`) erscheinen seit 6a-4a in typografischen Anführungszeichen (en_US.UTF-8), getopt-Meldungen und `cannot access` in ASCII.
+
+## Persistentes virtuelles Dateisystem (Paket 1)
+
+Stand: Entwurf, Windows-/file://-Persistenz noch nicht abgenommen. Architektur: docs/terminal-dateisystem-architektur.md.
+
+- Startverzeichnis ist /home/raizo (Prompt `~`); `cd` ohne Argument und `~` führen dorthin. Schreibbar sind nur /home/raizo und /tmp (IndexedDB `fieldterminal.vfs`); alle übrigen Bereiche bleiben schreibgeschützt. Ein Root-Modell gibt es nicht; EXDEV ist mangels weiterer Einhängepunkte nicht erreichbar.
+- Befehle: mkdir, rmdir, touch, rm, mv, cp, cat, echo, nano (kleiner Editor: ^O Write Out, ^X Exit, ohne Suchen/Ersetzen), Umleitung `>` und `>>` für eine Befehlsliste (stderr bleibt auf dem Bildschirm). Namen sind byte-genau und unterscheiden Groß-/Kleinschreibung; `:` und `\` werden weiterhin abgelehnt.
+- Die Archiv-Exportdateien (lageblatt-, zone-, sichtung-) werden weder kopiert noch umgeleitet noch mit nano geöffnet. cp aus Verzeichnissen außerhalb des VFS wird nicht unterstützt.
+- /tmp wird bei der Abmeldung (und beim nächsten Start nach unsauberem Ende) geleert; mehrere Fenster werden über Web Locks erkannt.
+- Sicherung: `home-backup [list]`, `home-restore --yes`, `home-export` über die lokale Brücke in `terminal-home/` neben dem Starter (Manifest mit sha256, atomar, die letzten 10 Stände; Wiederherstellung sichert zuvor den aktuellen Stand). Die Sicherung gehört nicht zum Fallpaket. Eine Oberfläche zum Import gibt es nicht.
+- Kontingente sind vorläufig und nicht gemessen.
