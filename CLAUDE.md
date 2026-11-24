@@ -1,6 +1,6 @@
 # Field Terminal (Repo: ShadowTerminal)
 
-Lokales Recherchewerkzeug (Vanilla JS, ohne Build-Schritt, `file://`-fähig), Oberfläche im Stil eines Feldterminals; früher ein Spiel, jetzt Werkzeug. Arbeitssprache und interne Dokumentation Deutsch; sichtbare Terminalmeldungen und Oberfläche werden nach Freigabe schrittweise auf Englisch umgestellt (Tests und Dokumentation synchron).
+Lokales Recherchewerkzeug (Vanilla JS, ohne Build-Schritt, `file://`-fähig), Oberfläche im Stil eines Feldterminals; früher ein Spiel, jetzt Werkzeug. Arbeitssprache und interne Dokumentation Deutsch. Sprachliche Architektur (Entscheidung Shadow 24.11.2026, docs/terminal-intel-konzept.md Abschnitt 0): die grafische Oberfläche bleibt Deutsch; Terminal und virtuelle Linux-Umgebung einschließlich `/intel` sind englisch (bestehende deutsche Terminalmeldungen werden schrittweise angeglichen, Tests und Dokumentation synchron); Benutzerinhalte bleiben in ihrer Sprache; deutsche Archivexporte bleiben unverändert.
 Nutzer: Shadow ("Master Wayne"): formell, präzise, keine Emojis, kein Füllmaterial; Schwächen und Widersprüche ungefragt benennen; nie halluzinieren.
 
 ## Wo der Stand steht

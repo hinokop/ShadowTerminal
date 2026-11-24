@@ -1,8 +1,40 @@
-# Paket 2: `/intel` – Architektur und Bedienung (Konzept zur Besprechung)
+# Paket 2: `/intel` – Architektur und Bedienung
 
-Stand: 24.11.2026, Entwurf auf Basis von `main` `07a736d`. Grundlage: [terminal-dateisystem-architektur.md](terminal-dateisystem-architektur.md),
-Abschnitte 5, 9 (D3), 9a.5 und 11. Noch keine Implementierung. Die mit **E** nummerierten Punkte in Abschnitt 11 sind zu besprechen und zu entscheiden, bevor
-Code entsteht. Wo eine Empfehlung steht, ist sie als Vorschlag gemeint, nicht als Festlegung.
+Stand: 24.11.2026 auf Basis von `main` `07a736d`. Grundlage: [terminal-dateisystem-architektur.md](terminal-dateisystem-architektur.md),
+Abschnitte 5, 9 (D3), 9a.5 und 11. Der Entwurf ist von Master Wayne grundsätzlich freigegeben (24.11.2026); die verbindlichen Entscheidungen stehen in
+**Abschnitt 0** und gehen den Vorschlägen der übrigen Abschnitte vor, wo diese abweichen (insbesondere Abschnitt 5: Objektverzeichnisse statt Einzeldateien für Kartenobjekte).
+
+## 0. Verbindliche Entscheidungen (Master Wayne, 24.11.2026)
+
+**Sprachliche Architektur.** Die grafische Fachanwendung bleibt vorerst vollständig deutschsprachig; Deutsch gilt konzeptionell als die gewählte
+Anwendungssprache des Nutzers. Eine spätere optionale Englischumstellung der Oberfläche bleibt möglich, ist aber keine Voraussetzung für die weitere
+Entwicklung und nicht Teil des unmittelbaren Plans. Das Terminal und die virtuelle Linux-Systemumgebung sind grundsätzlich vollständig englischsprachig:
+Befehle, Fehlermeldungen, Hilfetexte, simulierte Systemdienste, Verzeichnisnamen sowie systemseitige Feld- und Statusbezeichnungen innerhalb von `/intel`.
+Benutzerinhalte (Namen, Notizen, Beschreibungen, Zitate, Quellen) bleiben in ihrer Originalsprache. Bestehende deutsche Archivexporte einschließlich ihrer
+Dateinamen (`lageblatt-PIN-001.txt` usw.) bleiben unverändert; sie sind Dokumente einer deutschsprachig konfigurierten Fachanwendung. Keine
+Internationalisierung der Oberfläche und keine Spracheinstellung in diesem Schritt. Bestehende deutsche Terminalmeldungen werden mit der allgemeinen
+Englischumstellung des Terminals angeglichen, nicht in Paket 2.
+
+| Nr. | Entscheidung |
+|---|---|
+| E1 | Ausschließlich stabile Kennungen als Namen der Objektverzeichnisse. |
+| E2 | Gliederung `persons`, `organizations`, `locations`; zusätzlich ein zentraler `/intel/dossiers/index` über alle Typen sowie Indizes für Pins und Zonen. |
+| E3 | Symbolische Links, vom Anbieter erzeugt; keine allgemeine `ln`-Implementierung. `cd` verwendet den kanonischen Zielpfad. Gegenseitige Verknüpfungen und Zyklen sind zu berücksichtigen. |
+| E4 | Fälle bleiben unabhängig von Dossiersperren sichtbar. Eigene Fallinhalte behalten die Maskierungssemantik der Oberfläche; eingebettete Inhalte gesperrter Dossiers bleiben geschützt. Dossierkennungen in bestehenden Beziehungen dürfen sichtbar sein; gesperrte Kartenobjekte und Sichtungen werden nicht offengelegt. Zusammengesetzte Ausgaben (insbesondere Indizes) erhalten hinreichend granulare Schutzmetadaten. |
+| E5 | Neue `/intel`-Dateien und systemseitige Beschriftungen englisch. Vorhandene Renderer wiederverwenden bzw. parametrieren, keine doppelte Datenaufbereitung. Benutzerinhalte unverändert; Archivexporte nicht migrieren. |
+| E5b | Dateinamen ohne Endung. |
+| E6 | Kopieren, Umleiten und sonstige dauerhafte Übernahme von `/intel`-Inhalten ins VFS vorerst verboten; langfristig über ein bewusstes Export-/Herkunftsmodell. |
+| E7 | Anhängen von Dossiernotizen als letzter Meilenstein von Paket 2: genau eine validierte Anwendungsaktion je erfolgreichem Schreibbefehl, dauerhafter Erfolgsstatus, Rücknahme bei Speicherfehler; kein Überschreiben oder Löschen. |
+| E8 | Kein automatisches Folgen der Oberfläche beim `cd`. |
+| E9 | Arbeitsverzeichnis bei Sperre behalten, Zugriff verweigern, Navigation hinaus bleibt möglich. Entsperren nur über das bestehende `sudo open`; kein `sudo cd`/`sudo cat`. |
+| E10 | Metadaten von Galerie- und Belegdateien anzeigen; Inhalte über die Oberfläche; keine neue Binärverarbeitung. |
+| E11 | Knopf „Im Terminal“ an Dossiers, Fällen und Kartenobjekten; laufende Terminalprozesse (tmux, PREDICT, PPP, Profanity), ungespeicherte Eingaben und Oberflächenentwürfe werden geschützt. |
+| E12 | `grep` und `find` zurückgestellt. |
+| O1 | Pins, Zonen und einzelne Sichtungen sind eigene Objektverzeichnisse: `/intel/geospatial/pins/PIN-004/record`, bei Pins und Zonen zusätzlich `coordinates` und bei bestehender Verknüpfung der Link `dossier`; Sichtungen unter `sightings/<Dossier-ID>/<Sichtung-ID>/record`. |
+| O2 | Pfadsemantik für bestehende Befehle: `open .`, `open /intel/cases/F-001`, `map .`, `map ../pins/PIN-004`, `readlink dossier`, `cd dossier`. |
+| O3 | Keine vollständige POSIX-Symlink-Implementierung, keine zusätzliche GNU-Detailarbeit; `ls -l` nutzt die vorhandene Formatierung und ergänzt nur die für `/intel` nötigen Metadaten. |
+
+Die Windows-Neustartprüfung von Paket 1 bleibt Abnahmebedingung, blockiert die Entwicklung von Paket 2 aber nicht.
 
 ## 1. Ziel
 
@@ -60,8 +92,9 @@ Vorschlag (Namen nach D6 englisch, Dossiers nach Typ gegliedert, siehe E2):
 /intel/
   README                          kurze Beschreibung des Baums (statisch)
   dossiers/
+    index                         alle Typen: Kennung, Typ, Status, Name je freiem Dossier (gesperrte fehlen)
     persons/  organizations/  locations/
-      index                       Kennung, Typ, Status, Name je freiem Dossier (gesperrte fehlen)
+      index                       wie oben, je Typ
       P-0001/
         profile                   Name, Typ, Länderkennung, Aliase, Status, Registernummer, Erkenntnislage, Kurzlage, Beschreibung, Eckdaten
         notes                     Dossiernotizen (DN-nnn), älteste zuerst; später anhängbar (E7)
@@ -84,10 +117,21 @@ Vorschlag (Namen nach D6 englisch, Dossiers nach Typ gegliedert, siehe E2):
             version               erfasst, Dateiname, Größe, Typ, SHA-256, veröffentlicht
             observations          Beobachtungen dieser Fassung: Fundstelle, Zitat, Ereigniszeit, Ort, Dossiers, Prüfung
   geospatial/
-    pins/       PIN-004           Lageblatt (gleicher Text wie der Archivexport, E5)
-    zones/      ZO-002            Zonenblatt
+    pins/
+      index                       Kennung, Name, verknüpftes Dossier je freiem Pin
+      PIN-004/
+        record                    Pinblatt (Zweck, Umgebung, Notiz, angelegt)
+        coordinates               Breite und Länge
+        dossier -> /intel/dossiers/persons/P-0001   (nur bei Verknüpfung)
+    zones/
+      index
+      ZO-002/   record  coordinates  [dossier ->]
     sightings/
-      P-0001/   SI-001            Sichtungsblatt
+      P-0001/
+        SI-001/
+          record                  Sichtungsblatt
+          dossier -> /intel/dossiers/persons/P-0001
+          [pin -> /intel/geospatial/pins/PIN-007]   (Entwurfs-Pin, aus dem sie entstand)
 ```
 
 Zeitstempel (`ls -l`): letzte Änderung des Objekts (`aktualisiert`, `stand`, `t`, `geaendert`), Größe gleich der Bytezahl des gerenderten Texts,
