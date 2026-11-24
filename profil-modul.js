@@ -365,12 +365,13 @@ function terminalSitzungTrennen() {
   if (TERMINAL_ZUSTAND.sudo) terminalKetteAbbrechen(130); /* keine offene Kennwortabfrage nach Sitzungsende */
   terminalKanalAbbruch();
   terminalNmapEnde(130);
-  if (!terminalBrueckenAdresse()) return;
-  TERMINAL_ZUSTAND.version++;
-  terminalTransferStop();
+  /* Shell-Zustand der Sitzung (Arbeitsverzeichnis, vorheriges Verzeichnis) endet mit der Sitzung, auch ohne verbundene Archivbrücke */
   TERMINAL_ZUSTAND.ort = null;
   TERMINAL_ZUSTAND.virtuellerOrt = null;
   TERMINAL_ZUSTAND.oldpwd = null;
+  if (!terminalBrueckenAdresse()) return;
+  TERMINAL_ZUSTAND.version++;
+  terminalTransferStop();
   return terminalBruecke('disconnect');
 }
 /* Angemeldeter Benutzer der Shell: ein gewöhnlicher Benutzer (kein root), damit sudo ein Kennwort verlangen kann; sudo fragt

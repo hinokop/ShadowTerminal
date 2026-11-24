@@ -76,4 +76,6 @@ Die Shell läuft als gewöhnlicher Benutzer `raizo` (Prompt `raizo@terminal:/$`,
 - `cd -` wechselt in das vorherige Verzeichnis und gibt den Pfad aus; vor dem ersten Wechsel `bash: cd: OLDPWD not set` (1). Jeder erfolgreiche Wechsel (auch `cd .`) setzt das vorherige Verzeichnis, ein Fehler nicht. `$OLDPWD` als Variable gibt es noch nicht (6a-5).
 - Pfadkomponenten werden der Reihe nach geprüft: Datei als Komponente `Not a directory`, fehlende Komponente `No such file or directory` (auch bei `x/..`). Fehlermeldungen tragen das Präfix `bash: cd:`.
 - Archivpfade werden streng mit Groß- und Kleinschreibung geprüft, auch unter Windows (`cd DOSSIERS` scheitert, ebenso Kurznamen wie `dossi~1`). Die Prüfung liest das Elternverzeichnis über die Brücke; der Zugangsschutz der Brücke gilt weiterhin.
+- Die strenge Namensprüfung gilt nur für `cd`; `ls`, Tab und `cat` nutzen noch die bisherige Brückenlogik (spätere Etappen).
+- Mit dem Sitzungsende (Abmeldung) werden Arbeitsverzeichnis und vorheriges Verzeichnis zurückgesetzt.
 - Nicht nachgebildet: `CDPATH`, `cdable_vars`, Variablen (`$HOME`, `$PWD`, `$OLDPWD`).

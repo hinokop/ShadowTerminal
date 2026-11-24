@@ -23,6 +23,7 @@ const { APP } = require('./_pfad');
       if (req.url() !== 'http://127.0.0.1:45674/db') return route.abort();
       const d = req.postDataJSON();
       calls.push({ op: d.op, parts: d.parts, hidden: d.hidden });
+      if (d.op === 'disconnect') return route.fulfill({ json: { ok: true } });
       const pfad = echterOrdner(d.parts);
       if (d.op === 'cd') return route.fulfill({ json: pfad === null ? { error: 'Datei oder Ordner nicht gefunden' } : { ok: true } });
       if (d.op === 'ls') {
@@ -150,11 +151,25 @@ const { APP } = require('./_pfad');
     assert.ok(!(await zeilen('cd -x && echo NEIN')).includes('NEIN'));
     assert.ok((await zeilen('cd -x || echo JA')).includes('JA'));
     assert.ok((await zeilen('cd /etc && echo DA')).includes('DA'));
-    /* Sitzungsende setzt OLDPWD zurück */
-    await p.evaluate(() => { TERMINAL_ZUSTAND.oldpwd = null; });
-    await cmd('cd /');
-    assert.equal(await aus('cd -'), '/etc', 'nach cd / ist OLDPWD das vorherige Verzeichnis');
+    /* Sitzungsende über den echten Pfad (terminalSitzungTrennen, von der Abmeldung aufgerufen): Arbeitsverzeichnis und OLDPWD enden mit der
+       Sitzung, mit verbundener Brücke (disconnect wird gesendet) und ohne (kein Brückenaufruf). */
+    const zustand = () => p.evaluate(() => ({ cwd: terminalArbeitsverzeichnis(), oldpwd: TERMINAL_ZUSTAND.oldpwd }));
+    await cmd('cd /etc'); await cmd('cd ' + D + '/dossiers');
+    assert.deepEqual(await zustand(), { cwd: D + '/dossiers', oldpwd: '/etc' });
+    calls.length = 0;
+    await p.evaluate(() => terminalSitzungTrennen());
+    assert.deepEqual(await zustand(), { cwd: '/', oldpwd: null }, 'mit Brücke: Zustand zurückgesetzt');
+    assert.ok(calls.some(c => c.op === 'disconnect'), 'mit Brücke: disconnect gesendet');
+    assert.equal(await aus('cd -'), 'bash: cd: OLDPWD not set', 'nach der Trennung gibt es kein vorheriges Verzeichnis');
+    await cmd('cd /etc'); await cmd('cd /var');
+    assert.deepEqual(await zustand(), { cwd: '/var', oldpwd: '/etc' });
+    await p.evaluate(() => history.replaceState(null, '', location.pathname + location.search));
+    assert.equal(await p.evaluate(() => !!terminalBrueckenAdresse()), false, 'Brückenadresse entfernt');
+    calls.length = 0;
+    await p.evaluate(() => terminalSitzungTrennen());
+    assert.deepEqual(await zustand(), { cwd: '/', oldpwd: null }, 'ohne Brücke: Zustand zurückgesetzt');
+    assert.equal(calls.length, 0, 'ohne Brücke: kein Brückenaufruf');
     assert.deepEqual(errors, []);
-    console.log('OK: cd als Bash-Builtin, strenge Schreibweise im Archiv');
+    console.log('OK: cd als Bash-Builtin, strenge Schreibweise im Archiv, Sitzungsende');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
