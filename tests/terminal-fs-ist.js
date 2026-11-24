@@ -79,7 +79,7 @@ const { APP } = require('./_pfad');
     const lsText = async () => cmd('ls /' + db + '/ops');
     const tab = async eingabe => {
       await inp.fill(eingabe); await inp.press('Tab');
-      await p.waitForTimeout(600);
+      await p.waitForFunction(() => terminalTabLauf === null);
       const w = await inp.inputValue(); await inp.fill(''); return w;
     };
     const pinDatei = 'lageblatt-' + z.pinZu + '.txt', siZuDatei = 'sichtung-' + z.zu + '-' + z.siZu + '.txt', siFreiDatei = 'sichtung-' + z.frei + '-' + z.siFrei + '.txt';
@@ -89,10 +89,16 @@ const { APP } = require('./_pfad');
     assert.ok(!ls.includes(siZuDatei), 'Name der gesperrten Sichtungsdatei in ls verborgen');
     assert.ok(ls.includes(siFreiDatei), 'Sichtungsdatei eines nicht gesperrten Dossiers bleibt sichtbar');
     assert.ok(ls.includes('unrelated.txt'), 'gewöhnliche Datei bleibt sichtbar');
-    assert.ok(!(await cmd('ls -a /' + db + '/ops')).includes(pinDatei), 'auch mit -a verborgen');
     assert.match(await cmd('cat /' + db + '/ops/' + pinDatei), /Permission denied/, 'Inhalt bleibt gesperrt');
     assert.doesNotMatch(await cmd('cd /' + db + '/ops/' + pinDatei), /Not a directory|Permission denied/, 'cd auf verborgenen Namen verrät keine Art');
     await cmd('cd /' + db + '/ops');
+    /* ls -a gilt nur im Arbeitsverzeichnis (ls akzeptiert hier keinen Operanden zusammen mit der Option); Rückgabewert 0 und Sichtbarkeit prüfen */
+    const la = await cmd('ls -a'), lang = await cmd('ls -l');
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.status), 0, 'ls -l endet mit 0');
+    for (const text of [la, lang]) {
+      assert.ok(!text.includes(pinDatei) && !text.includes(siZuDatei), 'gesperrte Namen auch mit -a und -l verborgen');
+      assert.ok(text.includes('unrelated.txt') && text.includes(siFreiDatei), 'übrige Namen sichtbar');
+    }
     assert.equal(await tab('cat lageblatt-' + z.pinZu.slice(0, 8)), 'cat lageblatt-' + z.pinZu.slice(0, 8), 'Tab ergänzt den gesperrten Namen nicht');
     assert.equal(await tab('cat sichtung-' + z.frei), 'cat ' + siFreiDatei, 'Tab ergänzt den freigegebenen Namen');
     assert.equal(await tab('cat unrel'), 'cat unrelated.txt', 'Tab ergänzt gewöhnliche Datei');

@@ -291,7 +291,40 @@ function terminalArchivZiele(op, parts, antwort) {
 /* Sichtbarkeit eines Namens im Archiv: nur anwendungsseitig gesperrte Export-Objekte (Pin, Zone, Sichtung) sind verborgen;
    gewöhnliche Dateien unterliegen keiner Anwendungsregel (normales Unix-Verhalten). */
 function terminalArchivNameSichtbar(name) {
-  return !terminalArchivZielGesperrt(terminalArchivNameZiel(name));
+  return terminalArchivSichtbarkeit()(name);
+}
+/* Momentaufnahme der aktuellen Sperren, einmal je Listung berechnet (statt je Eintrag neu); gleiche Entscheidung wie terminalArchivZielGesperrt. */
+function terminalArchivSichtbarkeit() {
+  const objekte = new Set(terminalVaultObjekte().filter(function (o) { return o.gesperrt; }).map(function (o) { return o.art + ':' + o.id; }));
+  const dossiers = new Set((typeof PROFIL !== 'undefined' && PROFIL && PROFIL.gesperrt) || []);
+  return function (name) {
+    const z = terminalArchivNameZiel(name);
+    if (!z) return true;
+    return z.art === 'sichtung' ? !dossiers.has(z.dossier) : !objekte.has(z.art + ':' + z.id);
+  };
+}
+/* Eine Zeile (Verlauf, Vorschlag), die einen Namen gesperrter Archivobjekte als Wort oder Pfadende enthält */
+function terminalZeileMitGesperrtemName(zeile, sicht) {
+  sicht = sicht || terminalArchivSichtbarkeit();
+  return String(zeile).split(/\s+/).some(function (w) { return !sicht(w.replace(/^['"]+|['"]+$/g, '').split('/').pop()); });
+}
+/* Sperrstand als Zeichenkette; ändert er sich (Sperren, Entsperren, Verknüpfung von Pin oder Zone), verfallen alle abgeleiteten Zustände
+   mit Archivnamen: Listen-Zwischenspeicher, Auswahlliste, Ergänzungsvorschlag und Verlaufseinträge mit gesperrten Namen. */
+const TERMINAL_VORSCHLAG_LS = new Map();
+let terminalSperrstandLetzter = null;
+function terminalSperrstandPruefen() {
+  if (typeof PROFIL === 'undefined' || !PROFIL) return;
+  const stand = terminalVaultObjekte().filter(function (o) { return o.gesperrt; }).map(function (o) { return o.art + ':' + o.id; }).sort().join(',') +
+    '|' + (PROFIL.gesperrt || []).slice().sort().join(',');
+  if (stand === terminalSperrstandLetzter) return;
+  terminalSperrstandLetzter = stand;
+  TERMINAL_VORSCHLAG_LS.clear();
+  terminalTabReset();
+  const t = TERMINAL_ZUSTAND;
+  t.vorschlagErgaenzung = null;
+  const sicht = terminalArchivSichtbarkeit();
+  t.verlauf = t.verlauf.filter(function (zeile) { return !terminalZeileMitGesperrtemName(zeile, sicht); });
+  t.vpos = -1;
 }
 function terminalArchivZielGesperrt(z) {
   if (!z) return false;
@@ -305,7 +338,8 @@ async function terminalBruecke(op, parts, hidden, exportDaten) {
        cd-Prüfung) laufen über diesen Zweig. Die Prüfung erfolgt nach dem Abruf, damit eine währenddessen gesetzte Sperre gilt. */
     const liste = await terminalBrueckeLsAlle(parts, hidden);
     if (liste.error || !Array.isArray(liste.entries)) return liste;
-    return Object.assign({}, liste, { entries: liste.entries.filter(function (e) { return terminalArchivNameSichtbar(e && e.name); }) });
+    const sicht = terminalArchivSichtbarkeit();
+    return Object.assign({}, liste, { entries: liste.entries.filter(function (e) { return sicht(e && e.name); }) });
   }
   /* Vor UND nach dem asynchronen Lesezugriff prüfen: die Sperre könnte
      während einer laufenden Anfrage aktiviert worden sein. */
@@ -340,19 +374,30 @@ function terminalSchutzBereinigen() {
   const t = TERMINAL_ZUSTAND;
   if (!t || !t.ausgabe || !t.ausgabe.length || !PROFIL) return false;
   const meta = t.ausgabeMeta || [], ausgabe = [], neueMeta = [];
+  let geaendert = false;
+  const sicht = terminalArchivSichtbarkeit();
   t.ausgabe.forEach(function (zeile, i) {
     let ziel = meta[i] || null;
+    if (ziel && ziel.liste) {       /* Archivlistung (ls): nur Zeilen mit nun gesperrtem Namen entfernen, übrige Einträge bleiben */
+      const alle = String(zeile).split('\n'), rein = alle.filter(function (l) { return sicht(terminalListenName(l)); });
+      if (rein.length === alle.length) { ausgabe.push(zeile); neueMeta.push(ziel); return; }
+      geaendert = true;
+      if (rein.length) { ausgabe.push(rein.join('\n')); neueMeta.push(ziel); }
+      return;
+    }
     const m = !ziel && /^VAULT :: RECORD ACCESS\nOBJECT\s+((PIN|ZO)-\d{3,15})\b/.exec(zeile);
     if (m) ziel = { art: m[2] === 'PIN' ? 'pin' : 'zone', id: m[1] };
-    if (ziel && terminalArchivZielGesperrt(ziel)) return;
+    if (ziel && terminalArchivZielGesperrt(ziel)) { geaendert = true; return; }
     ausgabe.push(zeile); neueMeta.push(meta[i] || null);
   });
-  if (ausgabe.length === t.ausgabe.length) return false;
+  if (!geaendert) return false;
   t.ausgabe = ausgabe; t.ausgabeMeta = neueMeta;
   return true;
 }
 /* Nach jeder Zustandsänderung (index.html, dispatch) */
-function terminalSchutzPruefen() { if (terminalSchutzBereinigen()) terminalAusgabe([]); }
+function terminalSchutzPruefen() { terminalSperrstandPruefen(); if (terminalSchutzBereinigen()) terminalAusgabe([]); }
+/* Name am Zeilenende einer ls-Ausgabe (kurz: ganze Zeile; lang: letztes Feld nach zwei oder mehr Leerzeichen), ohne Ordnerzeichen */
+function terminalListenName(zeile) { return String(zeile).split(/\s{2,}/).pop().replace(/\/$/, ''); }
 async function terminalBrueckeSenden(daten) {
   const bruecke = terminalBrueckenAdresse();
   if (!bruecke) return { error: TERMINAL_BRUECKE_FEHLT };
@@ -580,7 +625,7 @@ async function terminalBefehlLauf(fn, args, arg, version) {
   if (t.version !== version) return 1;
   if (res.cwd) { t.oldpwd = cwdVorher; t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; terminalKanalPromptSync(); }
   const zeilen = (res.stdout || []).concat(res.stderr || []);
-  if (zeilen.length) terminalAusgabe(zeilen);
+  if (zeilen.length) terminalAusgabe(zeilen, res.archivListe ? { liste: true } : null);
   return res.code;
 }
 function terminalBefehlFehler(text) { return { code: 1, stdout: [], stderr: [text] }; }
@@ -717,7 +762,7 @@ async function terminalBefehlLs(ctx) {
     return lang ? (x.dir ? 'dr-x' : '-r--') + '  ' + String(x.bytes).padStart(8) + '  ' + fmtZ(x.mtime * 1000) + '  ' + x.name + (x.dir ? '/' : '') :
       x.name + (x.dir ? '/' : '');
   });
-  return { code: 0, stdout: [zeilen.join('\n') || '(leer)'], stderr: [] };
+  return { code: 0, stdout: [zeilen.join('\n') || '(leer)'], stderr: [], archivListe: true };
 }
 
 const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, oldpwd: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null, nmap: null };
@@ -3243,11 +3288,12 @@ function terminalVorschlag() {
   // Der jüngste passende Eintrag entscheidet; ist er genau die Eingabe, gibt es keinen Vorschlag (kein älterer, längerer).
   for (let i = t.verlauf.length - 1; i >= 0; i--) {
     const e = t.verlauf[i];
-    if (e.startsWith(input.value)) return e.slice(input.value.length);
+    if (e.startsWith(input.value) && !terminalZeileMitGesperrtemName(e)) return e.slice(input.value.length);
   }
   // Zweite Quelle wie ZSH_AUTOSUGGEST_STRATEGY=(history completion): der erste Treffer der Tab-Ergänzung.
   const k = t.vorschlagErgaenzung;
-  if (k && k.wert === input.value && k.version === t.version && k.ort === terminalArbeitsverzeichnis()) return k.rest;
+  if (k && k.wert === input.value && k.version === t.version && k.ort === terminalArbeitsverzeichnis())
+    return terminalZeileMitGesperrtemName(k.wert + k.rest) ? '' : k.rest;
   if (!k || k.wert !== input.value) terminalVorschlagErgaenzen(input);
   return '';
 }
@@ -3273,13 +3319,18 @@ function terminalVorschlagGueltig(lauf) {
     input.value === lauf.wert && input.selectionStart === n && input.selectionEnd === n;
 }
 // Ordnerinhalt für den Vorschlag: je Ordner eine Anfrage an die Brücke, 10 s zwischengespeichert.
-const TERMINAL_VORSCHLAG_LS = new Map();
 function terminalVorschlagLs(teile, versteckt) {
   const schluessel = teile.join('/') + (versteckt ? '\u0000.' : ''), alt = TERMINAL_VORSCHLAG_LS.get(schluessel);
-  if (alt && Date.now() - alt.zeit < 10000) return alt.antwort;
+  /* Auch ein Treffer im Zwischenspeicher wird bei jeder Entnahme gegen die aktuellen Sperren gefiltert */
+  const jetzt = function (antwort) {
+    if (!antwort.entries) return antwort;
+    const sicht = terminalArchivSichtbarkeit();
+    return Object.assign({}, antwort, { entries: antwort.entries.filter(function (e) { return sicht(e && e.name); }) });
+  };
+  if (alt && Date.now() - alt.zeit < 10000) return alt.antwort.then(jetzt);
   const antwort = terminalBruecke('ls', teile, versteckt);
   TERMINAL_VORSCHLAG_LS.set(schluessel, { zeit: Date.now(), antwort });
-  return antwort;
+  return antwort.then(jetzt);
 }
 /* Einfärbung beim Tippen wie zsh-syntax-highlighting. Die Zerlegung folgt terminalZerlegen, damit die Farbe zeigt,
    was die Shell beim Ausführen tut: Befehlswort grün (bekannt) oder rot (command not found), Anführungszeichen gelb

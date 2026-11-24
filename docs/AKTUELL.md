@@ -45,7 +45,7 @@ Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **
 
 Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Baseline und Entwicklungsplan (#93 bis #97); Doku zu Karten-Konsolenbefunden (#107). Manuelle Dossiersperren, Pin- und Zonenzugriff über `zielZugang` und Profilkompatibilität sind erhalten.
 
-**Tests:** `node tests/runall.js` führt die Standardauswahl aus (89 Skripte bis #110, 91 mit #111, 92 seit #115 mit `dossier-sperre`, 93 seit 5c2a mit `phase5c2a-altdaten`, 94 seit 5c2b (a) mit `phase5c2b-tickblock`, 96 seit 5c2b (b) mit `phase5c2b-frischer-zustand` und `phase5c2b-karte-altbestand`, 97 seit D2 (#123) mit `phase5c2b-sichtungtext` , 100 seit #128 mit `terminal-fs-ist`, `terminal-fs-schnittstelle`, `terminal-fs-vergleich` ; 101 seit #130 mit `terminal-pwd-bash`, 102 seit #132 mit `terminal-cd-bash`; Playwright, Passwort `pw-test-123`). Historische Skripte des stillgelegten Missionsablaufs sind nur namentlich aufrufbar. Als instabil bekannt: `wk3`, `dp`, `m1flow` (Missionsablauf, auch auf `main` rot) und `lage-box` unter Parallellast. Bestätigung der Läufe erfolgt über GitHub Actions: der dauerhafte Workflow `ci.yml` (seit #114) führt Python-Brückentest, Syntaxprüfung und die vollständige Standardauswahl bei jedem Pull Request gegen `main` und bei jedem Push auf `main` aus (Push-Lauf 45075611403 auf `c9e48ab`: 91 grün, 0 unerwartet rot). Für den Merge-Commit `dc78f0c` von #111 selbst lief keine Standardauswahl; bestätigt war dort der Lauf 45067956391 auf dem Head `477cfaa` des gemergten Branches.
+**Tests:** `node tests/runall.js` führt die Standardauswahl aus (89 Skripte bis #110, 91 mit #111, 92 seit #115 mit `dossier-sperre`, 93 seit 5c2a mit `phase5c2a-altdaten`, 94 seit 5c2b (a) mit `phase5c2b-tickblock`, 96 seit 5c2b (b) mit `phase5c2b-frischer-zustand` und `phase5c2b-karte-altbestand`, 97 seit D2 (#123) mit `phase5c2b-sichtungtext` , 100 seit #128 mit `terminal-fs-ist`, `terminal-fs-schnittstelle`, `terminal-fs-vergleich` ; 101 seit #130 mit `terminal-pwd-bash`, 102 seit #132 mit `terminal-cd-bash`; 103 mit #133 (Draft) und `terminal-fs-sperrstand`; Playwright, Passwort `pw-test-123`). Historische Skripte des stillgelegten Missionsablaufs sind nur namentlich aufrufbar. Als instabil bekannt: `wk3`, `dp`, `m1flow` (Missionsablauf, auch auf `main` rot) und `lage-box` unter Parallellast. Bestätigung der Läufe erfolgt über GitHub Actions: der dauerhafte Workflow `ci.yml` (seit #114) führt Python-Brückentest, Syntaxprüfung und die vollständige Standardauswahl bei jedem Pull Request gegen `main` und bei jedem Push auf `main` aus (Push-Lauf 45075611403 auf `c9e48ab`: 91 grün, 0 unerwartet rot). Für den Merge-Commit `dc78f0c` von #111 selbst lief keine Standardauswahl; bestätigt war dort der Lauf 45067956391 auf dem Head `477cfaa` des gemergten Branches.
 
 **Abnahme #111:** Die Windows-Abnahme mit gesicherter Kopie der echten Profildaten wurde laut Master Wayne vor dem Merge durchgeführt und als erfolgreich gemeldet; das Ergebnisblatt ist nicht Teil des Repositorys und wurde von Claude nicht eingesehen.
 
@@ -55,9 +55,9 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 
 | PR | Inhalt | Stand |
 |---|---|---|
-| #55 | alter Entwurf zu `CLAUDE.md` | veraltet, durch die neue `CLAUDE.md` (#112) ersetzt; Schließen erst nach Freigabe |
+| #133 | 6a, Sicherheits-PR Variante B: Namen gesperrter Archivobjekte in `ls`, Tab und `cd`-Prüfung verborgen; dynamischer Test `terminal-fs-sperrstand` | Draft, Review-Nachbesserungen, CI ausstehend |
 
-Zurzeit ist kein Pull Request außer dem Draft zur Sichtbarkeit gesperrter Archivnamen (Variante B, Plan 9.11) offen; #55 wurde am 24.11.2026 auf Anweisung von Master Wayne geschlossen (ungemergt). Stand 24.11.2026, nach dem Merge von #131 (`facb741`) und #132. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
+Zurzeit ist nur der Draft #133 (Variante B, Plan 9.11) offen; #55 wurde am 24.11.2026 auf Anweisung von Master Wayne geschlossen (ungemergt). Stand 24.11.2026, nach dem Merge von #131 (`facb741`) und #132. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
@@ -76,7 +76,7 @@ Weder die Bestätigung dieser Reihenfolge noch eine erfolgreiche CI ist eine Fre
 
 ## 4. Repository, Branches und CI
 
-- **Prüfstand 24.11.2026, gemessen über die GitHub-Schnittstelle vor dem Merge von #131 und nach dem Merge von #132:** 80 Branches (`main` und 79 weitere), 131 Pull Requests: 126 gemergt, 2 offen (#55, #131), 3 geschlossen ohne Merge (#48, #50, #75). Nach dem Merge von #131 rechnerisch 127 gemergt und 1 offen (#55). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu prüfen.
+- **Prüfstand 24.11.2026, gemessen über die GitHub-Schnittstelle vor dem Merge von #131 und nach dem Merge von #132:** 80 Branches (`main` und 79 weitere), 131 Pull Requests: 126 gemergt, 2 offen (#55, #131), 3 geschlossen ohne Merge (#48, #50, #75). Nach dem Merge von #131 rechnerisch 127 gemergt und 1 offen (#55); #55 wurde danach geschlossen, #133 eröffnet (Draft). Die Branches gemergter PRs bestehen noch. Diese Zahlen sind nach jedem Merge zu prüfen.
 - Von den 53 Branches gemergter PRs (Zählung vor den Merges von #111 und #112, deren Branches nicht eingerechnet sind) haben 52 keinen Commit, der nicht in `main` liegt. `test/parallelitaet` (PR #73) wurde per Squash gemergt; sein Inhalt ist in `main` enthalten (Diff des PR und des Merge-Commits zeilengleich). Gelöscht wird nichts ohne ausdrückliche Freigabe.
 - Workflows: ausschließlich `ci.yml`. Die früheren zwölf `phase5*-regression.yml` wurden mit #115 entfernt; ihre damaligen Läufe (zuletzt 5c1b, 45067956391) bleiben als Nachweis auf GitHub einsehbar.
 
