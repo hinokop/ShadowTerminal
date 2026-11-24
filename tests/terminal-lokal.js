@@ -88,7 +88,7 @@ const PF = require('./_pfad');
     await cmd('cd ..');
     assert.equal(await p.locator('#profil-terminal-prompt').textContent(), 'raizo@terminal:/$');
     assert.match(await cmd('pwd'), /\n\/$/);
-    assert.match(await cmd('ls'), /\npgcl-eu3\.arch07$/);
+    assert.match(await cmd('ls'), /\netc\npgcl-eu3\.arch07\nvar$/);
     const vorUngueltig = netz.length;
     assert.match(await cmd('cd /opt'), /cd: \/opt: No such file or directory$/);
     assert.match(await cmd('cat /etc/passwd'), /cat: \/etc\/passwd: No such file or directory$/);

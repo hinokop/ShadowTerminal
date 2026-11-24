@@ -1,0 +1,452 @@
+[
+  {
+    "befehl": "pwd",
+    "ausgabe": "/",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "pwd -P",
+    "ausgabe": "/",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "pwd -L",
+    "ausgabe": "/",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "pwd x",
+    "ausgabe": "/",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "pwd -x",
+    "ausgabe": "bash: pwd: -x: invalid option\npwd: usage: pwd [-LP]",
+    "status": "2",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "pwd --help",
+    "ausgabe": "pwd: pwd [-LP]\n    Print the name of the current working directory.\n    \n    Options:\n      -L\tprint the value of $PWD if it names the current working\n    \t\tdirectory\n      -P\tprint the physical directory, without any symbolic links\n    \n    By default, `pwd' behaves as if `-L' were specified.\n    \n    Exit Status:\n    Returns 0 unless an invalid option is given or the current directory\n    cannot be read.",
+    "status": "2",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls",
+    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -a",
+    "ausgabe": ".\n..\netc\npgcl-eu3.arch07\nvar",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -l",
+    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -la",
+    "ausgabe": ".\n..\netc\npgcl-eu3.arch07\nvar",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -al",
+    "ausgabe": ".\n..\netc\npgcl-eu3.arch07\nvar",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -1",
+    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -lh",
+    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -d",
+    "ausgabe": ".",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -F",
+    "ausgabe": "etc/\npgcl-eu3.arch07/\nvar/",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -z",
+    "ausgabe": "ls: invalid option -- 'z'\nTry 'ls --help' for more information.",
+    "status": "2",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls --falsch",
+    "ausgabe": "ls: unrecognized option '--falsch'\nTry 'ls --help' for more information.",
+    "status": "2",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls --help",
+    "ausgabe": "Usage: ls [OPTION]... [FILE]...\nList information about the FILEs (the current directory by default).\n\nMandatory arguments to long options are mandatory for short options too.\n  -a, --all                  do not ignore entries starting with .\n  -A, --almost-all           do not list implied . and ..\n  -d, --directory            list directories themselves, not their contents\n  -F, --classify[=WHEN]      append indicator (one of */=>@|) to entries WHEN\n  -h, --human-readable       with -l and -s, print sizes like 1K 234M 2G etc.\n  -l                         use a long listing format\n  -1                         list one file per line\n      --help        display this help and exit\n\nThe WHEN argument defaults to 'always' and can also be 'auto' or 'never'.\n\nExit status:\n 0  if OK,\n 1  if minor problems (e.g., cannot access subdirectory),\n 2  if serious trouble (e.g., cannot access command-line argument).\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /",
+    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /etc",
+    "ausgabe": "chatscripts\nppp",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /etc/ppp",
+    "ausgabe": "peers",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /var/log",
+    "ausgabe": "syslog",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /etc /var",
+    "ausgabe": "/etc:\nchatscripts\nppp\n\n/var:\ncache\nlog",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls -l /etc",
+    "ausgabe": "chatscripts\nppp",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /nonexistent",
+    "ausgabe": "ls: cannot access '/nonexistent': No such file or directory",
+    "status": "2",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls etc",
+    "ausgabe": "chatscripts\nppp",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /etc/ppp/peers/kestrel",
+    "ausgabe": "/etc/ppp/peers/kestrel",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls pgcl-eu3.arch07",
+    "ausgabe": "dossiers\nops\nwurzel.txt",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /pgcl-eu3.arch07/dossiers",
+    "ausgabe": "eins.txt",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /pgcl-eu3.arch07/dossiers/eins.txt",
+    "ausgabe": "/pgcl-eu3.arch07/dossiers/eins.txt",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /pgcl-eu3.arch07/ops",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "pwd",
+    "ausgabe": "/",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd /",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd ~",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd /etc",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/etc$"
+  },
+  {
+    "befehl": "pwd",
+    "ausgabe": "/etc",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/etc$"
+  },
+  {
+    "befehl": "cd ..",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd ../..",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd /etc/ppp",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/etc/ppp$"
+  },
+  {
+    "befehl": "cd -",
+    "ausgabe": "/",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "pwd",
+    "ausgabe": "/",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd .",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd /nonexistent",
+    "ausgabe": "bash: cd: /nonexistent: No such file or directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd /etc/ppp/peers/kestrel",
+    "ausgabe": "bash: cd: /etc/ppp/peers/kestrel: Not a directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd /etc /var",
+    "ausgabe": "bash: cd: too many arguments",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd -x",
+    "ausgabe": "bash: cd: -x: invalid option\ncd: usage: cd [-L|[-P [-e]] [-@]] [dir]",
+    "status": "2",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd \"\"",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd ~/etc",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/etc$"
+  },
+  {
+    "befehl": "echo $HOME",
+    "ausgabe": "$HOME",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/etc$"
+  },
+  {
+    "befehl": "echo $PWD",
+    "ausgabe": "$PWD",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/etc$"
+  },
+  {
+    "befehl": "echo $OLDPWD",
+    "ausgabe": "$OLDPWD",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/etc$"
+  },
+  {
+    "befehl": "cd $HOME",
+    "ausgabe": "bash: cd: $HOME: No such file or directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/etc$"
+  },
+  {
+    "befehl": "cd /var/log/syslog",
+    "ausgabe": "bash: cd: /var/log/syslog: Not a directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/etc$"
+  },
+  {
+    "befehl": "cd /pgcl-eu3.arch07",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
+  },
+  {
+    "befehl": "pwd",
+    "ausgabe": "/pgcl-eu3.arch07",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
+  },
+  {
+    "befehl": "ls",
+    "ausgabe": "dossiers\nops\nwurzel.txt",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
+  },
+  {
+    "befehl": "ls -l",
+    "ausgabe": "dr-x      4096  <ZEIT>  dossiers\ndr-x      4096  <ZEIT>  ops\n-r--         1  <ZEIT>  wurzel.txt",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
+  },
+  {
+    "befehl": "cd dossiers",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
+  },
+  {
+    "befehl": "pwd",
+    "ausgabe": "/pgcl-eu3.arch07/dossiers",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
+  },
+  {
+    "befehl": "ls -a",
+    "ausgabe": ".\n..\neins.txt\n.intern",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
+  },
+  {
+    "befehl": "ls -l",
+    "ausgabe": "-r--        15  <ZEIT>  eins.txt",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
+  },
+  {
+    "befehl": "cd eins.txt",
+    "ausgabe": "bash: cd: eins.txt: Not a directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
+  },
+  {
+    "befehl": "cd nichts",
+    "ausgabe": "bash: cd: nichts: No such file or directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
+  },
+  {
+    "befehl": "ls nichts",
+    "ausgabe": "ls: cannot access 'nichts': No such file or directory",
+    "status": "2",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
+  },
+  {
+    "befehl": "ls ..",
+    "ausgabe": "dossiers\nops\nwurzel.txt",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
+  },
+  {
+    "befehl": "cd ..",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
+  },
+  {
+    "befehl": "cd ../ops",
+    "ausgabe": "bash: cd: ../ops: No such file or directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
+  },
+  {
+    "befehl": "ls",
+    "ausgabe": "dossiers\nops\nwurzel.txt",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
+  },
+  {
+    "befehl": "cd /",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cat /nonexistent",
+    "ausgabe": "cat: /nonexistent: No such file or directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cat /etc",
+    "ausgabe": "cat: /etc: Is a directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "ls /var/cache/tle",
+    "ausgabe": "kestrel.tle",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/$"
+  },
+  {
+    "befehl": "cd /var/cache/tle",
+    "ausgabe": "",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/var/cache/tle$"
+  },
+  {
+    "befehl": "ls -l",
+    "ausgabe": "kestrel.tle",
+    "status": "0",
+    "promptDanach": "raizo@terminal:/var/cache/tle$"
+  }
+]

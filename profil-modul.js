@@ -793,6 +793,8 @@ const TERMINAL_LS_HILFE = ['Usage: ls [OPTION]... [FILE]...', 'List information 
   'Exit status:', ' 0  if OK,', ' 1  if minor problems (e.g., cannot access subdirectory),',
   ' 2  if serious trouble (e.g., cannot access command-line argument).', '',
   'GNU coreutils online help: <https://www.gnu.org/software/coreutils/>'];
+/* Typografische Anführungszeichen der gnulib-Meldungen (nur argmatch-Meldungen; getopt-Meldungen und "cannot access" bleiben bei ASCII) */
+const TERMINAL_LS_ZITAT_LINKS = '\u2018', TERMINAL_LS_ZITAT_RECHTS = '\u2019';
 /* Name in Meldungen wie bei ls (Stil "shell": in einfachen Anführungszeichen, ein Apostroph als '\'' ) */
 function terminalLsQuote(name) { return "'" + String(name).replace(/'/g, "'\\''") + "'"; }
 /* -h: Größe wie ls (Basis 1024, aufgerundet, eine Nachkommastelle unter 10), gegen ls 9.4 gemessen */
@@ -831,7 +833,7 @@ function terminalLsOptionen(args) {
       if (kurz === 'help') return { hilfe: true };
       if (voll === 'classify' && wert !== null) {
         /* argmatch (gnulib): exakte Übereinstimmung, sonst eindeutige Abkürzung (Groß-/Kleinschreibung beachtet); Abkürzungen,
-           die auf verschiedene Werte führen, sind mehrdeutig. */
+           die auf verschiedene Werte führen, sind mehrdeutig. Unter en_US.UTF-8 stehen diese Meldungen in typografischen Anführungszeichen. */
         const werte = [['always', 'yes', 'force', true], ['never', 'no', 'none', false], ['auto', 'tty', 'if-tty', false]];
         const namen = []; werte.forEach(function (g, i) { g.slice(0, 3).forEach(function (n) { namen.push([n, i]); }); });
         const genau = namen.filter(function (x) { return x[0] === wert; });
@@ -839,9 +841,8 @@ function terminalLsOptionen(args) {
         const gruppen = Array.from(new Set(teil.map(function (x) { return x[1]; })));
         if (gruppen.length === 1) opt.F = werte[gruppen[0]][3];
         else {
-          /* gnulib quote() in der Locale C: Apostroph und Rückstrich mit Rückstrich maskiert (anders als der Shell-Stil der übrigen Meldungen) */
-          const q = function (t) { return "'" + String(t).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; };
-          return fehler(['ls: ' + (gruppen.length ? 'ambiguous' : 'invalid') + ' argument ' + q(wert) + " for '--classify'",
+          const q = function (t) { return TERMINAL_LS_ZITAT_LINKS + String(t).replace(/\\/g, '\\\\') + TERMINAL_LS_ZITAT_RECHTS; };
+          return fehler(['ls: ' + (gruppen.length ? 'ambiguous' : 'invalid') + ' argument ' + q(wert) + ' for ' + q('--classify'),
             'Valid arguments are:'].concat(werte.map(function (g) { return '  - ' + g.slice(0, 3).map(q).join(', '); })), 1);
         }
       } else setze(kurz);
@@ -896,16 +897,21 @@ async function terminalBefehlLs(ctx) {
     }
     if (r.adapter === 'archiv') archiv = true;
     if (r.typ === 'dir' && !opt.d) verzeichnisse.push({ op: op, seg: r.seg, adapter: r.adapter });
-    else dateien.push(zeile(op, r.typ === 'dir', r.eintrag, r.adapter));
+    else dateien.push({ name: op, text: zeile(op, r.typ === 'dir', r.eintrag, r.adapter) });
   }
+  /* Anzeigereihenfolge nach en_US.UTF-8 (TERMINAL_LOCALE); beeinflusst weder Namensauflösung noch Zugriffsentscheidung. */
+  const ordne = function (liste, schluessel) { return liste.slice().sort(function (a, b) { return TERMINAL_LOCALE.vergleich(schluessel(a), schluessel(b)); }); };
+  verzeichnisse.splice(0, verzeichnisse.length, ...ordne(verzeichnisse, function (v) { return v.op; }));
   const aus = [];
   let erst = true;
-  if (dateien.length) { aus.push(dateien.join('\n')); erst = false; }
+  if (dateien.length) { aus.push(ordne(dateien, function (d) { return d.name; }).map(function (d) { return d.text; }).join('\n')); erst = false; }
   let code = fehler.length ? 2 : 0;
   for (const v of verzeichnisse) {
     const dir = await ctx.fs.readdir(v.seg, { versteckt: opt.alle !== null });
     if (dir.fehler) { fehler.push('ls: cannot open directory ' + terminalLsQuote(v.op) + ': ' + (dir.fehler === 'ENOENT' || dir.fehler === 'Datei oder Ordner nicht gefunden' ? 'No such file or directory' : dir.fehler)); code = 2; continue; }
-    const zeilen = dir.eintraege.filter(function (x) { return opt.alle !== null || !x.name.startsWith('.'); }).map(function (x) { return zeile(x.name, x.dir, x, v.adapter); });
+    let eintraege = dir.eintraege.filter(function (x) { return opt.alle !== null || !x.name.startsWith('.'); });
+    if (opt.alle === 'a') eintraege = eintraege.concat([{ name: '.', dir: true }, { name: '..', dir: true }]);
+    const zeilen = ordne(eintraege, function (x) { return x.name; }).map(function (x) { return zeile(x.name, x.dir, x.bytes === undefined ? null : x, v.adapter); });
     const kopf = operanden.length > 1 ? (erst ? '' : '\n') + v.op + ':' + (zeilen.length ? '\n' : '') : (erst ? '' : '\n');
     const text = kopf + zeilen.join('\n');
     if (operanden.length > 1 || zeilen.length) { aus.push(text); erst = false; }
