@@ -1,6 +1,6 @@
-/* Charakterisierung (Ist-Stand, Phase 6a-0): Sichtbarkeit der Namen anwendungsseitig gesperrter Archivdateien in ls und Tab.
-   Zielverhalten ist laut Plan (Abschnitt 9.3) Variante B (Name ebenfalls geschützt); dieser Test hält den HEUTIGEN Stand fest
-   und ist bei der Umsetzung von Variante B bewusst umzukehren. Die Brücke ist gemockt (wie terminal-archiv-zugriff). */
+/* Variante B (Plan 9.3): Namen anwendungsseitig gesperrter Archivdateien erscheinen weder in ls noch in der Tab-Ergänzung; der Inhalt
+   bleibt durch cat gesperrt. Ursprünglich (6a-0) hielt dieser Test den Ist-Stand fest und wurde mit dem Sicherheits-PR umgekehrt.
+   Die Brücke ist gemockt (wie terminal-archiv-zugriff). */
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 const { APP } = require('./_pfad');
@@ -76,17 +76,40 @@ const { APP } = require('./_pfad');
       await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette);
       return (await out.textContent()).slice(start.length);
     };
-    const ls = await cmd('ls /' + db + '/ops');
-    /* Ist (gemessen): Namen gesperrter Exportdateien erscheinen in ls; der Inhalt bleibt durch cat/head/tail/wget geschützt */
-    assert.ok(ls.includes('lageblatt-' + z.pinZu + '.txt'), 'Ist: Name der gesperrten Pin-Datei in ls');
-    assert.ok(ls.includes('sichtung-' + z.zu + '-' + z.siZu + '.txt'), 'Ist: Name der gesperrten Sichtungsdatei in ls');
-    assert.match(await cmd('cat /' + db + '/ops/lageblatt-' + z.pinZu + '.txt'), /Permission denied/, 'Inhalt bleibt gesperrt');
+    const lsText = async () => cmd('ls /' + db + '/ops');
+    const tab = async eingabe => {
+      await inp.fill(eingabe); await inp.press('Tab');
+      await p.waitForFunction(() => terminalTabLauf === null);
+      const w = await inp.inputValue(); await inp.fill(''); return w;
+    };
+    const pinDatei = 'lageblatt-' + z.pinZu + '.txt', siZuDatei = 'sichtung-' + z.zu + '-' + z.siZu + '.txt', siFreiDatei = 'sichtung-' + z.frei + '-' + z.siFrei + '.txt';
+    /* Variante B (Plan 9.3): Namen gesperrter Archivobjekte erscheinen nirgends; gewöhnliche und freigegebene Dateien bleiben sichtbar */
+    const ls = await lsText();
+    assert.ok(!ls.includes(pinDatei), 'Name der gesperrten Pin-Datei in ls verborgen');
+    assert.ok(!ls.includes(siZuDatei), 'Name der gesperrten Sichtungsdatei in ls verborgen');
+    assert.ok(ls.includes(siFreiDatei), 'Sichtungsdatei eines nicht gesperrten Dossiers bleibt sichtbar');
+    assert.ok(ls.includes('unrelated.txt'), 'gewöhnliche Datei bleibt sichtbar');
+    assert.match(await cmd('cat /' + db + '/ops/' + pinDatei), /Permission denied/, 'Inhalt bleibt gesperrt');
+    assert.doesNotMatch(await cmd('cd /' + db + '/ops/' + pinDatei), /Not a directory|Permission denied/, 'cd auf verborgenen Namen verrät keine Art');
     await cmd('cd /' + db + '/ops');
-    await inp.fill('cat lageblatt-' + z.pinZu.slice(0, 8)); await inp.press('Tab');
-    await p.waitForFunction(() => document.getElementById('profil-terminal-eingabe').value.endsWith('.txt'), null, { timeout: 5000 });
-    assert.equal(await inp.inputValue(), 'cat lageblatt-' + z.pinZu + '.txt', 'Ist: Tab ergänzt den Namen der gesperrten Pin-Datei');
-    await inp.fill('');
+    /* ls -a gilt nur im Arbeitsverzeichnis (ls akzeptiert hier keinen Operanden zusammen mit der Option); Rückgabewert 0 und Sichtbarkeit prüfen */
+    const la = await cmd('ls -a'), lang = await cmd('ls -l');
+    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.status), 0, 'ls -l endet mit 0');
+    for (const text of [la, lang]) {
+      assert.ok(!text.includes(pinDatei) && !text.includes(siZuDatei), 'gesperrte Namen auch mit -a und -l verborgen');
+      assert.ok(text.includes('unrelated.txt') && text.includes(siFreiDatei), 'übrige Namen sichtbar');
+    }
+    assert.equal(await tab('cat lageblatt-' + z.pinZu.slice(0, 8)), 'cat lageblatt-' + z.pinZu.slice(0, 8), 'Tab ergänzt den gesperrten Namen nicht');
+    assert.equal(await tab('cat sichtung-' + z.frei), 'cat ' + siFreiDatei, 'Tab ergänzt den freigegebenen Namen');
+    assert.equal(await tab('cat unrel'), 'cat unrelated.txt', 'Tab ergänzt gewöhnliche Datei');
+    /* Entsperren macht die Namen wieder sichtbar (Sperre ist maßgeblich, kein Zwischenspeicher) */
+    await p.evaluate(id => dispatch({ type: 'DOSSIER_ENTSPERREN', id }), z.zu);
+    const nach = await lsText();
+    assert.ok(nach.includes(pinDatei) && nach.includes(siZuDatei), 'nach Entsperren wieder sichtbar');
+    assert.equal(await tab('cat lageblatt-' + z.pinZu.slice(0, 8)), 'cat ' + pinDatei, 'Tab ergänzt nach Entsperren');
+    await p.evaluate(id => dispatch({ type: 'DOSSIER_SPERREN', id }), z.zu);
+    assert.ok(!(await lsText()).includes(pinDatei), 'nach erneutem Sperren wieder verborgen');
     assert.deepEqual(errors, []);
-    console.log('OK: Ist-Stand Namenssichtbarkeit gesperrter Archivdateien (ls, Tab) festgehalten');
+    console.log('OK: Variante B, Namen gesperrter Archivdateien in ls und Tab verborgen');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
