@@ -578,6 +578,7 @@ const TERMINAL_FS = {
     if (voll === '/var/log/syslog' || TERMINAL_VIRT_DATEIEN.has(voll)) return { adapter: 'virtuell', typ: 'file' };
     if (seg[0] !== TERMINAL_DB) return { fehler: 'ENOENT' };
     if (opt && opt.pruefen) {
+      let archivEintrag = null;
       /* Streng wie unter Unix: der Name muss im Elternverzeichnis genau so (Groß-/Kleinschreibung, kein Kurzname) geführt werden;
          dabei zeigt sich auch, ob das Ziel eine Datei ist. Danach die Brückenoperation "cd" als Zugangsprüfung (Schutz, Sperren). */
       if (seg.length > 1) {
@@ -585,11 +586,12 @@ const TERMINAL_FS = {
         if (eltern.fehler) return { adapter: 'archiv', fehler: eltern.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : eltern.fehler };
         const eintrag = eltern.eintraege.find(function (e) { return e.name === seg[seg.length - 1]; });
         if (!eintrag) return { adapter: 'archiv', fehler: 'ENOENT' };
-        if (!eintrag.dir) return { adapter: 'archiv', typ: 'file' };
+        if (!eintrag.dir) return { adapter: 'archiv', typ: 'file', eintrag: eintrag };
+        archivEintrag = eintrag;
       }
       const antwort = await terminalBruecke('cd', seg.slice(1), false);
       if (antwort.error) return { adapter: 'archiv', fehler: antwort.error === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : antwort.error };
-      return { adapter: 'archiv', typ: 'dir' };
+      return { adapter: 'archiv', typ: 'dir', eintrag: archivEintrag };
     }
     return { adapter: 'archiv', typ: null };
   },
@@ -632,7 +634,7 @@ async function terminalBefehlLauf(fn, args, arg, version) {
   const res = await fn({ args: args, arg: arg || '', cwd: cwdVorher, env: env, fs: TERMINAL_FS });
   if (t.version !== version) return 1;
   if (res.cwd) { t.oldpwd = cwdVorher; t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; terminalKanalPromptSync(); }
-  let zeilen = (res.stdout || []).concat(res.stderr || []);
+  let zeilen = res.stderrZuerst ? (res.stderr || []).concat(res.stdout || []) : (res.stdout || []).concat(res.stderr || []);
   if (res.archivListe) {   /* letzte Prüfung gegen die aktuellen Sperren unmittelbar vor der Ausgabe */
     const sicht = terminalArchivSichtbarkeit();
     zeilen = zeilen.map(function (z) { return String(z).split('\n').filter(function (l) { return sicht(terminalListenName(l)); }).join('\n'); })
@@ -758,24 +760,145 @@ async function terminalBefehlCd(ctx) {
   }
   return { code: 0, stdout: ausgeben ? ['/' + r.seg.join('/')] : [], stderr: [], cwd: terminalCdCwd(r.seg) };
 }
+/* ls (Phase 6a-3, Referenz GNU coreutils 9.4, Ausgabe ohne TTY): Optionen und Operanden wie getopt_long mit Umstellung (Optionen auch hinter
+   Operanden, "--" beendet sie, "-" ist Operand), zusammengesetzte Kurzoptionen, eindeutig abgekürzte Langoptionen. Umgesetzt: -a, -A, -d, -F,
+   -h, -l, -1 und --all, --almost-all, --directory, --classify[=WHEN], --human-readable, --help. Alle übrigen Optionen von ls 9.4 sind für
+   die Namenserkennung (Mehrdeutigkeit) bekannt, werden aber wie unbekannte Optionen gemeldet (Entscheidung des Plans: Originalmeldung statt
+   Sonderausgabe). Die Reihenfolge der Einträge bleibt die der Quelle (Sortierung, "." und ".." bei -a und das Langformat folgen in 6a-4). */
+const TERMINAL_LS_LANG = [['all', 'no'], ['almost-all', 'no'], ['author', 'no'], ['block-size', 'req'], ['classify', 'opt'], ['color', 'opt'],
+  ['context', 'no'], ['directory', 'no'], ['dired', 'no'], ['dereference-command-line', 'no'], ['dereference-command-line-symlink-to-dir', 'no'],
+  ['dereference', 'no'], ['escape', 'no'], ['full-time', 'no'], ['file-type', 'no'], ['format', 'req'], ['group-directories-first', 'no'],
+  ['human-readable', 'no'], ['hide-control-chars', 'no'], ['hide', 'req'], ['hyperlink', 'opt'], ['help', 'no'], ['inode', 'no'],
+  ['ignore-backups', 'no'], ['ignore', 'req'], ['indicator-style', 'req'], ['kibibytes', 'no'], ['literal', 'no'], ['numeric-uid-gid', 'no'],
+  ['no-group', 'no'], ['quote-name', 'no'], ['quoting-style', 'req'], ['reverse', 'no'], ['recursive', 'no'], ['size', 'no'], ['si', 'no'],
+  ['show-control-chars', 'no'], ['sort', 'req'], ['tabsize', 'req'], ['time', 'req'], ['time-style', 'req'], ['version', 'no'], ['width', 'req'],
+  ['zero', 'no']];   /* Reihenfolge wie im Programm (bestimmt die Aufzählung bei Mehrdeutigkeit), gegen ls 9.4 für alle Präfixe geprüft */
+const TERMINAL_LS_UMGESETZT = { 'all': 'a', 'almost-all': 'A', 'directory': 'd', 'classify': 'F', 'human-readable': 'h', 'help': 'help' };
+const TERMINAL_LS_KURZ = 'aAdFhl1';
+const TERMINAL_LS_TRY = "Try 'ls --help' for more information.";
+const TERMINAL_LS_HILFE = ['Usage: ls [OPTION]... [FILE]...', 'List information about the FILEs (the current directory by default).', '',
+  'Mandatory arguments to long options are mandatory for short options too.',
+  '  -a, --all                  do not ignore entries starting with .',
+  '  -A, --almost-all           do not list implied . and ..',
+  '  -d, --directory            list directories themselves, not their contents',
+  '  -F, --classify[=WHEN]      append indicator (one of */=>@|) to entries WHEN',
+  '  -h, --human-readable       with -l and -s, print sizes like 1K 234M 2G etc.',
+  '  -l                         use a long listing format',
+  '  -1                         list one file per line',
+  '      --help        display this help and exit', '',
+  "The WHEN argument defaults to 'always' and can also be 'auto' or 'never'.", '',
+  'Exit status:', ' 0  if OK,', ' 1  if minor problems (e.g., cannot access subdirectory),',
+  ' 2  if serious trouble (e.g., cannot access command-line argument).', '',
+  'GNU coreutils online help: <https://www.gnu.org/software/coreutils/>'];
+/* Name in Meldungen wie bei ls (Stil "shell": in einfachen Anführungszeichen, ein Apostroph als '\'' ) */
+function terminalLsQuote(name) { return "'" + String(name).replace(/'/g, "'\\''") + "'"; }
+/* -h: Größe wie ls (Basis 1024, aufgerundet, eine Nachkommastelle unter 10), gegen ls 9.4 gemessen */
+function terminalLsGroesse(b) {
+  if (b < 1024) return String(b);
+  for (let k = 1, q = 1024; k <= 8; k++, q *= 1024) {
+    const c = Math.ceil(b / q);
+    if (c >= 1024 && k < 8) continue;
+    const zehntel = Math.ceil(b * 10 / q);
+    return (zehntel < 100 ? Math.floor(zehntel / 10) + '.' + (zehntel % 10) : String(c)) + 'KMGTPEZY'[k - 1];
+  }
+}
+/* Auswertung der Argumente: { fehler: { code, zeilen } } | { hilfe: true } | { opt, operanden } */
+function terminalLsOptionen(args) {
+  const opt = { alle: null, d: false, F: false, h: false, format: '1' }, operanden = [];
+  const fehler = function (zeilen, code) { return { fehler: { code: code || 2, zeilen: zeilen.concat([TERMINAL_LS_TRY]) } }; };
+  const setze = function (c) {
+    if (c === 'a' || c === 'A') opt.alle = c; else if (c === 'd') opt.d = true; else if (c === 'F') opt.F = true;
+    else if (c === 'h') opt.h = true; else if (c === 'l') opt.format = 'l'; else if (c === '1') opt.format = '1';
+  };
+  let ende = false;
+  for (const a of args) {
+    if (ende || a.length < 2 || a[0] !== '-') { operanden.push(a); continue; }
+    if (a === '--') { ende = true; continue; }
+    if (a.startsWith('--')) {
+      const gleich = a.indexOf('='), name = gleich < 0 ? a.slice(2) : a.slice(2, gleich), wert = gleich < 0 ? null : a.slice(gleich + 1);
+      const treffer = TERMINAL_LS_LANG.filter(function (x) { return x[0] === name; });
+      const kandidaten = treffer.length ? treffer : TERMINAL_LS_LANG.filter(function (x) { return x[0].startsWith(name); });
+      if (!kandidaten.length) return fehler(['ls: unrecognized option ' + terminalLsQuote(a)]);
+      if (kandidaten.length > 1) return fehler(['ls: option ' + terminalLsQuote(a) + ' is ambiguous; possibilities: ' + kandidaten.map(function (x) { return terminalLsQuote('--' + x[0]); }).join(' ')]);
+      const [voll, art] = kandidaten[0];
+      if (art === 'no' && wert !== null) return fehler(['ls: option ' + terminalLsQuote('--' + voll) + " doesn't allow an argument"]);
+      if (art === 'req' && wert === null) return fehler(['ls: option ' + terminalLsQuote('--' + voll) + ' requires an argument']);
+      const kurz = TERMINAL_LS_UMGESETZT[voll];
+      if (!kurz) return fehler(['ls: unrecognized option ' + terminalLsQuote(a)]);   /* bekannt, aber in diesem Terminal nicht umgesetzt */
+      if (kurz === 'help') return { hilfe: true };
+      if (voll === 'classify' && wert !== null) {
+        const w = wert.toLowerCase();
+        const gueltig = ['always', 'yes', 'force'].includes(w) ? true : ['never', 'no', 'none', 'auto', 'tty', 'if-tty'].includes(w) ? false : null;
+        if (gueltig === null) return fehler(['ls: ' + (wert === '' ? 'ambiguous' : 'invalid') + ' argument ' + terminalLsQuote(wert) + " for '--classify'",
+          'Valid arguments are:', "  - 'always', 'yes', 'force'", "  - 'never', 'no', 'none'", "  - 'auto', 'tty', 'if-tty'"], 1);
+        opt.F = gueltig;
+      } else setze(kurz);
+      continue;
+    }
+    for (const c of Array.from(a).slice(1)) {
+      if (!TERMINAL_LS_KURZ.includes(c)) return fehler(["ls: invalid option -- '" + c + "'"]);
+      setze(c);
+    }
+  }
+  return { opt: opt, operanden: operanden };
+}
+/* Operand auflösen: jede Komponente streng prüfen; eine Datei mit Folgekomponente (auch "/" am Ende) ergibt ENOTDIR.
+   Ergebnis { seg, typ, adapter, eintrag } oder { fehler } */
+async function terminalLsAufloesen(ctx, ziel) {
+  if (ziel === '') return { fehler: 'ENOENT' };   /* ls '' : cannot access '': No such file or directory */
+  const roh = await ctx.fs.resolve(ziel, { cwd: ctx.cwd });
+  if (!roh) return { fehler: 'Permission denied' };
+  const absolut = ziel.startsWith('/') || ziel === '~' || ziel.startsWith('~/');
+  const teile = (ziel === '~' || ziel.startsWith('~/') ? ziel.slice(1) : ziel).split('/');
+  let seg = absolut ? [] : await ctx.fs.resolve('', { cwd: ctx.cwd }), st = null, datei = false;
+  for (let i = absolut ? 1 : 0; i < teile.length; i++) {
+    const name = teile[i];
+    if (datei) return { fehler: 'ENOTDIR' };
+    if (!name || name === '.') { if (!name && i === teile.length - 1 && st && st.typ === 'file') return { fehler: 'ENOTDIR' }; continue; }
+    if (name === '..') { seg = seg.slice(0, -1); st = null; continue; }
+    seg = seg.concat(name);
+    st = await ctx.fs.stat(seg, { pruefen: true });
+    if (st.fehler) return { fehler: st.fehler };
+    datei = st.typ === 'file';
+  }
+  if (!st || st.typ === undefined || st.typ === null) { st = await ctx.fs.stat(seg, { pruefen: true }); if (st.fehler) return { fehler: st.fehler }; }
+  return { seg: seg, typ: st.typ, adapter: st.adapter, eintrag: st.eintrag || null };
+}
 async function terminalBefehlLs(ctx) {
-  const arg = ctx.arg, lang = ['-l', '-la', '-al'].includes(arg), alle = ['-a', '-la', '-al'].includes(arg);
-  const name = terminalName(arg);
-  if (name === null) return terminalBefehlFehler('ls: unterminated quote');
-  if (arg.startsWith('-') && !lang && !alle) return terminalBefehlFehler("ls: unrecognized option '" + arg + "'");
-  const seg = await ctx.fs.resolve(lang || alle ? '' : name, { cwd: ctx.cwd });
-  if (!seg) return terminalBefehlFehler('ls: ' + name + ': Permission denied');
-  const st = await ctx.fs.stat(seg);
-  if (st.fehler) return terminalBefehlFehler(terminalFsFehlerText('ls', name, st.fehler));
-  if (st.typ === 'file') return { code: 0, stdout: [seg.at(-1)], stderr: [] };
-  const dir = await ctx.fs.readdir(seg, { versteckt: alle });
-  if (dir.fehler) return terminalBefehlFehler(terminalFsFehlerText('ls', name, dir.fehler));
-  if (st.adapter === 'virtuell') return { code: 0, stdout: [dir.eintraege.map(function (x) { return x.name + (x.dir ? '/' : ''); }).join('\n')], stderr: [] };
-  const zeilen = dir.eintraege.map(function (x) {
-    return lang ? (x.dir ? 'dr-x' : '-r--') + '  ' + String(x.bytes).padStart(8) + '  ' + fmtZ(x.mtime * 1000) + '  ' + x.name + (x.dir ? '/' : '') :
-      x.name + (x.dir ? '/' : '');
-  });
-  return { code: 0, stdout: [zeilen.join('\n') || '(leer)'], stderr: [], archivListe: true };
+  const z = terminalLsOptionen(ctx.args);
+  if (z.fehler) return { code: z.fehler.code, stdout: [], stderr: z.fehler.zeilen };
+  if (z.hilfe) return { code: 0, stdout: [TERMINAL_LS_HILFE.join('\n')], stderr: [] };
+  const opt = z.opt, operanden = z.operanden.length ? z.operanden : ['.'], fehler = [], dateien = [], verzeichnisse = [];
+  let archiv = false;
+  const marke = function (name, dir) { return name + (opt.F && dir ? '/' : ''); };
+  const zeile = function (name, dir, e, adapter) {
+    if (opt.format !== 'l' || adapter === 'virtuell' || !e) return marke(name, dir);
+    return (dir ? 'dr-x' : '-r--') + '  ' + (opt.h ? terminalLsGroesse(e.bytes) : String(e.bytes)).padStart(8) + '  ' + fmtZ(e.mtime * 1000) + '  ' + marke(name, dir);
+  };
+  for (const op of operanden) {
+    const r = await terminalLsAufloesen(ctx, op);
+    if (r.fehler) {
+      const f = r.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : r.fehler;
+      fehler.push('ls: cannot access ' + terminalLsQuote(op) + ': ' + (f === 'ENOENT' ? 'No such file or directory' : f === 'ENOTDIR' ? 'Not a directory' : f));
+      continue;
+    }
+    if (r.adapter === 'archiv') archiv = true;
+    if (r.typ === 'dir' && !opt.d) verzeichnisse.push({ op: op, seg: r.seg, adapter: r.adapter });
+    else dateien.push(zeile(op, r.typ === 'dir', r.eintrag, r.adapter));
+  }
+  const aus = [];
+  let erst = true;
+  if (dateien.length) { aus.push(dateien.join('\n')); erst = false; }
+  let code = fehler.length ? 2 : 0;
+  for (const v of verzeichnisse) {
+    const dir = await ctx.fs.readdir(v.seg, { versteckt: opt.alle !== null });
+    if (dir.fehler) { fehler.push('ls: cannot open directory ' + terminalLsQuote(v.op) + ': ' + (dir.fehler === 'ENOENT' || dir.fehler === 'Datei oder Ordner nicht gefunden' ? 'No such file or directory' : dir.fehler)); code = 2; continue; }
+    const zeilen = dir.eintraege.filter(function (x) { return opt.alle !== null || !x.name.startsWith('.'); }).map(function (x) { return zeile(x.name, x.dir, x, v.adapter); });
+    const kopf = operanden.length > 1 ? (erst ? '' : '\n') + v.op + ':' + (zeilen.length ? '\n' : '') : (erst ? '' : '\n');
+    const text = kopf + zeilen.join('\n');
+    if (operanden.length > 1 || zeilen.length) { aus.push(text); erst = false; }
+  }
+  return { code: code, stdout: aus, stderr: fehler, stderrZuerst: true, archivListe: archiv };
 }
 
 const TERMINAL_ZUSTAND = { offen: false, ausgabe: [], prueft: false, dateiLaeuft: false, version: 0, ort: null, virtuellerOrt: null, oldpwd: null, kanal: null, fortschritt: '', verlauf: [], vpos: -1, entwurf: '', satLink: null, orbitLive: false, modem: null, wgSat: null, syslog: [], kette: null, status: 0, tmux: null, plogFolgen: null, nmap: null };
@@ -2870,7 +2993,7 @@ function terminalHilfe() {
 const TERMINAL_PPP = function (name) { return function (args, arg) { return terminalPppShell(name, arg, args); }; };
 const TERMINAL_DATEI = function (name) { return function (args, arg) { return terminalDateiAusfuehren(name, arg, args); }; };
 const TERMINAL_TABELLE = [
-  { name: 'ls', hilfe: [[0, 0, 'ls [-a|-l|-la]']], tab: { art: 'pfad', optionen: ['-a', '-l', '-la'] }, aus: TERMINAL_DATEI('ls') },
+  { name: 'ls', hilfe: [[0, 0, 'ls [OPTION]... [FILE]...']], tab: { art: 'pfad', optionen: ['-1', '-a', '-A', '-d', '-F', '-h', '-l'] }, aus: TERMINAL_DATEI('ls') },
   { name: 'cd', hilfe: [[0, 1, 'cd <ordner>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('cd') },
   { name: 'cat', hilfe: [[0, 3, 'cat <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('cat') },
   { name: 'head', hilfe: [[0, 4, 'head <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('head') },
@@ -3056,7 +3179,8 @@ function terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format) {
 }
 async function terminalTab(lauf, m) {
   const bisher = lauf.wert;
-  const befehl = m[1], arg = m[2];
+  const befehl = m[1];
+  let arg = m[2], kopfB = befehl + ' ';
   // lauf.nurVorschlag: nur die Treffer festhalten (grauer Vorschlag), nichts an der Eingabe ändern.
   const fertig = function (kopf, prefix, kandidaten, format) {
     if (lauf.nurVorschlag) { lauf.ergebnis = { kopf, prefix, kandidaten, format }; return; }
@@ -3068,6 +3192,9 @@ async function terminalTab(lauf, m) {
   }
   const tab = terminalBefehlEintrag(befehl)?.tab;
   if (!tab) return;
+  /* ls: führende Optionswörter bleiben stehen, ergänzt wird der Pfad dahinter (ls -l /etc/p) */
+  const vorOpt = befehl === 'ls' ? /^((?:-\S*\s+)+)(.*)$/.exec(arg) : null;
+  if (vorOpt) { kopfB = befehl + ' ' + vorOpt[1]; arg = vorOpt[2]; }
   if (befehl === 'sudo') {
     const sub = /^(map|open)(?:\s+(.*))?$/.exec(arg);
     if (!sub || sub[2] === undefined) {
@@ -3108,7 +3235,7 @@ async function terminalTab(lauf, m) {
     else fertig('tail ', arg, ['-n 12 /var/log/syslog'], x => x);
     return;
   }
-  if (tab.art === 'optionen' || (tab.optionen && arg.startsWith('-'))) {
+  if (tab.art === 'optionen' || (tab.optionen && arg.startsWith('-') && !vorOpt)) {
     fertig(befehl + ' ', arg, tab.werte || tab.optionen, function (x) { return x; });
     return;
   }
@@ -3122,7 +3249,7 @@ async function terminalTab(lauf, m) {
   const listing = !teile.length ? ['etc/', 'var/', TERMINAL_DB + (basis ? '/' : '')] : TERMINAL_TLE_DIRS.get('/' + teile.join('/'));
   if (listing) {
     const namen = listing.filter(x => befehl !== 'cd' || x.endsWith('/') || x === TERMINAL_DB).map(x => basis + x);
-    fertig(befehl + ' ' + anfang, pfad, namen, function (x) { return x + anfang; });
+    fertig(kopfB + anfang, pfad, namen, function (x) { return x + anfang; });
     return;
   }
   if (teile[0] !== TERMINAL_DB) return;
@@ -3135,7 +3262,7 @@ async function terminalTab(lauf, m) {
   const sichtJetzt = terminalArchivSichtbarkeit();   /* letzte Prüfung unmittelbar vor der Übernahme */
   const namen = antwort.entries.filter(function (x) { return sichtJetzt(x.name) && (x.dir || befehl !== 'cd'); })
     .map(function (x) { return basis + x.name + (x.dir ? '/' : ''); });
-  fertig(befehl + ' ' + anfang, pfad, namen, function (x) {
+  fertig(kopfB + anfang, pfad, namen, function (x) {
     const quote = anfang || (/\s|^'/.test(x) ? '"' : '');
     return (quote && !anfang ? quote : '') + x + quote;
   });

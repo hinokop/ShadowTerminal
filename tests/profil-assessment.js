@@ -71,7 +71,7 @@ const { chromium } = require('playwright');
     const cmd = async zeile => { await p.locator('#profil-terminal-eingabe').fill(zeile); await p.locator('#profil-terminal-eingabe').press('Enter'); };
     const netz0 = netz.length;
     await cmd('ls'); await cmd('pwd'); await cmd('whoami'); await cmd('ping https://example.org'); await cmd('sudo test');
-    assert.match(await ausgabe.textContent(), /pgcl-eu3\.arch07\//);
+    assert.match(await ausgabe.textContent(), /pgcl-eu3\.arch07/);
     assert.match(await ausgabe.textContent(), /\nraizo\n/);
     assert.match(await ausgabe.textContent(), /Name or service not known/);
     assert.match(await ausgabe.textContent(), /command not found/);

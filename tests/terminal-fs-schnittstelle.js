@@ -86,7 +86,8 @@ const { APP } = require('./_pfad');
     assert.deepEqual(await r('stat', ['etc', 'ppp', 'peers', 'kestrel']), { adapter: 'virtuell', typ: 'file' });
     assert.deepEqual(await r('stat', ['nichts']), { fehler: 'ENOENT' });
     assert.deepEqual(await r('stat', [db, 'ops']), { adapter: 'archiv', typ: null }, 'ohne Prüfung bleibt die Art im Archiv unbekannt');
-    assert.deepEqual(await r('stat', [db, 'ops'], { pruefen: true }), { adapter: 'archiv', typ: 'dir' });
+    const stOps = await r('stat', [db, 'ops'], { pruefen: true });
+    assert.deepEqual({ adapter: stOps.adapter, typ: stOps.typ, name: stOps.eintrag && stOps.eintrag.name, dir: stOps.eintrag && stOps.eintrag.dir }, { adapter: 'archiv', typ: 'dir', name: 'ops', dir: true }, 'stat mit Prüfung liefert zusätzlich den Eintrag der Quelle (6a-3, für ls -l)');
     /* readdir */
     const wurzel = await r('readdir', []);
     assert.deepEqual(wurzel.eintraege.map(x => x.name), ['etc', 'var', db]);
@@ -156,7 +157,7 @@ const { APP } = require('./_pfad');
         cdPunkt: await terminalBefehlCd(ctx('..')), global: terminalArbeitsverzeichnis() };
     });
     assert.deepEqual(direkt.ls.stdout, ['kestrel'], 'ls löst relativ zum Kontext-cwd auf');
-    assert.deepEqual(direkt.lsLeer.stdout, ['peers/'], 'ls ohne Operand listet das Kontext-cwd');
+    assert.deepEqual(direkt.lsLeer.stdout, ['peers'], 'ls ohne Operand listet das Kontext-cwd (ohne Schrägstrich, nur -F markiert Verzeichnisse)');
     assert.deepEqual(direkt.cd.cwd, { ort: null, virtuellerOrt: ['etc', 'ppp', 'peers'] }, 'cd relativ zum Kontext-cwd');
     assert.deepEqual(direkt.cdPunkt.cwd, { ort: null, virtuellerOrt: ['etc'] });
     assert.equal(direkt.global, '/', 'globaler Zustand unverändert (cd liefert nur ein Ergebnis)');
