@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""Erzeugt terminal-locale.js (Kollation en_US.UTF-8) aus der glibc-Quelle iso14651_t1_common.
+"""Erzeugt die Kollationstabelle (en_US.UTF-8) in terminal-locale.js aus der glibc-Quelle iso14651_t1_common.
 
-Aufruf:  python3 tools/gen-locale-en_US.py [Quelle] > terminal-locale.js
+Aufruf:  python3 tools/gen-locale-en_US.py [--schreiben] [Quelle]
+  ohne --schreiben: der generierte Abschnitt (zwischen den Marken GENERIERT-BEGINN und GENERIERT-ENDE) geht nach stdout;
+  mit --schreiben: derselbe Abschnitt ersetzt den Abschnitt in terminal-locale.js; der handgeschriebene Vergleichscode bleibt unberührt.
+Der Abschnitt nennt die SHA-256-Summe der Quelle; tests/terminal-locale.js erzeugt ihn neu und vergleicht (wenn die Quelle vorhanden ist).
 Referenz: Ubuntu 24.04, glibc 2.39, /usr/share/i18n/locales/iso14651_t1_common.
 Repertoire: U+0020..U+007E, U+00A0..U+017F (ASCII, Latin-1, Latin Extended-A).
 Die Rangwerte werden dicht neu nummeriert; die Ordnung bleibt erhalten.
 """
-import re, sys, json
-quelle = sys.argv[1] if len(sys.argv) > 1 else '/usr/share/i18n/locales/iso14651_t1_common'
+import re, sys, json, hashlib, os
+args = [a for a in sys.argv[1:] if a != '--schreiben']
+schreiben = '--schreiben' in sys.argv[1:]
+quelle = args[0] if args else '/usr/share/i18n/locales/iso14651_t1_common'
+sha = hashlib.sha256(open(quelle, 'rb').read()).hexdigest()
 src = open(quelle, encoding='utf-8').read().split('\n')
 rang = {}; zeichen = {}
 for i, l in enumerate(src):
@@ -26,9 +32,16 @@ tab = {}
 for c in rep:
     w = zeichen[c]
     tab[c] = [[dicht[rang[s]] for s in w[k]] for k in range(3)] + [l4[w[3]]]
-out = []
-out.append('/* GENERIERT von tools/gen-locale-en_US.py, nicht von Hand ändern.\n'
-           '   Kollation en_US.UTF-8 (glibc 2.39, iso14651_t1_common, Ubuntu 24.04), Repertoire U+0020-007E und U+00A0-017F.\n'
-           '   Je Zeichen: [Gewichte Ebene 1, Ebene 2, Ebene 3, Rang Ebene 4]; leere Liste = IGNORE. */')
-out.append('const TERMINAL_LOCALE_TABELLE = ' + json.dumps({str(c): tab[c] for c in rep}, separators=(',', ':')) + ';')
-print('\n'.join(out))
+abschnitt = ('/* GENERIERT-BEGINN: von tools/gen-locale-en_US.py erzeugt, nicht von Hand ändern.\n'
+             '   Kollation en_US.UTF-8 (glibc 2.39, Ubuntu 24.04), Quelle iso14651_t1_common, SHA-256 ' + sha + ',\n'
+             '   Repertoire U+0020-007E und U+00A0-017F. Je Zeichen: [Gewichte Ebene 1, 2, 3, Rang Ebene 4]; leere Liste = IGNORE. */\n'
+             'const TERMINAL_LOCALE_TABELLE = ' + json.dumps({str(c): tab[c] for c in rep}, separators=(',', ':')) + ';\n'
+             '/* GENERIERT-ENDE */')
+if schreiben:
+    ziel = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'terminal-locale.js')
+    t = open(ziel, encoding='utf-8').read()
+    m = re.search(r'/\* GENERIERT-BEGINN.*?/\* GENERIERT-ENDE \*/', t, re.S)
+    if not m: sys.exit('Marken nicht gefunden')
+    open(ziel, 'w', encoding='utf-8').write(t[:m.start()] + abschnitt + t[m.end():])
+else:
+    print(abschnitt)

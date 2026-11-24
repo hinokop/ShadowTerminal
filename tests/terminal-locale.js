@@ -30,5 +30,19 @@ pruefe('Gleichheit', L.vergleich('x', 'x') === 0);
 /* Zeichen ausserhalb des Repertoires: hinter dem Repertoire, nach Codepunkt, deterministisch */
 pruefe('Fallback hinter Repertoire', f('z', '中') === -1 && f('中', '丮') === -1 && f('ÿ', '中') === -1);
 pruefe('Fallback Surrogatpaar', f('\u{1F600}', '\u{1F601}') === -1 && f('a', '\u{1F600}') === -1);
+/* Reproduzierbarkeit: der Generator erzeugt den Tabellenabschnitt aus der glibc-Quelle neu; er muss mit der eingecheckten Datei übereinstimmen.
+   Fehlt die Quelle (/usr/share/i18n/locales/iso14651_t1_common, Paket locales) oder python3, wird das offen gemeldet und nicht als bestanden gezählt. */
+const quelle = '/usr/share/i18n/locales/iso14651_t1_common';
+const text = fs.readFileSync(path.join(wurzel, 'terminal-locale.js'), 'utf8'), abschnitt = /\/\* GENERIERT-BEGINN.*?\/\* GENERIERT-ENDE \*\//s.exec(text);
+pruefe('Marken im Quelltext', !!abschnitt);
+if (abschnitt && fs.existsSync(quelle)) {
+  const r = require('child_process').spawnSync('python3', [path.join(wurzel, 'tools', 'gen-locale-en_US.py'), quelle], { encoding: 'utf8' });
+  if (r.error || r.status !== 0) pruefe('Generator läuft', false, String(r.error || r.stderr));
+  else {
+    const gleich = r.stdout.replace(/\n$/, '') === abschnitt[0];
+    pruefe('Regenerierung ergibt die eingecheckte Tabelle', gleich, gleich ? '' : 'Quelle oder Generator weichen ab (Quelle ' + quelle + ')');
+    if (gleich) console.log('Regenerierung aus ' + quelle + ': identisch');
+  }
+} else console.log('HINWEIS: Regenerierung nicht geprüft (Quelle ' + quelle + ' fehlt)');
 console.log(fail ? 'Fehlschläge: ' + fail : 'terminal-locale: alle Prüfungen bestanden');
 process.exit(fail ? 1 : 0);

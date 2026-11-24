@@ -174,7 +174,7 @@ const FAELLE = [
     assert.equal(await aus('ls -ld dossiers'), 'dr-x         0  01.01.1970 00:00:01Z  dossiers');
     assert.equal((await aus('ls -lF .')).split('\n').filter(x => x.endsWith('dossiers/') || x.endsWith('leer/')).length, 2, '-F kennzeichnet Verzeichnisse auch im Langformat');
     assert.equal(await aus('ls -1 -l dossiers'), await aus('ls -l dossiers'), '-l nach -1 gilt');
-    assert.equal(await aus('ls -l -1 dossiers'), 'eins.txt', '-1 nach -l gilt');
+    assert.equal(await aus('ls -l -1 dossiers'), await aus('ls -l dossiers'), '-1 hebt -l nicht auf (ls 9.4 gemessen: -l -1 bleibt Langformat, ebenso -1 -l)');
     assert.equal(await aus('ls dossiers -l'), await aus('ls -l dossiers'), 'Optionen auch hinter Operanden');
     /* Operand in der virtuellen Ebene, absolute Pfade, Wurzel */
     assert.equal(await aus('ls /etc /var'), '/etc:\nchatscripts\nppp\n\n/var:\ncache\nlog');
