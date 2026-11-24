@@ -288,6 +288,11 @@ function terminalArchivZiele(op, parts, antwort) {
   if (!['cat', 'head', 'tail', 'wget', 'send'].includes(op) || !Array.isArray(parts) || !parts.length) return [];
   return [parts[parts.length - 1], antwort && antwort.file].map(terminalArchivNameZiel).filter(Boolean);
 }
+/* Sichtbarkeit eines Namens im Archiv: nur anwendungsseitig gesperrte Export-Objekte (Pin, Zone, Sichtung) sind verborgen;
+   gewöhnliche Dateien unterliegen keiner Anwendungsregel (normales Unix-Verhalten). */
+function terminalArchivNameSichtbar(name) {
+  return !terminalArchivZielGesperrt(terminalArchivNameZiel(name));
+}
 function terminalArchivZielGesperrt(z) {
   if (!z) return false;
   if (z.art === 'sichtung') return (PROFIL.gesperrt || []).includes(z.dossier);
@@ -295,7 +300,13 @@ function terminalArchivZielGesperrt(z) {
   return !!objekt && objekt.gesperrt;
 }
 async function terminalBruecke(op, parts, hidden, exportDaten) {
-  if (op === 'ls' && Array.isArray(parts)) return terminalBrueckeLsAlle(parts, hidden);
+  if (op === 'ls' && Array.isArray(parts)) {
+    /* Variante B (Plan 9.3): Namen gesperrter Archivobjekte erscheinen in keiner Listung; alle Verbraucher (ls, Tab, strenge
+       cd-Prüfung) laufen über diesen Zweig. Die Prüfung erfolgt nach dem Abruf, damit eine währenddessen gesetzte Sperre gilt. */
+    const liste = await terminalBrueckeLsAlle(parts, hidden);
+    if (liste.error || !Array.isArray(liste.entries)) return liste;
+    return Object.assign({}, liste, { entries: liste.entries.filter(function (e) { return terminalArchivNameSichtbar(e && e.name); }) });
+  }
   /* Vor UND nach dem asynchronen Lesezugriff prüfen: die Sperre könnte
      während einer laufenden Anfrage aktiviert worden sein. */
   if (terminalArchivZiele(op, parts).some(terminalArchivZielGesperrt)) return { error: 'Permission denied' };
@@ -498,9 +509,9 @@ async function terminalDateiBefehl(befehl, arg, version) {
    Bewusst noch NICHT auf dieser Schnittstelle: cat, head, tail, wget (terminalDateiBefehl) und die Tab-Ergänzung. */
 const TERMINAL_WURZEL_LISTE = ['etc/', 'var/', TERMINAL_DB + '/'];
 const TERMINAL_FS = {
-  /* Sichtbarkeitsregel gesperrter Archivobjekte: zentraler Haken. Ist-Stand (tests/terminal-fs-ist.js): Namen bleiben sichtbar.
-     Variante B (Name ebenfalls geschützt) wird hier umgesetzt, nicht in den Befehlen. */
-  sichtbar: function (seg) { return true; },
+  /* Sichtbarkeitsregel gesperrter Archivobjekte (Variante B, Plan 9.3): der Name ist ebenfalls geschützt. Die Regel gilt zentral in
+     terminalBruecke('ls') und hier als zweite Schranke (readdir); Befehle prüfen nicht selbst. */
+  sichtbar: function (seg) { return seg[0] !== TERMINAL_DB || terminalArchivNameSichtbar(seg[seg.length - 1]); },
   /* Zeichenkette -> Segmentliste ab der Wurzel; null bei unzulässigen Zeichen. Mit opt.cwd (Zeichenkette, z. B. '/etc/ppp') relativ zu
      diesem Arbeitsverzeichnis, ohne den globalen Terminalzustand zu lesen; ohne opt.cwd relativ zum Zustand der einen Shell (Altverhalten). */
   resolve: async function (arg, opt) {
