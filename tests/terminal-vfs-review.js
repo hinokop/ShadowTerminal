@@ -73,6 +73,77 @@ function shell(p) {
     assert.equal(await s.lauf('rm ordner/../zwei/../wichtig.txt'), '', 'zwei ist ein Verzeichnis: gültiger Weg');
     assert.equal(await s.lauf('cat wichtig.txt'), 'cat: wichtig.txt: No such file or directory');
 
+    /* ---- A2: abschließendes "/" und "/." (Review 2) ---- */
+    await s.lauf('echo wichtig > wichtig.txt');
+    const fehl2 = {
+      'rm wichtig.txt/': "rm: cannot remove 'wichtig.txt/': Not a directory",
+      'rm wichtig.txt/.': "rm: refusing to remove '.' or '..' directory: skipping 'wichtig.txt/.'",
+      'rmdir wichtig.txt/': "rmdir: failed to remove 'wichtig.txt/': Not a directory",
+      'echo X > wichtig.txt/': 'bash: wichtig.txt/: Not a directory',
+      'echo X >> wichtig.txt/.': 'bash: wichtig.txt/.: Not a directory',
+      'touch wichtig.txt/': "touch: cannot touch 'wichtig.txt/': Not a directory",
+      'mv wichtig.txt/ x.txt': "mv: cannot stat 'wichtig.txt/': Not a directory",
+      'mv neu wichtig.txt/': "mv: cannot move 'neu' to 'wichtig.txt/': Not a directory",
+      'cp wichtig.txt/ x.txt': "cp: cannot stat 'wichtig.txt/': Not a directory",
+      'cp neu.txt wichtig.txt/': "cp: cannot create regular file 'wichtig.txt/': Not a directory",
+      'nano wichtig.txt/': 'nano: wichtig.txt/: Not a directory',
+      'cat wichtig.txt/': 'cat: wichtig.txt/: Not a directory'
+    };
+    await s.lauf('echo n > neu.txt');
+    for (const [z, text] of Object.entries(fehl2)) { assert.equal(await s.lauf(z), text, z); await intakt(z); }
+    /* fehlendes Ziel mit "/": keine Datei entsteht */
+    assert.equal(await s.lauf('echo X > fehlt/'), 'bash: fehlt/: Is a directory');
+    assert.equal(await s.lauf('touch fehlt/'), "touch: cannot touch 'fehlt/': Is a directory");
+    assert.equal(await s.lauf('cp neu.txt fehlt/'), "cp: cannot create regular file 'fehlt/': Not a directory");
+    assert.equal(await s.lauf('mv neu.txt fehlt/'), "mv: cannot move 'neu.txt' to 'fehlt/': Not a directory");
+    assert.equal(await s.lauf('ls -1 fehlt'), "ls: cannot access 'fehlt': No such file or directory");
+    /* "." und ".." am Ende entfernen nichts (rmdir/rename: EINVAL) */
+    await s.lauf('mkdir -p leer/sub');
+    assert.equal(await s.lauf('rmdir leer/sub/.'), "rmdir: failed to remove 'leer/sub/.': Invalid argument");
+    assert.equal(await s.lauf('rmdir leer/sub/..'), "rmdir: failed to remove 'leer/sub/..': Invalid argument");
+    assert.equal(await s.lauf('mv leer/. weg'), "mv: cannot stat 'leer/.': Invalid argument");
+    assert.equal(await s.lauf('ls -1 leer'), 'sub');
+    /* gültige Verzeichnisformen bleiben gültig */
+    assert.equal(await s.lauf('mkdir neuer/'), '');
+    assert.equal(await s.lauf('cp neu.txt neuer/; mv neuer/neu.txt neuer/./x.txt; ls -1 neuer/'), 'x.txt');
+    assert.equal(await s.lauf('rmdir leer/sub/; rm -r neuer/ leer/; ls -1 -d leer neuer'), "ls: cannot access 'leer': No such file or directory\nls: cannot access 'neuer': No such file or directory");
+
+    /* ---- A3: Wettlauf zwischen Pfadprüfung und Änderung (zweites Fenster) ---- */
+    const wettlauf = async (z, op, vorbereitung, erwartet) => {
+      await s.lauf(vorbereitung);
+      await p.evaluate(([op]) => {
+        const orig = TERMINAL_VFS[op];
+        TERMINAL_VFS[op] = async function () {
+          TERMINAL_VFS[op] = orig;
+          /* das Zwischenverzeichnis verschwindet nach der Prüfung, vor der Änderung (eigene Transaktion, wie ein anderes Fenster) */
+          await TERMINAL_VFS.entfernen(['home', 'raizo', 'zw'], { rekursiv: true });
+          return orig.apply(this, arguments);
+        };
+      }, [op]);
+      assert.equal(await s.lauf(z), erwartet, z);
+      await intakt(z);
+    };
+    await wettlauf('rm zw/../wichtig.txt', 'entfernen', 'mkdir zw', "rm: cannot remove 'zw/../wichtig.txt': Device or resource busy");
+    await wettlauf('echo X > zw/../wichtig.txt', 'schreiben', 'mkdir zw', 'bash: zw/../wichtig.txt: Device or resource busy');
+    await wettlauf('mv neu.txt zw/../wichtig.txt', 'umbenennen', 'mkdir zw', "mv: cannot move 'neu.txt' to 'zw/../wichtig.txt': Device or resource busy");
+    await wettlauf('cp neu.txt zw/../wichtig.txt', 'kopieren', 'mkdir zw', "cp: cannot create regular file 'zw/../wichtig.txt': Device or resource busy");
+    /* ohne Wettlauf funktioniert derselbe Weg, auch über mehrere Schritte (Bindung folgt den eigenen Änderungen) */
+    await s.lauf('mkdir zw');
+    assert.equal(await s.lauf('echo eins > zw/../mehr.txt; echo zwei >> zw/../mehr.txt; cat mehr.txt'), 'eins\nzwei');
+    assert.equal(await s.lauf('mkdir ziel; cp neu.txt mehr.txt zw/../ziel; ls -1 ziel'), 'mehr.txt\nneu.txt');
+    await s.lauf('rm -r zw ziel mehr.txt');
+
+    /* ---- A4: Tiefe des ganzen Teilbaums bei mv und cp (Review 2, Blocker 1) ---- */
+    const tief = Array.from({ length: 37 }, () => 't').join('/');   /* /home/raizo/t/.../t: 39 Segmente */
+    assert.equal(await s.lauf('mkdir -p ' + tief + ' a/b'), '');
+    assert.equal(await s.lauf('mv a ' + tief), "mv: cannot move 'a' to '" + tief + "/a': File name too long");
+    assert.equal(await s.lauf('cp -r a ' + tief), "cp: cannot create directory '" + tief + "/a': File name too long");
+    assert.equal(await s.lauf('ls -1 a; ls -1 ' + tief), 'b', 'Quell- und Zielbaum unverändert');
+    assert.equal(await s.lauf('rmdir a/b; mv a ' + tief + '; ls -1 ' + tief), 'a', 'Grenztiefe 40 ohne Nachkommen gilt');
+    const rund = await p.evaluate(async () => { const pk = await terminalHomePaket(); const gp = await terminalHomePruefen(pk.text); return gp.fehler || 'ok'; });
+    assert.equal(rund, 'ok', 'jeder erzeugbare Baum besteht die Prüfung der Wiederherstellung');
+    await s.lauf('rm -r t');
+
     /* ---- B: Archivschutz ---- */
     await p.evaluate(() => {
       window.__brueckeAufrufe = [];

@@ -4,7 +4,8 @@
    E: Selbstprüfung: kein stilles Reparieren bei Datei als lost+found, Zähler aus dem Endbestand.
    F: echte Abmeldung sichert vor dem Trennen (frische Änderung vor der Ruhezeit), mit und ohne Brücke; /tmp der letzten Sitzung endet leer.
    G: Editor: Weitertippen während des Schreibens geht nicht verloren; Abmeldung beendet den Editor sichtbar ohne Schreiben.
-   H: Größenvertrag: Randwert (16 MiB Steuerzeichen) wird gesichert; über dem Limit wird sichtbar abgelehnt. home-import als Rückweg ohne Brücke. */
+   F2: laufende automatische Sicherung wird vor dem Trennen abgeschlossen (mit und ohne Änderung währenddessen); Fehler im Abmeldebildschirm.
+   H: Größenvertrag: kombinierter Randwert (16 MiB Steuerzeichen-Inhalt, übrige Knoten mit 255-Byte-Namen) wird im Format 2 gesichert; über dem Limit wird sichtbar abgelehnt. home-import als Rückweg ohne Brücke. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -198,19 +199,39 @@ const ende = async (q) => { await q.evaluate(() => { window.close = function () 
 
     /* ---- H: Größenvertrag und Rückweg ohne Brücke ---- */
     await t.lauf('rm -r daten'); await t.lauf('rm anderes-fenster.txt mitten-drin.txt edit.txt');
-    await q.evaluate(async () => {
-      for (let i = 0; i < 16; i++) { const r = await TERMINAL_VFS.schreiben(['home', 'raizo', 'rand' + i], '\u0001'.repeat(1048576), {}); if (r.fehler) throw new Error(r.fehler + ' bei ' + i); }
+    /* kombinierter Randwert: 16 MiB Steuerzeichen-Inhalt UND alle übrigen Knoten als Verzeichnisse mit 255-Byte-Namen aus Steuerzeichen */
+    const randAnzahl = await q.evaluate(async () => {
+      const tmpN = (await TERMINAL_VFS.readdir(['tmp'])).eintraege.length, e = [];
+      for (let i = 0; i < 16; i++) e.push({ pfad: 'rand' + i, typ: 'file', modus: 420, erstellt: 1, geaendert: 1, inhalt: '\u0001'.repeat(1048576) });
+      for (let i = 0; e.length < TERMINAL_VFS.GRENZE.knoten - tmpN; i++) e.push({ pfad: '\u0001'.repeat(250) + String(i).padStart(5, '0'), typ: 'dir', modus: 493, erstellt: 1, geaendert: 1 });
+      const r = await TERMINAL_VFS.importieren(e);
+      if (r.fehler) throw new Error(r.fehler);
+      return e.length;
     });
+    assert.ok(randAnzahl >= 4990, 'Knotenzahl am Limit: ' + randAnzahl);
     const rand = await t.lauf('home-backup');
-    assert.match(rand, /^home-backup: home-\d{8}T\d{6}Z(-\d)?\.json \(\d+ entries, \d+ B\)$/, 'Worst Case (16 MiB Steuerzeichen) wird gesichert: ' + rand);
+    assert.match(rand, /^home-backup: home-\d{8}T\d{6}Z(-\d)?\.json \(\d+ entries, \d+ B\)$/, 'Worst Case (Inhalt und Namen) wird gesichert: ' + rand);
     const groesse = Number(/(\d+) B\)$/.exec(rand)[1]);
-    assert.ok(groesse > 90 * 1048576 && groesse <= 112 * 1048576, 'Sicherungsgröße ' + groesse);
+    assert.ok(groesse > 96 * 1048576 && groesse <= 112 * 1048576, 'Sicherungsgröße ' + groesse);
     const randName = /home-\S+\.json/.exec(rand)[0];
-    await t.lauf('rm rand0 rand1 rand2 rand3 rand4 rand5 rand6 rand7 rand8 rand9 rand10 rand11 rand12 rand13 rand14 rand15');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(sicher, randName), 'utf8')).version, 2, 'kompaktes Format 2');
+    await q.evaluate(async () => { const r = await TERMINAL_VFS.importieren([]); if (r.fehler) throw new Error(r.fehler); });
     await new Promise(r => setTimeout(r, 1100));
-    assert.match(await t.lauf('home-restore --yes ' + randName), /^home-restore: 16 entries restored from /, 'Wiederherstellung des Randwerts');
+    assert.match(await t.lauf('home-restore --yes ' + randName), new RegExp('^home-restore: ' + randAnzahl + ' entries restored from '), 'Wiederherstellung des Randwerts');
     assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readFile(['home', 'raizo', 'rand15'])).text.length), 1048576);
-    await t.lauf('rm rand0 rand1 rand2 rand3 rand4 rand5 rand6 rand7 rand8 rand9 rand10 rand11 rand12 rand13 rand14 rand15');
+    assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readdir(['home', 'raizo'])).eintraege.length), randAnzahl);
+    await q.evaluate(async () => { const r = await TERMINAL_VFS.importieren([]); if (r.fehler) throw new Error(r.fehler); });
+    /* Format 2: Elternindex auf späteren Eintrag oder auf eine Datei wird abgelehnt */
+    const v2 = async (eintraege) => q.evaluate(async (e) => {
+      const k = JSON.stringify(e), b = e.reduce((s, z) => s + (z.typ === 'file' ? new TextEncoder().encode(z.inhalt).length : 0), 0);
+      return (await terminalHomePruefen(JSON.stringify({ format: TERMINAL_HOME_FORMAT, version: 2, manifest: { eintraege: e.length, bytes: b, sha256: await terminalHomeHash(k) }, eintraege: e }))).fehler || 'ok';
+    }, eintraege);
+    const d2 = (eltern, name, typ, inhalt) => Object.assign({ eltern, name, typ, modus: typ === 'dir' ? 493 : 420, erstellt: 1, geaendert: 1 }, typ === 'file' ? { inhalt } : {});
+    assert.equal(await v2([d2(-1, 'a', 'dir'), d2(0, 'b', 'file', 'x')]), 'ok');
+    assert.equal(await v2([d2(1, 'a', 'dir'), d2(-1, 'b', 'dir')]), 'not a valid backup (path)');
+    assert.equal(await v2([d2(-1, 'a', 'file', 'x'), d2(0, 'b', 'file', 'y')]), 'not a valid backup (path)');
+    assert.equal(await v2([d2(-1, 'a/b', 'dir')]), 'not a valid backup (path)');
+    assert.equal(await v2([d2(-1, '..', 'dir')]), 'not a valid backup (path)');
     await t.lauf('echo klein > klein.txt');
     await q.evaluate(() => { TERMINAL_HOME_ANFRAGE_MAX = 200; });
     const vorAnzahl = fs.readdirSync(sicher).length;
@@ -245,11 +266,82 @@ const ende = async (q) => { await q.evaluate(() => { window.close = function () 
     await ende(q4);
     const nachDatei = fs.readdirSync(sicher).filter(x => /^home-2/.test(x) && !x.startsWith('home-2099'));
     assert.equal(nachDatei.length >= Math.min(10, vorDatei + 1), true, 'letzte Sicherung beim Abmelden');
-    const neuesteHome = nachDatei.sort().at(-1);
+    const neuesteHome = nachDatei.sort((a, b) => fs.statSync(path.join(sicher, a)).mtimeMs - fs.statSync(path.join(sicher, b)).mtimeMs).at(-1);
     assert.ok(/letzte-aenderung\.txt/.test(fs.readFileSync(path.join(sicher, neuesteHome), 'utf8')), 'frische Änderung vor der Ruhezeit ist gesichert');
     assert.equal(await q4.evaluate(async () => (await TERMINAL_VFS.readdir(['tmp'])).eintraege.length), 0, '/tmp der letzten Sitzung geleert');
     assert.deepEqual(q4.fehler, []);
     await q4.context().close();
+
+    /* ---- F2: laufende automatische Sicherung bei sofortiger Abmeldung; Fehler im Abmeldebildschirm ---- */
+    /* eigene Brücke: die Abmeldung in F hat die Sitzung der ersten Brücke beendet (disconnect) */
+    const sicher6 = tmp('ft-home6-'), b6 = await bruecke(sicher6);
+    const ctx6 = await chromium.launchPersistentContext(tmp('ft-vfs6-'), { reducedMotion: 'reduce' });
+    const q6 = await seite(ctx6, b6.fragment), v = shell(q6);
+    await q6.evaluate(() => {
+      window.__ops = [];
+      const orig = terminalBrueckeSenden;
+      terminalBrueckeSenden = async function (d) {
+        window.__ops.push('start:' + d.op);
+        if (d.op === 'home-save') await new Promise(r => setTimeout(r, 1500));   /* langsame Brücke */
+        const r = await orig.apply(this, arguments);
+        window.__ops.push('ende:' + d.op + (r && r.error ? '!' + r.error : r && r.name ? '=' + r.name : ''));
+        return r;
+      };
+      terminalHomeRuhe = 100;
+    });
+    await v.lauf('echo "vor der Sicherung" > a.txt');
+    await q6.waitForFunction(() => window.__ops.includes('start:home-save'));
+    await v.lauf('echo "waehrend der Sicherung" > b.txt');   /* Änderung, während die automatische Sicherung läuft */
+    await q6.evaluate(() => { clearTimeout(terminalHomeTimer); });
+    await ende(q6);
+    const ops = await q6.evaluate(() => window.__ops);
+    const iDisc = ops.indexOf('start:disconnect'), saves = ops.map((o, i) => [o, i]).filter(x => x[0].startsWith('ende:home-save=')).map(x => x[1]);
+    assert.ok(iDisc > 0 && saves.length >= 2 && saves.every(i => i < iDisc), 'disconnect erst nach allen Sicherungen: ' + ops.join(','));
+    const neueste6 = fs.readdirSync(sicher6).filter(x => /^home-2/.test(x)).sort((a, b) => fs.statSync(path.join(sicher6, a)).mtimeMs - fs.statSync(path.join(sicher6, b)).mtimeMs).at(-1);
+    const inhalt6 = fs.readFileSync(path.join(sicher6, neueste6), 'utf8');
+    assert.ok(/waehrend der Sicherung/.test(inhalt6) && /vor der Sicherung/.test(inhalt6), 'jüngster Stand gesichert: ' + ops.join(',') + ' | ' + fs.readdirSync(sicher6).join(' '));
+    assert.equal(await q6.locator('#gate-end-fehler').count(), 0, 'kein Fehler angezeigt');
+    assert.deepEqual(q6.fehler, []);
+    await ctx6.close(); b6.py.kill();
+    /* Variante ohne weitere Änderung: die laufende automatische Sicherung allein muss vor dem Trennen abgeschlossen sein */
+    const sicher8 = tmp('ft-home8-'), b8 = await bruecke(sicher8);
+    const ctx8 = await chromium.launchPersistentContext(tmp('ft-vfs8-'), { reducedMotion: 'reduce' });
+    const q8 = await seite(ctx8, b8.fragment), v8 = shell(q8);
+    await q8.evaluate(() => {
+      window.__ops = [];
+      const orig = terminalBrueckeSenden;
+      terminalBrueckeSenden = async function (d) {
+        window.__ops.push('start:' + d.op);
+        if (d.op === 'home-save') await new Promise(r => setTimeout(r, 1500));
+        const r = await orig.apply(this, arguments);
+        window.__ops.push('ende:' + d.op + (r && r.error ? '!' + r.error : ''));
+        return r;
+      };
+      terminalHomeRuhe = 100;
+    });
+    await v8.lauf('echo "nur eine" > a.txt');
+    await q8.waitForFunction(() => window.__ops.includes('start:home-save'));
+    await ende(q8);
+    const ops8 = await q8.evaluate(() => window.__ops);
+    assert.ok(ops8.indexOf('ende:home-save') >= 0 && ops8.indexOf('ende:home-save') < ops8.indexOf('start:disconnect'), 'laufende Sicherung vor dem Trennen beendet: ' + ops8.join(','));
+    assert.ok(fs.readdirSync(sicher8).some(x => /nur eine/.test(fs.readFileSync(path.join(sicher8, x), 'utf8'))), 'Sicherung abgelegt');
+    await ctx8.close(); b8.py.kill();
+    /* Fehlerfall: Sicherung scheitert -> Meldung im Abmeldebildschirm, Fenster wird nicht geschlossen */
+    const ctx7 = await chromium.launchPersistentContext(tmp('ft-vfs7-'), { reducedMotion: 'reduce' });
+    const q7 = await seite(ctx7, fragment), w7 = shell(q7);
+    await q7.evaluate(() => {
+      terminalHomeRuhe = 600000;
+      const orig = terminalBrueckeSenden;
+      terminalBrueckeSenden = async function (d) { if (d.op === 'home-save') return { error: 'Sicherung zu groß' }; return orig.apply(this, arguments); };
+    });
+    await w7.lauf('echo x > c.txt');
+    await q7.evaluate(() => { window.__close = 0; });
+    await q7.evaluate(() => { window.close = function () { window.__close++; }; Zugang.beenden(); });
+    await q7.locator('#gate-end-fertig').waitFor({ state: 'visible' });
+    assert.match(await q7.locator('#gate-end-fehler').textContent(), /^Abschluss des Terminal-Heimverzeichnisses fehlgeschlagen \(last backup failed: Sicherung zu groß\)\. Die letzten Änderungen liegen nur im Browser\.$/);
+    assert.equal(await q7.evaluate(() => window.__close), 0, 'Fenster bleibt offen, Meldung sichtbar');
+    assert.deepEqual(q7.fehler, []);
+    await ctx7.close();
     assert.deepEqual(q.fehler, []);
     console.log('OK: terminal-vfs-sicherung (Restore-Validierung, Restore-Gate, Selbstprüfung, Abmeldung, Editor, Größenvertrag, home-import)');
   } finally { await ctx.close().catch(() => {}); py.kill(); }
