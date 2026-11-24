@@ -27,8 +27,11 @@ const { APP } = require('./_pfad');
       if (d.op === 'cd') return route.fulfill({ json: { ok: true } });
       if (d.op === 'ls') {
         const ordner = d.parts.join('/').toLowerCase();
-        const alle = [...dateien.keys()].filter(x => x.toLowerCase().startsWith(ordner + '/') && !x.slice(ordner.length + 1).includes('/'))
-          .map(x => ({ name: x.slice(ordner.length + 1), dir: false, bytes: dateien.get(x).length, mtime: 1 }))
+        /* Verzeichnisse ergeben sich aus den Pfaden (die Brücke führt sie als dir: true); nötig, weil cd Namen streng im Elternverzeichnis prüft */
+        const pre = ordner ? ordner + '/' : '', rest = [...dateien.keys()].filter(x => x.toLowerCase().startsWith(pre));
+        const verz = [...new Set(rest.filter(x => x.slice(pre.length).includes('/')).map(x => x.slice(pre.length).split('/')[0]))].map(n => ({ name: n, dir: true, bytes: 0, mtime: 1 }));
+        const alle = rest.filter(x => !x.slice(pre.length).includes('/'))
+          .map(x => ({ name: x.slice(pre.length), dir: false, bytes: dateien.get(x).length, mtime: 1 })).concat(verz)
           .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.name.localeCompare(b.name));
         const offset = d.offset || 0, limit = d.limit || 500;
         return route.fulfill({ json: { entries: alle.slice(offset, offset + limit), next: offset + limit < alle.length ? offset + limit : null } });

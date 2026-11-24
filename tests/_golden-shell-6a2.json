@@ -241,45 +241,45 @@
  },
  {
   "befehl": "cd -",
-  "ausgabe": "cd: -: No such file or directory",
-  "status": "1",
-  "promptDanach": "raizo@terminal:/etc/ppp$"
+  "ausgabe": "/",
+  "status": "0",
+  "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "pwd",
-  "ausgabe": "/etc/ppp",
+  "ausgabe": "/",
   "status": "0",
-  "promptDanach": "raizo@terminal:/etc/ppp$"
+  "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "cd .",
   "ausgabe": "",
   "status": "0",
-  "promptDanach": "raizo@terminal:/etc/ppp$"
+  "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "cd /nonexistent",
-  "ausgabe": "cd: /nonexistent: No such file or directory",
+  "ausgabe": "bash: cd: /nonexistent: No such file or directory",
   "status": "1",
-  "promptDanach": "raizo@terminal:/etc/ppp$"
+  "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "cd /etc/ppp/peers/kestrel",
-  "ausgabe": "cd: /etc/ppp/peers/kestrel: Not a directory",
+  "ausgabe": "bash: cd: /etc/ppp/peers/kestrel: Not a directory",
   "status": "1",
-  "promptDanach": "raizo@terminal:/etc/ppp$"
+  "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "cd /etc /var",
-  "ausgabe": "cd: /etc /var: No such file or directory",
+  "ausgabe": "bash: cd: too many arguments",
   "status": "1",
-  "promptDanach": "raizo@terminal:/etc/ppp$"
+  "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "cd -x",
-  "ausgabe": "cd: -x: No such file or directory",
-  "status": "1",
-  "promptDanach": "raizo@terminal:/etc/ppp$"
+  "ausgabe": "bash: cd: -x: invalid option\ncd: usage: cd [-L|[-P [-e]] [-@]] [dir]",
+  "status": "2",
+  "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "cd \"\"",
@@ -313,13 +313,13 @@
  },
  {
   "befehl": "cd $HOME",
-  "ausgabe": "cd: $HOME: No such file or directory",
+  "ausgabe": "bash: cd: $HOME: No such file or directory",
   "status": "1",
   "promptDanach": "raizo@terminal:/etc$"
  },
  {
   "befehl": "cd /var/log/syslog",
-  "ausgabe": "cd: /var/log/syslog: Not a directory",
+  "ausgabe": "bash: cd: /var/log/syslog: Not a directory",
   "status": "1",
   "promptDanach": "raizo@terminal:/etc$"
  },
@@ -373,13 +373,13 @@
  },
  {
   "befehl": "cd eins.txt",
-  "ausgabe": "cd: eins.txt: No such file or directory",
+  "ausgabe": "bash: cd: eins.txt: Not a directory",
   "status": "1",
   "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
  },
  {
   "befehl": "cd nichts",
-  "ausgabe": "cd: nichts: No such file or directory",
+  "ausgabe": "bash: cd: nichts: No such file or directory",
   "status": "1",
   "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
  },
@@ -403,7 +403,7 @@
  },
  {
   "befehl": "cd ../ops",
-  "ausgabe": "cd: ../ops: No such file or directory",
+  "ausgabe": "bash: cd: ../ops: No such file or directory",
   "status": "1",
   "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
  },
