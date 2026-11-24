@@ -609,6 +609,7 @@ body:not(.locked) #gate{display:none}
 .gate-boot .ok{color:var(--accent)}
 .gate-boot .hint{margin-top:14px;font-size:11px;color:var(--text-muted)}
 .gate-end .fin{margin-top:10px;color:var(--text)}
+.gate-end p.warn{color:var(--warn)}
 .gate-end button{margin-top:10px;padding:3px 14px}
 @media (prefers-reduced-motion: reduce){
   .gate-glow,.gate-libelle .gl-glow,.gate-dust i,.gate-box.shake{animation:none}
@@ -4369,7 +4370,11 @@ const Zugang = (function () {
     let i = 0;
     const abschluss = async function () {
       if (typeof terminalSitzungTrennen === 'function') await terminalSitzungTrennen();
-      try { window.close(); } catch (e) { /* nicht erlaubt */ }
+      /* Fehler beim Abschluss des Terminal-Dateisystems (letzte Sicherung, Sitzungsende) erscheinen hier, nicht nur im Terminal; das Fenster
+         bleibt dann offen, damit die Meldung sichtbar ist. */
+      const fsFehler = typeof TERMINAL_ZUSTAND !== 'undefined' && TERMINAL_ZUSTAND.abmeldeFehler;
+      if (fsFehler) liste.appendChild(h('p', { class: 'warn', id: 'gate-end-fehler', role: 'alert' }, 'Abschluss des Terminal-Heimverzeichnisses fehlgeschlagen (' + fsFehler + '). Die letzten Änderungen liegen nur im Browser.'));
+      else { try { window.close(); } catch (e) { /* nicht erlaubt */ } }
       setTimeout(function () {
         const mitBruecke = typeof terminalBrueckenAdresse === 'function' && !!terminalBrueckenAdresse();
         $('gate-reconnect').hidden = mitBruecke;

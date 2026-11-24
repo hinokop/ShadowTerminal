@@ -50,18 +50,30 @@ const TERMINAL_VFS = (function () {
         t.oncomplete = function () { ok(erg); };
         t.onabort = function () { ok(erg && erg.fehler ? erg : { fehler: 'EIO' }); };
         Promise.resolve().then(async function () {
+          let neu = null;
           if (modus === 'readwrite' && !(opt && opt.ohneGen)) {
             const g = await anf(t.objectStore('meta').get('gen')), alt = g ? g.wert : 0;
             if (opt && opt.gen !== undefined && opt.gen !== alt) return { fehler: 'EBUSY' };
-            t.objectStore('meta').put({ key: 'gen', wert: alt + 1 });
+            neu = alt + 1;
+            t.objectStore('meta').put({ key: 'gen', wert: neu });
           }
-          return fn(t.objectStore('knoten'), t.objectStore('meta'));
+          const r = await fn(t.objectStore('knoten'), t.objectStore('meta'));
+          if (neu !== null && r && typeof r === 'object' && !r.fehler) r.gen = neu;   /* neue Generation für gebundene Pfade des Aufrufers */
+          return r;
         }).then(function (r) {
           erg = r;
           if (r && r.fehler) { try { t.abort(); } catch (e) { /* bereits beendet */ } }
         }, function () { erg = { fehler: 'EIO' }; try { t.abort(); } catch (e) { /* bereits beendet */ } });
       });
     }, function () { return { fehler: 'EIO' }; });
+  }
+  /* Schreibende Transaktion, optional an eine Generation gebunden (opt.gen: Pfadprüfung des Befehls und Änderung bilden eine Einheit) */
+  function txGen(opt, fn) { return tx('readwrite', fn, opt && opt.gen !== undefined ? { gen: opt.gen } : undefined); }
+  /* Größte Tiefe unterhalb eines Knotens (0 ohne Kinder); mv und cp prüfen damit die Tiefe des ganzen verschobenen Teilbaums */
+  async function tiefeUnter(k, id) {
+    let max = 0;
+    for (const c of await anf(k.index('eltern').getAll(IDBKeyRange.only(id)))) max = Math.max(max, 1 + (c.typ === 'dir' ? await tiefeUnter(k, c.id) : 0));
+    return max;
   }
   async function lauf(k, seg) {
     let n = await anf(k.get(WURZEL));
@@ -238,7 +250,7 @@ const TERMINAL_VFS = (function () {
       opt = opt || {};
       const pf = pfadFehler(seg);
       if (pf) return Promise.resolve({ fehler: pf });
-      return tx('readwrite', async function (k, m) {
+      return txGen(opt, async function (k, m) {
         const p = await elternVon(k, seg);
         if (p.fehler) return p;
         const vorhanden = await anf(k.index('ename').get([p.n.id, seg[seg.length - 1]]));
@@ -265,7 +277,7 @@ const TERMINAL_VFS = (function () {
       opt = opt || {};
       const pf = pfadFehler(seg);
       if (pf) return Promise.resolve({ fehler: pf });
-      return tx('readwrite', async function (k, m) {
+      return txGen(opt, async function (k, m) {
         const z = await zaehlerLesen(m);
         let n = await anf(k.get(WURZEL));
         for (let i = 0; i < seg.length; i++) {
@@ -290,7 +302,7 @@ const TERMINAL_VFS = (function () {
     /* opt.rekursiv: rm -r; opt.nurDatei: unlink-Semantik (rm ohne -r); opt.nurVerzeichnis: rmdir */
     entfernen: function (seg, opt) {
       opt = opt || {};
-      return tx('readwrite', async function (k, m) {
+      return txGen(opt, async function (k, m) {
         const r = await lauf(k, seg);
         if (r.fehler) return { fehler: r.fehler };
         if (!seg.length || !schreibrecht(seg)) return { fehler: seg.length > 1 && r.n.typ === 'dir' && opt.nurVerzeichnis ? 'EBUSY' : 'EACCES' };
@@ -309,15 +321,16 @@ const TERMINAL_VFS = (function () {
       });
     },
     /* rename(2): Ziel ist der endgültige Pfad (der Befehl mv hängt bei vorhandenem Zielverzeichnis den Namen selbst an) */
-    umbenennen: function (von, nach) {
+    umbenennen: function (von, nach, opt) {
       const pf = pfadFehler(nach);
       if (pf) return Promise.resolve({ fehler: pf });
-      return tx('readwrite', async function (k, m) {
+      return txGen(opt, async function (k, m) {
         const s = await lauf(k, von);
         if (s.fehler) return { fehler: s.fehler };
         const p = await elternVon(k, nach);
         if (p.fehler) return p;
         if (!von.length || !schreibrecht(von) || !schreibrecht(nach)) return { fehler: 'EACCES' };
+        if (s.n.typ === 'dir' && nach.length + await tiefeUnter(k, s.n.id) > TERMINAL_VFS_GRENZE.tiefe) return { fehler: 'ENAMETOOLONG' };
         const ziel = await anf(k.index('ename').get([p.n.id, nach[nach.length - 1]])), z = await zaehlerLesen(m);
         if (ziel && ziel.id === s.n.id) return { ok: true };
         for (let a = p.n; a && a.id !== WURZEL; a = await anf(k.get(a.eltern))) if (a.id === s.n.id) return { fehler: 'EINVAL' };
@@ -342,10 +355,11 @@ const TERMINAL_VFS = (function () {
       opt = opt || {};
       const pf = pfadFehler(nach);
       if (pf) return Promise.resolve({ fehler: pf });
-      return tx('readwrite', async function (k, m) {
+      return txGen(opt, async function (k, m) {
         const s = await lauf(k, von);
         if (s.fehler) return { fehler: s.fehler };
         if (s.n.typ === 'dir' && !opt.rekursiv) return { fehler: 'EISDIR' };
+        if (s.n.typ === 'dir' && nach.length + await tiefeUnter(k, s.n.id) > TERMINAL_VFS_GRENZE.tiefe) return { fehler: 'ENAMETOOLONG' };
         const p = await elternVon(k, nach);
         if (p.fehler) return p;
         if (!schreibrecht(nach)) return { fehler: 'EACCES' };
@@ -379,6 +393,7 @@ const TERMINAL_VFS = (function () {
         return { ok: true };
       });
     },
+    generation: function () { return tx('readonly', async function (k, m) { const g = await anf(m.get('gen')); return { gen: g ? g.wert : 0 }; }); },
     zaehler: function () { return tx('readonly', async function (k, m) { const z = await zaehlerLesen(m); return { bytes: z.bytes, knoten: z.knoten }; }); },
     /* Sicherung (Abschnitt 4): Inhalt von /home/raizo, ohne /tmp; Pfade relativ, Eltern vor Kindern */
     exportieren: function () {

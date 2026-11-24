@@ -30,19 +30,45 @@ function terminalDateiFehlerText(f) { return typeof TERMINAL_VFS !== 'undefined'
 function terminalDateiMeldung(befehl, teil, name, f) { return befehl + ': ' + teil + terminalLsQuote(name) + ': ' + terminalDateiFehlerText(f); }
 function terminalBasisname(name) { const t = String(name).replace(/\/+$/, '').split('/'); return t[t.length - 1]; }
 function terminalSegText(seg) { return '/' + seg.join('/'); }
-/* Pfad für schreibende Befehle: Zwischenverzeichnisse vor ".." müssen existieren und Verzeichnisse sein (ENOENT/ENOTDIR statt stillem Überspringen);
+/* Pfadprüfung vor jeder Dateioperation (Review #137): Zwischenverzeichnisse vor ".." müssen existieren und Verzeichnisse sein; eine Eingabe, die
+   ein Verzeichnis verlangt ("x/", "x/."), trifft keine gewöhnliche Datei (ENOTDIR) und legt keine an (opt.fehltVerzeichnis, z. B. EISDIR
+   für touch und Umleitung); "." oder ".." als letzte Komponente ist für entfernende Befehle unzulässig (opt.destruktiv: EINVAL).
+   Für VFS-Pfade mit solchen Prüfungen wird die Generation VOR der Prüfung gebunden (seg.bindung); die Änderung gilt nur in dieser Generation
+   (terminalFsSchreibOp), ein dazwischen änderndes Fenster führt zu EBUSY. Wiederholter Aufruf mit derselben Segmentliste bindet neu.
    null bei Fehler, der Kürzel steht dann in ctx.segFehler (Standard EACCES für unzulässige Zeichen). */
-async function terminalSegPruefen(ctx, seg) {
+async function terminalSegPruefen(ctx, seg, opt) {
+  opt = opt || {};
   ctx.segFehler = 'EACCES';
   if (!seg) return null;
-  for (const p of seg.zwischen || []) {
+  const zwischen = seg.zwischen || [];
+  let bindung = null;
+  if ((zwischen.length || seg.endeVerzeichnis) && TERMINAL_VFS.zugehoerig(seg)) {
+    await terminalVfsBereit();
+    const g = await TERMINAL_VFS.generation();
+    if (g.fehler) { ctx.segFehler = g.fehler; return null; }
+    bindung = { gen: g.gen };
+  }
+  if (seg.endePunkt && opt.destruktiv) { ctx.segFehler = 'EINVAL'; return null; }
+  for (const p of zwischen) {
     const st = await ctx.fs.stat(p, { pruefen: true });
     if (st.fehler) { ctx.segFehler = st.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : st.fehler; return null; }
     if (st.typ === 'file') { ctx.segFehler = 'ENOTDIR'; return null; }
   }
+  if (seg.endeVerzeichnis && seg.length) {
+    const st = await ctx.fs.stat(seg, { pruefen: true });
+    if (!st.fehler && st.typ === 'file') { ctx.segFehler = 'ENOTDIR'; return null; }
+    if ((st.fehler === 'ENOENT' || st.fehler === 'Datei oder Ordner nicht gefunden') && opt.fehltVerzeichnis) { ctx.segFehler = opt.fehltVerzeichnis; return null; }
+  }
+  Object.defineProperty(seg, 'bindung', { value: bindung, configurable: true, writable: true });
   return seg;
 }
-async function terminalDateiSeg(ctx, text) { return terminalSegPruefen(ctx, await ctx.fs.resolve(text, { cwd: ctx.cwd })); }
+/* Kind eines geprüften Verzeichnispfads (cp/mv in ein Zielverzeichnis): teilt die Bindung des Verzeichnisses */
+function terminalSegKind(seg, name) {
+  const kind = seg.concat(name);
+  Object.defineProperty(kind, 'bindung', { value: seg.bindung || null, configurable: true, writable: true });
+  return kind;
+}
+async function terminalDateiSeg(ctx, text, opt) { return terminalSegPruefen(ctx, await ctx.fs.resolve(text, { cwd: ctx.cwd }), opt); }
 /* Gibt es das Ziel? { typ } oder { fehler } */
 async function terminalDateiStat(ctx, seg) {
   const st = await ctx.fs.stat(seg, { pruefen: true });
@@ -78,7 +104,7 @@ async function terminalBefehlTouch(ctx) {
   if (!z.operanden.length) return { code: 1, stdout: [], stderr: ['touch: missing file operand', terminalGnuTry('touch')] };
   const fehler = [];
   for (const name of z.operanden) {
-    const seg = await terminalDateiSeg(ctx, name);
+    const seg = await terminalDateiSeg(ctx, name, { fehltVerzeichnis: 'EISDIR' });
     const r = seg ? await ctx.fs.schreiben(seg, '', { nurAnlegen: true }) : { fehler: ctx.segFehler };
     if (r.fehler) fehler.push(terminalDateiMeldung('touch', 'cannot touch ', name, r.fehler));
   }
@@ -90,7 +116,7 @@ async function terminalBefehlRmdir(ctx) {
   if (!z.operanden.length) return { code: 1, stdout: [], stderr: ['rmdir: missing operand', terminalGnuTry('rmdir')] };
   const fehler = [];
   for (const name of z.operanden) {
-    const seg = await terminalDateiSeg(ctx, name);
+    const seg = await terminalDateiSeg(ctx, name, { destruktiv: true });
     const r = seg ? await ctx.fs.entfernen(seg, { nurVerzeichnis: true }) : { fehler: ctx.segFehler };
     if (r.fehler) fehler.push(terminalDateiMeldung('rmdir', 'failed to remove ', name, r.fehler));
   }
@@ -105,7 +131,7 @@ async function terminalBefehlRm(ctx) {
   for (const name of z.operanden) {
     const basis = terminalBasisname(name);
     if (basis === '.' || basis === '..') { fehler.push("rm: refusing to remove '.' or '..' directory: skipping " + terminalLsQuote(name)); continue; }
-    const seg = await terminalDateiSeg(ctx, name);
+    const seg = await terminalDateiSeg(ctx, name, { destruktiv: true });
     if (!seg) { fehler.push(terminalDateiMeldung('rm', 'cannot remove ', name, ctx.segFehler)); continue; }
     if (rek && !seg.length) { fehler.push("rm: it is dangerous to operate recursively on '/'", 'rm: use --no-preserve-root to override this failsafe'); continue; }
     const st = await terminalDateiStat(ctx, seg);
@@ -118,7 +144,7 @@ async function terminalBefehlRm(ctx) {
 }
 /* Zielauflösung für cp und mv: bei mehreren Quellen oder vorhandenem Zielverzeichnis landet jede Quelle unter ihrem Namen im Ziel */
 async function terminalZielPlan(ctx, befehl, quellen, zielName) {
-  const zielSeg = await terminalDateiSeg(ctx, zielName);
+  const zielSeg = await terminalDateiSeg(ctx, zielName, { fehltVerzeichnis: 'ENOTDIR' });
   if (!zielSeg) return { fehler: [befehl === 'mv' && quellen.length === 1 ? 'mv: cannot move ' + terminalLsQuote(quellen[0]) + ' to ' + terminalLsQuote(zielName) + ': ' + terminalDateiFehlerText(ctx.segFehler)
     : befehl + ': cannot create ' + (befehl === 'cp' ? 'regular file ' : '') + terminalLsQuote(zielName) + ': ' + terminalDateiFehlerText(ctx.segFehler)] };
   const st = zielSeg.length ? await terminalDateiStat(ctx, zielSeg) : { typ: 'dir' };
@@ -144,7 +170,7 @@ async function terminalBefehlCp(ctx) {
     const st = await terminalDateiStat(ctx, seg);
     if (st.fehler) { fehler.push('cp: cannot stat ' + terminalLsQuote(name) + ': ' + terminalDateiFehlerText(st.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : st.fehler)); continue; }
     if (st.typ === 'dir' && !rek) { fehler.push('cp: -r not specified; omitting directory ' + terminalLsQuote(name)); continue; }
-    const ziel = plan.istDir ? plan.zielSeg.concat(basis) : plan.zielSeg;
+    const ziel = plan.istDir ? terminalSegKind(plan.zielSeg, basis) : plan.zielSeg;
     if (ziel.join('/') === seg.join('/')) { fehler.push('cp: ' + terminalLsQuote(name) + ' and ' + terminalLsQuote(zielName) + ' are the same file'); continue; }
     let r;
     if (TERMINAL_VFS.zugehoerig(seg) && TERMINAL_VFS.zugehoerig(ziel)) r = await ctx.fs.kopieren(seg, ziel, { rekursiv: rek });
@@ -171,11 +197,11 @@ async function terminalBefehlMv(ctx) {
   if (plan.fehler) return { code: 1, stdout: [], stderr: plan.fehler };
   const fehler = [];
   for (const name of quellen) {
-    const seg = await terminalDateiSeg(ctx, name);
+    const seg = await terminalDateiSeg(ctx, name, { destruktiv: true });
     if (!seg) { fehler.push('mv: cannot stat ' + terminalLsQuote(name) + ': ' + terminalDateiFehlerText(ctx.segFehler)); continue; }
     const st = await terminalDateiStat(ctx, seg);
     if (st.fehler) { fehler.push('mv: cannot stat ' + terminalLsQuote(name) + ': ' + terminalDateiFehlerText(st.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : st.fehler)); continue; }
-    const ziel = plan.istDir ? plan.zielSeg.concat(terminalBasisname(name)) : plan.zielSeg;
+    const ziel = plan.istDir ? terminalSegKind(plan.zielSeg, terminalBasisname(name)) : plan.zielSeg;
     if (ziel.join('/') === seg.join('/')) { fehler.push('mv: ' + terminalLsQuote(name) + ' and ' + terminalLsQuote(zielName) + ' are the same file'); continue; }
     const r = await ctx.fs.umbenennen(seg, ziel);
     if (!r.fehler) continue;
@@ -255,7 +281,7 @@ function terminalBefehlDirekt(befehl) {
 async function terminalUmgeleitet(woerter, um, status) {
   const t = TERMINAL_ZUSTAND, version = t.version;
   const ziel = um.ziel;
-  const pctx = { fs: TERMINAL_FS }, seg = await terminalSegPruefen(pctx, terminalShellPfad(ziel));
+  const pctx = { fs: TERMINAL_FS }, uopt = { fehltVerzeichnis: 'EISDIR' }, seg = await terminalSegPruefen(pctx, terminalShellPfad(ziel), uopt);
   const f = function (kuerzel) { return 'bash: ' + ziel + ': ' + terminalDateiFehlerText(kuerzel); };
   if (!ziel) { terminalAusgabe('bash: : No such file or directory'); return 1; }
   if (t.version !== version) return 1;
@@ -298,6 +324,9 @@ async function terminalUmgeleitet(woerter, um, status) {
   }
   const text = typeof res.text === 'string' ? res.text : (res.stdout || []).length ? res.stdout.join('\n') + '\n' : '';
   if (text) {
+    /* Der Befehl kann inzwischen selbst geändert haben: Pfad erneut prüfen und binden (gleiche Segmentliste, kein neues Auflösen) */
+    if (!(await terminalSegPruefen(pctx, seg, uopt))) { if (t.version === version) terminalAusgabe(f(pctx.segFehler)); return 1; }
+    if (t.version !== version) return 1;
     const w = await TERMINAL_FS.schreiben(seg, text, { anhaengen: true });
     if (t.version !== version) return 1;
     if (w.fehler) { terminalAusgabe('bash: ' + befehl + ': write error: ' + terminalDateiFehlerText(w.fehler)); return 1; }
@@ -312,7 +341,7 @@ async function terminalBefehlNano(ctx) {
   const z = terminalGnuOptionen('nano', ctx.args, '', {});
   if (z.fehler) return z.fehler;
   if (z.operanden.length !== 1) return { code: 1, stdout: [], stderr: ['nano: exactly one file name is required in this terminal (usage: nano <file>)'] };
-  const name = z.operanden[0], seg = await terminalDateiSeg(ctx, name);
+  const name = z.operanden[0], seg = await terminalDateiSeg(ctx, name, { fehltVerzeichnis: 'EISDIR' });
   if (!seg || !seg.length) return { code: 1, stdout: [], stderr: ['nano: ' + name + ': ' + terminalDateiFehlerText(seg ? 'EACCES' : ctx.segFehler)] };
   if (seg[0] === TERMINAL_DB && terminalArchivNameZiel(seg.at(-1))) return { code: 1, stdout: [], stderr: ['nano: ' + name + ': Permission denied'] };
   let text = '', neu = false;
@@ -350,7 +379,9 @@ async function terminalBefehlNano(ctx) {
       if (speichert) return false;
       speichert = true;
       const stand = version, text = feld.value;
-      const r = await TERMINAL_FS.schreiben(seg, text, {});
+      /* Pfad vor jedem Schreiben neu prüfen und binden (der Editor kann lange offen sein) */
+      const pr = await terminalSegPruefen(ctx, seg, { fehltVerzeichnis: 'EISDIR' });
+      const r = pr ? await TERMINAL_FS.schreiben(seg, text, {}) : { fehler: ctx.segFehler };
       speichert = false;
       if (r.fehler) { meldung('Error writing ' + name + ': ' + terminalDateiFehlerText(r.fehler)); return false; }
       neu = false;
@@ -410,28 +441,48 @@ async function terminalHomeHash(text) {
   const h = await terminalVaultHash(text);
   return h;
 }
+/* Format 2 (Review #137): jeder Eintrag nennt nur seinen Namen und den Index seines Elternverzeichnisses (-1: /home/raizo), statt den ganzen
+   relativen Pfad zu wiederholen. So bleibt jeder gültige Bestand im Größenvertrag (5000 Knoten mit Namen bis 255 Bytes bei beliebiger Tiefe).
+   Format 1 (Pfade) wird weiterhin gelesen. */
 async function terminalHomePaket() {
   const ex = await TERMINAL_VFS.exportieren();
   if (ex.fehler) return { fehler: ex.fehler };
-  const koerper = JSON.stringify(ex.eintraege), summe = await terminalHomeHash(koerper);
+  const index = new Map([['', -1]]), eintraege = ex.eintraege.map(function (e, i) {
+    const teile = e.pfad.split('/'), name = teile.pop();
+    index.set(e.pfad, i);
+    const x = { eltern: index.get(teile.join('/')), name: name, typ: e.typ, modus: e.modus, erstellt: e.erstellt, geaendert: e.geaendert };
+    if (e.typ === 'file') x.inhalt = e.inhalt;
+    return x;
+  });
+  const koerper = JSON.stringify(eintraege), summe = await terminalHomeHash(koerper);
   if (!summe) return { fehler: 'EIO' };
-  const bytes = ex.eintraege.reduce(function (s, e) { return s + (e.typ === 'file' ? new TextEncoder().encode(e.inhalt).length : 0); }, 0);
-  const paket = { format: TERMINAL_HOME_FORMAT, version: 1, erstellt: new Date().toISOString(),
-    manifest: { eintraege: ex.eintraege.length, bytes: bytes, sha256: summe }, eintraege: ex.eintraege };
+  const bytes = eintraege.reduce(function (s, e) { return s + (e.typ === 'file' ? new TextEncoder().encode(e.inhalt).length : 0); }, 0);
+  const paket = { format: TERMINAL_HOME_FORMAT, version: 2, erstellt: new Date().toISOString(),
+    manifest: { eintraege: eintraege.length, bytes: bytes, sha256: summe }, eintraege: eintraege };
   return { paket: paket, text: JSON.stringify(paket), gen: ex.gen };
 }
 /* Vollständige Prüfung vor jeder Wiederherstellung; nichts wird verändert, bevor alles gültig ist. */
 async function terminalHomePruefen(text) {
   let p;
   try { p = JSON.parse(text); } catch (e) { return { fehler: 'not a valid backup (unreadable)' }; }
-  if (!p || p.format !== TERMINAL_HOME_FORMAT || p.version !== 1 || !Array.isArray(p.eintraege) || !p.manifest) return { fehler: 'not a valid backup (format)' };
+  if (!p || p.format !== TERMINAL_HOME_FORMAT || (p.version !== 1 && p.version !== 2) || !Array.isArray(p.eintraege) || !p.manifest) return { fehler: 'not a valid backup (format)' };
   const koerper = JSON.stringify(p.eintraege);
   if ((await terminalHomeHash(koerper)) !== p.manifest.sha256) return { fehler: 'backup is damaged (checksum mismatch)' };
   if (p.manifest.eintraege !== p.eintraege.length) return { fehler: 'backup is damaged (entry count)' };
   const g = TERMINAL_VFS.GRENZE, art = new Map([['', 'dir']]);
   let summe = 0;
   if (p.eintraege.length > g.knoten) return { fehler: 'backup exceeds the limits of this file system' };
-  for (const e of p.eintraege) {
+  /* Format 2 -> Pfade: der Elternindex muss auf einen FRÜHEREN Eintrag zeigen; der Name ist ein einzelner gültiger Name */
+  if (p.version === 2) {
+    const pfade = [];
+    for (let i = 0; i < p.eintraege.length; i++) {
+      const e = p.eintraege[i];
+      if (!e || !Number.isInteger(e.eltern) || e.eltern < -1 || e.eltern >= i || typeof e.name !== 'string' || !e.name || e.name.includes('/')) return { fehler: 'not a valid backup (path)' };
+      pfade.push(e.eltern === -1 ? e.name : pfade[e.eltern] + '/' + e.name);
+    }
+    p.eintraegeV1 = p.eintraege.map(function (e, i) { const x = { pfad: pfade[i], typ: e.typ, modus: e.modus, erstellt: e.erstellt, geaendert: e.geaendert }; if ('inhalt' in e) x.inhalt = e.inhalt; return x; });
+  } else p.eintraegeV1 = p.eintraege;
+  for (const e of p.eintraegeV1) {
     if (!e || typeof e.pfad !== 'string' || !e.pfad || (e.typ !== 'dir' && e.typ !== 'file') || !Number.isInteger(e.modus) || e.modus < 0 || e.modus > 0o7777 ||
       !Number.isFinite(e.erstellt) || !Number.isFinite(e.geaendert)) return { fehler: 'not a valid backup (entry)' };
     if (e.typ === 'file' && typeof e.inhalt !== 'string') return { fehler: 'not a valid backup (entry)' };
@@ -445,7 +496,16 @@ async function terminalHomePruefen(text) {
   if (p.manifest.bytes !== summe) return { fehler: 'backup is damaged (byte count)' };
   return { paket: p };
 }
-async function terminalHomeSichern(automatisch) {
+/* Sicherungen laufen nacheinander (automatische, manuelle und die letzte bei der Abmeldung): eine neue wartet auf die laufende. */
+let terminalHomeLaufend = null;
+function terminalHomeSichern(automatisch) {
+  const lauf = (terminalHomeLaufend || Promise.resolve()).catch(function () {}).then(function () { return terminalHomeSichernKern(automatisch); });
+  terminalHomeLaufend = lauf;
+  const frei = function () { if (terminalHomeLaufend === lauf) terminalHomeLaufend = null; };
+  lauf.then(frei, frei);
+  return lauf;
+}
+async function terminalHomeSichernKern(automatisch) {
   const t = TERMINAL_ZUSTAND;
   t.homeAenderung = false;   /* Änderungen während der Sicherung setzen das Kennzeichen erneut */
   const pk = await terminalHomePaket();
@@ -504,7 +564,7 @@ async function terminalBefehlHomeRestore(ctx) {
   if (!yes) return { code: 1, stdout: [], stderr: ['home-restore: this replaces everything in /home/raizo (' + gp.paket.manifest.eintraege + ' entries in the backup). The current state is saved first.', 'Run again with --yes to proceed.'] };
   const vorher = await terminalHomeSichern(false);
   if (vorher.fehler) return { code: 1, stdout: [], stderr: ['home-restore: could not save the current state first (' + vorher.fehler + '); nothing changed'] };
-  const r = await TERMINAL_VFS.importieren(gp.paket.eintraege, { gen: vorher.gen });
+  const r = await TERMINAL_VFS.importieren(gp.paket.eintraegeV1, { gen: vorher.gen });
   if (r.fehler === 'EBUSY') return { code: 1, stdout: [], stderr: ['home-restore: files changed in another window while restoring; nothing changed. Run the command again.'] };
   if (r.fehler) return { code: 1, stdout: [], stderr: ['home-restore: ' + terminalDateiFehlerText(r.fehler) + '; nothing changed'] };
   terminalHomeGeaendert();
@@ -547,7 +607,7 @@ async function terminalBefehlHomeImport(ctx) {
     if (ex.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + terminalDateiFehlerText(ex.fehler) + '; nothing changed'] };
     gen = ex.gen;
   }
-  const r = await TERMINAL_VFS.importieren(gp.paket.eintraege, { gen: gen });
+  const r = await TERMINAL_VFS.importieren(gp.paket.eintraegeV1, { gen: gen });
   if (r.fehler === 'EBUSY') return { code: 1, stdout: [], stderr: ['home-import: files changed in another window while importing; nothing changed. Run the command again.'] };
   if (r.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + terminalDateiFehlerText(r.fehler) + '; nothing changed'] };
   terminalHomeGeaendert();

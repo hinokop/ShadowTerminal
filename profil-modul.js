@@ -250,7 +250,12 @@ function terminalPfadAufloesen(arg, cwdSegmente) {
     if (name === '..') { if (out.length > fest) zwischen.push(out.slice()); out.pop(); fest = Math.min(fest, out.length); }
     else out.push(name);
   }
-  out.zwischen = zwischen;
+  const teile = (arg === '~' || arg.startsWith('~/') ? arg.slice(1) : arg).split('/').filter(Boolean), letzte = teile[teile.length - 1];
+  /* endeVerzeichnis: Eingabe verlangt ein Verzeichnis ("x/", "x/.", "x/.."); endePunkt: letzte Komponente "." oder ".." (für entfernende
+     und umbenennende Befehle unzulässig, wie rmdir/rename unter Linux: EINVAL). Nicht aufzählbar, damit Segmentlisten gleich bleiben. */
+  Object.defineProperty(out, 'zwischen', { value: zwischen, configurable: true, writable: true });
+  Object.defineProperty(out, 'endeVerzeichnis', { value: /\/$/.test(arg) || letzte === '.' || letzte === '..', configurable: true, writable: true });
+  Object.defineProperty(out, 'endePunkt', { value: letzte === '.' || letzte === '..', configurable: true, writable: true });
   return out;
 }
 const TERMINAL_TLE_DIRS = new Map([['/var', ['cache/', 'log/']], ['/var/cache', ['tle/']],
@@ -448,7 +453,7 @@ async function terminalSitzungTrennen() {
   t.abmeldeFehler = null;
   try {
     const r = await terminalVfsEnde();
-    if (r && r.fehler) { t.abmeldeFehler = r.fehler; terminalAusgabe('home-backup: last backup failed: ' + r.fehler); }
+    if (r && r.fehler) { t.abmeldeFehler = r.fehler; terminalAusgabe('home-backup: ' + r.fehler); }
   } catch (e) { t.abmeldeFehler = 'file system session could not be closed'; terminalAusgabe('home-backup: ' + t.abmeldeFehler); }
   /* Shell-Zustand der Sitzung (Arbeitsverzeichnis, vorheriges Verzeichnis) endet mit der Sitzung, auch ohne verbundene Archivbrücke */
   t.ort = null;
@@ -654,11 +659,11 @@ const TERMINAL_FS = {
   },
   /* Schreibende Operationen (Paket 1): nur das persistente VFS (/home/raizo, /tmp) ist beschreibbar; alle übrigen Anbieter weisen ab
      (zentrale Richtlinienstufe: Pfadgültigkeit und Rechte vor dem Anbieter, Quoten im Anbieter selbst in derselben Transaktion). */
-  schreiben: function (seg, text, opt) { return terminalFsSchreibOp([seg], function () { return TERMINAL_VFS.schreiben(seg, text, opt); }, { eltern: false }); },
-  mkdir: function (seg, opt) { return terminalFsSchreibOp([seg], function () { return TERMINAL_VFS.mkdir(seg, opt); }, { mkdir: !!(opt && opt.eltern) }); },
-  entfernen: function (seg, opt) { return terminalFsSchreibOp([seg], function () { return TERMINAL_VFS.entfernen(seg, opt); }, {}); },
-  umbenennen: function (von, nach) { return terminalFsSchreibOp([von, nach], function () { return TERMINAL_VFS.umbenennen(von, nach); }, {}); },
-  kopieren: function (von, nach, opt) { return terminalFsSchreibOp([von, nach], function () { return TERMINAL_VFS.kopieren(von, nach, opt); }, {}); },
+  schreiben: function (seg, text, opt) { return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.schreiben(seg, text, Object.assign({}, opt, g)); }, { eltern: false }); },
+  mkdir: function (seg, opt) { return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.mkdir(seg, Object.assign({}, opt, g)); }, { mkdir: !!(opt && opt.eltern) }); },
+  entfernen: function (seg, opt) { return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.entfernen(seg, Object.assign({}, opt, g)); }, {}); },
+  umbenennen: function (von, nach) { return terminalFsSchreibOp([von, nach], function (g) { return TERMINAL_VFS.umbenennen(von, nach, g); }, {}); },
+  kopieren: function (von, nach, opt) { return terminalFsSchreibOp([von, nach], function (g) { return TERMINAL_VFS.kopieren(von, nach, Object.assign({}, opt, g)); }, {}); },
   writeFile: function (seg, text, opt) { return TERMINAL_FS.schreiben(seg, text, opt); }
 };
 let terminalVfsStart = null;
@@ -670,13 +675,16 @@ function terminalVfsBereit() {
 async function terminalVfsEnde() {
   clearTimeout(terminalHomeTimer);
   let ergebnis = { ok: true };
+  /* Eine laufende (automatische) Sicherung wird abgewartet; danach wird gesichert, wenn seither oder während ihr geändert wurde oder sie scheiterte */
+  if (terminalHomeLaufend) { try { await terminalHomeLaufend; } catch (e) { /* Ergebnis über homeAenderung */ } }
   if (terminalVfsStart && TERMINAL_ZUSTAND.homeAenderung && terminalBrueckenAdresse()) {
     const r = await terminalHomeSichern(true);
-    if (r.fehler) ergebnis = { fehler: r.fehler };
+    if (r.fehler) ergebnis = { fehler: 'last backup failed: ' + r.fehler };
   }
   if (!terminalVfsStart) return ergebnis;
-  await TERMINAL_VFS.sitzungEnde();
+  const e = await TERMINAL_VFS.sitzungEnde();
   terminalVfsStart = null;
+  if (e && e.fehler && !ergebnis.fehler) ergebnis = { fehler: 'session could not be closed (' + TERMINAL_VFS.fehlerText(e.fehler) + ')' };
   return ergebnis;
 }
 window.addEventListener('pagehide', function () { if (terminalVfsStart) void TERMINAL_VFS.sitzungEnde(); });
@@ -689,7 +697,12 @@ async function terminalFsSchreibOp(segs, op, ziel) {
   const fremd = segs.find(function (s) { return !TERMINAL_VFS.zugehoerig(s); });
   if (fremd) return terminalFsAbweisung(fremd, ziel);
   await terminalVfsBereit();
-  const r = await op();
+  /* Gebundene Pfade (terminalSegPruefen): die Änderung gilt nur, wenn seit der Pfadprüfung niemand (auch kein anderes Fenster) geändert hat;
+     sonst EBUSY, nichts geändert. Nach Erfolg übernehmen die Bindungen die neue Generation (Folgeschritte desselben Befehls). */
+  const bindungen = segs.map(function (s) { return s.bindung; }).filter(Boolean);
+  if (bindungen.some(function (b) { return b.gen !== bindungen[0].gen; })) return { fehler: 'EBUSY' };
+  const r = await op(bindungen.length ? { gen: bindungen[0].gen } : {});
+  if (!r.fehler && r.gen !== undefined) bindungen.forEach(function (b) { b.gen = r.gen; });
   if (!r.fehler && segs.some(function (s) { return s[0] === 'home'; })) terminalHomeGeaendert();
   return r;
 }
