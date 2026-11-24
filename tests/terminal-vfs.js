@@ -131,8 +131,8 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
       'mv nix x': "mv: cannot stat 'nix': No such file or directory",
       'mv projects projects/alpha/in': "mv: cannot move 'projects' to a subdirectory of itself, 'projects/alpha/in'",
       'mv neu.txt neu.txt': "mv: 'neu.txt' and 'neu.txt' are the same file",
-      'mv neu.txt /etc/x': "mv: cannot move 'neu.txt' to '/etc/x': Permission denied",
-      'mv /etc/ppp x': "mv: cannot move '/etc/ppp' to 'x': Permission denied",
+      'mv neu.txt /etc/x': "mv: cannot move 'neu.txt' to '/etc/x': Invalid cross-device link",
+      'mv /etc/ppp x': "mv: cannot move '/etc/ppp' to 'x': Invalid cross-device link",
       'cat nix': 'cat: nix: No such file or directory',
       'cat projects': 'cat: projects: Is a directory',
       'cat projects/alpha/nix': 'cat: projects/alpha/nix: No such file or directory'

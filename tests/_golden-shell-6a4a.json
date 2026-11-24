@@ -37,43 +37,43 @@
   },
   {
     "befehl": "ls",
-    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -a",
-    "ausgabe": ".\n..\netc\nhome\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -l",
-    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -la",
-    "ausgabe": ".\n..\netc\nhome\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -al",
-    "ausgabe": ".\n..\netc\nhome\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -1",
-    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -lh",
-    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -85,7 +85,7 @@
   },
   {
     "befehl": "ls -F",
-    "ausgabe": "etc/\nhome/\npgcl-eu3.arch07/\ntmp/\nvar/",
+    "ausgabe": "etc/\nhome/\nintel/\npgcl-eu3.arch07/\ntmp/\nvar/",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -109,7 +109,7 @@
   },
   {
     "befehl": "ls /",
-    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
