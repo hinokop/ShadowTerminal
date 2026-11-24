@@ -559,8 +559,23 @@ async function terminalBefehlLauf(fn, args, arg, version) {
   return res.code;
 }
 function terminalBefehlFehler(text) { return { code: 1, stdout: [], stderr: [text] }; }
+/* pwd als Bash-Builtin (Referenz bash 5.2.21): Optionen -L und -P (ohne symbolische Links gleichwertig, auch kombiniert und wiederholt),
+   "--" beendet die Optionen, der erste Nicht-Optionswert beendet die Optionsauswertung, Operanden werden ignoriert. Eine ungültige Option
+   (auch "--x", "-L-": gemeldet als "--") ergibt "bash: pwd: -x: invalid option" und die Usage-Zeile, Rückgabewert 2. "--help" gibt den
+   Hilfetext aus (stdout), Rückgabewert 2; Optionen werden der Reihe nach ausgewertet. Meldungen mit dem Präfix "bash:" wie im interaktiven Bash. */
+const TERMINAL_PWD_HILFE = ['pwd: pwd [-LP]', '    Print the name of the current working directory.', '    ', '    Options:',
+  '      -L\tprint the value of $PWD if it names the current working', '    \t\tdirectory', '      -P\tprint the physical directory, without any symbolic links',
+  '    ', "    By default, `pwd' behaves as if `-L' were specified.", '    ', '    Exit Status:',
+  '    Returns 0 unless an invalid option is given or the current directory', '    cannot be read.'];
 function terminalBefehlPwd(ctx) {
-  if (ctx.arg) return { code: 2, stdout: [], stderr: ['usage: pwd'] };
+  for (const a of ctx.args) {
+    if (a === '--') break;
+    if (a === '--help') return { code: 2, stdout: [TERMINAL_PWD_HILFE.join('\n')], stderr: [] };
+    if (a.length < 2 || a[0] !== '-') break;
+    for (const c of Array.from(a).slice(1)) {
+      if (c !== 'L' && c !== 'P') return { code: 2, stdout: [], stderr: ['bash: pwd: -' + c + ': invalid option', 'pwd: usage: pwd [-LP]'] };
+    }
+  }
   return { code: 0, stdout: [ctx.cwd], stderr: [] };
 }
 async function terminalBefehlCd(ctx) {
