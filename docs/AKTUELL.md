@@ -57,8 +57,9 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 | PR | Inhalt | Stand |
 |---|---|---|
 | #134 | 6a-3: `ls` mit GNU-Optionen und Operanden (`-a -A -d -F -h -l -1`, Langoptionen mit Abkürzungen, mehrere Operanden, GNU-Fehlertexte); Test `terminal-ls-gnu` mit 62 Aufnahmen von ls 9.4; Plan 9.12 | Draft, CI ausstehend |
+| #135 | 6a-4a (baut auf #134): Locale `en_US.UTF-8` als Referenz (`terminal-locale.js`), Sortierung und `.`/`..` bei `ls`, `--classify`-Abkürzungen; Tests `terminal-locale`, `terminal-ls-gnu` (84 Aufnahmen); Plan 9.13 | Draft, CI ausstehend |
 
-Zurzeit ist nur der Draft #134 (6a-3, Plan 9.12) offen; #55 wurde am 24.11.2026 auf Anweisung von Master Wayne geschlossen (ungemergt). Stand 24.11.2026, nach dem Merge von #131 (`facb741`), #132 und #133 (`40773b3`). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
+Zurzeit sind die Drafts #134 (6a-3, Plan 9.12) und #135 (6a-4a, Plan 9.13, abhängig von #134) offen; #55 wurde am 24.11.2026 auf Anweisung von Master Wayne geschlossen (ungemergt). Stand 24.11.2026, nach dem Merge von #131 (`facb741`), #132 und #133 (`40773b3`). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
 ## 3. Reihenfolge der nächsten Schritte (bestätigt am 22.11.2026)
 
