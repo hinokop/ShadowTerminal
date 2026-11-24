@@ -1,0 +1,97 @@
+# Branch-Bereinigung 24.11.2026
+
+Prüfstand gegen `main` `32d73e6` (Merge von #135). Gemessen mit `git rev-list --count origin/main..origin/<Branch>` nach Abruf aller Branch-Köpfe.
+
+**Ergebnis:** 84 Branches außer `main` (einschließlich der beiden Branches von #134 und #135). Davon sind **78 vollständig in `main` enthalten** (77 mit null Commits vor `main`, dazu `test/parallelitaet`, dessen PR #73 als Squash-Merge `3fee0ad` integriert wurde; `git cherry` zeigt die Commits nur wegen anderer SHAs). Diese Branches können gelöscht werden; die Inhalte bleiben in `main`, die PRs bleiben einsehbar.
+
+**Nicht gelöscht, Entscheidung offen** (PR geschlossen ohne Merge, Commits nicht in `main`):
+
+| Branch | PR | Commits vor `main` | Inhalt |
+|---|---|---|---|
+| `docs/aktueller-arbeitsstand` | #55 | 1 | Dokumentation Lagebriefing/Fallpaket/Arbeitsstand-Tasten (17.11.) |
+| `docs/lagebriefing-x` | #48 | 2 | Skizze Lagebriefing in X (kein Code) |
+| `feat/naechster-schritt` | #50 | 2 | X: Lagebriefing, Nächster Schritt |
+| `fix/sichtung-export-verwechslung` | #75 | 1 | Test sichtung-export wartet auf sys-msg-Leerlauf |
+
+**Löschung:** Der Versuch, die 78 Branches über die GitHub-Schnittstelle zu löschen, wurde von der Umgebung abgelehnt (HTTP 403, Schreibzugriff auf Referenzen nicht erlaubt). Die Löschung ist daher von Master Wayne selbst auszuführen (GitHub-Oberfläche oder `git push origin --delete <Branch>`). Wiederherstellung ist mit der Kurz-SHA möglich (`git branch <Name> <SHA>` nach Abruf, solange GitHub die Objekte vorhält).
+
+## Zu löschende Branches (Name, Kurz-SHA des letzten Commits)
+
+- `ci/alte-workflows-entfernen-20261122` (`38f0edb1b0b4`)
+- `ci/dauerhafte-pruefung-20261122` (`f4c75b3e38e3`)
+- `docs/5c2b-c-analyse` (`6526afaf3bc9`)
+- `docs/aktuell-nach-111-20261122` (`d576ddac5c37`)
+- `docs/aktuell-nach-128` (`ff89f2d55f66`)
+- `docs/aktuell-nach-130` (`cc3d0a08c6e1`)
+- `docs/inventur-nichtstandard-skripte` (`e1f82dd91c04`)
+- `docs/karte-konsole-20261123` (`47d64e3ee4af`)
+- `docs/phase5-abschluss` (`b742ecf9a60f`)
+- `docs/phase5c-schemainventar-20261123` (`10a0eca6ddb7`)
+- `docs/phase6a-architektur` (`68c74800853e`)
+- `docs/phase6a-plan` (`afbc9c087fdc`)
+- `docs/status-nach-phase5-20261122` (`970273c570da`)
+- `feat/6a3-ls-optionen-20261124` (`998b8c13da7e`)
+- `feat/6a4a-locale-en-us-20261124` (`34508bacde73`)
+- `feat/archive-vault-lookup` (`ea05f8e89d71`)
+- `feat/befehlstabelle` (`9cbb7d8d8afa`)
+- `feat/benutzer-raizo` (`03f996a362b5`)
+- `feat/dateiversand` (`c0bfec2b8085`)
+- `feat/einfaerbung` (`44fa4bb252fa`)
+- `feat/einwahl-realismus` (`8304a9434298`)
+- `feat/einwahl-zeiten` (`ba38241e8b24`)
+- `feat/fester-kontakt` (`989db71520a9`)
+- `feat/kestrel` (`2421a452f55f`)
+- `feat/link-anzeige` (`3f0a2a0c74d8`)
+- `feat/link-end` (`914c542f9e31`)
+- `feat/nmap` (`12175d44d9ec`)
+- `feat/offline-zustellung` (`5012a889d937`)
+- `feat/onion-v3` (`97b443ed062a`)
+- `feat/phase6a0-fs` (`32cb9d3650d0`)
+- `feat/phase6a1-pwd` (`cf826686e778`)
+- `feat/phase6a2-cd` (`e3b245db9767`)
+- `feat/plog` (`3c0eee66cb50`)
+- `feat/ppp-persist` (`934cd062f158`)
+- `feat/predict-anzeige` (`0015310e602a`)
+- `feat/profanity-fenster` (`403c3d6bf46b`)
+- `feat/profanity-wortlaut` (`2199c1abcd3b`)
+- `feat/satcon-tx-passfenster` (`2710656bf05b`)
+- `feat/shell-kern` (`8124570768be`)
+- `feat/strg-rechts` (`4e9fcba253d1`)
+- `feat/tab-auswahlliste` (`104d583416bd`)
+- `feat/terminal-konsole` (`2af90fbe984c`)
+- `feat/terminal-link-kette` (`956d8a05d3bf`)
+- `feat/terminal-namensnavigation` (`73b0351e48a2`)
+- `feat/terminal-navigation` (`3bac2200e831`)
+- `feat/terminal-pin-suche` (`2931ed927dcc`)
+- `feat/terminal-sudo` (`8a44c1afea4f`)
+- `feat/tmux-mehrere-bereiche` (`8f23d3b5e01e`)
+- `feat/tmux-split` (`fd7682527831`)
+- `feat/verlauf-vorschlag` (`cc47f1e27c6f`)
+- `feat/zugang-pins` (`900c9931dabe`)
+- `fix/5c2b-a-toter-tickblock` (`35ea6dfa91c1`)
+- `fix/5c2b-b-iz-aussagenliste` (`994fbc26eb2a`)
+- `fix/5c2b-d2-sichtungtext` (`e43f9c40b383`)
+- `fix/6a-sichtbarkeit-20261124` (`8927c347b6e8`)
+- `fix/abd` (`155af1f9ca6b`)
+- `fix/pin-tab-test-und-entwicklungsplan-20261121` (`8f4d850fdc01`)
+- `fix/ppp-abbruch` (`5269e9bd84c1`)
+- `fix/sichtung-export-guete` (`fa1460dbbd01`)
+- `fix/terminal-einwahl-abschluss` (`8d39a8cddaa6`)
+- `fix/terminal-poff-los` (`4550da96a27b`)
+- `refactor/phase5a-dossierfreigaben-abbau-20261121` (`8a1602114889`)
+- `refactor/phase5b1-legacy-ui-isolation-20261122` (`8a281642c115`)
+- `refactor/phase5b2-recherchekarte-dossier-20261122` (`15c30dc77eff`)
+- `refactor/phase5b3-dossier-ui-legacy-mask-20261122` (`13347eda5b45`)
+- `refactor/phase5b4-workspace-legacy-access-20261122` (`4f34560b14a3`)
+- `refactor/phase5b5-dossier-legacy-addenda-20261122` (`95288f7a4599`)
+- `refactor/phase5b6-dossier-kennungen-20261122` (`09a2b99921d0`)
+- `refactor/phase5b7-missionsbetrieb-stilllegen-20261123` (`eb345a0cd496`)
+- `refactor/phase5b8-toter-code-20261123` (`1fa8655c381e`)
+- `refactor/phase5b9-missionskern-20261123` (`e0570d41967d`)
+- `refactor/phase5c1a-profiltexte-20261122` (`b871dabbe891`)
+- `refactor/phase5c1b-zustandsformat-20261122` (`477cfaaf2e9b`)
+- `refactor/phase5c2a-missionsdaten-ausblenden-20261122` (`db956dab8389`)
+- `test/5c2b-entkopplung-altzustand` (`c87d23d989d2`)
+- `test/link-kette-satellit-20261123` (`24f8a5d91851`)
+- `test/parallelitaet` (`0688f52e5cb9`)
+- `test/sichtung-export-warten` (`59f092b61172`)
