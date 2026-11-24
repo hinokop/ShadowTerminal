@@ -37,91 +37,91 @@
  },
  {
   "befehl": "ls",
-  "ausgabe": "etc/\nvar/\npgcl-eu3.arch07/",
+  "ausgabe": "etc\nvar\npgcl-eu3.arch07",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls -a",
-  "ausgabe": "etc/\nvar/\npgcl-eu3.arch07/",
+  "ausgabe": "etc\nvar\npgcl-eu3.arch07",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls -l",
-  "ausgabe": "etc/\nvar/\npgcl-eu3.arch07/",
+  "ausgabe": "etc\nvar\npgcl-eu3.arch07",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls -la",
-  "ausgabe": "etc/\nvar/\npgcl-eu3.arch07/",
+  "ausgabe": "etc\nvar\npgcl-eu3.arch07",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls -al",
-  "ausgabe": "etc/\nvar/\npgcl-eu3.arch07/",
+  "ausgabe": "etc\nvar\npgcl-eu3.arch07",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls -1",
-  "ausgabe": "ls: unrecognized option '-1'",
-  "status": "1",
+  "ausgabe": "etc\nvar\npgcl-eu3.arch07",
+  "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls -lh",
-  "ausgabe": "ls: unrecognized option '-lh'",
-  "status": "1",
+  "ausgabe": "etc\nvar\npgcl-eu3.arch07",
+  "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls -d",
-  "ausgabe": "ls: unrecognized option '-d'",
-  "status": "1",
+  "ausgabe": ".",
+  "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls -F",
-  "ausgabe": "ls: unrecognized option '-F'",
-  "status": "1",
-  "promptDanach": "raizo@terminal:/$"
- },
- {
-  "befehl": "ls -z",
-  "ausgabe": "ls: unrecognized option '-z'",
-  "status": "1",
-  "promptDanach": "raizo@terminal:/$"
- },
- {
-  "befehl": "ls --falsch",
-  "ausgabe": "ls: unrecognized option '--falsch'",
-  "status": "1",
-  "promptDanach": "raizo@terminal:/$"
- },
- {
-  "befehl": "ls --help",
-  "ausgabe": "ls: unrecognized option '--help'",
-  "status": "1",
-  "promptDanach": "raizo@terminal:/$"
- },
- {
-  "befehl": "ls /",
   "ausgabe": "etc/\nvar/\npgcl-eu3.arch07/",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
+  "befehl": "ls -z",
+  "ausgabe": "ls: invalid option -- 'z'\nTry 'ls --help' for more information.",
+  "status": "2",
+  "promptDanach": "raizo@terminal:/$"
+ },
+ {
+  "befehl": "ls --falsch",
+  "ausgabe": "ls: unrecognized option '--falsch'\nTry 'ls --help' for more information.",
+  "status": "2",
+  "promptDanach": "raizo@terminal:/$"
+ },
+ {
+  "befehl": "ls --help",
+  "ausgabe": "Usage: ls [OPTION]... [FILE]...\nList information about the FILEs (the current directory by default).\n\nMandatory arguments to long options are mandatory for short options too.\n  -a, --all                  do not ignore entries starting with .\n  -A, --almost-all           do not list implied . and ..\n  -d, --directory            list directories themselves, not their contents\n  -F, --classify[=WHEN]      append indicator (one of */=>@|) to entries WHEN\n  -h, --human-readable       with -l and -s, print sizes like 1K 234M 2G etc.\n  -l                         use a long listing format\n  -1                         list one file per line\n      --help        display this help and exit\n\nThe WHEN argument defaults to 'always' and can also be 'auto' or 'never'.\n\nExit status:\n 0  if OK,\n 1  if minor problems (e.g., cannot access subdirectory),\n 2  if serious trouble (e.g., cannot access command-line argument).\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>",
+  "status": "0",
+  "promptDanach": "raizo@terminal:/$"
+ },
+ {
+  "befehl": "ls /",
+  "ausgabe": "etc\nvar\npgcl-eu3.arch07",
+  "status": "0",
+  "promptDanach": "raizo@terminal:/$"
+ },
+ {
   "befehl": "ls /etc",
-  "ausgabe": "chatscripts/\nppp/",
+  "ausgabe": "chatscripts\nppp",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls /etc/ppp",
-  "ausgabe": "peers/",
+  "ausgabe": "peers",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
@@ -133,37 +133,37 @@
  },
  {
   "befehl": "ls /etc /var",
-  "ausgabe": "ls: /etc /var: No such file or directory",
-  "status": "1",
+  "ausgabe": "/etc:\nchatscripts\nppp\n\n/var:\ncache\nlog",
+  "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls -l /etc",
-  "ausgabe": "ls: unrecognized option '-l /etc'",
-  "status": "1",
+  "ausgabe": "chatscripts\nppp",
+  "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls /nonexistent",
-  "ausgabe": "ls: /nonexistent: No such file or directory",
-  "status": "1",
+  "ausgabe": "ls: cannot access '/nonexistent': No such file or directory",
+  "status": "2",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls etc",
-  "ausgabe": "chatscripts/\nppp/",
+  "ausgabe": "chatscripts\nppp",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls /etc/ppp/peers/kestrel",
-  "ausgabe": "kestrel",
+  "ausgabe": "/etc/ppp/peers/kestrel",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls pgcl-eu3.arch07",
-  "ausgabe": "dossiers/\nops/\nwurzel.txt",
+  "ausgabe": "dossiers\nops\nwurzel.txt",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
@@ -175,13 +175,13 @@
  },
  {
   "befehl": "ls /pgcl-eu3.arch07/dossiers/eins.txt",
-  "ausgabe": "ls: /pgcl-eu3.arch07/dossiers/eins.txt: No such file or directory",
-  "status": "1",
+  "ausgabe": "/pgcl-eu3.arch07/dossiers/eins.txt",
+  "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
  {
   "befehl": "ls /pgcl-eu3.arch07/ops",
-  "ausgabe": "(leer)",
+  "ausgabe": "",
   "status": "0",
   "promptDanach": "raizo@terminal:/$"
  },
@@ -337,13 +337,13 @@
  },
  {
   "befehl": "ls",
-  "ausgabe": "dossiers/\nops/\nwurzel.txt",
+  "ausgabe": "dossiers\nops\nwurzel.txt",
   "status": "0",
   "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
  },
  {
   "befehl": "ls -l",
-  "ausgabe": "dr-x      4096  <ZEIT>  dossiers/\ndr-x      4096  <ZEIT>  ops/\n-r--         1  <ZEIT>  wurzel.txt",
+  "ausgabe": "dr-x      4096  <ZEIT>  dossiers\ndr-x      4096  <ZEIT>  ops\n-r--         1  <ZEIT>  wurzel.txt",
   "status": "0",
   "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
  },
@@ -385,13 +385,13 @@
  },
  {
   "befehl": "ls nichts",
-  "ausgabe": "ls: nichts: No such file or directory",
-  "status": "1",
+  "ausgabe": "ls: cannot access 'nichts': No such file or directory",
+  "status": "2",
   "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
  },
  {
   "befehl": "ls ..",
-  "ausgabe": "dossiers/\nops/\nwurzel.txt",
+  "ausgabe": "dossiers\nops\nwurzel.txt",
   "status": "0",
   "promptDanach": "raizo@terminal:/pgcl-eu3.arch07/dossiers$"
  },
@@ -409,7 +409,7 @@
  },
  {
   "befehl": "ls",
-  "ausgabe": "dossiers/\nops/\nwurzel.txt",
+  "ausgabe": "dossiers\nops\nwurzel.txt",
   "status": "0",
   "promptDanach": "raizo@terminal:/pgcl-eu3.arch07$"
  },

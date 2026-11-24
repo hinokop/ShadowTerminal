@@ -194,6 +194,39 @@ const { APP } = require('./_pfad');
     await p.evaluate(() => { terminalBruecke = window.__orig; });
     await inp.fill('');
 
+    /* J. Dateioperanden mit Pfad (Review #134): die Zeile trägt den eingegebenen Pfad; Bereinigung und Endprüfung prüfen den Basisnamen */
+    await entsperren(z.zu);
+    await p.evaluate(() => { window.__sperreNach = null; });
+    const zeilenOhneEingabe = t => t.split('\n').filter(l => l && !l.startsWith('raizo@terminal'));
+    const absPin = '/' + db + '/ops/' + pinDatei;
+    const operandenFaelle = ['ls ' + absPin + ' unrelated.txt', 'ls -l ./' + pinDatei + ' unrelated.txt', 'ls -F ../ops/' + pinDatei + ' ' + absPin + ' unrelated.txt', 'ls -d ' + pinDatei + ' ' + siZuDatei + ' ' + zoneDatei];
+    for (const befehl of operandenFaelle) {
+      const roh = zeilenOhneEingabe(await cmd(befehl));
+      assert.ok(roh.some(l => l.includes(pinDatei)), 'vor der Sperre sichtbar: ' + befehl);
+      await sperren(z.zu);
+      const danach = await p.evaluate(() => TERMINAL_ZUSTAND.ausgabe.join('\n'));
+      const block = danach.split('\n').filter(l => !l.startsWith('raizo@terminal'));
+      for (const n of gesperrteNamen) assert.ok(!block.some(l => l.includes(n) && !/Permission denied|No such/.test(l)), 'Scrollback ohne ' + n + ' nach: ' + befehl);
+      if (befehl.includes('unrelated.txt')) assert.ok(block.some(l => l.includes('unrelated.txt')), 'neutraler Operand bleibt: ' + befehl);
+      /* neue Ausführung bei bestehender Sperre: Pfadoperand mit gesperrtem Namen wird nicht gelistet, bleibt bei Permission denied */
+      const neu = zeilenOhneEingabe(await cmd(befehl));
+      assert.ok(!neu.some(l => !/Permission denied|No such/.test(l) && gesperrteNamen.some(n => l.includes(n))), 'gesperrt: keine Zeile mit Namen, nur Fehlertext: ' + befehl + ' -> ' + neu.join(' | '));
+      await entsperren(z.zu);
+    }
+    /* Sperre zwischen stat des ersten und stat des zweiten Operanden (verzögert): die Endprüfung vor der Ausgabe entfernt die Zeile */
+    await p.evaluate(() => { window.__statOrig = TERMINAL_FS.stat; TERMINAL_FS.stat = async function (...a) {
+      const r = await window.__statOrig.apply(this, a);
+      if (window.__nachStat && a[0][a[0].length - 1] === 'unrelated.txt') { const id = window.__nachStat; window.__nachStat = null; dispatch({ type: 'DOSSIER_SPERREN', id }); }
+      return r;
+    }; window.__nachStat = STATE.dossiers.eigene.find(x => x.name === 'Quarzfeld Sperrakte').id; });
+    const verzoegert = zeilenOhneEingabe(await cmd('ls -l ' + absPin + ' unrelated.txt'));
+    assert.ok(!verzoegert.some(l => l.includes(pinDatei)), 'Sperre zwischen stat und Ausgabe: Pfadzeile entfernt: ' + verzoegert.join(' | '));
+    assert.ok(verzoegert.some(l => l.includes('unrelated.txt')), 'neutraler Operand bleibt');
+    await p.evaluate(() => { TERMINAL_FS.stat = window.__statOrig; });
+    await entsperren(z.zu);
+    /* Normale Dateien mit Pfad bleiben unverändert sichtbar */
+    assert.ok(zeilenOhneEingabe(await cmd('ls /' + db + '/ops/unrelated.txt')).includes('/' + db + '/ops/unrelated.txt'));
+
     /* F. Messung (keine Prüfung): Filterzeit bei 5000 Einträgen */
     const ms = await p.evaluate(() => {
       const namen = Array.from({ length: 5000 }, (_, i) => i % 5 ? 'datei-' + i + '.txt' : 'lageblatt-PIN-' + String(100 + i).padStart(4, '0') + '.txt');
