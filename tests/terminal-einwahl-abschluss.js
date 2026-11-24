@@ -40,7 +40,7 @@ const { imUeberflug, bis: bisGilt, verbunden } = require('./_kestrel');
     await cmd('wg-quick down wg-sat');
     assert.equal(await badge.isVisible(), true, 'nach wg-quick down läuft das Modem noch');
     await cmd('poff kestrel');
-    assert.match(await out.textContent(), /raizo@terminal:\/\$ poff kestrel$/, 'poff bei Erfolg still');
+    assert.match(await out.textContent(), /raizo@terminal:~\$ poff kestrel$/, 'poff bei Erfolg still');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.modem), null);
     await p.clock.runFor(500);
     assert.equal(await badge.isVisible(), false, 'nach vollständigem Abbau kein Countdown');
@@ -62,7 +62,7 @@ const { imUeberflug, bis: bisGilt, verbunden } = require('./_kestrel');
     assert.match(await out.textContent(), /pppd\[\d+\]: Modem hangup \(NO CARRIER\)\npppd\[\d+\]: Connection terminated\.$/);
     assert.equal(await badge.isVisible(), false, 'nach LOS mit Modem kein Countdown');
     // persist: pppd wählt nach LOS weiter; poff beendet es still, danach läuft keins mehr.
-    await cmd('poff'); assert.match(await out.textContent(), /raizo@terminal:\/\$ poff$/);
+    await cmd('poff'); assert.match(await out.textContent(), /raizo@terminal:~\$ poff$/);
     await cmd('poff'); assert.match(await out.textContent(), /poff: No pppd is running\.  None stopped\.$/);
     assert.deepEqual(errors, []);
     console.log('OK: Einwahlabschluss ohne Countdown und ohne zweite Abbruchmeldung');

@@ -37,43 +37,43 @@
   },
   {
     "befehl": "ls",
-    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -a",
-    "ausgabe": ".\n..\netc\npgcl-eu3.arch07\nvar",
+    "ausgabe": ".\n..\netc\nhome\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -l",
-    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -la",
-    "ausgabe": ".\n..\netc\npgcl-eu3.arch07\nvar",
+    "ausgabe": ".\n..\netc\nhome\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -al",
-    "ausgabe": ".\n..\netc\npgcl-eu3.arch07\nvar",
+    "ausgabe": ".\n..\netc\nhome\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -1",
-    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -lh",
-    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -85,7 +85,7 @@
   },
   {
     "befehl": "ls -F",
-    "ausgabe": "etc/\npgcl-eu3.arch07/\nvar/",
+    "ausgabe": "etc/\nhome/\npgcl-eu3.arch07/\ntmp/\nvar/",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -109,7 +109,7 @@
   },
   {
     "befehl": "ls /",
-    "ausgabe": "etc\npgcl-eu3.arch07\nvar",
+    "ausgabe": "etc\nhome\npgcl-eu3.arch07\ntmp\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -189,13 +189,13 @@
     "befehl": "cd",
     "ausgabe": "",
     "status": "0",
-    "promptDanach": "raizo@terminal:/$"
+    "promptDanach": "raizo@terminal:~$"
   },
   {
     "befehl": "pwd",
-    "ausgabe": "/",
+    "ausgabe": "/home/raizo",
     "status": "0",
-    "promptDanach": "raizo@terminal:/$"
+    "promptDanach": "raizo@terminal:~$"
   },
   {
     "befehl": "cd /",
@@ -207,7 +207,7 @@
     "befehl": "cd ~",
     "ausgabe": "",
     "status": "0",
-    "promptDanach": "raizo@terminal:/$"
+    "promptDanach": "raizo@terminal:~$"
   },
   {
     "befehl": "cd /etc",
@@ -289,39 +289,39 @@
   },
   {
     "befehl": "cd ~/etc",
-    "ausgabe": "",
-    "status": "0",
-    "promptDanach": "raizo@terminal:/etc$"
+    "ausgabe": "bash: cd: ~/etc: No such file or directory",
+    "status": "1",
+    "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "echo $HOME",
     "ausgabe": "$HOME",
     "status": "0",
-    "promptDanach": "raizo@terminal:/etc$"
+    "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "echo $PWD",
     "ausgabe": "$PWD",
     "status": "0",
-    "promptDanach": "raizo@terminal:/etc$"
+    "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "echo $OLDPWD",
     "ausgabe": "$OLDPWD",
     "status": "0",
-    "promptDanach": "raizo@terminal:/etc$"
+    "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "cd $HOME",
     "ausgabe": "bash: cd: $HOME: No such file or directory",
     "status": "1",
-    "promptDanach": "raizo@terminal:/etc$"
+    "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "cd /var/log/syslog",
     "ausgabe": "bash: cd: /var/log/syslog: Not a directory",
     "status": "1",
-    "promptDanach": "raizo@terminal:/etc$"
+    "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "cd /pgcl-eu3.arch07",

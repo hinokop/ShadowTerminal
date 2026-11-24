@@ -44,7 +44,7 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
     assert.match(await pane.textContent(), new RegExp(pass.name + '\\s+\\d+\\s+\\d+\\s+\\d+\\s+LOS '));
     // automatic-rename: der Name folgt dem aktiven Bereich; mit -d bleibt das die Shell.
     assert.match(await status.textContent(), /^\[0\] 0:bash\*/);
-    assert.equal(await prompt.textContent(), 'raizo@terminal:/$');
+    assert.equal(await prompt.textContent(), 'raizo@terminal:~$');
     assert.equal(await inp.evaluate(e => e.readOnly), false);
     const panePos = await pane.evaluate(e => e.getBoundingClientRect().top), ausPos = await out.evaluate(e => e.getBoundingClientRect().top);
     assert.ok(panePos < ausPos, 'Fenster oberhalb der Shell');
@@ -68,7 +68,7 @@ const { imUeberflug, schnelleWahl } = require('./_kestrel');
 
     /* Strg+C unten wirkt nur auf die Shell */
     await inp.fill('halb'); await inp.press('Control+c');
-    assert.equal(await letzte(), 'raizo@terminal:/$ halb^C');
+    assert.equal(await letzte(), 'raizo@terminal:~$ halb^C');
     assert.equal(await pane.isVisible(), true);
     /* Strg+B ↑: Fokus oben, Eingabe gesperrt; Strg+B ↓ zurück */
     await inp.press('Control+b'); await inp.press('ArrowUp');

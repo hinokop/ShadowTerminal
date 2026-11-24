@@ -1,7 +1,9 @@
 /* Verhaltensaufnahme von pwd, cd und ls. Führt die Messsonde (_sonde-shell-6a.js, 75 Befehle gegen die echte lokale Brücke mit
    Beispielarchiv) aus und vergleicht Ausgabe, Rückgabewert ($?) und Prompt Befehl für Befehl mit der Aufnahme _golden-shell-6a4a.json
    (Zeitstempel normalisiert). Fortschreibung: 6a-0 ohne Verhaltensänderung, 6a-1 änderte fünf pwd-Fälle, 6a-2 die cd-Fälle (Bash-Präfix,
-   too many arguments, invalid option, cd -, Not a directory im Archiv), 6a-3 die ls-Fälle (kein Schrägstrich ohne -F, Optionen, Operanden, GNU-Fehlertexte, leere Verzeichnisse ohne Ausgabe), 6a-4a die ls-Reihenfolge (en_US.UTF-8) und . und .. bei -a. Spätere Etappen passen die Aufnahme bewusst an. */
+   too many arguments, invalid option, cd -, Not a directory im Archiv), 6a-3 die ls-Fälle (kein Schrägstrich ohne -F, Optionen, Operanden, GNU-Fehlertexte, leere Verzeichnisse ohne Ausgabe), 6a-4a die ls-Reihenfolge (en_US.UTF-8) und . und .. bei -a. Spätere Etappen passen die Aufnahme bewusst an.
+   Paket 1 (VFS): Die Messreihe startet in der Wurzel (Zustand wird gesetzt); die Wurzel zeigt zusätzlich home und tmp, "cd" und "cd ~" führen nach /home/raizo,
+   "cd ~/etc" scheitert dort (Aufnahme entsprechend fortgeschrieben). Übrige Fälle unverändert. */
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');

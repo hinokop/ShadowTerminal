@@ -78,7 +78,7 @@ const { APP } = require('./_pfad');
     assert.equal(await status(), '1');
     assert.equal(await gesperrt(z.zu), true);
     assert.equal((await ansicht()).modul, 'profil');
-    assert.equal(await prompt.textContent(), 'raizo@terminal:/$');
+    assert.equal(await prompt.textContent(), 'raizo@terminal:~$');
 
     /* Strg+C: Zeilenumbruch ohne ^C, 130, bleibt gesperrt */
     await starten('sudo map ' + z.pin);

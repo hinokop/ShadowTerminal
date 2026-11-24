@@ -80,7 +80,7 @@ const PF = require('./_pfad');
     assert.equal(await eingabe.inputValue(), 'wg');
     await eingabe.press('Tab'); assert.equal(await eingabe.inputValue(), 'wget ');
     await eingabe.press('Enter'); await eingabe.fill('');
-    assert.equal(await p.locator('#profil-terminal-prompt').textContent(), 'raizo@terminal:/$');
+    assert.equal(await p.locator('#profil-terminal-prompt').textContent(), 'raizo@terminal:~$');
     await tab('cd /pg', 'cd /pgcl-eu3.arch07/');
     await eingabe.press('Enter');
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.dateiLaeuft);
