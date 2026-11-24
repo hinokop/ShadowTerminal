@@ -232,14 +232,14 @@ function terminalPfad(arg) {
 // Pfade der Oberfläche beginnen an einer virtuellen Wurzel. Nur der Archivzweig geht an die Brücke.
 function terminalShellPfad(arg) {
   const ort = TERMINAL_ZUSTAND.ort;
-  return terminalPfadAufloesen(arg, ort ? [TERMINAL_DB].concat(ort) : (TERMINAL_ZUSTAND.virtuellerOrt || []));
+  return terminalPfadAufloesen(arg, ort ? [TERMINAL_DB].concat(ort) : (TERMINAL_ZUSTAND.virtuellerOrt || TERMINAL_HEIM));
 }
 /* Reine Pfadauflösung: Segmentliste ab der Wurzel aus Eingabe und ausdrücklich übergebenem Arbeitsverzeichnis (Segmente);
    liest keinen globalen Zustand. null bei unzulässigen Zeichen. */
 function terminalPfadAufloesen(arg, cwdSegmente) {
   if (/[:\\]|[\u0000-\u001f\u007f]/.test(arg)) return null;
   const absolut = arg.startsWith('/') || arg === '~' || arg.startsWith('~/');
-  const out = absolut ? [] : cwdSegmente.slice();
+  const out = arg === '~' || arg.startsWith('~/') ? TERMINAL_HEIM.slice() : absolut ? [] : cwdSegmente.slice();
   for (const name of (arg === '~' || arg.startsWith('~/') ? arg.slice(1) : arg).split('/')) {
     if (!name || name === '.') continue;
     if (name === '..') out.pop();
@@ -260,7 +260,7 @@ const TERMINAL_VIRT_DATEIEN = new Map([
 ]);
 function terminalArbeitsverzeichnis() {
   const t = TERMINAL_ZUSTAND;
-  return '/' + (t.ort ? [TERMINAL_DB].concat(t.ort) : t.virtuellerOrt || []).join('/');
+  return '/' + (t.ort ? [TERMINAL_DB].concat(t.ort) : t.virtuellerOrt || TERMINAL_HEIM).join('/');
 }
 /* Einheitliche Zugriffsprüfung für archivierte Kartenobjekte in der Terminal-Oberfläche (Pin, Zone, Sichtung).
    Die lokale Python-Brücke selbst besitzt keine Profilberechtigungen; direkter Dateisystemzugriff außerhalb dieser
@@ -311,7 +311,7 @@ const TERMINAL_ARCHIV_NAME_SUCHE = /(?:lageblatt-PIN-\d{3,15}(?:-v\d{1,2})?|zone
 function terminalZeileMitGesperrtemName(zeile, sicht) {
   sicht = sicht || terminalArchivSichtbarkeit();
   const roh = String(zeile), texte = [roh], z = terminalZerlegen(roh);
-  if (!z.fehler) z.folge.forEach(function (f) { f.woerter.forEach(function (w) { texte.push(w); }); });
+  if (!z.fehler) z.folge.forEach(function (f) { f.woerter.forEach(function (w) { texte.push(w); }); if (f.umleit && f.umleit.ziel) texte.push(f.umleit.ziel); });
   return texte.some(function (text) { return (text.match(TERMINAL_ARCHIV_NAME_SUCHE) || []).some(function (m) { return !sicht(m); }); });
 }
 /* Sperrstand als Zeichenkette; ändert er sich (Sperren, Entsperren, Verknüpfung von Pin oder Zone), verfallen alle abgeleiteten Zustände
@@ -444,6 +444,11 @@ function terminalSitzungTrennen() {
 /* Angemeldeter Benutzer der Shell: ein gewöhnlicher Benutzer (kein root), damit sudo ein Kennwort verlangen kann; sudo fragt
    root nie (plugins/sudoers/check.c). Prompt wie bash unter Ubuntu, PS1 '\u@\h:\w\$': '$' für Nicht-root. */
 const TERMINAL_BENUTZER = 'raizo', TERMINAL_UID = 1000;     /* erster Benutzer unter Ubuntu; tmux legt seinen Socket unter /tmp/tmux-<uid> an (tmux.c) */
+/* Wie bash: das Heimverzeichnis erscheint im Prompt als "~" (PS1 \w) */
+function terminalPromptOrt() {
+  const o = terminalArbeitsverzeichnis(), heim = '/' + TERMINAL_HEIM.join('/');
+  return o === heim ? '~' : o.startsWith(heim + '/') ? '~' + o.slice(heim.length) : o;
+}
 function terminalPrompt() {
   if (TERMINAL_ZUSTAND.sudo) return TERMINAL_ZUSTAND.sudo.pruefen ? '' : terminalSudoPrompt();
   if (TERMINAL_ZUSTAND.orbitLive) return 'predict · Ctrl+C';
@@ -451,7 +456,7 @@ function terminalPrompt() {
   if (TERMINAL_ZUSTAND.kette && !TERMINAL_ZUSTAND.kanal) return '';
   const kanal = TERMINAL_ZUSTAND.kanal;
   if (kanal) return '>';
-  return TERMINAL_BENUTZER + '@terminal:' + terminalArbeitsverzeichnis() + '$';
+  return TERMINAL_BENUTZER + '@terminal:' + terminalPromptOrt() + '$';
 }
 function terminalName(arg) {
   if (!arg) return '';
@@ -522,7 +527,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
   const nichtGefunden = befehl + ': ' + name + ': No such file or directory';
   if (!virtuell) { terminalAusgabe(befehl + ': ' + name + ': Permission denied'); return 1; }
   const voll = '/' + virtuell.join('/');
-  const listing = !virtuell.length ? ['etc/', 'var/', TERMINAL_DB + '/'] : TERMINAL_TLE_DIRS.get(voll);
+  const listing = !virtuell.length ? TERMINAL_WURZEL_LISTE : TERMINAL_TLE_DIRS.get(voll);
   if (listing) {
     terminalAusgabe(befehl + ': ' + name + ': Is a directory');
     return 1;
@@ -563,7 +568,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
    der virtuelle Baum (TERMINAL_TLE_DIRS, TERMINAL_VIRT_DATEIEN, Wurzel) und die Archivbrücke (TERMINAL_DB, nur lesend).
    Fehler sind Objekte { fehler: 'ENOENT' | 'EROFS' | 'ENOSYS' | <Text der Brücke> }, keine Ausnahmen.
    Bewusst noch NICHT auf dieser Schnittstelle: cat, head, tail, wget (terminalDateiBefehl) und die Tab-Ergänzung. */
-const TERMINAL_WURZEL_LISTE = ['etc/', 'var/', TERMINAL_DB + '/'];
+const TERMINAL_WURZEL_LISTE = ['etc/', 'home/', 'tmp/', 'var/', TERMINAL_DB + '/'];
 const TERMINAL_FS = {
   /* Sichtbarkeitsregel gesperrter Archivobjekte (Variante B, Plan 9.3): der Name ist ebenfalls geschützt. Die Regel gilt zentral in
      terminalBruecke('ls') und hier als zweite Schranke (readdir); Befehle prüfen nicht selbst. */
@@ -579,6 +584,7 @@ const TERMINAL_FS = {
     const voll = '/' + seg.join('/');
     if (!seg.length || TERMINAL_TLE_DIRS.has(voll)) return { adapter: 'virtuell', typ: 'dir' };
     if (voll === '/var/log/syslog' || TERMINAL_VIRT_DATEIEN.has(voll)) return { adapter: 'virtuell', typ: 'file' };
+    if (TERMINAL_VFS.zugehoerig(seg)) { await terminalVfsBereit(); return TERMINAL_VFS.stat(seg); }
     if (seg[0] !== TERMINAL_DB) return { fehler: 'ENOENT' };
     if (opt && opt.pruefen) {
       let archivEintrag = null;
@@ -605,6 +611,7 @@ const TERMINAL_FS = {
       const liste = !seg.length ? TERMINAL_WURZEL_LISTE : TERMINAL_TLE_DIRS.get(voll);
       return { eintraege: liste.map(function (x) { return x.endsWith('/') ? { name: x.slice(0, -1), dir: true } : { name: x, dir: false }; }) };
     }
+    if (TERMINAL_VFS.zugehoerig(seg)) { await terminalVfsBereit(); return TERMINAL_VFS.readdir(seg); }
     if (seg[0] !== TERMINAL_DB) return { fehler: 'ENOENT' };
     const antwort = await terminalBruecke('ls', seg.slice(1), !!(opt && opt.versteckt));
     if (antwort.error) return { fehler: antwort.error };
@@ -616,13 +623,47 @@ const TERMINAL_FS = {
     if (TERMINAL_VIRT_DATEIEN.has(voll)) return { text: TERMINAL_VIRT_DATEIEN.get(voll)() };
     if (!seg.length || TERMINAL_TLE_DIRS.has(voll)) return { fehler: 'EISDIR' };
     if (voll === '/var/log/syslog') return { fehler: 'ENOSYS' };
+    if (TERMINAL_VFS.zugehoerig(seg)) { await terminalVfsBereit(); return TERMINAL_VFS.readFile(seg); }
     if (seg[0] !== TERMINAL_DB) return { fehler: 'ENOENT' };
     const antwort = await terminalBruecke('cat', seg.slice(1), false);
     return antwort.error ? { fehler: antwort.error } : { text: antwort.text };
   },
-  /* Nur entworfen: beide Adapter sind schreibgeschützt. */
-  writeFile: async function () { return { fehler: 'EROFS' }; }
+  /* Schreibende Operationen (Paket 1): nur das persistente VFS (/home/raizo, /tmp) ist beschreibbar; alle übrigen Anbieter weisen ab
+     (zentrale Richtlinienstufe: Pfadgültigkeit und Rechte vor dem Anbieter, Quoten im Anbieter selbst in derselben Transaktion). */
+  schreiben: function (seg, text, opt) { return terminalFsSchreibOp([seg], function () { return TERMINAL_VFS.schreiben(seg, text, opt); }, { eltern: false }); },
+  mkdir: function (seg, opt) { return terminalFsSchreibOp([seg], function () { return TERMINAL_VFS.mkdir(seg, opt); }, { mkdir: !!(opt && opt.eltern) }); },
+  entfernen: function (seg, opt) { return terminalFsSchreibOp([seg], function () { return TERMINAL_VFS.entfernen(seg, opt); }, {}); },
+  umbenennen: function (von, nach) { return terminalFsSchreibOp([von, nach], function () { return TERMINAL_VFS.umbenennen(von, nach); }, {}); },
+  kopieren: function (von, nach, opt) { return terminalFsSchreibOp([von, nach], function () { return TERMINAL_VFS.kopieren(von, nach, opt); }, {}); },
+  writeFile: function (seg, text, opt) { return TERMINAL_FS.schreiben(seg, text, opt); }
 };
+let terminalVfsStart = null;
+/* Die VFS-Sitzung beginnt mit der ersten Dateioperation: /tmp wird geleert, wenn kein anderes Fenster lebt (Architektur 9a.2) */
+function terminalVfsBereit() {
+  if (!terminalVfsStart) terminalVfsStart = TERMINAL_VFS.sitzungStart();
+  return terminalVfsStart;
+}
+async function terminalVfsEnde() {
+  clearTimeout(terminalHomeTimer);
+  if (terminalVfsStart && TERMINAL_ZUSTAND.homeAenderung && terminalBrueckenAdresse()) await terminalHomeSichern(true);
+  if (!terminalVfsStart) return;
+  await TERMINAL_VFS.sitzungEnde();
+  terminalVfsStart = null;
+}
+window.addEventListener('pagehide', function () { if (terminalVfsStart) void TERMINAL_VFS.sitzungEnde(); });
+async function terminalFsAbweisung(seg, ziel) {
+  if (ziel && ziel.mkdir) { const st = await TERMINAL_FS.stat(seg); if (!st.fehler && st.typ === 'dir') return { ok: true }; }
+  if (seg.length > 1) { const st = await TERMINAL_FS.stat(seg.slice(0, -1)); if (st.fehler === 'ENOENT') return { fehler: 'ENOENT' }; }
+  return { fehler: 'EACCES' };
+}
+async function terminalFsSchreibOp(segs, op, ziel) {
+  const fremd = segs.find(function (s) { return !TERMINAL_VFS.zugehoerig(s); });
+  if (fremd) return terminalFsAbweisung(fremd, ziel);
+  await terminalVfsBereit();
+  const r = await op();
+  if (!r.fehler && segs.some(function (s) { return s[0] === 'home'; })) terminalHomeGeaendert();
+  return r;
+}
 function terminalFsFehlerText(befehl, name, fehler) {
   if (fehler === 'ENOENT' || fehler === 'Datei oder Ordner nicht gefunden') return befehl + ': ' + name + ': No such file or directory';
   return befehl + ': ' + fehler;
@@ -716,7 +757,8 @@ async function terminalCdAufloesen(ctx, ziel) {
   const roh = await ctx.fs.resolve(ziel, { cwd: ctx.cwd });
   if (!roh) return { fehler: 'Permission denied' };
   const absolut = ziel.startsWith('/') || ziel === '~' || ziel.startsWith('~/');
-  let seg = absolut ? [] : await ctx.fs.resolve('', { cwd: ctx.cwd }), geprueft = null;
+  const heim = ziel === '~' || ziel.startsWith('~/');
+  let seg = heim ? TERMINAL_HEIM.slice() : absolut ? [] : await ctx.fs.resolve('', { cwd: ctx.cwd }), geprueft = null;
   for (const name of (ziel === '~' || ziel.startsWith('~/') ? ziel.slice(1) : ziel).split('/')) {
     if (!name || name === '.') continue;
     if (name === '..') { seg = seg.slice(0, -1); continue; }
@@ -747,7 +789,7 @@ async function terminalBefehlCd(ctx) {
   }
   const operanden = args.slice(i);
   if (operanden.length > 1) return terminalBefehlFehler('bash: cd: too many arguments');
-  let ziel = operanden.length ? operanden[0] : '/', ausgeben = false;
+  let ziel = operanden.length ? operanden[0] : '~', ausgeben = false;
   if (ziel === '-') {
     if (!ctx.env.OLDPWD) return terminalBefehlFehler('bash: cd: OLDPWD not set');
     ziel = ctx.env.OLDPWD; ausgeben = true;
@@ -863,7 +905,7 @@ async function terminalLsAufloesen(ctx, ziel) {
   if (!roh) return { fehler: 'Permission denied' };
   const absolut = ziel.startsWith('/') || ziel === '~' || ziel.startsWith('~/');
   const teile = (ziel === '~' || ziel.startsWith('~/') ? ziel.slice(1) : ziel).split('/');
-  let seg = absolut ? [] : await ctx.fs.resolve('', { cwd: ctx.cwd }), st = null, datei = false;
+  let seg = ziel === '~' || ziel.startsWith('~/') ? TERMINAL_HEIM.slice() : absolut ? [] : await ctx.fs.resolve('', { cwd: ctx.cwd }), st = null, datei = false;
   for (let i = absolut ? 1 : 0; i < teile.length; i++) {
     const name = teile[i];
     if (datei) return { fehler: 'ENOTDIR' };
@@ -886,7 +928,7 @@ async function terminalBefehlLs(ctx) {
   const marke = function (name, dir) { return name + (opt.F && dir ? '/' : ''); };
   const zeile = function (name, dir, e, adapter) {
     if (opt.format !== 'l' || adapter === 'virtuell' || !e) return marke(name, dir);
-    return (dir ? 'dr-x' : '-r--') + '  ' + (opt.h ? terminalLsGroesse(e.bytes) : String(e.bytes)).padStart(8) + '  ' + fmtZ(e.mtime * 1000) + '  ' + marke(name, dir);
+    return (adapter === 'vfs' ? (dir ? 'drwxr-xr-x' : '-rw-r--r--') : dir ? 'dr-x' : '-r--') + '  ' + (opt.h ? terminalLsGroesse(e.bytes) : String(e.bytes)).padStart(8) + '  ' + fmtZ(e.mtime * 1000) + '  ' + marke(name, dir);
   };
   for (const op of operanden) {
     const r = await terminalLsAufloesen(ctx, op);
@@ -2221,9 +2263,10 @@ function terminalNmapEnde(code) {
 const TERMINAL_STATUS_MARKE = '\u0001';
 function terminalZerlegen(zeile) {
   const folge = [];
-  let woerter = [], wort = null, quote = null;
-  const wortEnde = function () { if (wort !== null) { woerter.push(wort); wort = null; } };
-  const befehlEnde = function (op) { wortEnde(); folge.push({ woerter, op }); woerter = []; };
+  let woerter = [], wort = null, quote = null, umleit = null, offen = null, syntax = null;
+  /* Umleitung ">" und ">>" (Paket 1): das nächste Wort ist das Ziel und gehört nicht zu den Argumenten */
+  const wortEnde = function () { if (wort !== null) { if (offen) { offen.ziel = wort; offen = null; } else woerter.push(wort); wort = null; } };
+  const befehlEnde = function (op) { wortEnde(); if (offen && !syntax) syntax = op || 'newline'; offen = null; folge.push({ woerter, op, umleit }); woerter = []; umleit = null; };
   for (let i = 0; i < zeile.length; i++) {
     const c = zeile[i], n = zeile[i + 1];
     if (quote === "'") { if (c === "'") quote = null; else wort += c; continue; }
@@ -2240,15 +2283,27 @@ function terminalZerlegen(zeile) {
     if (c === '&' && n === '&') { befehlEnde('&&'); i++; continue; }
     if (c === '|' && n === '|') { befehlEnde('||'); i++; continue; }
     if (c === ';') { befehlEnde(';'); continue; }
+    if (c === '>') {
+      if (wort !== null && /^\d+$/.test(wort)) return { fehler: 'terminal: file descriptor redirections are not supported' };
+      wortEnde();
+      if (offen) return { fehler: "terminal: syntax error near unexpected token `>'" };
+      if (umleit) return { fehler: 'terminal: multiple redirections are not supported' };
+      const art = n === '>' ? '>>' : '>';
+      if (n === '>') i++;
+      if (zeile[i + 1] === '&' || zeile[i + 1] === '|') return { fehler: 'terminal: ' + art + zeile[i + 1] + ' redirections are not supported' };
+      umleit = { art: art, ziel: null }; offen = umleit;
+      continue;
+    }
     if ('|&<>`'.includes(c) || (c === '$' && n === '(')) return { fehler: 'terminal: ' + (c === '$' ? '$(' : c) + ': pipes, redirections and substitutions are not supported' };
     if (c === '$' && n === '?') { wort = (wort ?? '') + TERMINAL_STATUS_MARKE; i++; continue; }
     wort = (wort ?? '') + c;
   }
   if (quote) return { fehler: 'terminal: unexpected EOF while looking for matching `' + quote + "'" };
   befehlEnde(null);
-  if (folge.length > 1 && !folge.at(-1).woerter.length && folge.at(-2).op === ';') folge.pop();
+  if (syntax) return { fehler: "terminal: syntax error near unexpected token `" + syntax + "'" };
+  if (folge.length > 1 && !folge.at(-1).woerter.length && !folge.at(-1).umleit && folge.at(-2).op === ';') folge.pop();
   for (let i = 0; i < folge.length; i++) {
-    if (folge[i].woerter.length) continue;
+    if (folge[i].woerter.length || folge[i].umleit) continue;
     const token = folge[i].op || (i ? 'newline' : '');
     return { fehler: 'terminal: syntax error near unexpected token `' + token + "'" };
   }
@@ -2488,6 +2543,7 @@ async function terminalEinzelbefehl(woerter) {
   return eintrag.aus(args, arg);
 }
 // Aufruffehler einfacher Befehle: usage-Zeile, Rückgabewert 2.
+function terminalVfsPfad(name) { const seg = terminalShellPfad(name); return !!seg && TERMINAL_VFS.zugehoerig(seg); }
 function terminalUsage(text) { terminalAusgabe('usage: ' + text); return 2; }
 async function terminalDateiAusfuehren(befehl, arg, args) {
   const t = TERMINAL_ZUSTAND;
@@ -2495,7 +2551,9 @@ async function terminalDateiAusfuehren(befehl, arg, args) {
   t.dateiLaeuft = true;
   const version = t.version;
   try {
-    const fn = befehl === 'cd' ? terminalBefehlCd : befehl === 'ls' ? terminalBefehlLs : null;
+    const fn = befehl === 'cd' ? terminalBefehlCd : befehl === 'ls' ? terminalBefehlLs :
+      (befehl === 'cat' || befehl === 'head' || befehl === 'tail') && args && args.length && terminalVfsPfad(args[args.length - 1]) ? terminalLeser(befehl) :
+      terminalBefehlDirekt(befehl);
     return fn ? await terminalBefehlLauf(fn, args || [], arg, version) : await terminalDateiBefehl(befehl, arg, version);
   } catch (e) {
     if (t.version === version) terminalAusgabe('Dateioperation fehlgeschlagen');
@@ -3017,7 +3075,7 @@ const TERMINAL_TABELLE = [
   { name: 'head', hilfe: [[0, 4, 'head <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('head') },
   { name: 'tail', hilfe: [[0, 5, 'tail <datei>']], tab: { art: 'tail' }, aus: async function (args, arg) {
     const ppp = await terminalPppShell('tail', arg, args);
-    return ppp !== null ? ppp : terminalDateiAusfuehren('tail', arg);
+    return ppp !== null ? ppp : terminalDateiAusfuehren('tail', arg, args);
   } },
   { name: 'wget', hilfe: [[0, 6, 'wget <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('wget') },
   { name: 'help', aus: function (args, arg) { if (arg) return terminalUsage('help'); terminalAusgabe(terminalHilfe()); return 0; } },
@@ -3057,6 +3115,7 @@ const TERMINAL_TABELLE = [
     t.version++;
     terminalTransferStop();
     terminalKonsoleSchliessen();
+    void terminalVfsEnde();   /* Abmeldung: letzte Sicherung, /tmp leeren (letzte Sitzung) */
     return 0;
   } },
   { name: 'predict', hilfe: [[1, 0, 'predict']], tab: { art: 'predict' }, aus: TERMINAL_PPP('predict') },
@@ -3070,7 +3129,17 @@ const TERMINAL_TABELLE = [
   { name: 'map', hilfe: [[0, 6.6, 'map [pins [query]|zones [query]|PIN-nnn|ZO-nnn|name]']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('map', args); } },
   { name: 'open', hilfe: [[0, 6.7, 'open <id|name|export name>']], tab: { art: 'navigation' }, aus: function (args) { return terminalNavigation('open', args); } },
   { name: 'sudo', hilfe: [[0, 6.8, 'sudo <command>']], tab: { art: 'navigation' }, aus: function (args) { return terminalSudo(args); } },
-  { name: 'echo', hilfe: [[0, 7, 'echo']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
+  { name: 'touch', hilfe: [[0, 6.91, 'touch <file>...']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('touch') },
+  { name: 'mkdir', hilfe: [[0, 6.92, 'mkdir [-p] <dir>...']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('mkdir') },
+  { name: 'rmdir', hilfe: [[0, 6.93, 'rmdir <dir>...']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('rmdir') },
+  { name: 'rm', hilfe: [[0, 6.94, 'rm [-rf] <path>...']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('rm') },
+  { name: 'cp', hilfe: [[0, 6.95, 'cp [-r] <src>... <dest>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('cp') },
+  { name: 'mv', hilfe: [[0, 6.96, 'mv <src>... <dest>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('mv') },
+  { name: 'nano', hilfe: [[0, 6.97, 'nano <file>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('nano') },
+  { name: 'home-backup', hilfe: [[0, 6.98, 'home-backup [list]']], tab: { art: 'optionen', werte: ['list'] }, aus: TERMINAL_DATEI('home-backup') },
+  { name: 'home-restore', hilfe: [[0, 6.985, 'home-restore [--yes] [name]']], aus: TERMINAL_DATEI('home-restore') },
+  { name: 'home-export', hilfe: [[0, 6.99, 'home-export']], aus: TERMINAL_DATEI('home-export') },
+  { name: 'echo', hilfe: [[0, 7, 'echo [> file | >> file]']], aus: function (args) { terminalAusgabe(args.join(' ')); return 0; } },
   { name: 'true', hilfe: [[0, 8, 'true']], aus: function (args, arg) { return arg ? terminalUsage('true') : 0; } },
   { name: 'false', hilfe: [[0, 9, 'false']], aus: function (args, arg) { return arg ? terminalUsage('false') : 1; } },
   { name: 'wg-quick', hilfe: [[1, 4, 'wg-quick']], tab: { art: 'fest', werte: ['up wg-sat', 'down wg-sat'] }, aus: TERMINAL_PPP('wg-quick') },
@@ -3095,7 +3164,10 @@ async function terminalKetteAusfuehren(folge) {
       if (t.satLink) terminalSatLinkAktiv(t.satLink);
       const woerter = teil.woerter.map(function (w) { return w.split(TERMINAL_STATUS_MARKE).join(String(t.status)); });
       let code;
-      try { code = await terminalEinzelbefehl(woerter); } catch (e) { code = 1; }
+      try {
+        const um = teil.umleit ? { art: teil.umleit.art, ziel: teil.umleit.ziel.split(TERMINAL_STATUS_MARKE).join(String(t.status)) } : null;
+        code = um ? await terminalUmgeleitet(woerter, um) : await terminalEinzelbefehl(woerter);
+      } catch (e) { code = 1; }
       if (t.kette !== kette) return;
       t.status = kette.abgebrochen ? kette.code : typeof code === 'number' ? code : 0;
     }
@@ -3257,6 +3329,11 @@ async function terminalTab(lauf, m) {
     fertig(befehl + ' ', arg, tab.werte || tab.optionen, function (x) { return x; });
     return;
   }
+  /* Befehle mit mehreren Operanden: ergänzt wird das letzte Wort (cp a.txt b<Tab>) */
+  if (['cp', 'mv', 'rm', 'touch', 'mkdir', 'rmdir', 'cat', 'head', 'tail', 'nano'].includes(befehl) && !/['"]/.test(arg)) {
+    const mm = /^(.*\s)?(\S*)$/.exec(arg);
+    kopfB += mm[1] || ''; arg = mm[2];
+  }
   const anfang = arg[0] === '"' || arg[0] === "'" ? arg[0] : '';
   const pfad = anfang ? arg.slice(1, arg.endsWith('/' + anfang) ? -1 : undefined) : arg;
   if ((anfang && pfad.includes(anfang)) || /[:\\]|[\u0000-\u001f\u007f]/.test(pfad)) return;
@@ -3264,10 +3341,25 @@ async function terminalTab(lauf, m) {
   const basis = pfad.slice(0, slash), prefix = pfad.slice(slash);
   const teile = terminalShellPfad(basis);
   if (!teile) return;
-  const listing = !teile.length ? ['etc/', 'var/', TERMINAL_DB + (basis ? '/' : '')] : TERMINAL_TLE_DIRS.get('/' + teile.join('/'));
+  const nurDir = befehl === 'cd' || befehl === 'rmdir';
+  const listing = !teile.length ? TERMINAL_WURZEL_LISTE.map(function (x) { return x === TERMINAL_DB + '/' && !basis ? TERMINAL_DB : x; }) : TERMINAL_TLE_DIRS.get('/' + teile.join('/'));
   if (listing) {
-    const namen = listing.filter(x => befehl !== 'cd' || x.endsWith('/') || x === TERMINAL_DB).map(x => basis + x);
+    const namen = listing.filter(x => !nurDir || x.endsWith('/') || x === TERMINAL_DB).map(x => basis + x);
     fertig(kopfB + anfang, pfad, namen, function (x) { return x + anfang; });
+    return;
+  }
+  if (TERMINAL_VFS.zugehoerig(teile)) {
+    await terminalVfsBereit();
+    const r = await TERMINAL_VFS.readdir(teile);
+    if (lauf.nurVorschlag ? !terminalVorschlagGueltig(lauf) : !terminalTabGueltig(lauf)) return;
+    if (r.fehler) return;
+    if (lauf.nurVorschlag) lauf.fertigLs = true;
+    const dateien = r.eintraege.filter(function (x) { return (prefix.startsWith('.') || !x.name.startsWith('.')) && (x.dir || !nurDir); })
+      .map(function (x) { return basis + x.name + (x.dir ? '/' : ''); });
+    fertig(kopfB + anfang, pfad, dateien, function (x) {
+      const quote = anfang || (/\s|^'/.test(x) ? '"' : '');
+      return (quote && !anfang ? quote : '') + x + quote;
+    });
     return;
   }
   if (teile[0] !== TERMINAL_DB) return;
@@ -3278,7 +3370,7 @@ async function terminalTab(lauf, m) {
   if (!antwort.entries) { terminalTabFehler(lauf, antwort); return; }
   terminalTabFehlerZuletzt = '';
   const sichtJetzt = terminalArchivSichtbarkeit();   /* letzte Prüfung unmittelbar vor der Übernahme */
-  const namen = antwort.entries.filter(function (x) { return sichtJetzt(x.name) && (x.dir || befehl !== 'cd'); })
+  const namen = antwort.entries.filter(function (x) { return sichtJetzt(x.name) && (x.dir || !nurDir); })
     .map(function (x) { return basis + x.name + (x.dir ? '/' : ''); });
   fertig(kopfB + anfang, pfad, namen, function (x) {
     const quote = anfang || (/\s|^'/.test(x) ? '"' : '');

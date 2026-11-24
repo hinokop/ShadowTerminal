@@ -29,6 +29,12 @@ TOKEN_HEADER = "X-Shadow-Token"
 MAX_DOWNLOAD = 20 * 1024 * 1024
 MAX_TEXT = 64 * 1024
 MAX_EXPORT_REQUEST = 2 * MAX_TEXT + 1024
+HOME_FOLDER = "terminal-home"   # backups of /home/raizo of the virtual terminal, next to the starter (fixed name, never client-supplied)
+HOME_NAME = re.compile(r"home-([0-9]{8}T[0-9]{6}Z)(?:-([0-9]))?\.json")
+MAX_HOME = 24 * 1024 * 1024
+MAX_HOME_REQUEST = MAX_HOME + 4096
+HOME_KEEP = 10
+HOME_LOCK = threading.Lock()
 EXPORT_IDS = {"pin": re.compile(r"PIN-[0-9]{3,15}"), "zone": re.compile(r"ZO-[0-9]{3,15}"), "sichtung": re.compile(r"[POL]-[0-9]{4,15}-SI-[0-9]{3,15}")}
 PROJECT = Path(__file__).resolve().parent
 DEVICE = re.compile(r"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)", re.I)
@@ -320,6 +326,78 @@ def terminal_export_txt(root, request):
     return {"name": name, "folder": folder, "bytes": len(data), "sha256": sha, "mode": mode}
 
 
+def _home_names(folder):
+    found = []
+    for item in folder.iterdir():
+        match = HOME_NAME.fullmatch(item.name)
+        if match and not item.is_symlink() and item.is_file():
+            found.append(((match.group(1), int(match.group(2) or 0)), item.name))
+    return [name for _key, name in sorted(found, reverse=True)]
+
+
+def terminal_home_op(folder, request):
+    """Backups of the virtual home: fixed folder, server-chosen names, atomic replace, newest HOME_KEEP kept. No client path is used."""
+    if not isinstance(request, dict):
+        raise Refused
+    op, keys = request.get("op"), set(request)
+    if folder.is_symlink():
+        raise Refused
+    if op == "home-list":
+        if keys != {"op"}:
+            raise Refused
+        if not folder.exists():
+            return {"backups": []}
+        if not folder.is_dir():
+            raise Refused
+        return {"backups": [{"name": name, "bytes": (folder / name).stat().st_size} for name in _home_names(folder)]}
+    if op == "home-load":
+        name = request.get("name")
+        if keys != {"op", "name"} or not isinstance(name, str) or not HOME_NAME.fullmatch(name):
+            raise Refused
+        path = folder / name
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_HOME:
+            raise FileNotFoundError
+        raw = path.read_bytes()
+        return {"data": raw.decode("utf-8"), "sha256": hashlib.sha256(raw).hexdigest()}
+    if op == "home-save":
+        data, digest = request.get("data"), request.get("sha256")
+        if keys != {"op", "data", "sha256"} or not isinstance(data, str) or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise Refused
+        raw = data.encode("utf-8")
+        if len(raw) > MAX_HOME:
+            return {"error": "Sicherung zu groß"}
+        if hashlib.sha256(raw).hexdigest() != digest:
+            return {"error": "Prüfsumme stimmt nicht; nichts gespeichert"}
+        try:
+            document = json.loads(data)
+        except ValueError:
+            raise Refused
+        if not isinstance(document, dict) or document.get("format") != "fieldterminal-home":
+            raise Refused
+        with HOME_LOCK:
+            folder.mkdir(exist_ok=True)
+            if folder.is_symlink() or not folder.is_dir():
+                raise Refused
+            stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+            name = next((n for n in [f"home-{stamp}.json"] + [f"home-{stamp}-{i}.json" for i in range(1, 10)] if not (folder / n).exists()), None)
+            if name is None:
+                return {"error": "Zu viele Sicherungen in derselben Sekunde"}
+            temp = folder / (".tmp-" + secrets.token_hex(8))
+            try:
+                with open(temp, "xb") as stream:
+                    stream.write(raw)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temp, folder / name)
+            finally:
+                if temp.exists():
+                    temp.unlink()
+            for old in _home_names(folder)[HOME_KEEP:]:
+                (folder / old).unlink()
+        return {"name": name, "bytes": len(raw), "sha256": digest}
+    raise Refused
+
+
 def terminal_file_op(root, request):
     if not isinstance(request, dict):
         raise Refused
@@ -518,7 +596,8 @@ class NmapJobs:
         raise Refused
 
 
-def make_server(root, token, output=print):
+def make_server(root, token, output=print, home_folder=None):
+    home_folder = home_folder or Path(os.environ.get("SHADOW_TERMINAL_HOME") or PROJECT / HOME_FOLDER)   # the override is for tests only
     session_lock = threading.Lock()
     disconnected = threading.Event()
     nmap = NmapJobs()
@@ -570,11 +649,14 @@ def make_server(root, token, output=print):
             request = None
             try:
                 size = int(self.headers.get("Content-Length", "0"))
-                if not 0 < size <= MAX_EXPORT_REQUEST or self.headers.get_content_type() != "application/json":
+                if not 0 < size <= MAX_HOME_REQUEST or self.headers.get_content_type() != "application/json":
                     raise Refused
-                self.connection.settimeout(5)
+                self.connection.settimeout(5 if size <= MAX_EXPORT_REQUEST else 30)
                 request = json.loads(self.rfile.read(size).decode("utf-8"))
-                if size > 8192 and (not isinstance(request, dict) or request.get("op") != "export-txt"):
+                kind = request.get("op") if isinstance(request, dict) else None
+                if size > 8192 and kind not in ("export-txt", "home-save"):
+                    raise Refused
+                if size > MAX_EXPORT_REQUEST and kind != "home-save":
                     raise Refused
                 if request == {"op": "disconnect"}:
                     try:
@@ -586,6 +668,8 @@ def make_server(root, token, output=print):
                     result = {"error": "Lokale Sitzung getrennt"}
                 elif isinstance(request, dict) and str(request.get("op", "")).startswith("nmap-"):
                     result = nmap.op(request)
+                elif isinstance(request, dict) and str(request.get("op", "")).startswith("home-"):
+                    result = terminal_home_op(home_folder, request)
                 else:
                     result = terminal_file_op(root, request)
             except (Refused, PermissionError, ValueError):

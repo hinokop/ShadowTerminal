@@ -98,3 +98,10 @@
 #profil-terminal-vorschlag .f-zeichenkette{color:#e5c07b}
 #profil-terminal-vorschlag .f-variable{color:#56b6c2}
 #profil-terminal-vorschlag .rest{color:#6b7584}
+/* Editor (nano-ähnlich, Paket 1) */
+.profil-terminal-kern.editor-aktiv > :not(#profil-terminal-editor){display:none !important}
+#profil-terminal-editor{display:flex;flex-direction:column;flex:1;min-height:0}
+#profil-terminal-editor .editor-kopf{background:#d7dce5;color:#101217;padding:0 4px;white-space:pre}
+#profil-terminal-editor textarea{flex:1;min-height:0;resize:none;background:transparent;color:inherit;border:0;outline:0;padding:4px;white-space:pre;overflow:auto;font-family:var(--mono)}
+#profil-terminal-editor .editor-status{min-height:1.5em;text-align:center;padding:2px 4px}
+#profil-terminal-editor .editor-hilfe{background:#d7dce5;color:#101217;padding:0 4px;white-space:pre}
