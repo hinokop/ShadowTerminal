@@ -33,7 +33,7 @@ Aktueller Stand von `main`, offene Pull Requests, Reihenfolge der nächsten Schr
 - `terminal-locale.js`: Locale-Referenz `en_US.UTF-8` (Ubuntu 24.04, coreutils 9.4) als Kollationstabelle, erzeugt von `tools/gen-locale-en_US.py`; vor `profil-modul.js` geladen; bestimmt nur die Anzeigereihenfolge (`ls`), nie Namensauflösung oder Zugriff (Entscheidung Shadow 24.11.2026, `docs/phase6a-plan-pwd-cd-ls.md` 9.13).
 - `terminal_lokal.py`: lokale Dateibrücke (Archivordner neben dem Starter, Exportarten pin, zone, sichtung; Ersetzen nur eigener unveränderter Dateien; Nmap-Anbindung). `docs/terminal.md`: Statusanzeigen im Fensterkopf und Grenze Simulation / echte Zugriffe.
 - Terminal-nmap: echtes installiertes Nmap über die Brücke (`nmap-start/-read/-stop`), Argumente ohne Shell und ohne Einschränkung (Entscheidung Shadow); scannt die echten Schnittstellen des PCs, nicht die Simulation. Test `tests/terminal-nmap.js` mit Ersatz-nmap (nur POSIX), Windows-Abnahme lokal bei Shadow.
-- Terminalbenutzer: `raizo` (Prompt `raizo@terminal:/$`), kein root, damit sudo ein Kennwort verlangen kann; Abweichungen in docs/terminal.md.
+- Terminalbenutzer: `raizo` (Prompt `raizo@terminal:~$` im Heimverzeichnis /home/raizo), kein root, damit sudo ein Kennwort verlangen kann; Abweichungen in docs/terminal.md.
 - Start: Windows `START_TERMINAL.bat` (Edge-Anwendungsfenster mit Dateibrücke, Python 3, ruft `START_3D.bat` auf) oder `START_3D.bat` (ohne Dateibrücke, mit GPU, für 3D nötig); Linux `START.sh`.
 
 ## Tests
