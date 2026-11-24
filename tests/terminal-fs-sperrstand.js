@@ -157,6 +157,43 @@ const { APP } = require('./_pfad');
     assert.ok(await p.evaluate(() => terminalTabAuswahl === null || !terminalTabAuswahl.werte.some(w => w.includes('lageblatt-PIN-001'))), 'Auswahl ohne gesperrten Namen');
     await inp.fill('');
 
+    /* G. Verlauf: Verkettungen und Parserfehler (Review, Restlücke A) */
+    await entsperren(z.zu);
+    const ketten = ['cat ' + pinDatei + '; echo OK', 'cat "' + pinDatei + '"; echo OK', 'cat ' + pinDatei + '&&echo OK', 'cat ' + pinDatei + ' || echo OK',
+      'echo a;cat /' + db + '/ops/' + pinDatei, "cat '" + zoneDatei + "'", 'cat ' + siZuDatei + " 'offen", 'echo a | cat ' + pinDatei, 'cat lageblatt-\\' + pinDatei.slice(10)];
+    await p.evaluate(k => { TERMINAL_ZUSTAND.verlauf = k.concat(['echo harmlos2', 'cat unrelated.txt; echo OK']); }, ketten);
+    await sperren(z.zu);
+    const verlaufNach = await p.evaluate(() => TERMINAL_ZUSTAND.verlauf.slice());
+    assert.deepEqual(verlaufNach, ['echo harmlos2', 'cat unrelated.txt; echo OK'], 'Verlauf nach Sperre: nur unbeteiligte Einträge, Rest: ' + JSON.stringify(verlaufNach));
+
+    /* H. Vorschlags-Overlay (graue Ergänzung) verschwindet unmittelbar bei der Sperre, ohne Tastendruck und ohne vorheriges ls im Scrollback */
+    await entsperren(z.zu);
+    await cmd('cd /' + db + '/ops');
+    await p.evaluate(() => { TERMINAL_ZUSTAND.ausgabe = []; TERMINAL_ZUSTAND.ausgabeMeta = []; TERMINAL_ZUSTAND.verlauf = []; });
+    await inp.fill('cat lageblatt-PIN-001');
+    await p.waitForFunction(() => document.getElementById('profil-terminal-vorschlag').textContent.includes('.txt'), null, { timeout: 8000 });
+    await sperren(z.zu);
+    assert.ok(!(await p.evaluate(() => document.getElementById('profil-terminal-vorschlag').textContent)).includes('.txt'), 'grauer Vorschlag mit gesperrtem Namen sofort entfernt');
+    await inp.fill('');
+
+    /* I. Übergabepunkt: die Sperre greift zwischen Brückenantwort (bereits gefiltert) und Ausgabe bzw. Tab-Übernahme */
+    await entsperren(z.zu);
+    await p.evaluate(() => { window.__orig = terminalBruecke; terminalBruecke = async function (...a) {
+      const r = await window.__orig(...a);
+      if (a[0] === 'ls' && window.__sperreNach) { const id = window.__sperreNach; window.__sperreNach = null; dispatch({ type: 'DOSSIER_SPERREN', id }); }
+      return r;
+    }; window.__sperreNach = STATE.dossiers.eigene.find(x => x.name === 'Quarzfeld Sperrakte').id; });
+    const gelistet = await cmd('ls');
+    assert.ok(!gelistet.includes(pinDatei) && !gelistet.includes(zoneDatei), 'ls: Sperre zwischen Antwort und Ausgabe wirkt');
+    assert.ok(gelistet.includes('unrelated.txt'), 'ls: übrige Namen bleiben');
+    await entsperren(z.zu);
+    await p.evaluate(() => { window.__sperreNach = STATE.dossiers.eigene.find(x => x.name === 'Quarzfeld Sperrakte').id; TERMINAL_VORSCHLAG_LS.clear(); });
+    await tabNur('cat lageblatt-PIN-');
+    const nachTab = await p.evaluate(() => ({ wert: document.getElementById('profil-terminal-eingabe').value, auswahl: terminalTabAuswahl ? terminalTabAuswahl.werte.join('|') : '' }));
+    assert.ok(!nachTab.wert.includes(pinDatei) && !nachTab.auswahl.includes(pinDatei), 'Tab: Sperre zwischen Antwort und Übernahme wirkt: ' + JSON.stringify(nachTab));
+    await p.evaluate(() => { terminalBruecke = window.__orig; });
+    await inp.fill('');
+
     /* F. Messung (keine Prüfung): Filterzeit bei 5000 Einträgen */
     const ms = await p.evaluate(() => {
       const namen = Array.from({ length: 5000 }, (_, i) => i % 5 ? 'datei-' + i + '.txt' : 'lageblatt-PIN-' + String(100 + i).padStart(4, '0') + '.txt');

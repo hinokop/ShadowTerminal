@@ -303,10 +303,16 @@ function terminalArchivSichtbarkeit() {
     return z.art === 'sichtung' ? !dossiers.has(z.dossier) : !objekte.has(z.art + ':' + z.id);
   };
 }
-/* Eine Zeile (Verlauf, Vorschlag), die einen Namen gesperrter Archivobjekte als Wort oder Pfadende enthält */
+/* Eine Zeile (Verlauf, Vorschlag), die einen Namen gesperrter Archivobjekte enthält. Geprüft wird der Rohtext UND jedes Wort des Shell-Zerlegers
+   (terminalZerlegen: Quotes, Maskierungen), jeweils durch Teilstring-Suche; so zählen auch "cat Name; echo", cat "Name"; ..., && und || sowie Pfade.
+   Schlägt die Zerlegung fehl, bleibt die Suche im Rohtext (im Zweifel verdächtig, nie automatisch wieder vorgeschlagen). Bewusst großzügig:
+   ein gewöhnlicher Dateiname, der einen Archivnamen als Teilstring enthält, gilt ebenfalls als verdächtig. */
+const TERMINAL_ARCHIV_NAME_SUCHE = /(?:lageblatt-PIN-\d{3,15}(?:-v\d{1,2})?|zone-ZO-\d{3,15}(?:-v\d{1,2})?|sichtung-[POL]-\d{4,15}-SI-\d{3,15}(?:-v\d{1,2})?)\.txt/gi;
 function terminalZeileMitGesperrtemName(zeile, sicht) {
   sicht = sicht || terminalArchivSichtbarkeit();
-  return String(zeile).split(/\s+/).some(function (w) { return !sicht(w.replace(/^['"]+|['"]+$/g, '').split('/').pop()); });
+  const roh = String(zeile), texte = [roh], z = terminalZerlegen(roh);
+  if (!z.fehler) z.folge.forEach(function (f) { f.woerter.forEach(function (w) { texte.push(w); }); });
+  return texte.some(function (text) { return (text.match(TERMINAL_ARCHIV_NAME_SUCHE) || []).some(function (m) { return !sicht(m); }); });
 }
 /* Sperrstand als Zeichenkette; ändert er sich (Sperren, Entsperren, Verknüpfung von Pin oder Zone), verfallen alle abgeleiteten Zustände
    mit Archivnamen: Listen-Zwischenspeicher, Auswahlliste, Ergänzungsvorschlag und Verlaufseinträge mit gesperrten Namen. */
@@ -318,13 +324,15 @@ function terminalSperrstandPruefen() {
     '|' + (PROFIL.gesperrt || []).slice().sort().join(',');
   if (stand === terminalSperrstandLetzter) return;
   terminalSperrstandLetzter = stand;
+  /* erst die Datenquellen verwerfen, dann Auswahlliste und Vorschlags-Overlay neu zeichnen (sonst bliebe ein bereits angezeigter Name stehen) */
   TERMINAL_VORSCHLAG_LS.clear();
-  terminalTabReset();
   const t = TERMINAL_ZUSTAND;
   t.vorschlagErgaenzung = null;
   const sicht = terminalArchivSichtbarkeit();
   t.verlauf = t.verlauf.filter(function (zeile) { return !terminalZeileMitGesperrtemName(zeile, sicht); });
   t.vpos = -1;
+  terminalTabReset();
+  terminalVorschlagAnzeige();
 }
 function terminalArchivZielGesperrt(z) {
   if (!z) return false;
@@ -624,7 +632,12 @@ async function terminalBefehlLauf(fn, args, arg, version) {
   const res = await fn({ args: args, arg: arg || '', cwd: cwdVorher, env: env, fs: TERMINAL_FS });
   if (t.version !== version) return 1;
   if (res.cwd) { t.oldpwd = cwdVorher; t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; terminalKanalPromptSync(); }
-  const zeilen = (res.stdout || []).concat(res.stderr || []);
+  let zeilen = (res.stdout || []).concat(res.stderr || []);
+  if (res.archivListe) {   /* letzte Prüfung gegen die aktuellen Sperren unmittelbar vor der Ausgabe */
+    const sicht = terminalArchivSichtbarkeit();
+    zeilen = zeilen.map(function (z) { return String(z).split('\n').filter(function (l) { return sicht(terminalListenName(l)); }).join('\n'); })
+      .filter(function (z) { return z !== ''; });
+  }
   if (zeilen.length) terminalAusgabe(zeilen, res.archivListe ? { liste: true } : null);
   return res.code;
 }
@@ -3119,7 +3132,8 @@ async function terminalTab(lauf, m) {
   else if (!terminalTabGueltig(lauf)) return;
   if (!antwort.entries) { terminalTabFehler(lauf, antwort); return; }
   terminalTabFehlerZuletzt = '';
-  const namen = antwort.entries.filter(function (x) { return x.dir || befehl !== 'cd'; })
+  const sichtJetzt = terminalArchivSichtbarkeit();   /* letzte Prüfung unmittelbar vor der Übernahme */
+  const namen = antwort.entries.filter(function (x) { return sichtJetzt(x.name) && (x.dir || befehl !== 'cd'); })
     .map(function (x) { return basis + x.name + (x.dir ? '/' : ''); });
   fertig(befehl + ' ' + anfang, pfad, namen, function (x) {
     const quote = anfang || (/\s|^'/.test(x) ? '"' : '');
@@ -3170,7 +3184,8 @@ async function terminalKanalTab(lauf) {
   if (!terminalTabGueltig(lauf)) return;
   if (!antwort.entries) { terminalTabFehler(lauf, antwort); return; }
   terminalTabFehlerZuletzt = '';
-  terminalTabKandidaten(lauf, kopf, pfad, antwort.entries.map(function (x) {
+  const sichtJetzt = terminalArchivSichtbarkeit();   /* letzte Prüfung unmittelbar vor der Übernahme */
+  terminalTabKandidaten(lauf, kopf, pfad, antwort.entries.filter(function (x) { return sichtJetzt(x.name); }).map(function (x) {
     return basis + x.name + (x.dir ? '/' : '');
   }), format);
 }
