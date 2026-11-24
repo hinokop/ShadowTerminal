@@ -404,8 +404,11 @@ function terminalSchutzBereinigen() {
 }
 /* Nach jeder Zustandsänderung (index.html, dispatch) */
 function terminalSchutzPruefen() { terminalSperrstandPruefen(); if (terminalSchutzBereinigen()) terminalAusgabe([]); }
-/* Name am Zeilenende einer ls-Ausgabe (kurz: ganze Zeile; lang: letztes Feld nach zwei oder mehr Leerzeichen), ohne Ordnerzeichen */
-function terminalListenName(zeile) { return String(zeile).split(/\s{2,}/).pop().replace(/\/$/, ''); }
+/* Name am Zeilenende einer ls-Ausgabe (kurz: ganze Zeile; lang: letztes Feld nach zwei oder mehr Leerzeichen), ohne Ordnerzeichen und
+   ohne Pfad: Dateioperanden erscheinen so, wie sie eingegeben wurden (absolut, relativ, mit ./ oder ../), geprüft wird der Basisname.
+   Fehlerzeilen (ls: cannot access '<Pfad>': ...) enthalten keinen Basisnamen am Ende und werden nicht als Listeneintrag gewertet;
+   dort steht nur ein selbst eingegebener Name, den ls auch bei Permission denied nennt. */
+function terminalListenName(zeile) { return String(zeile).split(/\s{2,}/).pop().replace(/\/$/, '').split('/').pop(); }
 async function terminalBrueckeSenden(daten) {
   const bruecke = terminalBrueckenAdresse();
   if (!bruecke) return { error: TERMINAL_BRUECKE_FEHLT };
@@ -808,7 +811,7 @@ function terminalLsOptionen(args) {
   const fehler = function (zeilen, code) { return { fehler: { code: code || 2, zeilen: zeilen.concat([TERMINAL_LS_TRY]) } }; };
   const setze = function (c) {
     if (c === 'a' || c === 'A') opt.alle = c; else if (c === 'd') opt.d = true; else if (c === 'F') opt.F = true;
-    else if (c === 'h') opt.h = true; else if (c === 'l') opt.format = 'l'; else if (c === '1') opt.format = '1';
+    else if (c === 'h') opt.h = true; else if (c === 'l') opt.format = 'l'; else if (c === '1' && opt.format !== 'l') opt.format = '1';   /* ls: -1 ersetzt -l nicht (gemessen, ls 9.4) */
   };
   let ende = false;
   for (const a of args) {
@@ -827,11 +830,20 @@ function terminalLsOptionen(args) {
       if (!kurz) return fehler(['ls: unrecognized option ' + terminalLsQuote(a)]);   /* bekannt, aber in diesem Terminal nicht umgesetzt */
       if (kurz === 'help') return { hilfe: true };
       if (voll === 'classify' && wert !== null) {
-        const w = wert.toLowerCase();
-        const gueltig = ['always', 'yes', 'force'].includes(w) ? true : ['never', 'no', 'none', 'auto', 'tty', 'if-tty'].includes(w) ? false : null;
-        if (gueltig === null) return fehler(['ls: ' + (wert === '' ? 'ambiguous' : 'invalid') + ' argument ' + terminalLsQuote(wert) + " for '--classify'",
-          'Valid arguments are:', "  - 'always', 'yes', 'force'", "  - 'never', 'no', 'none'", "  - 'auto', 'tty', 'if-tty'"], 1);
-        opt.F = gueltig;
+        /* argmatch (gnulib): exakte Übereinstimmung, sonst eindeutige Abkürzung (Groß-/Kleinschreibung beachtet); Abkürzungen,
+           die auf verschiedene Werte führen, sind mehrdeutig. */
+        const werte = [['always', 'yes', 'force', true], ['never', 'no', 'none', false], ['auto', 'tty', 'if-tty', false]];
+        const namen = []; werte.forEach(function (g, i) { g.slice(0, 3).forEach(function (n) { namen.push([n, i]); }); });
+        const genau = namen.filter(function (x) { return x[0] === wert; });
+        const teil = genau.length ? genau : namen.filter(function (x) { return x[0].startsWith(wert); });
+        const gruppen = Array.from(new Set(teil.map(function (x) { return x[1]; })));
+        if (gruppen.length === 1) opt.F = werte[gruppen[0]][3];
+        else {
+          /* gnulib quote() in der Locale C: Apostroph und Rückstrich mit Rückstrich maskiert (anders als der Shell-Stil der übrigen Meldungen) */
+          const q = function (t) { return "'" + String(t).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; };
+          return fehler(['ls: ' + (gruppen.length ? 'ambiguous' : 'invalid') + ' argument ' + q(wert) + " for '--classify'",
+            'Valid arguments are:'].concat(werte.map(function (g) { return '  - ' + g.slice(0, 3).map(q).join(', '); })), 1);
+        }
       } else setze(kurz);
       continue;
     }

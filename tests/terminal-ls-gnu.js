@@ -67,7 +67,18 @@ const FAELLE = [
   [["dossiers/../leer"], "", 0],
   [["dossiers/./"], "eins.txt\n", 0],
   [["-d", "dossiers/.."], "dossiers/..\n", 0],
-  [["--classify", "datei.txt", "leer"], "datei.txt\n\nleer:\n", 0]
+  [["--classify", "datei.txt", "leer"], "datei.txt\n\nleer:\n", 0],
+  [["--classify=al"], "alpha.txt\ndatei.txt\ndossiers/\ngross.bin\nklein.bin\nleer/\nmittel.bin\n", 0],
+  [["--classify=a"], "ls: ambiguous argument 'a' for '--classify'\nValid arguments are:\n  - 'always', 'yes', 'force'\n  - 'never', 'no', 'none'\n  - 'auto', 'tty', 'if-tty'\nTry 'ls --help' for more information.\n", 1],
+  [["--classify=n"], "alpha.txt\ndatei.txt\ndossiers\ngross.bin\nklein.bin\nleer\nmittel.bin\n", 0],
+  [["--classify=no"], "alpha.txt\ndatei.txt\ndossiers\ngross.bin\nklein.bin\nleer\nmittel.bin\n", 0],
+  [["--classify=ti"], "ls: invalid argument 'ti' for '--classify'\nValid arguments are:\n  - 'always', 'yes', 'force'\n  - 'never', 'no', 'none'\n  - 'auto', 'tty', 'if-tty'\nTry 'ls --help' for more information.\n", 1],
+  [["--classify=ALWAYS"], "ls: invalid argument 'ALWAYS' for '--classify'\nValid arguments are:\n  - 'always', 'yes', 'force'\n  - 'never', 'no', 'none'\n  - 'auto', 'tty', 'if-tty'\nTry 'ls --help' for more information.\n", 1],
+  [["--classify=it's"], "ls: invalid argument 'it\\'s' for '--classify'\nValid arguments are:\n  - 'always', 'yes', 'force'\n  - 'never', 'no', 'none'\n  - 'auto', 'tty', 'if-tty'\nTry 'ls --help' for more information.\n", 1],
+  [["--classify=a\\b"], "ls: invalid argument 'a\\\\b' for '--classify'\nValid arguments are:\n  - 'always', 'yes', 'force'\n  - 'never', 'no', 'none'\n  - 'auto', 'tty', 'if-tty'\nTry 'ls --help' for more information.\n", 1],
+  [["--classify=y", "-d", "dossiers"], "dossiers/\n", 0],
+  [["--classify=if"], "alpha.txt\ndatei.txt\ndossiers\ngross.bin\nklein.bin\nleer\nmittel.bin\n", 0],
+  [["--classify=fo", "-d", "dossiers"], "dossiers/\n", 0]
 ];
 
 (async () => {
@@ -116,7 +127,7 @@ const FAELLE = [
     const zeilen = async line => { const t = (await cmd(line)).split('\n'); return t.slice(t.findIndex(x => x.startsWith('raizo@terminal:')) + 1); };
     const aus = async line => (await zeilen(line)).join('\n');
     const rc = async () => (await zeilen('echo $?'))[0];
-    const q = a => /^[A-Za-z0-9_.\/=,:+-]+$/.test(a) ? a : "'" + a + "'";
+    const q = a => /^[A-Za-z0-9_.\/=,:+-]+$/.test(a) ? a : "'" + a.replace(/'/g, "'\\''") + "'";
     await cmd('cd /' + db);
 
     /* A. Aufnahmen von GNU ls 9.4 */
@@ -155,7 +166,7 @@ const FAELLE = [
     assert.equal(await aus('ls -ld dossiers'), 'dr-x         0  01.01.1970 00:00:01Z  dossiers');
     assert.equal((await aus('ls -lF .')).split('\n').filter(x => x.endsWith('dossiers/') || x.endsWith('leer/')).length, 2, '-F kennzeichnet Verzeichnisse auch im Langformat');
     assert.equal(await aus('ls -1 -l dossiers'), await aus('ls -l dossiers'), '-l nach -1 gilt');
-    assert.equal(await aus('ls -l -1 dossiers'), 'eins.txt', '-1 nach -l gilt');
+    assert.equal(await aus('ls -l -1 dossiers'), await aus('ls -l dossiers'), '-1 hebt -l nicht auf (ls 9.4 gemessen: -l -1 bleibt Langformat, ebenso -1 -l)');
     assert.equal(await aus('ls dossiers -l'), await aus('ls -l dossiers'), 'Optionen auch hinter Operanden');
     /* Operand in der virtuellen Ebene, absolute Pfade, Wurzel */
     assert.equal(await aus('ls /etc /var'), '/etc:\nchatscripts\nppp\n\n/var:\ncache\nlog');
