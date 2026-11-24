@@ -2704,8 +2704,8 @@ const ACTIONS = {
     const id = 'DN-' + p3(STATE.seq.notiz), t = nowIso();
     d.notizen.push({ id: id, t: t, text: text });
     dossierStempel(d, t);
-    delete VIEW.draft['dn-' + e.id];
-    return { modul: 'Dossier', aktion: 'Dossiernotiz hinzugefügt', detail: e.id + ' ' + e.name + ', ' + id + ': ' + kuerzen(text, 120) };
+    if (a.quelle !== 'Terminal') delete VIEW.draft['dn-' + e.id];   /* eine Notiz aus dem Terminal lässt den Entwurf im Notizfeld der Oberfläche stehen */
+    return { modul: 'Dossier', aktion: 'Dossiernotiz hinzugefügt', detail: e.id + ' ' + e.name + ', ' + id + ': ' + kuerzen(text, 120) + (a.quelle === 'Terminal' ? ' (Terminal)' : '') };
   },
   SICHTUNG_HINZU: function (a) {
     const e = entitaet(a.id), ort = String(a.ort || '').trim().slice(0, 160), text = String(a.text || '').trim().slice(0, 400);
@@ -2812,6 +2812,33 @@ const ACTIONS = {
 /* Phase 5b7: Der alte Missionsbetrieb ist stillgelegt. Ein gespeichertes Feld STATE.missionsbetrieb
    bleibt als Altfeld unverändert erhalten, hat aber keine Wirkung mehr; Missionsaktionen setzen es nicht. */
 function missionsbetrieb() { return false; }
+/* Dossiernotiz mit dauerhaftem Erfolgsstatus (Paket 2, E7; Architektur 9a.5): genau eine Aktion DOSSIER_NOTIZ über dispatch, danach geprüfte
+   Speicherung von Zustand (Rücklesen) und Profil. Scheitert eine davon, werden Notiz, Zähler, Stempel und Protokolleintrag zurückgenommen und
+   der vorherige Stand erneut gespeichert. Ergebnis { ok, id } oder { fehler: 'EACCES' | 'ENOENT' | 'EINVAL' | 'EIO' }. */
+function dossierNotizDauerhaft(id, text, quelle) {
+  const e = entitaet(id), klar = String(text || '').trim();
+  if (!e || !STATE.dossiers.entitaeten[e.id]) return { fehler: 'ENOENT' };
+  if (dossierGesperrt(e)) return { fehler: 'EACCES' };
+  if (!klar) return { fehler: 'EINVAL' };
+  const d = STATE.dossiers.entitaeten[e.id];
+  const vorher = { notizen: d.notizen.slice(), aktualisiert: d.aktualisiert, durch: d.durch, seq: STATE.seq.notiz, logSeq: STATE.seq.log };
+  dispatch({ type: 'DOSSIER_NOTIZ', id: e.id, text: klar, quelle: quelle || 'Terminal' });
+  const neu = d.notizen.length === vorher.notizen.length + 1 ? d.notizen[d.notizen.length - 1] : null;
+  if (!neu) return { fehler: 'EIO' };
+  const zustandOk = Store.saveGeprueft(STATE) === 'ok', profilOk = !PROFIL_AUFSCHUB.an && profilSpeichern();
+  if (zustandOk && profilOk) return { ok: true, id: neu.id };
+  /* Rücknahme: Speicherstand gilt als nicht gesichert */
+  d.notizen = vorher.notizen; d.aktualisiert = vorher.aktualisiert;
+  if (vorher.durch === undefined) delete d.durch; else d.durch = vorher.durch;
+  STATE.seq.notiz = vorher.seq;
+  const li = STATE.log.map(function (x) { return x.aktion === 'Dossiernotiz hinzugefügt' && String(x.detail).indexOf(', ' + neu.id + ':') >= 0; }).lastIndexOf(true);
+  if (li >= 0) STATE.log.splice(li, 1);
+  STATE.seq.log = vorher.logSeq;
+  Store.save(STATE); profilSpeichern();
+  render();
+  meldung('Notiz aus dem Terminal nicht gespeichert. Der bisherige Stand bleibt erhalten.');
+  return { fehler: 'EIO' };
+}
 function dispatch(action) {
   const handler = ACTIONS[action.type];
   if (!handler) return;
@@ -3490,6 +3517,7 @@ function dossierAnsicht(e) {
     h('div', { class: 'row' },
       h('button', { type: 'button', id: 'btn-dbearb', onclick: function () { dossierBearbeiten(e); } }, 'Dossier bearbeiten'),
       xDossierKnopf(e),
+      h('button', { type: 'button', id: 'btn-dterminal', title: 'Im Terminal in /intel öffnen', onclick: function () { if (typeof terminalImTerminal === 'function') terminalImTerminal('dossier', e.id); } }, 'Im Terminal'),
       PROFIL.aenderungen[e.id] ? h('button', { type: 'button', id: 'btn-dorig', onclick: function () { dispatch({ type: 'DOSSIER_ZURUECKGESETZT', id: e.id }); } }, 'Auf Original zurücksetzen') : null,
       PROFIL.aenderungen[e.id] ? h('span', { class: 'bearb-hinweis', title: 'Vom Original abweichend' }, 'bearbeitet') : null),
     kartenKnopf(e),
@@ -4612,6 +4640,7 @@ else window.addEventListener('load', function () { Zugang.start(init); });   /* 
 <script src="terminal-locale.js"></script>
 <script src="terminal-vfs.js"></script>
 <script src="terminal-dateibefehle.js"></script>
+<script src="terminal-intel.js"></script>
 <script src="profil-modul.js"></script>
 <script src="fall-modul.js"></script>
 <script src="arbeitsstand-modul.js"></script>
