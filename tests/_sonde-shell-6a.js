@@ -35,6 +35,7 @@ const BEFEHLE = [
     await p.goto(PF.APP + start);
     await p.fill('#gate-pw', 'pw-test-123'); if (await p.isVisible('#gate-pw2')) await p.fill('#gate-pw2', 'pw-test-123');
     await p.click('#gate-go'); await p.click('#profil-terminal-oeffnen');
+    await p.evaluate(() => { TERMINAL_ZUSTAND.virtuellerOrt = []; terminalKanalPromptSync(); });   /* Startverzeichnis dieser Messreihe: Wurzel (seit Paket 1 startet die Shell in /home/raizo) */
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe'), prompt = p.locator('#profil-terminal-prompt');
     const zeilen = async () => (await out.textContent()).split('\n');
     const ergebnis = [];

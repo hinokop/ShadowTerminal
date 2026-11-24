@@ -69,6 +69,7 @@ const { APP } = require('./_pfad');
     put('ops/unrelated.txt', 'TOKEN_NEUTRAL\n');
     const db = await p.evaluate(() => TERMINAL_DB);
     await p.click('#profil-terminal-oeffnen');
+    await p.evaluate(() => { TERMINAL_ZUSTAND.virtuellerOrt = []; terminalKanalPromptSync(); });   /* Startverzeichnis dieser Messreihe: Wurzel (seit Paket 1 startet die Shell in /home/raizo) */
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async line => {
       const start = await out.textContent();

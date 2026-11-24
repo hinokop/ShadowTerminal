@@ -129,6 +129,7 @@ const FAELLE = [
     await p.evaluate(() => dispatch({ type: 'NAVIGATION', modul: 'profil' }));
     await p.evaluate(() => renderModule());
     await p.click('#profil-terminal-oeffnen');
+    await p.evaluate(() => { TERMINAL_ZUSTAND.virtuellerOrt = []; terminalKanalPromptSync(); });   /* Startverzeichnis dieser Messreihe: Wurzel (seit Paket 1 startet die Shell in /home/raizo) */
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async line => {
       const start = await out.textContent();
@@ -183,7 +184,7 @@ const FAELLE = [
     assert.equal(await rc(), '2');
     assert.equal(await aus('ls "it\'s"'), "ls: cannot access 'it'\\''s': No such file or directory", 'Apostroph in der Meldung wie bei ls maskiert');
     assert.equal(await aus('ls -d /'), '/');
-    assert.equal(await aus('ls -F /'), 'etc/\n' + db + '/\nvar/', 'Wurzel sortiert (en_US.UTF-8): etc, pgcl-..., var');
+    assert.equal(await aus('ls -F /'), 'etc/\nhome/\n' + db + '/\ntmp/\nvar/', 'Wurzel sortiert (en_US.UTF-8): etc, home, pgcl-..., tmp, var');
     assert.equal(await aus('ls /' + db + '/dossiers/eins.txt'), '/' + db + '/dossiers/eins.txt');
     assert.equal(await aus('ls /' + db + '/DOSSIERS'), "ls: cannot access '/" + db + "/DOSSIERS': No such file or directory", 'Groß-/Kleinschreibung im Archiv streng');
 

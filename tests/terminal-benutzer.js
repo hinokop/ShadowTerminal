@@ -20,9 +20,9 @@ const { APP } = require('./_pfad');
     const inp = p.locator('#profil-terminal-eingabe'), prompt = p.locator('#profil-terminal-prompt'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette); };
 
-    assert.equal(await prompt.textContent(), 'raizo@terminal:/$');
+    assert.equal(await prompt.textContent(), 'raizo@terminal:~$');
     await cmd('whoami');
-    assert.match(await out.textContent(), /raizo@terminal:\/\$ whoami\nraizo$/);
+    assert.match(await out.textContent(), /raizo@terminal:~\$ whoami\nraizo$/);
     /* Arbeitsverzeichnis im Prompt: terminal-lokal (mit Brücke) */
     await cmd('tmux split-window -bd predict');
     assert.match(await out.textContent(), /\nno server running on \/tmp\/tmux-1000\/default$/, 'tmux-Socket mit der uid des Benutzers');

@@ -43,6 +43,8 @@ fehler() {
 
 [ -f "$DIR/fall-modul.js" ] || fehler "fall-modul.js fehlt neben dieser Datei."
 [ -f "$DIR/terminal-locale.js" ] || fehler "terminal-locale.js fehlt neben dieser Datei."
+[ -f "$DIR/terminal-vfs.js" ] || fehler "terminal-vfs.js fehlt neben dieser Datei."
+[ -f "$DIR/terminal-dateibefehle.js" ] || fehler "terminal-dateibefehle.js fehlt neben dieser Datei."
 
 # Browser suchen: erst der ausdrueckliche Wunsch, dann gaengige Chromium-Varianten
 BROWSER=""

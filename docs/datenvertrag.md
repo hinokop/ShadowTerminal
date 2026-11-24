@@ -109,3 +109,7 @@ Profilimport übernimmt Recherchedaten nach derselben Regel; Belegdateien sind n
 - `bewertung` beschreibt manuell die Belastbarkeit der Informationslage. Ohne Eingabe erscheint „Unbewertet“. Eine optionale Begründung wird als `begruendung` gespeichert. Die Bewertung verändert weder Unterlagen noch deren Prüfstand.
 - Optionale `dossiers`- und `pins`-Listen enthalten profilweite Kennungen. Diese Verknüpfungen sind unabhängig von den Dossierbezügen einzelner Unterlagen. Im Fallpaket reisen explizit verknüpfte Dossiers mit. Pins und ihre Verknüpfungen reisen nur im Profilexport mit.
 - Beim Löschen eines Falls werden seine Quellen, Fassungen, Beobachtungen und Altaussagen entfernt. Dossiers, Kartenobjekte und in anderen Fällen oder im Eingang benötigte Dateikopien bleiben erhalten. Unterlagenverweise auf gelöschte Beobachtungen werden aufgelöst. Dateien außerhalb des Terminals werden nie verändert.
+
+## Terminal-Heimverzeichnis (Paket 1)
+
+IndexedDB `fieldterminal.vfs` (Stores knoten, meta) liegt außerhalb von PROFIL und außerhalb des Fallpakets. Sicherungen: `terminal-home/home-*.json`, Format 2 (`version: 2`; Einträge `{ eltern, name, typ, modus, erstellt, geaendert[, inhalt] }`, `eltern` ist der Index eines früheren Eintrags oder -1 für /home/raizo; Manifest mit sha256 über die Einträge, Anzahl und Bytesumme). Format 1 (Einträge mit relativem `pfad`) wird weiterhin gelesen, eigene Wiederherstellung mit vollständiger Vorabprüfung. Bestehende Profile bleiben unverändert lesbar.

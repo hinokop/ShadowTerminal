@@ -3,3 +3,5 @@ profil/
 *.zip
 node_modules/
 tests/*.png
+terminal-home/
+__pycache__/

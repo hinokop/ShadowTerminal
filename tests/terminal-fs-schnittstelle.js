@@ -90,7 +90,7 @@ const { APP } = require('./_pfad');
     assert.deepEqual({ adapter: stOps.adapter, typ: stOps.typ, name: stOps.eintrag && stOps.eintrag.name, dir: stOps.eintrag && stOps.eintrag.dir }, { adapter: 'archiv', typ: 'dir', name: 'ops', dir: true }, 'stat mit Prüfung liefert zusätzlich den Eintrag der Quelle (6a-3, für ls -l)');
     /* readdir */
     const wurzel = await r('readdir', []);
-    assert.deepEqual(wurzel.eintraege.map(x => x.name), ['etc', 'var', db]);
+    assert.deepEqual(wurzel.eintraege.map(x => x.name), ['etc', 'home', 'tmp', 'var', db]);
     assert.ok(wurzel.eintraege.every(x => x.dir));
     assert.deepEqual((await r('readdir', ['var', 'log'])).eintraege, [{ name: 'syslog', dir: false }]);
     const ops = await r('readdir', [db, 'ops']);
@@ -108,8 +108,8 @@ const { APP } = require('./_pfad');
     assert.deepEqual(await r('readFile', ['nichts']), { fehler: 'ENOENT' });
     assert.equal((await r('readFile', [db, 'ops', 'unrelated.txt'])).text, 'TOKEN_NEUTRAL\n');
     assert.deepEqual(await r('readFile', [db, 'ops', 'lageblatt-' + z.pinZu + '.txt']), { fehler: 'Permission denied' }, 'gesperrter Inhalt bleibt geschützt');
-    assert.deepEqual(await r('writeFile', ['etc', 'x'], 'y'), { fehler: 'EROFS' });
-    assert.deepEqual(await r('writeFile', [db, 'x'], 'y'), { fehler: 'EROFS' });
+    assert.deepEqual(await r('writeFile', ['etc', 'x'], 'y'), { fehler: 'EACCES' }, 'Paket 1: nur das VFS ist beschreibbar, alle anderen Anbieter weisen ab');
+    assert.deepEqual(await r('writeFile', [db, 'x'], 'y'), { fehler: 'EACCES' });
     /* Befehlskontext, Exit-Code, getrennte Ausgabe */
     const lauf = await p.evaluate(async () => {
       let ctx = null;
@@ -119,9 +119,9 @@ const { APP } = require('./_pfad');
     assert.equal(lauf.code, 3);
     assert.deepEqual(lauf.schluessel, ['arg', 'args', 'cwd', 'env', 'fs']);
     assert.deepEqual(lauf.args, ['a', 'b']);
-    assert.equal(lauf.cwd, '/');
+    assert.equal(lauf.cwd, '/home/raizo', 'Startverzeichnis seit Paket 1');
     assert.deepEqual(lauf.env, {});
-    assert.deepEqual(lauf.fsOps, ['readFile', 'readdir', 'resolve', 'sichtbar', 'stat', 'writeFile']);
+    assert.deepEqual(lauf.fsOps, ['entfernen', 'kopieren', 'mkdir', 'readFile', 'readdir', 'resolve', 'schreiben', 'sichtbar', 'stat', 'umbenennen', 'writeFile']);
     const text = await out.textContent();
     assert.ok(text.indexOf('AUS_EINS') > -1 && text.indexOf('FEHLER_EINS') > text.indexOf('AUS_EINS'), 'stdout vor stderr');
     /* Arbeitsverzeichnis wird nur über das Ergebnis gesetzt */

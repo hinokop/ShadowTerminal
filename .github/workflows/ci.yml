@@ -42,7 +42,7 @@ jobs:
         run: python3 tests/terminal_bridge_pagination.py
       - name: Syntax of all application scripts
         run: |
-          for f in szenario.js karte-modul.js akten-modul.js recherche-modul.js terminal-locale.js profil-modul.js fall-modul.js arbeitsstand-modul.js; do node --check "$f"; done
+          for f in szenario.js karte-modul.js akten-modul.js recherche-modul.js terminal-locale.js terminal-vfs.js terminal-dateibefehle.js profil-modul.js fall-modul.js arbeitsstand-modul.js; do node --check "$f"; done
       - name: Standard test selection
         env:
           FT_PARALLEL: '4'

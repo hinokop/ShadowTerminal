@@ -33,7 +33,7 @@ const { imUeberflug, bis, verbunden } = require('./_kestrel');
 
     /* Strg+C an der leeren Eingabe: ^C, $? = 130 */
     await inp.fill('halb getippt'); await inp.press('Control+c');
-    assert.equal(await letzte(), 'raizo@terminal:/$ halb getippt^C'); assert.equal(await inp.inputValue(), '');
+    assert.equal(await letzte(), 'raizo@terminal:~$ halb getippt^C'); assert.equal(await inp.inputValue(), '');
     await cmd('$?'); assert.equal(await letzte(), '130: command not found');
 
     /* Zerlegung */
@@ -46,7 +46,7 @@ const { imUeberflug, bis, verbunden } = require('./_kestrel');
     await cmd('echo x &&'); assert.match(await letzte(), /syntax error near unexpected token `newline'/);
     await cmd('echo x ;'); assert.equal(await letzte(), 'x');
     await cmd('ls | grep ops'); assert.match(await letzte(), /terminal: \|: pipes, redirections and substitutions are not supported/);
-    await cmd('echo a > datei'); assert.match(await letzte(), /terminal: >: /);
+    await cmd('echo a < datei'); assert.match(await letzte(), /terminal: <: /);
 
     /* Verkettung und Rückgabewerte */
     await cmd('false; echo $?'); assert.equal(await letzte(), '1');
@@ -84,7 +84,7 @@ const { imUeberflug, bis, verbunden } = require('./_kestrel');
     await p.clock.runFor(700);
     assert.equal(await letzte(), 'bereit');
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.wgSat.bereit), true);
-    assert.equal(await prompt.textContent(), 'raizo@terminal:/$');
+    assert.equal(await prompt.textContent(), 'raizo@terminal:~$');
     assert.equal(await p.locator('#profil-terminal form').getAttribute('aria-busy'), 'false');
     assert.equal(await inp.inputValue(), 'echo zwischendurch', 'alte Eingabe wird nicht von selbst ausgeführt');
     assert.doesNotMatch(await out.textContent(), /\nzwischendurch/);

@@ -56,6 +56,7 @@ const { APP } = require('./_pfad');
     });
     const db = await p.evaluate(() => TERMINAL_DB);
     await p.click('#profil-terminal-oeffnen');
+    await p.evaluate(() => { TERMINAL_ZUSTAND.virtuellerOrt = []; terminalKanalPromptSync(); });   /* Startverzeichnis dieser Messreihe: Wurzel (seit Paket 1 startet die Shell in /home/raizo) */
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async line => {
       const start = await out.textContent();
@@ -105,11 +106,11 @@ const { APP } = require('./_pfad');
     await fall('cd -L-', FEHLER('-'), 2, '/');
     await fall('cd -P -x', FEHLER('x'), 2, '/');
     await fall('cd etc', '', 0, '/etc');
-    await fall('cd -L', '', 0, '/');
-    await fall('cd --', '', 0, '/');
-    await fall('cd', '', 0, '/');
-    await fall('cd ~', '', 0, '/');
-    await fall('cd -- -', '/', 0, '/');
+    await fall('cd -L', '', 0, '/home/raizo');   /* ohne Operand: Heimverzeichnis (Paket 1) */
+    await fall('cd --', '', 0, '/home/raizo');
+    await fall('cd', '', 0, '/home/raizo');
+    await fall('cd ~', '', 0, '/home/raizo');
+    await fall('cd -- -', '/home/raizo', 0, '/home/raizo');
     /* --help */
     const hilfe = await aus('cd --help');
     assert.ok(hilfe.startsWith('cd: cd [-L|[-P [-e]] [-@]] [dir]\n    Change the shell working directory.'), 'Hilfe Anfang');
@@ -158,7 +159,7 @@ const { APP } = require('./_pfad');
     assert.deepEqual(await zustand(), { cwd: D + '/dossiers', oldpwd: '/etc' });
     calls.length = 0;
     await p.evaluate(() => terminalSitzungTrennen());
-    assert.deepEqual(await zustand(), { cwd: '/', oldpwd: null }, 'mit Brücke: Zustand zurückgesetzt');
+    assert.deepEqual(await zustand(), { cwd: '/home/raizo', oldpwd: null }, 'mit Brücke: Zustand zurückgesetzt');
     assert.ok(calls.some(c => c.op === 'disconnect'), 'mit Brücke: disconnect gesendet');
     assert.equal(await aus('cd -'), 'bash: cd: OLDPWD not set', 'nach der Trennung gibt es kein vorheriges Verzeichnis');
     await cmd('cd /etc'); await cmd('cd /var');
@@ -167,7 +168,7 @@ const { APP } = require('./_pfad');
     assert.equal(await p.evaluate(() => !!terminalBrueckenAdresse()), false, 'Brückenadresse entfernt');
     calls.length = 0;
     await p.evaluate(() => terminalSitzungTrennen());
-    assert.deepEqual(await zustand(), { cwd: '/', oldpwd: null }, 'ohne Brücke: Zustand zurückgesetzt');
+    assert.deepEqual(await zustand(), { cwd: '/home/raizo', oldpwd: null }, 'ohne Brücke: Zustand zurückgesetzt');
     assert.equal(calls.length, 0, 'ohne Brücke: kein Brückenaufruf');
     assert.deepEqual(errors, []);
     console.log('OK: cd als Bash-Builtin, strenge Schreibweise im Archiv, Sitzungsende');
