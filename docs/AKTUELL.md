@@ -58,7 +58,7 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 
 | PR | Inhalt | Stand |
 |---|---|---|
-| (neu) | Paket 2: `/intel` (Anbieter-Tabelle, Zugriffsschutz, Baum, Navigation, Notiz anhängen), Konzept docs/terminal-intel-konzept.md | Draft; Prüfung und Freigabe ausstehend. Paket 1 (#137) ist gemergt; dessen Windows-Neustartprüfung bleibt Abnahmebedingung. |
+| #138 | Paket 2: `/intel` (Anbieter-Tabelle, Zugriffsschutz, Baum, Navigation, Notiz anhängen), Konzept docs/terminal-intel-konzept.md | Draft; Prüfung und Freigabe ausstehend. Paket 1 (#137) ist gemergt; dessen Windows-Neustartprüfung bleibt Abnahmebedingung. |
 
 Zurzeit ist kein Pull Request offen; #55 wurde am 24.11.2026 auf Anweisung von Master Wayne geschlossen (ungemergt). Stand 24.11.2026, nach dem Merge von #131 (`facb741`), #132 und #133 (`40773b3`). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
