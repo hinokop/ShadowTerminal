@@ -55,7 +55,7 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 
 | PR | Inhalt | Stand |
 |---|---|---|
-| #133 | 6a, Sicherheits-PR Variante B: Namen gesperrter Archivobjekte in `ls`, Tab und `cd`-Prüfung verborgen; dynamischer Test `terminal-fs-sperrstand` | Draft, Review-Nachbesserungen, CI ausstehend |
+| #133 | 6a, Sicherheits-PR Variante B: Namen gesperrter Archivobjekte in `ls`, Tab und `cd`-Prüfung verborgen; dynamischer Test `terminal-fs-sperrstand` | Draft; Head vor dieser Änderung `d125bb0`: CI 103/103 grün, drei unabhängige Prüfungen, positive Empfehlung; Merge nach Freigabe |
 
 Zurzeit ist nur der Draft #133 (Variante B, Plan 9.11) offen; #55 wurde am 24.11.2026 auf Anweisung von Master Wayne geschlossen (ungemergt). Stand 24.11.2026, nach dem Merge von #131 (`facb741`) und #132. Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
