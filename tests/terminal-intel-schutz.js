@@ -149,6 +149,44 @@ const PW = 'pw-test-123';
     assert.equal(await lauf('ls /intel > neu.txt'), 'bash: ls: Operation not permitted');
     await p.evaluate(() => { terminalLiestIntel = window.__lies; });
     assert.equal(await lauf('cat ziel.txt; ls'), 'alt\n-x\nziel.txt', 'Inhalt wiederhergestellt, neue Datei entfernt');
+    /* Restblocker Review 2: keinerlei Zielmutation bei E6-Abweisung (Inhalt und Änderungszeit), echter Pfad über /intel/.., ">" und ">>",
+       fehlendes und bestehendes Ziel, erzwungene Vorfilterabweichung, verzögerte Quelle mit konkurrierender Änderung; Selbstumleitung */
+    const knoten = (name) => p.evaluate(async (n) => { const e = (await TERMINAL_VFS.exportieren()).eintraege.find(x => x.pfad === n); return e ? [e.inhalt, e.geaendert] : null; }, name);
+    const zielVorher = await knoten('ziel.txt');
+    await p.waitForTimeout(20);
+    for (const art of ['>', '>>']) {
+      assert.equal(await lauf('ls /intel/../home/raizo ' + art + ' ~/neu-' + art.length + '.txt'), 'bash: ls: Operation not permitted', 'echter Pfad ' + art);
+      assert.equal(await knoten('neu-' + art.length + '.txt'), null, 'fehlendes Ziel nicht angelegt (' + art + ')');
+      assert.equal(await lauf('ls /intel/../home/raizo ' + art + ' ziel.txt'), 'bash: ls: Operation not permitted');
+      assert.deepEqual(await knoten('ziel.txt'), zielVorher, 'bestehendes Ziel unverändert, auch die Änderungszeit (' + art + ')');
+    }
+    await p.evaluate(() => { window.__lies = terminalLiestIntel; terminalLiestIntel = function () { return false; }; });
+    for (const art of ['>', '>>']) {
+      assert.equal(await lauf('cat /intel/README ' + art + ' ziel.txt'), 'bash: cat: Operation not permitted', 'Vorfilterabweichung ' + art);
+      assert.deepEqual(await knoten('ziel.txt'), zielVorher);
+      assert.equal(await lauf('head -n 1 /intel/README ' + art + ' frisch.txt'), 'bash: head: Operation not permitted');
+      assert.equal(await knoten('frisch.txt'), null);
+    }
+    /* verzögerte Quelle, ein anderes Fenster ändert währenddessen das Ziel: die fremde Änderung bleibt */
+    await lauf('echo quelle > q.txt');
+    await p.evaluate(() => {
+      window.__rf = TERMINAL_FS.readFile;
+      TERMINAL_FS.readFile = async function (seg) {
+        if (seg.join('/') === 'home/raizo/q.txt') { await new Promise(z => setTimeout(z, 300)); await TERMINAL_VFS.schreiben(['home', 'raizo', 'ziel.txt'], 'fremd\n', {}); }
+        return window.__rf.call(this, seg);
+      };
+    });
+    assert.equal(await lauf('cat q.txt /intel/README > ziel.txt'), 'bash: cat: Operation not permitted');
+    await p.evaluate(() => { TERMINAL_FS.readFile = window.__rf; terminalLiestIntel = window.__lies; });
+    assert.equal(await lauf('cat ziel.txt'), 'fremd', 'konkurrierende Änderung nicht überschrieben');
+    await lauf('echo alt > ziel.txt');
+    /* Selbstumleitung: nichts aus dem Ziel übernehmen */
+    await lauf('echo inhalt > s1.txt; echo x > s2.txt');
+    assert.equal(await lauf('cat s1.txt > s1.txt'), 'cat: s1.txt: input file is output file');
+    assert.equal(await lauf('cat s1.txt'), '', '">": Ziel danach leer (wie bash)');
+    assert.equal(await lauf('cat s2.txt >> s2.txt'), 'cat: s2.txt: input file is output file');
+    assert.equal(await lauf('cat s2.txt'), 'x', '">>": unverändert');
+    await lauf('rm s1.txt s2.txt q.txt');
     /* Notizquellen */
     await cmd('cd ' + P1);
     const n0 = await p.evaluate(() => STATE.dossiers.entitaeten['P-0001'].notizen.length);
