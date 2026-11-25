@@ -614,7 +614,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
    der virtuelle Baum (TERMINAL_TLE_DIRS, TERMINAL_VIRT_DATEIEN, Wurzel) und die Archivbrücke (TERMINAL_DB, nur lesend).
    Fehler sind Objekte { fehler: 'ENOENT' | 'EROFS' | 'ENOSYS' | <Text der Brücke> }, keine Ausnahmen.
    Bewusst noch NICHT auf dieser Schnittstelle: cat, head, tail, wget (terminalDateiBefehl) und die Tab-Ergänzung. */
-const TERMINAL_WURZEL_LISTE = ['etc/', 'home/', 'intel/', 'tmp/', 'usr/', 'var/', TERMINAL_DB + '/'];
+const TERMINAL_WURZEL_LISTE = ['etc/', 'exports/', 'home/', 'intel/', 'tmp/', 'usr/', 'var/', TERMINAL_DB + '/'];
 /* Einhängepunkte (Anbieter-Tabelle, Review #137 / Paket 2): längster passender Präfix entscheidet. Jeder Anbieter liefert stat, readdir,
    readFile (alle mit voller Segmentliste ab der Wurzel), optional readlink; schreibbar ist nur das VFS. schreibFehler ist die Abweisung für
    schreibende Operationen (EROFS für den schreibgeschützten Einhängepunkt /intel, EACCES für Wurzel und Archiv). Über Einhängepunkte
@@ -653,6 +653,8 @@ const TERMINAL_ANBIETER = {
   },
   /* /usr: schreibgeschützte Vorlagen der Systemdateien (terminal-sys.js, S3) */
   paket: SYS_USR_ANBIETER,
+  /* /exports: verwaltete Exporte (terminal-exporte.js, Paket 4 M4), schreibgeschützt; rm einzelner Dateien über die gemeinsame Löschaktion */
+  exporte: EXPORTE_ANBIETER,
   /* /intel (terminal-intel.js): synchron gerendert, jede Antwort prüft die aktuellen Sperren */
   intel: {
     name: 'intel', schreibFehler: 'EROFS',
@@ -699,7 +701,7 @@ const TERMINAL_ANBIETER = {
     }
   }
 };
-const TERMINAL_EINHAENGEPUNKTE = [{ pfad: ['intel'], anbieter: 'intel' }, { pfad: ['home'], anbieter: 'vfs' }, { pfad: ['tmp'], anbieter: 'vfs' },
+const TERMINAL_EINHAENGEPUNKTE = [{ pfad: ['intel'], anbieter: 'intel' }, { pfad: ['exports'], anbieter: 'exporte' }, { pfad: ['home'], anbieter: 'vfs' }, { pfad: ['tmp'], anbieter: 'vfs' },
   { pfad: ['etc'], anbieter: 'vfs' }, { pfad: ['usr'], anbieter: 'paket' }];
 /* Nur die Kennzeichnung der Systemverwaltung wird an das VFS durchgereicht */
 function terminalFsPriv(opt) { return opt && opt.privilegiert ? { privilegiert: true } : undefined; }
@@ -738,7 +740,10 @@ const TERMINAL_FS = {
      (zentrale Richtlinienstufe: Pfadgültigkeit und Rechte vor dem Anbieter, Quoten im Anbieter selbst in derselben Transaktion). */
   schreiben: function (seg, text, opt) { return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.schreiben(seg, text, Object.assign({}, opt, g)); }, { eltern: false }); },
   mkdir: function (seg, opt) { return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.mkdir(seg, Object.assign({}, opt, g)); }, { mkdir: !!(opt && opt.eltern) }); },
-  entfernen: function (seg, opt) { return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.entfernen(seg, Object.assign({}, opt, g)); }, {}); },
+  entfernen: function (seg, opt) {
+    if (terminalAnbieter(seg).name === 'exporte') return EXPORTE_ANBIETER.entfernen(seg, opt);   /* Paket 4 M4 (§9.7) */
+    return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.entfernen(seg, Object.assign({}, opt, g)); }, {});
+  },
   umbenennen: function (von, nach, opt) { return terminalFsSchreibOp([von, nach], function (g) { return TERMINAL_VFS.umbenennen(von, nach, Object.assign({}, terminalFsPriv(opt), g)); }, { umbenennen: true }); },
   kopieren: function (von, nach, opt) { return terminalFsSchreibOp([von, nach], function (g) { return TERMINAL_VFS.kopieren(von, nach, Object.assign({}, opt, g)); }, {}); },
   writeFile: function (seg, text, opt) { return TERMINAL_FS.schreiben(seg, text, opt); }
@@ -1162,6 +1167,7 @@ async function terminalBefehlLs(ctx) {
     if ((adapter === 'vfs' || adapter === 'paket') && Number.isInteger(e.modus)) return (dir ? 'd' : '-') + [6, 3, 0].map(function (s) { const m = e.modus >> s; return (m & 4 ? 'r' : '-') + (m & 2 ? 'w' : '-') + (m & 1 ? 'x' : '-'); }).join('');
     if (adapter === 'vfs') return dir ? 'drwxr-xr-x' : '-rw-r--r--';
     if (adapter === 'intel') return e.link ? 'lrwxrwxrwx' : dir ? 'dr-xr-xr-x' : '-r--r--r--';
+    if (adapter === 'exporte') return dir ? 'dr-xr-xr-x' : '-r--r--r--';
     return dir ? 'dr-x' : '-r--';
   };
   const zeile = function (name, dir, e, adapter) {
@@ -1179,7 +1185,7 @@ async function terminalBefehlLs(ctx) {
       continue;
     }
     if (r.adapter === 'archiv') archiv = true;
-    if (r.adapter === 'intel') intelAusgabe = true;
+    if (r.adapter === 'intel' || r.adapter === 'exporte') intelAusgabe = true;
     if (r.typ === 'dir' && !opt.d) verzeichnisse.push({ op: op, seg: r.seg, adapter: r.adapter });
     else dateien.push({ name: op, text: zeile(op, r.typ === 'dir', r.eintrag, r.adapter), deps: r.deps || [] });
   }
@@ -2618,7 +2624,7 @@ function terminalSendPfad(pfad) {
   return { seg: seg, zwischen: zwischen, deps: deps, endeVerzeichnis: roh.endeVerzeichnis };
 }
 /* Freigegebene Versandquellen (F1): Archiv, /home, /tmp, /intel; Wurzel nur als Durchgang (Tab) */
-function terminalSendErlaubt(seg) { return !seg.length || seg[0] === TERMINAL_DB || seg[0] === 'home' || seg[0] === 'tmp' || seg[0] === 'intel'; }
+function terminalSendErlaubt(seg) { return !seg.length || seg[0] === TERMINAL_DB || seg[0] === 'home' || seg[0] === 'tmp' || seg[0] === 'intel' || seg[0] === 'exports'; }
 /* Abhängigkeiten aus der Zuordnung eines Archiv-Exportnamens, soweit das Objekt heute auflösbar ist (Review 2 zu #140): Bindung beim Start */
 function terminalArchivSendDeps(ziele) {
   return ziele.map(function (z) {
@@ -2660,6 +2666,13 @@ async function terminalSendQuelle(pfad) {
     /* fehlende oder mehrdeutige Identität: kein Versand (fail closed) */
     if (!r.bindung.every(INTEL.bindungGueltig)) return fehlt;
     return { quelle: 'intel', name: terminalIntelVersandName(r.kanonisch), bytes: terminalUtf8Bytes(r.text), schutz: { deps: r.deps, bindung: r.bindung } };
+  }
+  if (art === 'exporte') {
+    /* verwaltete Exporte (M4): eine Darstellung mit der gespeicherten Herkunft; gesperrt und verwaist wie nicht vorhanden (D2) */
+    const r = await TERMINAL_FS.readFile(seg);
+    if (r.fehler === 'EISDIR') return keineDatei;
+    if (r.fehler || p.endeVerzeichnis) return fehlt;
+    return { quelle: 'exporte', name: EXPORTE.versandName(r.rec), bytes: terminalUtf8Bytes(r.text), schutz: { deps: r.rec.deps, bindung: r.rec.bindung } };
   }
   if (art === 'vfs' && (seg[0] === 'home' || seg[0] === 'tmp')) {
     const st = await TERMINAL_FS.stat(seg);
@@ -3155,7 +3168,7 @@ function terminalLeserNurVfs(befehl, args) {
   return op.length > 0 && op.every(terminalVfsPfad);
 }
 /* Pfad auf einem Anbieter mit eigenem Leser über die ctx-Schnittstelle (VFS und /intel); das Archiv behält seinen alten Pfad */
-function terminalVfsPfad(name) { const seg = terminalShellPfad(name); return !!seg && (TERMINAL_VFS.zugehoerig(seg) || seg[0] === 'intel' || seg[0] === 'usr'); }
+function terminalVfsPfad(name) { const seg = terminalShellPfad(name); return !!seg && (TERMINAL_VFS.zugehoerig(seg) || seg[0] === 'intel' || seg[0] === 'usr' || seg[0] === 'exports'); }
 function terminalUsage(text) { terminalAusgabe('usage: ' + text); return 2; }
 async function terminalDateiAusfuehren(befehl, arg, args, admin) {
   const t = TERMINAL_ZUSTAND;
@@ -4090,7 +4103,7 @@ async function terminalTabPfad(lauf, kopfB, arg, nurDir, fertig, opt) {
     fertig(kopfB + anfang, pfad, dateien, function (x) { return x + anfang; });
     return;
   }
-  if (TERMINAL_VFS.zugehoerig(teile) || teile[0] === 'usr') {
+  if (TERMINAL_VFS.zugehoerig(teile) || teile[0] === 'usr' || teile[0] === 'exports') {
     await terminalVfsBereit();
     const r = await TERMINAL_FS.readdir(teile);   /* VFS mit Rechten des Benutzers, /usr als Anbieter "paket" (Paket 3) */
     if (lauf.nurVorschlag ? !terminalVorschlagGueltig(lauf) : !terminalTabGueltig(lauf)) return;
