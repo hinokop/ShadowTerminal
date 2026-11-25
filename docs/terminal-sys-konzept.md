@@ -1,7 +1,37 @@
-# Paket 3: `sys` – Konzept (Entwurf, keine Entscheidung zur Umsetzung)
+# Paket 3: `sys` – Konzept (entschieden am 25.11.2026, siehe Abschnitt 0)
 
 Stand 25.11.2026, Grundlage `main` `8773b37` (nach #137 und #138). Bezug: docs/terminal-dateisystem-architektur.md, Abschnitte 6 und 8.3.
-Die mit **S** nummerierten Punkte in Abschnitt 5 sind offene Entscheidungen von Master Wayne. Implementiert wird erst nach dieser Entscheidung.
+Die Punkte S1 bis S9 in Abschnitt 5 sind entschieden (Abschnitt 0); A0 ist verbindliches Abnahmekriterium.
+
+## 0. Entscheidungen (Master Wayne, 25.11.2026)
+
+S1 bis S9 sind wie in Abschnitt 5 empfohlen entschieden:
+
+- **S1:** Es gibt ein eingeschränktes `sudo` mit zwei strikt getrennten Berechtigungsbereichen. Die *Systemadministration* erlaubt das Bearbeiten ausdrücklich freigegebener Systemdateien unter `/etc`. Die *Rechercheberechtigung* entsperrt Dossiers über `sudo open` bzw. `sudo map`. Es gibt keine Root-Shell und keinen Zugriff auf den Windows-Host, und administrative Dateibefehle umgehen keine Dossiersperre.
+- **S2:** Die Systemkonfiguration wird in die Sicherung integriert.
+- **S3:** Die Standardwerte liegen schreibgeschützt unter `/usr/share`.
+- **S4:** Der Umfang ist wie vorgeschlagen; profanity wird zurückgestellt.
+- **S5:** Eine Änderung wirkt beim nächsten Start des Dienstes.
+- **S6:** Abweichende Werte führen zu realistischem Fehlerverhalten.
+- **S7:** Die Konfigurationsdatei von predict hat Vorrang.
+- **S8:** Es gilt ein einheitlicher, konfigurierbarer Hostname.
+- **S9:** Die bestehenden Namen der Sicherungsbefehle bleiben.
+
+**Verbindliche Zusatzanforderung und Abnahmekriterium A0:** Die größere technische Tiefe darf den operativen Kommunikationsablauf weder verkomplizieren noch verlängern.
+Mit der Standardkonfiguration muss der bisherige vollständige Ablauf **ohne zusätzliche Befehle und ohne zusätzliche künstliche Wartezeiten** weiter funktionieren:
+predict im geteilten Terminalfenster; `pon kestrel && tmux split-window -bd plog -f`; `wg-quick up wg-sat && profanity`; dazu das bestehende Verhalten von
+DIALING, AOS/LOS, Countdown und Verbindungsabbau bei LOS. Daraus folgt:
+- Alle dafür nötigen Konfigurationsdateien sind standardmäßig vorhanden, gültig und sofort einsatzbereit.
+- WireGuard-Schlüssel werden einmalig erzeugt und danach automatisch verwendet. Es gibt keinen manuellen Schlüsselimport.
+- Das Bearbeiten von Konfigurationsdateien ist eine optionale Verwaltungstätigkeit außerhalb des Kommunikationsfensters und nie Voraussetzung für den Verbindungsaufbau.
+- Ein `sudo`-Kennwort wird nur für diese Verwaltung verlangt, nie im Kommunikationsablauf.
+- Realistische Folgen gibt es nur bei Konfigurationen, die der Benutzer selbst geändert hat. Künstliche Fehler, zusätzliche Pflichtauthentifizierungen und zusätzliche Verzögerungen gibt es nicht.
+- Die zeitliche Begrenzung durch die Sichtbarkeit der Satelliten bleibt unverändert.
+- A0 wird als automatisierter Ende-zu-Ende-Test des Ablaufs mit Standardkonfiguration und unveränderten Zeitkonstanten umgesetzt, zusätzlich als Punkt der Windows-Abnahme.
+
+**Umsetzungsdetails aus A0 (Vorschlag, im Pull Request zur Prüfung):**
+- Der Schlüssel liegt in einer eigenen Datei `/etc/wireguard/wg-sat.key`. Sie wird beim ersten `wg-quick up` erzeugt, ohne sichtbare Verzögerung. `wg-sat.conf` lädt ihn wie in der Praxis über `PostUp = wg set %i private-key …`. Wer die Konfiguration aus `/usr/share` zurücksetzt, behält deshalb den Schlüssel.
+- Der Hostname bleibt standardmäßig `terminal`, wie im Prompt; `uname -n` wird daran angeglichen. Eine Änderung wirkt ab der nächsten Anmeldung.
 
 ## 1. Ziel
 
