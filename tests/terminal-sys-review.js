@@ -10,7 +10,15 @@
    F: predict: QTH gültig, ungültig (gemeldet), fehlend (Ausgangsort des Profils), laufendes predict unverändert, nächster Start neu, Restore --home;
       eigene Bahndaten predict.tle (gültig, Prüfsummenfehler, -t), Einwahl bleibt auf der Relaiskette.
    G: Dossiernotiz löschen: Oberfläche mit Sicherheitsabfrage, notes delete im Dossierverzeichnis, Sperre, Speicherfehler mit Rücknahme, Protokoll.
-   H: WireGuard: ungültige Address und MTU (Meldungen von iproute2 6.1.0), eigene Adresse außerhalb des Tunnelnetzes ohne Handshake. */
+   H: WireGuard: ungültige Address und MTU (Meldungen von iproute2 6.1.0), eigene Adresse außerhalb des Tunnelnetzes ohne Handshake.
+   Review 2 zu #139 (ohne Warten des Tests auf interne Bereitschaft vor dem Start):
+   I: gemeinsamer Start von predict direkt und im tmux-Bereich: ungültig -> gültig und gültig -> ungültig mit sofortigem split, -t gültig
+      (auch bei ungültiger eigener Datenbank), fehlend und ungültig im split, QTH bleibt geprüft; beendete Bereiche und Sitzungen erhalten
+      keine späte Konfiguration; ein laufender Bereich bleibt unverändert.
+   J: TLE mit gültiger Prüfsumme, aber ungültiger Epoche bzw. nicht rechenbaren Elementen (direkt und tmux), Satellit ohne Position zu einem
+      späteren Zeitpunkt (Live-Zeile, -f) ohne Ausnahme; die Einwahl rechnet weiter mit der Relaiskette.
+   K: lesbare Vorgabe /usr/share/predict/default/predict.tle (schreibgeschützt, gleiche Quelle wie /var/cache/tle/kestrel.tle), Übernahme mit cp.
+   L: home-import über die echte Dateiauswahl: Format 3 mit Kennwort (richtig, abgebrochen), --home ohne Abfrage, altes Format 2 ohne Abfrage. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -351,8 +359,145 @@ const ohneEtc = p => p.evaluate(() => new Promise((ok, fail) => {
     }, [wg]);
     assert.deepEqual(pruef, [true, false, false, true, false, false, true], 'Address, MTU und eigene Tunneladresse');
     assert.ok(wg.includes('Address = 10.200.200.2/24'));
+    /* ---- I: gemeinsamer Start von predict (Review 2) ---- */
+    await p.lauf('cd /home/raizo'); await p.lauf('tmux kill-server'); await p.lauf('mkdir -p .predict');
+    const sysTle = await p.lauf('cat /var/cache/tle/kestrel.tle'), tleZ = sysTle.split('\n');
+    const mitSumme = l => { let x = 0; for (const c of l.slice(0, 68)) x += c === '-' ? 1 : /\d/.test(c) ? Number(c) : 0; return l.slice(0, 68) + (x % 10); };
+    const kaputtTle = tleZ.slice(); kaputtTle[1] = kaputtTle[1].slice(0, 68) + String((Number(kaputtTle[1][68]) + 1) % 10);
+    const eigenTle = sysTle.replace('KESTREL-1', 'EIGEN-1') + '\n';
+    /* Datei setzen und Änderung melden, OHNE auf den neuen Stand zu warten; der Stand ist danach synchron veraltet */
+    const sofort = (pfad, text) => p.evaluate(async ([seg, t]) => { const r = await TERMINAL_VFS.schreiben(seg, t, {}); if (r.fehler) throw new Error(r.fehler); terminalSysGeaendert(); return terminalSysAktuell(); }, [pfad.split('/').filter(Boolean), text]);
+    const panes = () => p.evaluate(() => TERMINAL_ZUSTAND.tmux ? TERMINAL_ZUSTAND.tmux.panes.length : -1);
+    const paneKopf = () => p.evaluate(() => TERMINAL_ZUSTAND.tmux.panes[0].el.textContent.split('\n').slice(0, 2).join('\n'));
+    await p.lauf('tmux');
+    await setze(p, '/home/raizo/.predict/predict.tle', kaputtTle.join('\n') + '\n', false);
+    assert.equal(await sofort('/home/raizo/.predict/predict.tle', eigenTle), false, 'Stand nach der Änderung veraltet');
+    assert.equal(await p.lauf('tmux split-window -bd predict'), '', 'ungültig -> gültig: sofortiger split startet');
+    assert.equal(await panes(), 1);
+    assert.match(await paneKopf(), /predict\.tle/, 'Bereich rechnet mit der neuen gültigen Datei');
+    assert.ok(await p.evaluate(() => TERMINAL_ZUSTAND.tmux.panes[0].konfig.sats.some(x => x.name === 'EIGEN-1')), 'Konfiguration am Bereich');
+    assert.equal(await sofort('/home/raizo/.predict/predict.tle', kaputtTle.join('\n') + '\n'), false);
+    assert.equal(await p.lauf('tmux split-window -bd predict'), 'predict: ~/.predict/predict.tle: KESTREL-1: checksum error in line 1', 'gültig -> ungültig: sofortiger split meldet den Fehler');
+    assert.equal(await p.lauf('echo $?'), '1');
+    assert.equal(await panes(), 1, 'kein zusätzlicher Bereich');
+    assert.ok(await p.evaluate(() => TERMINAL_ZUSTAND.tmux.panes[0].konfig.sats.some(x => x.name === 'EIGEN-1')), 'laufender Bereich behält seine Konfiguration');
+    await p.waitForTimeout(600);
+    assert.match(await paneKopf(), /predict\.tle/, 'laufender Bereich unverändert nach Takten');
+    await p.lauf("tmux kill-pane -t '{up-of}'");
+    /* -t hat Vorrang vor der ungültigen eigenen Datenbank, direkt und im split; fehlend und ungültig im split */
+    await setze(p, '/home/raizo/eins.tle', eigenTle.split('\n').slice(0, 3).join('\n') + '\n', false);
+    await setze(p, '/home/raizo/zwei.tle', kaputtTle.join('\n') + '\n', false);
+    assert.match(await p.lauf('predict -t eins.tle -f EIGEN-1 1795600000'), /^1795600000 /, '-t gültig trotz ungültiger predict.tle (direkt)');
+    assert.equal(await p.lauf('tmux split-window -bd predict -t eins.tle'), '');
+    assert.equal(await panes(), 1, '-t gültig im split');
+    assert.deepEqual(await p.evaluate(() => TERMINAL_ZUSTAND.tmux.panes[0].konfig.sats.map(x => x.name)), ['EIGEN-1']);
+    await p.lauf("tmux kill-pane -t '{up-of}'");
+    assert.equal(await p.lauf('tmux split-window -bd predict -t fehlt.tle'), 'predict: fehlt.tle: No such file or directory');
+    assert.equal(await p.lauf('echo $?'), '1');
+    assert.equal(await p.lauf('tmux split-window -bd predict -t zwei.tle'), 'predict: zwei.tle: KESTREL-1: checksum error in line 1');
+    assert.equal(await panes(), 0, 'kein Bereich bei fehlender oder ungültiger -t-Datei');
+    await setze(p, '/home/raizo/.predict/predict.qth', 'TOKYO\n35.68\n\n40\n', false);
+    assert.equal(await p.lauf('tmux split-window -bd predict -t eins.tle'), "predict: ~/.predict/predict.qth: invalid longitude ''", 'QTH bleibt geprüft');
+    assert.equal(await p.lauf('predict -t eins.tle -f EIGEN-1 1795600000'), "predict: ~/.predict/predict.qth: invalid longitude ''");
+    await p.lauf('rm .predict/predict.qth .predict/predict.tle'); await p.waitForFunction(() => terminalSysAktuell());
+    /* Beendeter Bereich bzw. beendete Sitzung während des Lesens: keine späte Zuweisung */
+    const spaet = await p.evaluate(async () => {
+      const aus = [];
+      terminalSysGeaendert(); let lauf = terminalTmux(['split-window', '-bd', 'predict']); terminalTmuxEnde();
+      aus.push(await lauf, TERMINAL_ZUSTAND.tmux);
+      await terminalTmux(['new']); terminalSysGeaendert(); lauf = terminalTmux(['split-window', '-bd', 'predict']);
+      terminalTmuxEnde(); await terminalTmux(['new']);
+      aus.push(await lauf, TERMINAL_ZUSTAND.tmux.panes.length);
+      await new Promise(r => setTimeout(r, 400));
+      aus.push(TERMINAL_ZUSTAND.tmux.panes.length, document.querySelectorAll('.tmux-pane').length);
+      terminalTmuxEnde();
+      return aus;
+    });
+    assert.deepEqual(spaet, [1, null, 1, 0, 0, 0], 'beendete Sitzung erhält keinen Bereich und keine späte Konfiguration');
+    assert.equal(await p.evaluate(() => 'predictKonfig' in TERMINAL_ZUSTAND), false, 'keine globale predict-Konfiguration');
+
+    /* ---- J: TLE mit gültiger Prüfsumme, aber ungültigen Werten; nicht rechenbare Satelliten ---- */
+    const mitZeile = (i, z) => { const t = tleZ.slice(); t[i] = mitSumme(z); return t.join('\n') + '\n'; };
+    const epochXX = mitZeile(1, tleZ[1].slice(0, 18) + 'XX' + tleZ[1].slice(20));
+    const ecc = e => mitZeile(2, tleZ[2].slice(0, 26) + e + tleZ[2].slice(33));
+    await p.lauf('tmux');
+    await setze(p, '/home/raizo/.predict/predict.tle', epochXX, false);
+    assert.equal(await p.lauf('predict -f KESTREL-1 1795600000'), 'predict: ~/.predict/predict.tle: KESTREL-1: invalid epoch year', 'Epoche XX direkt');
+    assert.equal(await p.lauf('tmux split-window -bd predict'), 'predict: ~/.predict/predict.tle: KESTREL-1: invalid epoch year', 'Epoche XX im split');
+    assert.equal(await p.lauf('predict'), 'predict: ~/.predict/predict.tle: KESTREL-1: invalid epoch year', 'Epoche XX live');
+    await setze(p, '/home/raizo/.predict/predict.tle', ecc('9999999'), false);
+    assert.equal(await p.lauf('predict -f KESTREL-1 1795600000'), 'predict: ~/.predict/predict.tle: KESTREL-1: orbital elements cannot be propagated (SGP4)', 'nicht initialisierbar direkt');
+    assert.equal(await p.lauf('tmux split-window -bd predict'), 'predict: ~/.predict/predict.tle: KESTREL-1: orbital elements cannot be propagated (SGP4)', 'nicht initialisierbar im split');
+    assert.equal(await panes(), 0);
+    /* e = 0.9: zur Epoche rechenbar, später liefert SGP4 zeitweise keine Position (satellite.js 5.0.0, Fehler 6); erster solcher Zeitpunkt */
+    await setze(p, '/home/raizo/.predict/predict.tle', ecc('9000000'), false);
+    const ep = await p.evaluate(() => {
+      const s = kestrelSatsPruefen(TERMINAL_SYS.tle), e = Math.floor(kestrelEpoche(s.sats[0]) / 1000);
+      for (let m = 1; m < 2880; m++) if (!kestrelLage(s.sats[0], (e + m * 60) * 1000)) return e + m * 60;
+      return null;
+    });
+    assert.ok(ep, 'Zeitpunkt ohne Position gefunden');
+    assert.equal(await p.lauf('predict -f KESTREL-1 ' + ep), 'predict: KESTREL-1: no position at ' + ep + ' (SGP4)');
+    assert.equal(await p.lauf('echo $?'), '1');
+    const live = await p.evaluate(s => { const k = { qth: kestrelQthStation(), sats: kestrelSatsPruefen(TERMINAL_SYS.tle).sats, eigeneTle: true }; return terminalPredictLive(s * 1000, k).split('\n').find(z => z.startsWith('KESTREL-1')); }, ep);
+    assert.match(live, /^KESTREL-1\s+-\s+-\s+-\s+no position \(SGP4\)$/, 'Live-Zeile ohne Position');
+    assert.equal(await p.lauf('tmux split-window -bd predict'), '');
+    await p.waitForTimeout(700);
+    assert.equal(await panes(), 1, 'Bereich läuft');
+    assert.deepEqual(await p.evaluate(() => kestrelSats().map(x => x.name)), ['KESTREL-1', 'KESTREL-2', 'KESTREL-3', 'KESTREL-4'], 'Einwahl rechnet mit der Relaiskette');
+    assert.ok(await p.evaluate(s => !!terminalPppZeile(kestrelSat('KESTREL-1'), s * 1000), ep), 'Relais KESTREL-1 rechenbar');
+    await p.lauf('tmux kill-server');
+    await p.lauf('rm .predict/predict.tle'); await p.waitForFunction(() => terminalSysAktuell());
+
+    /* ---- K: lesbare Vorgabe der Bahndaten ---- */
+    assert.equal((await p.lauf('cat /usr/share/predict/default/predict.tle')).replace(/\n$/, ''), sysTle, 'gleiche Bahndaten wie das System');
+    assert.match(await p.lauf('ls -l /usr/share/predict/default'), /^-rw-r--r--\s+\d+\s.*\spredict\.tle$/m);
+    assert.match(await p.lauf('echo x > /usr/share/predict/default/predict.tle'), /Read-only file system/);
+    assert.equal(await p.lauf('ls .predict'), '', 'keine Pflichtkopie im Heimverzeichnis');
+    await p.lauf('cp /usr/share/predict/default/predict.tle .predict/'); await p.waitForFunction(() => terminalSysAktuell());
+    assert.equal(await p.evaluate(() => TERMINAL_SYS.tleStatus), 'ok', 'übernommene Vorgabe ist gültig');
+    assert.match(await p.lauf('predict -f KESTREL-1 1795600000'), /^1795600000 /);
+    await p.lauf('rm -r .predict eins.tle zwei.tle'); await p.waitForFunction(() => terminalSysAktuell());
+
+    /* ---- L: home-import über die echte Dateiauswahl ---- */
+    const exportOrdner = tmp('ft-imp-');
+    const exportDatei = async nurHome => { const t = await p.evaluate(async h => (await terminalHomePaket(h)).text, nurHome); const f = path.join(exportOrdner, (nurHome ? 'format2' : 'format3') + '.json'); fs.writeFileSync(f, t); return f; };
+    const hostVorher = await p.mitKennwort('sudo cat /etc/hostname');
+    await p.lauf('echo import > imp.txt');
+    const f3 = await exportDatei(false), f2 = await exportDatei(true);
+    assert.equal(JSON.parse(fs.readFileSync(f3, 'utf8')).version, 3); assert.equal(JSON.parse(fs.readFileSync(f2, 'utf8')).version, 2);
+    const aendern = async () => { await setze(p, '/etc/hostname', 'anders\n'); await p.lauf('rm imp.txt'); };
+    const imp = async (datei, zusatz, kennwort) => {
+      const vorher = (await p.out.textContent()).split('\n').length, ch = p.waitForEvent('filechooser');
+      await p.inp.fill('home-import --yes' + zusatz); await p.inp.press('Enter');
+      (await ch).setFiles(datei);
+      if (kennwort !== undefined) {
+        await p.waitForFunction(() => !!TERMINAL_ZUSTAND.sudo && !TERMINAL_ZUSTAND.sudo.pruefen);
+        if (kennwort === null) await p.inp.press('Control+c'); else { await p.inp.focus(); await p.keyboard.type(kennwort); await p.keyboard.press('Enter'); }
+      }
+      await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette && !TERMINAL_ZUSTAND.dateiLaeuft && !TERMINAL_ZUSTAND.sudo);
+      return (await p.out.textContent()).split('\n').slice(vorher).join('\n');
+    };
+    const stand = async () => [(await p.mitKennwort('sudo cat /etc/hostname')), await p.lauf('cat imp.txt')];
+    await aendern();
+    const abbr = await imp(f3, '', null);
+    assert.doesNotMatch(abbr, /entries restored/, 'Abbruch der Kennwortabfrage');
+    assert.deepEqual(await stand(), ['anders', 'cat: imp.txt: No such file or directory'], 'Abbruch ändert nichts');
+    const voll = await imp(f3, '', PW);
+    assert.match(voll, /\[sudo\] password for raizo:/); assert.match(voll, /home-import: .*restored from format3\.json/);
+    assert.deepEqual(await stand(), [hostVorher, 'import'], 'Format 3 mit Kennwort: /etc und Heimverzeichnis');
+    await aendern();
+    const nurHome = await imp(f3, ' --home');
+    assert.doesNotMatch(nurHome, /password/, '--home ohne Kennwortabfrage'); assert.match(nurHome, /restored from format3\.json/);
+    assert.deepEqual(await stand(), ['anders', 'import'], '--home lässt /etc unverändert');
+    await p.lauf('rm imp.txt');
+    const altImp = await imp(f2, '');
+    assert.doesNotMatch(altImp, /password/, 'altes Format ohne Kennwortabfrage'); assert.match(altImp, /restored from format2\.json/);
+    assert.deepEqual(await stand(), ['anders', 'import'], 'altes Format lässt /etc unverändert');
+    await setze(p, '/etc/hostname', hostVorher + '\n'); await p.lauf('rm imp.txt');
+
     assert.deepEqual(p.fehler, []);
-    console.log('OK: terminal-sys-review (A0 Bestandsprofil ohne Warten, Installation, Kennwort für /etc, Register, Fenster, predict QTH/TLE, Notizen löschen, WireGuard)');
+    console.log('OK: terminal-sys-review (A0 Bestandsprofil ohne Warten, Installation, Kennwort für /etc, Register, Fenster, predict QTH/TLE, Notizen löschen, WireGuard, predict-Start, TLE-Werte, Vorgabe, home-import)');
   } finally {
     await ctx.close();
     py.kill();
