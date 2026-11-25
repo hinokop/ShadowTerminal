@@ -29,6 +29,12 @@ DIALING, AOS/LOS, Countdown und Verbindungsabbau bei LOS. Daraus folgt:
 - Die zeitliche Begrenzung durch die Sichtbarkeit der Satelliten bleibt unverändert.
 - A0 wird als automatisierter Ende-zu-Ende-Test des Ablaufs mit Standardkonfiguration und unveränderten Zeitkonstanten umgesetzt, zusätzlich als Punkt der Windows-Abnahme.
 
+**Präzisierungen (Master Wayne und ChatGPT nach Prüfung von `9909c39`, 25.11.2026; Implementierung freigegeben):**
+- WireGuard-Schlüssel werden getrennt und dauerhaft gespeichert, automatisch verwendet und in die Sicherung integriert. Private Schlüssel sind angemessen vor Lesen geschützt. `PostUp` ist ausschließlich eine begrenzte Simulationsfunktion und keine allgemeine Befehlsausführung.
+- Der aktive Hostname erscheint einheitlich im Prompt, in `hostname`, `uname -n`, `uname -a` und in neu erzeugten Systemprotokollen.
+- predict: Eine eigene QTH-Datei hat Vorrang. Fehlt sie, gilt dynamisch der Ausgangsort des Anwendungsprofils, danach der bisherige Standardwert Berlin.
+- Die fünf Meilensteine werden in einem zusammenhängenden Pull Request umgesetzt, mit gezielten Zwischentests sowie vollständiger CI und unabhängigem Review vor dem Merge.
+
 **Umsetzungsdetails aus A0 (Vorschlag, im Pull Request zur Prüfung):**
 - Der Schlüssel liegt in einer eigenen Datei `/etc/wireguard/wg-sat.key`. Sie wird beim ersten `wg-quick up` erzeugt, ohne sichtbare Verzögerung. `wg-sat.conf` lädt ihn wie in der Praxis über `PostUp = wg set %i private-key …`. Wer die Konfiguration aus `/usr/share` zurücksetzt, behält deshalb den Schlüssel.
 - Der Hostname bleibt standardmäßig `terminal`, wie im Prompt; `uname -n` wird daran angeglichen. Eine Änderung wirkt ab der nächsten Anmeldung.
