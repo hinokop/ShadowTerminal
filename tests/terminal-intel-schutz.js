@@ -187,6 +187,25 @@ const PW = 'pw-test-123';
     assert.equal(await lauf('cat s2.txt >> s2.txt'), 'cat: s2.txt: input file is output file');
     assert.equal(await lauf('cat s2.txt'), 'x', '">>": unverändert');
     await lauf('rm s1.txt s2.txt q.txt');
+    /* Review 3: schreibende Befehle mit Umleitung vor jeder Ausführung abgewiesen (kein Datenverlust bei ungültigem oder gültigem Ziel) */
+    await lauf('echo wichtig > wichtig.txt; mkdir ordner');
+    const zielR3 = await knoten('ziel.txt');
+    const nichtUnterst = b => 'bash: ' + b + ': output redirection is not supported for commands that change files';
+    for (const [z, b] of [['rm wichtig.txt > /etc/nicht-schreibbar.txt', 'rm'], ['rm wichtig.txt > fehlt/out.txt', 'rm'], ['rm wichtig.txt > ordner', 'rm'],
+      ['mv wichtig.txt w2.txt > /etc/x.txt', 'mv'], ['mv wichtig.txt w2.txt > gueltig.txt', 'mv'], ['rm wichtig.txt >> ziel.txt', 'rm'],
+      ['cp wichtig.txt w3.txt > gueltig.txt', 'cp'], ['touch t.txt > gueltig.txt', 'touch'], ['mkdir m > gueltig.txt', 'mkdir'], ['rmdir ordner > gueltig.txt', 'rmdir']]) {
+      assert.equal(await lauf(z), nichtUnterst(b), z);
+      assert.equal(await lauf('cat wichtig.txt'), 'wichtig', z + ': Quelle unverändert');
+    }
+    assert.equal(await lauf('ls'), 'ordner\nwichtig.txt\n-x\nziel.txt', 'keine Nebenwirkung, kein Ziel angelegt');
+    assert.deepEqual(await knoten('ziel.txt'), zielR3, 'gültiges Ziel unverändert, auch die Änderungszeit');
+    /* ohne Umleitung unverändert funktionsfähig */
+    assert.equal(await lauf('mv wichtig.txt w2.txt; rm w2.txt; rmdir ordner; ls'), '-x\nziel.txt');
+    /* ein einziger Schreibvorgang: scheitert er (Dateigrenze), bleibt der bisherige Inhalt */
+    await p.evaluate(() => TERMINAL_FS.schreiben(['home', 'raizo', 'gross.txt'], 'g'.repeat(700000), {}));
+    assert.equal(await lauf('cat gross.txt gross.txt > ziel.txt'), 'bash: cat: write error: File too large');
+    assert.equal(await lauf('cat ziel.txt'), 'alt', 'Ziel nach gescheitertem Schreiben unverändert');
+    await lauf('rm gross.txt');
     /* Notizquellen */
     await cmd('cd ' + P1);
     const n0 = await p.evaluate(() => STATE.dossiers.entitaeten['P-0001'].notizen.length);
