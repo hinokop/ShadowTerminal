@@ -332,14 +332,22 @@ function terminalLiestIntel(befehl, args) {
   else return false;
   return ops.some(function (o) { const seg = terminalShellPfad(o); return !!seg && seg[0] === 'intel'; });
 }
-/* Dateischnittstelle mit Herkunftsaufzeichnung: merkt sich die Anbieter aller gelesenen Pfade (stat, readdir, readFile, readlink) */
-function terminalFsMitHerkunft(herkunft) {
-  const merke = function (seg) { if (seg) herkunft.add(terminalAnbieter(seg).name); };
+/* Dateischnittstelle mit Herkunftsaufzeichnung: merkt sich die Anbieter aller gelesenen Pfade (stat, readdir, readFile, readlink) und in
+   opt.gelesen die mit readFile gelesenen Pfade. opt.intelSperren (Umleitung, E6): jeder Zugriff auf /intel wird aufgezeichnet und sofort
+   verweigert (fail-closed), sodass keine /intel-Inhalte in die gepufferte Ausgabe gelangen. */
+function terminalFsMitHerkunft(herkunft, opt) {
+  opt = opt || {};
+  const verweigert = { fehler: 'Operation not permitted' };
+  const zugriff = function (seg, weiter) {
+    if (seg) herkunft.add(terminalAnbieter(seg).name);
+    if (seg && opt.intelSperren && terminalAnbieter(seg).name === 'intel') return Promise.resolve(verweigert);
+    return weiter();
+  };
   return Object.assign({}, TERMINAL_FS, {
-    stat: function (seg, opt) { merke(seg); return TERMINAL_FS.stat(seg, opt); },
-    readdir: function (seg, opt) { merke(seg); return TERMINAL_FS.readdir(seg, opt); },
-    readFile: function (seg) { merke(seg); return TERMINAL_FS.readFile(seg); },
-    readlink: function (seg) { merke(seg); return TERMINAL_FS.readlink(seg); }
+    stat: function (seg, o) { return zugriff(seg, function () { return TERMINAL_FS.stat(seg, o); }); },
+    readdir: function (seg, o) { return zugriff(seg, function () { return TERMINAL_FS.readdir(seg, o); }); },
+    readFile: function (seg) { if (seg && opt.gelesen) opt.gelesen.push(seg.join('/')); return zugriff(seg, function () { return TERMINAL_FS.readFile(seg); }); },
+    readlink: function (seg) { return zugriff(seg, function () { return TERMINAL_FS.readlink(seg); }); }
   });
 }
 async function terminalUmgeleitet(woerter, um, status) {
@@ -356,15 +364,30 @@ async function terminalUmgeleitet(woerter, um, status) {
   if (!ziel) { terminalAusgabe('bash: : No such file or directory'); return 1; }
   if (t.version !== version) return 1;
   if (!seg) { terminalAusgabe(f(pctx.segFehler)); return 1; }
-  /* Vorheriger Inhalt bei ">": wird eine Übernahme am Lesepfad abgewiesen, bleibt die Zieldatei unverändert */
-  let vorher = null;
-  if (um.art !== '>>') { const r0 = await TERMINAL_FS.readFile(seg); if (!r0.fehler && typeof r0.text === 'string') vorher = r0.text; }
-  const auf = await TERMINAL_FS.schreiben(seg, '', { anhaengen: um.art === '>>' });
-  if (t.version !== version) return 1;
-  if (auf.fehler) { terminalAusgabe(f(auf.fehler)); return 1; }
-  if (!woerter.length) return 0;
+  /* Reihenfolge (Review #138, E6): erst den Befehl mit gepufferter Ausgabe ausführen und über die Herkunft entscheiden, danach die Zieldatei
+     genau einmal über den abgesicherten Schreibpfad öffnen und schreiben. Bei Abweisung wird das Ziel nicht berührt (auch nicht angelegt).
+     Abweichung von bash: das Ziel entsteht erst nach dem Befehl (eine Liste des Zielordners zeigt die neue Datei nicht); liest der Befehl
+     das Ziel selbst, wird wie bei bash nichts aus ihm übernommen (">": Ziel danach leer; ">>": unverändert; cat meldet
+     "input file is output file"). */
+  /* Öffnen (anlegen bzw. leeren) und danach Anhängen wie bash; beide Schritte erst nach der Herkunftsentscheidung, je mit erneuter Pfadprüfung */
+  const oeffnen = async function (text, befehlName) {
+    if (!(await terminalSegPruefen(pctx, seg, uopt))) { if (t.version === version) terminalAusgabe(f(pctx.segFehler)); return false; }
+    if (t.version !== version) return false;
+    const auf = await TERMINAL_FS.schreiben(seg, '', { anhaengen: um.art === '>>' });
+    if (t.version !== version) return false;
+    if (auf.fehler) { terminalAusgabe(f(auf.fehler)); return false; }
+    if (!text) return true;
+    if (!(await terminalSegPruefen(pctx, seg, uopt))) { if (t.version === version) terminalAusgabe(f(pctx.segFehler)); return false; }
+    if (t.version !== version) return false;
+    const w = await TERMINAL_FS.schreiben(seg, text, { anhaengen: true });
+    if (t.version !== version) return false;
+    if (w.fehler) { terminalAusgabe('bash: ' + befehlName + ': write error: ' + terminalDateiFehlerText(w.fehler)); return false; }
+    return true;
+  };
+  if (!woerter.length) return (await oeffnen('')) ? 0 : 1;
   const befehl = woerter[0], args = woerter.slice(1);
   if (!TERMINAL_UMLEITBAR.has(befehl)) {
+    if (!(await oeffnen(''))) return 1;   /* bash legt die Zieldatei an, bevor der Befehl scheitert */
     terminalAusgabe(terminalBefehlEintrag(befehl) ? 'bash: ' + befehl + ': output redirection is not supported for this command' : befehl + ': command not found');
     return terminalBefehlEintrag(befehl) ? 1 : 127;
   }
@@ -373,6 +396,7 @@ async function terminalUmgeleitet(woerter, um, status) {
     return 1;
   }
   let res;
+  const gelesen = [];
   const einfach = { echo: function () { return [args.join(' ')]; }, whoami: function () { return [TERMINAL_BENUTZER]; }, uname: function () { return args.length === 1 && args[0] === '-a' ? [TERMINAL_UBUNTU] : null; },
     date: function () { return args.length ? null : [fmtZ(new Date())]; }, true: function () { return args.length ? null : []; }, false: function () { return args.length ? null : []; } };
   if (einfach[befehl]) {
@@ -383,20 +407,18 @@ async function terminalUmgeleitet(woerter, um, status) {
     const fn = terminalBefehlFn(befehl);
     const env = t.oldpwd ? { OLDPWD: t.oldpwd } : {};
     const herkunft = new Set();
-    res = await fn({ args: args, arg: terminalArgText(args), cwd: terminalArbeitsverzeichnis(), env: env, fs: terminalFsMitHerkunft(herkunft) });
+    res = await fn({ args: args, arg: terminalArgText(args), cwd: terminalArbeitsverzeichnis(), env: env, fs: terminalFsMitHerkunft(herkunft, { intelSperren: true, gelesen: gelesen }) });
     if (t.version !== version) return 1;
     if (res.cwd) { t.oldpwd = terminalArbeitsverzeichnis(); t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; }
-    /* E6 am tatsächlichen Lesepfad: hat der Befehl /intel gelesen (gleich über welchen Weg), wird nichts übernommen; die Zieldatei erhält
-       ihren vorherigen Inhalt zurück (">": vorheriger Text oder leer, falls sie neu war; ">>": unverändert) */
+    /* E6 am tatsächlichen Lesepfad: jeder Zugriff auf /intel (auch nur die Prüfung eines Zwischenordners) führt zur Abweisung; das Ziel
+       ist bis hierhin unberührt */
     if (herkunft.has('intel') || res.schutzBloecke || res.schutzZeilen) {
-      if (um.art !== '>>') {
-        if (vorher !== null) await TERMINAL_FS.schreiben(seg, vorher, {});
-        else await TERMINAL_FS.entfernen(seg, {});
-      }
       if (t.version === version) terminalAusgabe('bash: ' + befehl + ': Operation not permitted');
       return 1;
     }
   }
+  const selbst = gelesen.includes(seg.join('/'));
+  if (selbst && befehl === 'cat') res.stderr = (res.stderr || []).concat(['cat: ' + ziel + ': input file is output file']);
   const fehlerZeilen = (res.stderr || []).filter(function (z) { return z !== ''; });
   if (fehlerZeilen.length) terminalAusgabe(fehlerZeilen);
   /* Archivlistung (ls): Namen der Exportobjekte (Lageblatt, Zone, Sichtung) gelangen nie in eine Datei, gleich ob gesperrt oder frei; so
@@ -406,16 +428,9 @@ async function terminalUmgeleitet(woerter, um, status) {
       .filter(function (z) { return z !== ''; });
     delete res.text;
   }
-  const text = typeof res.text === 'string' ? res.text : (res.stdout || []).length ? res.stdout.join('\n') + '\n' : '';
-  if (text) {
-    /* Der Befehl kann inzwischen selbst geändert haben: Pfad erneut prüfen und binden (gleiche Segmentliste, kein neues Auflösen) */
-    if (!(await terminalSegPruefen(pctx, seg, uopt))) { if (t.version === version) terminalAusgabe(f(pctx.segFehler)); return 1; }
-    if (t.version !== version) return 1;
-    const w = await TERMINAL_FS.schreiben(seg, text, { anhaengen: true });
-    if (t.version !== version) return 1;
-    if (w.fehler) { terminalAusgabe('bash: ' + befehl + ': write error: ' + terminalDateiFehlerText(w.fehler)); return 1; }
-  }
-  return res.code;
+  const text = selbst ? '' : typeof res.text === 'string' ? res.text : (res.stdout || []).length ? res.stdout.join('\n') + '\n' : '';
+  if (!(await oeffnen(text, befehl))) return 1;
+  return selbst && befehl === 'cat' ? 1 : res.code;
 }
 
 /* Paket 2, Meilenstein 5 (E7): "befehl >> /intel/dossiers/<typ>/<id>/notes" hängt genau eine Dossiernotiz an, über dieselbe Anwendungsaktion wie
