@@ -236,3 +236,14 @@ Gezielte Tests auf Browser, mit kontrollierter Uhr:
 4. Löschen: gemeinsame Aktion, GUI und `rm`, Prüfung innerhalb der Transaktion, Löschen nach Sperrwechsel zwischen Klick und Ausführung, Sammelbereinigung (nur Anzahl).
 5. Verfügbarkeit: Fehler beim Öffnen der Datenbank beeinträchtigt A0 (PPP, WireGuard, PREDICT, tmux, Profanity) nicht; Neustart (Seite neu laden) behält Exporte; Hostexport-Regressionstests bleiben grün.
 6. Sicherung: `home-backup`, `home-export`, Profilexport und Fallpaket enthalten keine Exporttexte (Stichprobe auf einen eindeutigen Text); `terminal-vfs-sicherung` unverändert grün.
+
+### 9.13 Umsetzung (M4, Head von #140) und Abweichungen von 9.1 bis 9.12
+
+- **D3, Review zu #140:** Namen `JJJJMMTTTHHMMSS.mmmZ-<6 Hex>.txt`. Das Zufallssuffix ist Teil jedes Namens, nicht nur bei gleicher Sekunde, damit keine Folge auf verborgene Versionen schließen lässt. Der eindeutige Index `pfad` erkennt Kollisionen atomar.
+- **Speicher:** Metadaten und Texte liegen in getrennten Objektspeichern. Listen lesen nur Metadaten. Statt eines gespeicherten Zählers zählt die Anlegetransaktion den Bestand (abweichend von 9.2, kein Abgleich nötig).
+- **Herkunft:** `deps` enthält Objekt und Dossier (bei Sichtungen zusätzlich den eingebetteten Ursprungspin), `bindung` deren Identität (Pin und Zone `t`, Sichtung UID, fail closed). Eine beschädigte oder fehlende Herkunft gilt als gesperrt und wird auch von der Sammelbereinigung nicht entfernt.
+- **Duplikatprüfung vor der Grenzprüfung**, Rechte unmittelbar vor dem Schreiben erneut. Die Löschaktion prüft den Zustand in der Löschtransaktion.
+- **Sammelbereinigung (D1)** im Exportdialog, Bestätigung durch einen zweiten Klick am selben Knopf (der Dialog ist einfach, kein zweiter Dialog).
+- **9.11 (a):** Zonen erhalten bei `OZONE_ANGELEGT` ein Anlegedatum `t`, das `OZONE_GEAENDERT` und `OZONE_STAND` nicht ändern (Review 6065257014). **(b):** Die Oberfläche verhindert das Löschen gesperrter Pins und Zonen nicht zuverlässig (`PIN_ENTFERNT`, `OZONE_ENTFERNT`, `KARTE_BEREINIGEN`). Der Vertrag stützt sich nicht darauf, gelöschte Objekte machen Exporte verwaist. **(c):** Echter Speichermangel nicht geprüft, nur simuliert.
+- **Mehrere Fenster:** Die Datenbank serialisiert den Bestand, nicht das Profil im Speicher anderer Fenster. Die Grenze ist in `docs/terminal.md` dokumentiert.
+
