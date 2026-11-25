@@ -2591,17 +2591,53 @@ function terminalIntelVersandName(kanonisch) {
   return (ids.length ? ids : [teile[teile.length - 2] || 'intel']).concat(blatt).join('-') + '.txt';
 }
 function terminalUtf8Bytes(text) { return new TextEncoder().encode(text).length; }
+/* Begrenzte komponentenweise Auflösung für den Versand und dessen Tab (Review 2 zu #140): wie terminalPfadAufloesen, aber in /intel physisch.
+   Jede Komponente unter /intel wird über den Anbieter aufgelöst (folgt Links auf ihr kanonisches Ziel); ".." gilt danach für das Ziel, nicht
+   für den Link (wie unter Linux). Die Abhängigkeiten aller durchlaufenen Einträge (auch der Links) bleiben erhalten. Außerhalb von /intel gibt
+   es keine Links: dort bleibt die lexikalische Auflösung, Verzeichnisse vor ".." werden als zwischen gemeldet und vom Aufrufer geprüft (das
+   Archiv behält so seine bisherigen Namensregeln der Brücke). Ergebnis { seg, zwischen, deps, endeVerzeichnis } oder { fehler: 'fehlt' }. */
+function terminalSendPfad(pfad) {
+  const roh = terminalShellPfad(pfad);
+  if (!roh) return { fehler: 'fehlt' };
+  const heim = pfad === '~' || pfad.startsWith('~/'), absolut = heim || pfad.startsWith('/');
+  let seg = heim ? TERMINAL_HEIM.slice() : absolut ? [] : terminalShellPfad('').slice(), fest = seg.length, datei = false;
+  const zwischen = [], deps = [];
+  for (const name of (heim ? pfad.slice(1) : pfad).split('/')) {
+    if (!name || name === '.') continue;
+    if (datei) return { fehler: 'fehlt' };   /* Komponente hinter einer Datei (ENOTDIR) */
+    if (name === '..') { if (seg.length > fest && seg[0] !== 'intel') zwischen.push(seg.slice()); seg.pop(); fest = Math.min(fest, seg.length); continue; }
+    seg.push(name);
+    if (seg[0] === 'intel' && seg.length > 1) {
+      const st = INTEL.stat(seg.slice(1));
+      if (st.fehler) return { fehler: 'fehlt' };
+      deps.push.apply(deps, st.pfadDeps || []);
+      seg = st.kanonisch.slice(); fest = Math.min(fest, seg.length);
+      datei = st.typ === 'file';
+    }
+  }
+  return { seg: seg, zwischen: zwischen, deps: deps, endeVerzeichnis: roh.endeVerzeichnis };
+}
+/* Freigegebene Versandquellen (F1): Archiv, /home, /tmp, /intel; Wurzel nur als Durchgang (Tab) */
+function terminalSendErlaubt(seg) { return !seg.length || seg[0] === TERMINAL_DB || seg[0] === 'home' || seg[0] === 'tmp' || seg[0] === 'intel'; }
+/* Abhängigkeiten aus der Zuordnung eines Archiv-Exportnamens, soweit das Objekt heute auflösbar ist (Review 2 zu #140): Bindung beim Start */
+function terminalArchivSendDeps(ziele) {
+  return ziele.map(function (z) {
+    if (z.art === 'sichtung') return { art: 'sichtung', dossier: z.dossier, id: z.id.slice(z.dossier.length + 1) };
+    return { art: z.art, id: z.id };
+  }).filter(function (d) { return INTEL.bindung(d).da; });
+}
 /* Gemeinsamer Versandadapter über TERMINAL_FS: { quelle, name, bytes [, schutz] } oder { fehler: 'fehlt' | 'keineDatei' | 'bruecke', text }.
-   Reihenfolge wie cmd_sendfile: access() (File not found, auch ohne Leserecht oder bei gesperrtem Objekt), dann Datei (Not a file).
-   Freigegebene Quellen (F1): /home, /tmp, /intel, das Archiv. Systembereiche (/etc, /usr, /var, Wurzel) sind keine Versandquellen;
-   ein Verzeichnis dort ergibt wie überall Not a file. Das Archiv liest weiter die Brücke (echte Bytezahl auch für Binärdateien,
-   Schutz der Exportnamen, Hostregeln); /intel und VFS werden mit einer einzigen Darstellung gelesen (Byte-Snapshot beim Start). */
+   Reihenfolge wie cmd_sendfile: access() (File not found, auch ohne Leserecht, bei gesperrtem Objekt oder fehlender Identität), dann Datei
+   (Not a file). Freigegebene Quellen (F1): /home, /tmp, /intel, das Archiv. Systembereiche sind keine Versandquellen; ein Verzeichnis dort ergibt
+   wie überall Not a file. Das Archiv liest weiter die Brücke (echte Bytezahl auch für Binärdateien, Schutz der Exportnamen, Hostregeln);
+   /intel und VFS werden mit einer einzigen Darstellung gelesen (Byte-Snapshot beim Start). */
 async function terminalSendQuelle(pfad) {
   const fehlt = { fehler: 'fehlt' }, keineDatei = { fehler: 'keineDatei' };
-  const seg = terminalShellPfad(pfad === '~' ? './~' : pfad);
-  if (!seg) return fehlt;
+  const p = terminalSendPfad(pfad === '~' ? './~' : pfad);
+  if (p.fehler) return fehlt;
+  const seg = p.seg;
   /* Verzeichnisse, die ".." nur lexikalisch überspringt, müssen bestehen (fehlt/../datei: File not found) */
-  for (const z of seg.zwischen || []) { const st = await TERMINAL_FS.stat(z, { pruefen: true }); if (st.fehler || st.typ !== 'dir') return fehlt; }
+  for (const z of p.zwischen) { const st = await TERMINAL_FS.stat(z, { pruefen: true }); if (st.fehler || st.typ !== 'dir') return fehlt; }
   const art = TERMINAL_FS.anbieter(seg);
   if (art === 'archiv') {
     let a;
@@ -2609,22 +2645,27 @@ async function terminalSendQuelle(pfad) {
     if (a.notfile) return keineDatei;
     if (TERMINAL_UPLOAD_DATEIFEHLER.includes(a.error)) return fehlt;
     if (a.error && a.error !== 'Datei zu groß') return { fehler: 'bruecke', text: a.error };
-    if (seg.endeVerzeichnis) return fehlt;   /* Datei mit "/" (ENOTDIR) */
-    /* Exportobjekte der Anwendung im Archiv (Lageblatt, Zone, Sichtung): Zuordnung als Schutz des Uploads und seiner Zeilen */
-    const ziele = terminalArchivZiele('send', seg.slice(1), a);
-    return { quelle: 'archiv', name: a.name, bytes: a.error ? Infinity : a.bytes, schutz: ziele.length ? { archiv: ziele } : undefined };
+    if (p.endeVerzeichnis) return fehlt;   /* Datei mit "/" (ENOTDIR) */
+    /* Exportobjekte der Anwendung im Archiv (Lageblatt, Zone, Sichtung): Zuordnung und, soweit auflösbar, Bindung beim Start */
+    const deps = terminalArchivSendDeps(terminalArchivZiele('send', seg.slice(1), a));
+    return { quelle: 'archiv', name: a.name, bytes: a.error ? Infinity : a.bytes, schutz: deps.length ? { deps: deps, bindung: deps.map(INTEL.bindung) } : undefined };
   }
   if (art === 'intel') {
-    const r = INTEL.versand(seg.slice(1));
+    let r = INTEL.versand(seg.slice(1), p.deps);
+    /* Sichtung ohne dauerhafte Kennung (Altbestand): Kennung einmalig vergeben wie beim Kartenexport (SICHTUNG_KENNUNG), dann neu darstellen */
+    const ohne = r.bindung ? r.bindung.filter(function (x) { return x.art === 'sichtung' && !x.uid; }) : [];
+    if (ohne.length) { ohne.forEach(function (x) { dispatch({ type: 'SICHTUNG_KENNUNG', id: x.dossier, sid: x.id }); }); r = INTEL.versand(seg.slice(1), p.deps); }
     if (r.fehler === 'EISDIR') return keineDatei;
-    if (r.fehler || seg.endeVerzeichnis) return fehlt;
+    if (r.fehler || p.endeVerzeichnis) return fehlt;
+    /* fehlende oder mehrdeutige Identität: kein Versand (fail closed) */
+    if (!r.bindung.every(INTEL.bindungGueltig)) return fehlt;
     return { quelle: 'intel', name: terminalIntelVersandName(r.kanonisch), bytes: terminalUtf8Bytes(r.text), schutz: { deps: r.deps, bindung: r.bindung } };
   }
   if (art === 'vfs' && (seg[0] === 'home' || seg[0] === 'tmp')) {
     const st = await TERMINAL_FS.stat(seg);
     if (st.fehler) return fehlt;
     if (st.typ === 'dir') return keineDatei;
-    if (seg.endeVerzeichnis) return fehlt;
+    if (p.endeVerzeichnis) return fehlt;
     const r = await TERMINAL_FS.readFile(seg);
     if (r.fehler) return r.fehler === 'EISDIR' ? keineDatei : fehlt;
     return { quelle: 'vfs', name: seg[seg.length - 1], bytes: terminalUtf8Bytes(r.text) };
@@ -2632,12 +2673,11 @@ async function terminalSendQuelle(pfad) {
   const st = await TERMINAL_FS.stat(seg, { pruefen: true });
   return !st.fehler && st.typ === 'dir' ? keineDatei : fehlt;
 }
-/* Schutz eines Versands: /intel mit Abhängigkeiten nicht gesperrt und jeder Bindung (Ursprung) noch derselben (M3, F4); Archiv mit der
-   Zuordnung des Exportnamens nicht gesperrt (gleiche Regel wie terminalBruecke) */
+/* Schutz eines Versands: Abhängigkeiten nicht gesperrt und jede Bindung (Ursprung) noch dieselbe (M3, F4); für /intel und Archiv-Exportnamen
+   dieselbe Regel, ohne zweite Rechtedatenbank */
 function terminalSendSchutzGueltig(schutz) {
   if (!schutz) return true;
-  if (schutz.deps && (schutz.deps.some(INTEL.gesperrt) || !schutz.bindung.every(INTEL.bindungGueltig))) return false;
-  return !(schutz.archiv && schutz.archiv.some(terminalArchivZielGesperrt));
+  return !schutz.deps.some(INTEL.gesperrt) && schutz.bindung.every(INTEL.bindungGueltig);
 }
 async function terminalPppSendfile(chat, fenster, arg) {
   const t = TERMINAL_ZUSTAND, konsole = chat.fenster[0], datei = terminalSendAnzeige(arg);
@@ -4012,14 +4052,25 @@ async function terminalTab(lauf, m) {
 }
 /* Pfadergänzung, gemeinsam für die Shell und /sendfile in Profanity (Paket 4, M2): dieselbe Auflösung, Listung und Sichtbarkeit
    (gesperrte Objekte in /intel und gesperrte Exportnamen im Archiv fehlen; Prüfung unmittelbar vor der Übernahme). */
-async function terminalTabPfad(lauf, kopfB, arg, nurDir, fertig) {
+/* opt.versand: Auflösung über terminalSendPfad und nur freigegebene Versandquellen (Review 2 zu #140); die Shell bleibt unverändert */
+async function terminalTabPfad(lauf, kopfB, arg, nurDir, fertig, opt) {
   const anfang = arg[0] === '"' || arg[0] === "'" ? arg[0] : '';
   const pfad = anfang ? arg.slice(1, arg.endsWith('/' + anfang) ? -1 : undefined) : arg;
   if ((anfang && pfad.includes(anfang)) || /[:\\]|[\u0000-\u001f\u007f]/.test(pfad)) return;
   const slash = pfad.lastIndexOf('/') + 1;
   const basis = pfad.slice(0, slash), prefix = pfad.slice(slash);
-  const teile = terminalShellPfad(basis);
+  let teile = terminalShellPfad(basis);
   if (!teile) return;
+  if (opt && opt.versand) {
+    const r = terminalSendPfad(basis || '.');
+    if (r.fehler || !terminalSendErlaubt(r.seg)) return;
+    for (const z of r.zwischen) { const st = await TERMINAL_FS.stat(z, { pruefen: true }); if (st.fehler || st.typ !== 'dir' || !terminalTabGueltig(lauf)) return; }
+    teile = r.seg;
+    if (!teile.length) {
+      fertig(kopfB + anfang, pfad, TERMINAL_WURZEL_LISTE.filter(function (x) { return terminalSendErlaubt([x.replace(/\/$/, '')]); }).map(function (x) { return basis + x; }), function (x) { return x + anfang; });
+      return;
+    }
+  }
   const listing = !teile.length ? TERMINAL_WURZEL_LISTE.map(function (x) { return x === TERMINAL_DB + '/' && !basis ? TERMINAL_DB : x; }) : TERMINAL_TLE_DIRS.get('/' + teile.join('/'));
   if (listing) {
     const namen = listing.filter(x => !nurDir || x.endsWith('/') || x === TERMINAL_DB).map(x => basis + x);
@@ -4092,7 +4143,7 @@ async function terminalKanalTab(lauf) {
   const m = /^\/sendfile\s+(.*)$/.exec(lauf.wert);
   if (!m) return;
   /* gleiche Pfadergänzung wie die Shell, ab deren Arbeitsverzeichnis (Profanity ergänzt Pfade des Dateisystems) */
-  await terminalTabPfad(lauf, kommando + ' ', m[1], false, function (kopf, prefix, kandidaten, format) { terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format); });
+  await terminalTabPfad(lauf, kommando + ' ', m[1], false, function (kopf, prefix, kandidaten, format) { terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format); }, { versand: true });
 }
 /* Befehlsverlauf: nur im Speicher der Sitzung (50 Einträge), nicht im Profil. Nicht aufgenommen werden exit und alles innerhalb des Kanals. */
 function terminalVerlaufNehmen(zeile) {
