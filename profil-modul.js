@@ -1406,6 +1406,18 @@ function kestrelSatsAus(tle) {
   }
   return KESTREL_SATS_DATEI.get(schluessel);
 }
+/* Rechenbarkeit eigener Bahndaten beim Start von predict (Review 2 zu #139): SGP4-Initialisierung ohne Fehler und eine Position mit endlichen
+   Werten zur Epoche. Ergebnis { sats } oder { fehler } (erster nicht rechenbarer Satellit). Geprüft wird ein frischer Datensatz: propagate
+   setzt rec.error bei jedem Aufruf neu, ein früherer Fehlerzeitpunkt des zwischengespeicherten Datensatzes darf den Start nicht bestimmen. */
+function kestrelSatsPruefen(tle) {
+  const sats = kestrelSatsAus(tle);
+  for (const s of sats) {
+    const rec = satellite.twoline2satrec(s.l1, s.l2), ep = kestrelEpoche(s);
+    const pv = !rec.error && Number.isFinite(ep) ? satellite.propagate(rec, new Date(ep)) : null;
+    if (!pv || !pv.position || ![pv.position.x, pv.position.y, pv.position.z].every(Number.isFinite)) return { fehler: s.name + ': orbital elements cannot be propagated (SGP4)' };
+  }
+  return { sats };
+}
 function kestrelSats() {
   if (KESTREL_SATS_AKTIV) return KESTREL_SATS_AKTIV;
   if (!KESTREL_SATS) KESTREL_SATS = KESTREL_TLE.map(function (e) {
@@ -1422,8 +1434,7 @@ function kestrelMitPredict(k, fn) {
   KESTREL_QTH_AKTIV = k.qth; KESTREL_SATS_AKTIV = k.sats || null;
   try { return fn(); } finally { KESTREL_QTH_AKTIV = altQ; KESTREL_SATS_AKTIV = altS; }
 }
-/* Konfiguration von predict beim Start (S5, S7, M5): eigene Dateien haben Vorrang, sonst Stationsort (Profil, Berlin) und die Bahndaten des
-   Systems (/var/cache/tle/kestrel.tle). Ungültige Dateien werden gemeldet, nicht stillschweigend ersetzt: { fehler } */
+/* Konfiguration aus dem Stand im Speicher, ohne Lesen (nur Tab-Vervollständigung). Der Start von predict läuft über terminalPredictStart. */
 function terminalPredictKonfig() {
   const S = TERMINAL_SYS;
   if (S.qthStatus && S.qthStatus !== 'ok' && S.qthStatus !== 'fehlt') return { fehler: '~/.predict/predict.qth: ' + S.qthStatus };
@@ -1542,7 +1553,7 @@ function terminalPppZeit(ms) {
 }
 const TERMINAL_PREDICT_USAGE = 'usage: predict [-t <tlefile>] [-p <satellite> [start] | -f <satellite> [start [end|+n[m]]]]';
 const TERMINAL_PREDICT_MAX = 600;
-function terminalPredictOptionen(args) {
+function terminalPredictOptionen(args, nurSyntax) {
   const o = { modus: 'live' };
   let datei = null;
   for (let i = 0; i < args.length; i++) {
@@ -1564,15 +1575,52 @@ function terminalPredictOptionen(args) {
     }
     return { fehler: 'usage' };
   }
-  /* Ohne -t liest predict seine Datenbank ~/.predict/predict.tle (predict(1)); fehlt sie, die Bahndaten des Systems. -t wird im Handler gelesen. */
+  /* Ohne -t liest predict seine Datenbank ~/.predict/predict.tle (predict(1)); fehlt sie, die Bahndaten des Systems. -t liest terminalPredictStart. */
   o.datei = datei;
-  if (o.modus !== 'live') { o.satObj = kestrelSat(o.sat); if (!o.satObj) return { fehler: '"' + o.sat + '" not found in ' + (datei || (TERMINAL_SYS.tle ? TERMINAL_PREDICT_DB : TERMINAL_PPP_DATEI)) }; }
+  if (o.modus !== 'live' && !nurSyntax) { o.satObj = kestrelSat(o.sat); if (!o.satObj) return { fehler: '"' + o.sat + '" not found in ' + (datei || (TERMINAL_SYS.tle ? TERMINAL_PREDICT_DB : TERMINAL_PPP_DATEI)) }; }
   return o;
 }
+/* Gemeinsamer Start von predict, direkt und im tmux-Bereich (S5, S7, M5; Review 2 zu #139). Reihenfolge wie predict: erst die Optionen, dann
+   die Dateien. Ist der Stand im Speicher veraltet oder noch nicht geladen, wird er vorher gelesen (keine künstliche Wartezeit). -t hat Vorrang
+   vor ~/.predict/predict.tle: eine gültige -t-Datei gilt auch, wenn die eigene Datenbank ungültig ist; der QTH wird immer geprüft.
+   Eigene Bahndaten müssen mit SGP4 rechenbar sein. Ergebnis { k, o } (Konfiguration für genau diesen Lauf), { fehler } oder { abbruch }
+   (Sitzung oder Vordergrund wurde inzwischen beendet). */
+async function terminalPredictStart(args) {
+  const t = TERMINAL_ZUSTAND, version = t.version;
+  if (!terminalSysAktuell()) { await terminalSysBereit(); if (t.version !== version) return { abbruch: true }; }
+  const roh = terminalPredictOptionen(args, true);
+  if (roh.fehler) return roh;
+  const S = TERMINAL_SYS;
+  if (S.qthStatus && S.qthStatus !== 'ok' && S.qthStatus !== 'fehlt') return { fehler: '~/.predict/predict.qth: ' + S.qthStatus };
+  let sats = null, eigeneTle = false;
+  if (roh.datei !== null && roh.datei !== TERMINAL_PPP_DATEI) {
+    /* -t <Datei>: Bahndaten aus /home, /tmp, /etc, /usr oder /var; Archiv und /intel bleiben außen vor (wie bisher ENOENT) */
+    const seg = terminalShellPfad(roh.datei), art = seg ? TERMINAL_FS.anbieter(seg) : null;
+    const r = art === 'vfs' || art === 'paket' || art === 'wurzel' ? await TERMINAL_FS.readFile(seg) : { fehler: 'ENOENT' };
+    if (t.version !== version) return { abbruch: true };
+    const tp = r.fehler ? null : sysTleParse(r.text), ks = tp && tp.tle ? kestrelSatsPruefen(tp.tle) : null;
+    const fehler = r.fehler ? TERMINAL_VFS.fehlerText(r.fehler) : tp.fehler || ks.fehler;
+    if (fehler) return { fehler: roh.datei + ': ' + fehler };
+    sats = ks.sats; eigeneTle = true;
+  } else if (roh.datei === null) {
+    if (S.tleStatus && S.tleStatus !== 'ok' && S.tleStatus !== 'fehlt') return { fehler: TERMINAL_PREDICT_DB + ': ' + S.tleStatus };
+    if (S.tle) {
+      const ks = kestrelSatsPruefen(S.tle);
+      if (ks.fehler) return { fehler: TERMINAL_PREDICT_DB + ': ' + ks.fehler };
+      sats = ks.sats; eigeneTle = true;
+    }
+  }
+  const k = { qth: S.qth || kestrelQthStation(), sats: sats, eigeneQth: !!S.qth, eigeneTle: eigeneTle, datei: roh.datei };
+  const o = kestrelMitPredict(k, function () { return terminalPredictOptionen(args); });
+  return o.fehler ? o : { k: k, o: o };
+}
+function terminalPredictFehler(s) { terminalAusgabe(s.fehler === 'usage' ? TERMINAL_PREDICT_USAGE : 'predict: ' + s.fehler); return s.fehler === 'usage' ? 2 : 1; }
 // Zeile wie predict -f/-p: Unix-Zeit, Datum/Zeit (UTC), Elevation, Azimut, Phase (0-255), Breite, Länge (West),
 // Entfernung (km), Umlauf, Sichtbarkeit ('*' sonnig, ' ' im Erdschatten, '+' sichtbar: sonnig und am Ort dunkel).
+/* null, wenn SGP4 für diesen Zeitpunkt keine Position liefert (Aufrufer melden das) */
 function terminalPppZeile(sat, ms) {
   const datum = new Date(ms), l = kestrelLage(sat, ms);
+  if (!l) return null;
   const tag = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }).format(datum);
   const mon = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(datum);
   const iso = datum.toISOString();
@@ -1598,10 +1646,10 @@ function terminalPppAnzeige() {
   for (const id of ['profil-terminal-xmpp-titel', 'profil-terminal-xmpp-status']) { const el = $(id); if (el) el.hidden = !chat; }
   if (!chat && !live) { shell.hidden = false; return; }
   shell.hidden = !!chat;
-  if (!chat) { delete oben.dataset.chat; terminalPredictSetzen(oben, terminalZeitstand()); return; }
+  if (!chat) { delete oben.dataset.chat; terminalPredictSetzen(oben, terminalZeitstand(), t.orbitLive.konfig); return; }
   if (!block) { delete oben.dataset.chat; oben.replaceChildren(); }
   else {
-    const kopf = chat.link.sat.name + '  [' + terminalSatEnde(chat.link) + ' ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand());
+    const kopf = chat.link.sat.name + '  [' + terminalSatEnde(chat.link) + ' ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand()) || '';
     const daten = kopf + '\n' + telemetrie;
     if (oben.dataset.chat !== daten) {
       delete oben.dataset.predict; oben.dataset.chat = daten;
@@ -1641,15 +1689,16 @@ function kestrelEpoche(sat) {
 /* Interaktives predict (Real-Time Multi-Tracking Mode): alle Satelliten der Datei mit nächstem Ereignis. Kopf mit QTH, Zeit
    und der Spanne der TLE-Epochen; AOS/LOS mit UTC-Datum und Countdown HH:MM:SS; Entfernung in km. Zeilen über dem
    geometrischen Horizont (El >= 0) sind markiert (oben); das bedeutet Sicht, keine Verbindung. */
-function terminalPredictLiveTeile(ms) {
-  /* QTH beim Start von predict festgehalten (S5) */
-  const k = TERMINAL_ZUSTAND.predictKonfig || terminalPredictKonfig();
+function terminalPredictLiveTeile(ms, k) {
+  /* Konfiguration des einzelnen Laufs, beim Start festgehalten (S5): direktes predict (orbitLive.konfig) oder tmux-Bereich (bereich.konfig).
+     Ohne Lauf (Aufruf zur Prüfung) gilt der Stand im Speicher. */
+  if (!k) k = terminalPredictKonfig();
   if (k.fehler) return { kopf: ['predict: ' + k.fehler], zeilen: [] };
   return kestrelMitPredict(k, function () { return terminalPredictLiveTeileKern(ms, k); });
 }
 function terminalPredictLiveTeileKern(ms, k) {
   const q = kestrelQth(), sats = kestrelSats(), uhr = function (x) { return kestrelDatum(x) + ' ' + terminalPppZeit(x); };
-  const epochen = sats.map(kestrelEpoche), von = Math.min(...epochen), bis = Math.max(...epochen);
+  const epochen = sats.map(kestrelEpoche).filter(Number.isFinite), von = Math.min(...epochen), bis = Math.max(...epochen);
   const ep = function (x) { return kestrelDatum(x) + ' ' + terminalPppZeit(x).slice(0, 5); };
   // Kompakt: drei Kopfzeilen, damit die vier Satelliten auch neben plog in einem Bereich Platz finden.
   const kopf = ['PREDICT Real-Time Multi-Tracking Mode · ' + uhr(ms) + ' UTC',
@@ -1657,19 +1706,22 @@ function terminalPredictLiveTeileKern(ms, k) {
       (k && k.eigeneQth ? ' (predict.qth)' : '') + (k && k.eigeneTle ? ' · predict.tle' : '') + ' · TLE epoch ' + (ep(von) === ep(bis) ? ep(von) : ep(von) + ' - ' + ep(bis)) + ' UTC',
     'Satellite'.padEnd(12) + 'Az'.padStart(5) + 'El'.padStart(6) + 'Range km'.padStart(10) + '   Next event (UTC)'];
   const zeilen = sats.map(function (sat) {
-    const l = kestrelLage(sat, ms), u = kestrelUeberflug(sat, ms), oben = l.el >= 0;
+    const l = kestrelLage(sat, ms);
+    /* Keine Position aus SGP4 (z. B. Bahn zu diesem Zeitpunkt nicht mehr rechenbar): Zeile ohne Werte, keine Ausnahme im Takt */
+    if (!l) return { text: sat.name.padEnd(12) + '-'.padStart(5) + '-'.padStart(6) + '-'.padStart(10) + '   no position (SGP4)', oben: false };
+    const u = kestrelUeberflug(sat, ms), oben = l.el >= 0;
     const ereignis = !u ? '-' : oben ? 'LOS ' + uhr(u.bis) + ' (' + terminalCountdown(u.bis, ms) + ')' : 'AOS ' + uhr(u.von) + ' (' + terminalCountdown(u.von, ms) + ')';
     return { text: sat.name.padEnd(12) + String(Math.round(l.az)).padStart(5) + String(Math.round(l.el)).padStart(6) + String(Math.round(l.range)).padStart(10) + '   ' + ereignis, oben };
   });
   return { kopf, zeilen };
 }
-function terminalPredictLive(ms) {
-  const d = terminalPredictLiveTeile(ms);
+function terminalPredictLive(ms, k) {
+  const d = terminalPredictLiveTeile(ms, k);
   return d.kopf.concat(d.zeilen.map(function (z) { return z.text; })).join('\n');
 }
 // Setzt die Verfolgung in ein Element; Zeilen über dem Horizont fett (wie PREDICT: BOLD). Nur bei geändertem Text neu.
-function terminalPredictSetzen(el, ms) {
-  const d = terminalPredictLiveTeile(ms), text = d.kopf.concat(d.zeilen.map(function (z) { return (z.oben ? '+' : '-') + z.text; })).join('\n');
+function terminalPredictSetzen(el, ms, k) {
+  const d = terminalPredictLiveTeile(ms, k), text = d.kopf.concat(d.zeilen.map(function (z) { return (z.oben ? '+' : '-') + z.text; })).join('\n');
   if (el.dataset.predict === text) return;
   el.dataset.predict = text;
   el.replaceChildren(h('span', { class: 'predict-kopf' }, d.kopf.join('\n')), ...d.zeilen.flatMap(function (z) {
@@ -1976,23 +2028,13 @@ async function terminalPppShell(befehl, arg, args = []) {
   if (befehl === 'predict') {
     // predict(1): -t <tlefile>, -p <sat> [start] (ein Überflug), -f <sat> [start [ende]] (Positionsdaten);
     // ohne -p/-f das interaktive Programm (hier die Verfolgung aller Satelliten, Ende mit Strg+C).
-    /* Start (S5): Stand der eigenen Dateien; veraltet oder noch nicht geladen nur dann lesen */
-    if (!terminalSysAktuell()) { const version = t.version; await terminalSysBereit(); if (t.version !== version) return 1; }
-    let k = terminalPredictKonfig();
-    const ti = args.indexOf('-t');
-    if (ti >= 0 && args[ti + 1] !== undefined && args[ti + 1] !== TERMINAL_PPP_DATEI) {
-      /* -t <Datei>: eigene Bahndaten aus dem VFS (~/.predict/predict.tle wie ohne -t) */
-      const seg = terminalShellPfad(args[ti + 1]), r = seg ? await sysDateiLesen('/' + seg.join('/'), true) : { fehler: 'ENOENT' };
-      const tp = r.fehler ? null : sysTleParse(r.text);
-      if (r.fehler || tp.fehler) { terminalAusgabe('predict: ' + args[ti + 1] + ': ' + (r.fehler ? TERMINAL_VFS.fehlerText(r.fehler) : tp.fehler)); return 1; }
-      if (!k.fehler) k = Object.assign({}, k, { sats: kestrelSatsAus(tp.tle), eigeneTle: true });
-    } else if (ti >= 0 && args[ti + 1] === TERMINAL_PPP_DATEI && !k.fehler) k = Object.assign({}, k, { sats: null, eigeneTle: false });
-    if (k.fehler) { terminalAusgabe('predict: ' + k.fehler); return 1; }
-    const o = kestrelMitPredict(k, function () { return terminalPredictOptionen(args); });
-    if (o.fehler) { terminalAusgabe(o.fehler === 'usage' ? TERMINAL_PREDICT_USAGE : 'predict: ' + o.fehler); return o.fehler === 'usage' ? 2 : 1; }
+    /* Start über den gemeinsamen Ablauf (S5, Review 2 zu #139): Stand lesen, falls veraltet; -t vor der eigenen Datenbank */
+    const st = await terminalPredictStart(args);
+    if (st.abbruch) return 1;
+    if (st.fehler) return terminalPredictFehler(st);
+    const k = st.k, o = st.o;
     if (o.modus === 'live') {
-      t.predictKonfig = k;
-      const orbit = { fertig: null, timer: setInterval(terminalTakt, 250) };
+      const orbit = { fertig: null, konfig: k, timer: setInterval(terminalTakt, 250) };
       const ende = terminalVordergrund(orbit);
       t.orbitLive = orbit;
       terminalPppAnzeige();
@@ -2002,12 +2044,20 @@ async function terminalPppShell(befehl, arg, args = []) {
     const jetzt = Math.floor(Date.now() / 1000);
     if (o.modus === 'f') {
       const start = o.start ?? jetzt;
-      if (o.ende === undefined) { terminalAusgabe(kestrelMitPredict(k, function () { return terminalPppZeile(o.satObj, start * 1000); })); return 0; }
+      if (o.ende === undefined) {
+        const z = kestrelMitPredict(k, function () { return terminalPppZeile(o.satObj, start * 1000); });
+        if (z === null) return terminalPredictFehler({ fehler: o.sat + ': no position at ' + start + ' (SGP4)' });
+        terminalAusgabe(z); return 0;
+      }
       const ende = o.ende.relativ ? start + o.ende.wert * (o.ende.minuten ? 60 : 1) : o.ende.wert;
       const schritt = o.ende.minuten ? 60 : 1;
       if (ende < start) return 0;
       const zeilen = [];
-      kestrelMitPredict(k, function () { for (let z = start; z <= ende && zeilen.length < TERMINAL_PREDICT_MAX; z += schritt) zeilen.push(terminalPppZeile(o.satObj, z * 1000)); });
+      let ohne = null;
+      kestrelMitPredict(k, function () {
+        for (let z = start; z <= ende && zeilen.length < TERMINAL_PREDICT_MAX; z += schritt) { const zl = terminalPppZeile(o.satObj, z * 1000); if (zl === null) { ohne = z; break; } zeilen.push(zl); }
+      });
+      if (ohne !== null) { terminalAusgabe(zeilen); return terminalPredictFehler({ fehler: o.sat + ': no position at ' + ohne + ' (SGP4)' }); }
       const gekuerzt = Math.floor((ende - start) / schritt) + 1 > zeilen.length;
       terminalAusgabe(gekuerzt ? zeilen.concat('predict: output limited to ' + TERMINAL_PREDICT_MAX + ' lines') : zeilen);
       return 0;
@@ -2022,6 +2072,7 @@ async function terminalPppShell(befehl, arg, args = []) {
       return zeiten.map(function (ms) { return terminalPppZeile(o.satObj, ms); });
     });
     if (!aus) return 0;
+    if (aus.includes(null)) { terminalAusgabe(aus.slice(0, aus.indexOf(null))); return terminalPredictFehler({ fehler: o.sat + ': no position during pass (SGP4)' }); }
     terminalAusgabe(aus);
     return 0;
   }
@@ -2788,7 +2839,7 @@ function terminalTmuxStatus() {
     '"terminal" ' + z(jetzt.getUTCHours()) + ':' + z(jetzt.getUTCMinutes()) + ' ' + z(jetzt.getUTCDate()) + '-' + mon + '-' + String(jetzt.getUTCFullYear()).slice(2);
 }
 function terminalTmuxBereichText(bereich) {
-  if (bereich.art === 'predict') return terminalPredictLive(Date.now());
+  if (bereich.art === 'predict') return terminalPredictLive(Date.now(), bereich.konfig);
   return bereich.zeilen.join('\n');
 }
 function terminalTmuxPaneAnzeige() {
@@ -2814,7 +2865,7 @@ function terminalTmuxPaneAnzeige() {
           b.el.textContent = b.zeilen.slice(-k).join('\n');
           while (k > 1 && b.el.scrollHeight > b.el.clientHeight) b.el.textContent = b.zeilen.slice(-(--k)).join('\n');
         }
-      } else terminalPredictSetzen(b.el, terminalZeitstand());
+      } else terminalPredictSetzen(b.el, terminalZeitstand(), b.konfig);
     });
   }
   const input = $('profil-terminal-eingabe');
@@ -2869,20 +2920,20 @@ function terminalTmuxPlogZeile(zeile) {
   terminalTmuxPaneAnzeige();
 }
 // Befehlsfolgen wie in tmux(1): "tmux new \; split-window -bd predict" (Trenner ";" als eigenes Wort).
-function terminalTmux(args) {
+async function terminalTmux(args) {
   const teile = [[]];
   for (const a of args) { if (a === ';') teile.push([]); else teile.at(-1).push(a); }
   if (teile.length === 1) return terminalTmuxEinzeln(args);
   let code = 0;
   for (let i = 0; i < teile.length; i++) {
-    if (!teile[i].length && i === 0) { code = terminalTmuxEinzeln([]); if (code !== 0) return code; continue; }
+    if (!teile[i].length && i === 0) { code = await terminalTmuxEinzeln([]); if (code !== 0) return code; continue; }
     if (!teile[i].length) continue;
-    code = terminalTmuxEinzeln(teile[i]);
+    code = await terminalTmuxEinzeln(teile[i]);
     if (code !== 0) return code;
   }
   return code;
 }
-function terminalTmuxEinzeln(args) {
+async function terminalTmuxEinzeln(args) {
   const t = TERMINAL_ZUSTAND, unter = args[0] === undefined ? 'new-session' : args[0];
   const sitzungsBefehle = ['new-session', 'new', 'split-window', 'splitw', 'kill-pane', 'killp', 'kill-server'];
   if (!sitzungsBefehle.includes(unter)) { terminalAusgabe('unknown command: ' + unter); return 1; }
@@ -2918,12 +2969,13 @@ function terminalTmuxEinzeln(args) {
   // Alle anderen enden sofort, ihr Bereich schließt sich wieder.
   let bereich = null;
   if (befehl[0] === 'predict') {
-    /* Konfiguration wie beim Start von predict; ist der Stand gerade veraltet, liest der Bereich ihn nach und rechnet bis dahin mit dem Stand im Speicher */
-    const k = terminalPredictKonfig(), o = k.fehler ? k : kestrelMitPredict(k, function () { return terminalPredictOptionen(befehl.slice(1)); });
-    if (o && !o.fehler && o.modus === 'live') {
-      bereich = { art: 'predict', timer: setInterval(terminalTakt, 250) }; TERMINAL_ZUSTAND.predictKonfig = k;
-      if (!terminalSysAktuell()) void terminalSysBereit().then(function () { TERMINAL_ZUSTAND.predictKonfig = terminalPredictKonfig(); });
-    } else if (k.fehler) { terminalAusgabe('predict: ' + k.fehler); return 1; }
+    /* Derselbe Start wie direkt (Review 2 zu #139): Stand vor dem Öffnen lesen, falls veraltet; -t wird geprüft. Die Konfiguration gehört
+       allein diesem Bereich (bereich.konfig); endet die Sitzung oder tmux während des Lesens, entsteht kein Bereich. */
+    const tmux = t.tmux, version = t.version, st = await terminalPredictStart(befehl.slice(1));
+    if (st.abbruch || t.tmux !== tmux || t.version !== version) return 1;
+    if (st.fehler) return terminalPredictFehler(st);
+    if (t.tmux.panes.length >= TERMINAL_TMUX_BEREICHE) { terminalAusgabe('create pane failed: pane too small'); return 1; }
+    if (st.o.modus === 'live') bereich = { art: 'predict', konfig: st.k, timer: setInterval(terminalTakt, 250) };
   } else if (befehl[0] === 'plog') {
     const opt = terminalPlogTail(befehl.slice(1));
     if (!opt.fehler && opt.folgen) {

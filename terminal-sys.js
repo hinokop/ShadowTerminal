@@ -50,8 +50,12 @@ function sysUsrBaum() {
   return new Map([['usr', null], ['usr/lib', null], ['usr/lib/os-release', x.osRelease], ['usr/share', null],
     ['usr/share/base-files', null], ['usr/share/base-files/hostname', x.hostname], ['usr/share/base-files/hosts', x.hosts],
     ['usr/share/ppp', null], ['usr/share/ppp/' + TERMINAL_PPP_PEER + '.peer', x.peer], ['usr/share/ppp/' + TERMINAL_PPP_PEER + '.chatscript', x.chat],
-    ['usr/share/wireguard', null], ['usr/share/wireguard/wg-sat.conf', x.wg]]);
+    ['usr/share/wireguard', null], ['usr/share/wireguard/wg-sat.conf', x.wg],
+    /* Vorgabe von predict (Verzeichnis default/ der Distribution, S3): Bahndaten aus derselben Quelle wie /var/cache/tle/kestrel.tle erzeugt,
+       keine zweite gepflegte Kopie. predict kopiert sie nicht selbst nach ~/.predict (Abweichung, siehe docs/terminal.md). */
+    ['usr/share/predict', null], ['usr/share/predict/default', null], ['usr/share/predict/default/predict.tle', sysPredictVorgabe()]]);
 }
+function sysPredictVorgabe() { return typeof KESTREL_TLE === 'undefined' ? '' : KESTREL_TLE.map(function (e) { return e.join('\n'); }).join('\n') + '\n'; }
 const SYS_USR_ANBIETER = {
   name: 'paket', schreibFehler: 'EROFS',
   stat: async function (seg) {
@@ -425,6 +429,34 @@ function sysQthParse(text) {
 }
 /* TLE-Prüfsumme (Spalte 69): Summe der Ziffern, "-" zählt 1, modulo 10 */
 function sysTlePruefsumme(zeile) { let s = 0; for (const c of zeile.slice(0, 68)) s += c === '-' ? 1 : /\d/.test(c) ? Number(c) : 0; return s % 10; }
+/* Zahlenfelder nach dem TLE-Format (Spalten wie in der Spezifikation von NORAD/CelesTrak, hier 0-basiert): Form und Wertebereich.
+   Ergebnis: Name des ersten ungültigen Feldes oder null. Ob SGP4 die Elemente rechnen kann, prüft der Aufrufer mit satellite.js. */
+function sysTleFelder(l1, l2) {
+  const zahl = function (t, muster) { return muster.test(t) ? Number(t.trim()) : NaN; };
+  const exp = /^[ +-]\d{5}[+-]\d$/, grad = /^[ \d]{3}\.\d{4}$/;
+  if (!/^\d{5}$/.test(l1.slice(2, 7))) return 'catalog number';
+  if (!/^[UCS ]$/.test(l1[7])) return 'classification';
+  if (!/^\d{2}$/.test(l1.slice(18, 20))) return 'epoch year';
+  const tag = zahl(l1.slice(20, 32), /^[ \d]{3}\.\d{8}$/);
+  if (!(tag >= 1 && tag < 367)) return 'epoch day';
+  if (!/^[ +-]\.\d{8}$/.test(l1.slice(33, 43))) return 'first derivative of mean motion';
+  if (!exp.test(l1.slice(44, 52))) return 'second derivative of mean motion';
+  if (!exp.test(l1.slice(53, 61))) return 'drag term';
+  if (!/^[ \d]$/.test(l1[62])) return 'ephemeris type';
+  if (!/^[ \d]{4}$/.test(l1.slice(64, 68))) return 'element set number';
+  const inkl = zahl(l2.slice(8, 16), grad);
+  if (!(inkl >= 0 && inkl <= 180)) return 'inclination';
+  for (const [name, a, b] of [['right ascension', 17, 25], ['argument of perigee', 34, 42], ['mean anomaly', 43, 51]]) {
+    const w = zahl(l2.slice(a, b), grad);
+    if (!(w >= 0 && w <= 360)) return name;
+  }
+  if (!/^\d{7}$/.test(l2.slice(26, 33))) return 'eccentricity';
+  const n = zahl(l2.slice(52, 63), /^[ \d]{2}\.\d{8}$/);
+  if (!(n > 0)) return 'mean motion';
+  if (!/^[ \d]{5}$/.test(l2.slice(63, 68))) return 'revolution number';
+  for (const [l, pos] of [[l1, [8, 17, 32, 43, 52, 61, 63]], [l2, [7, 16, 25, 33, 42, 51]]]) if (pos.some(function (i) { return l[i] !== ' '; })) return 'field separator';
+  return null;
+}
 /* Bahndaten im Format von predict.tle (je Satellit Name, Zeile 1, Zeile 2). Ergebnis { tle: [[name, l1, l2], …] } oder { fehler: Text } */
 function sysTleParse(text) {
   const z = text.split('\n').map(function (x) { return x.replace(/\s+$/, ''); }).filter(Boolean), aus = [];
@@ -437,6 +469,8 @@ function sysTleParse(text) {
       if (sysTlePruefsumme(l) !== Number(l[68])) return { fehler: name + ': checksum error in line ' + nr };
     }
     if (l1.slice(2, 7) !== l2.slice(2, 7)) return { fehler: name + ': catalog numbers of line 1 and 2 differ' };
+    const feld = sysTleFelder(l1, l2);
+    if (feld) return { fehler: name + ': invalid ' + feld };
     aus.push([name, l1, l2]);
   }
   return { tle: aus };
