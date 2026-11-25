@@ -58,7 +58,7 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 
 | PR | Inhalt | Stand |
 |---|---|---|
-| #137 | Paket 1: persistentes virtuelles Dateisystem `/home/raizo` und `/tmp`, Dateibefehle, Umleitung, nano, Sicherung über die Brücke | Draft; Review-Korrekturen (Archivschutz, Pfadnormalisierung, Restore-Validierung, Sitzung/Backup, Editor) eingearbeitet; Merge erst nach erneuter Prüfung und Freigabe von Shadow. Windows-/file://-Abnahme offen. |
+| #138 | Paket 2: `/intel` (Anbieter-Tabelle, Zugriffsschutz, Baum, Navigation, Notiz anhängen), Konzept docs/terminal-intel-konzept.md | Draft; Prüfung und Freigabe ausstehend. Paket 1 (#137) ist gemergt; dessen Windows-Neustartprüfung ist bestanden (25.11.2026, bestätigt von Shadow). Offen: Windows-Abnahme der Paket-2-Oberfläche. |
 
 Zurzeit ist kein Pull Request offen; #55 wurde am 24.11.2026 auf Anweisung von Master Wayne geschlossen (ungemergt). Stand 24.11.2026, nach dem Merge von #131 (`facb741`), #132 und #133 (`40773b3`). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 

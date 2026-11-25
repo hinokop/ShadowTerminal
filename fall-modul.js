@@ -448,7 +448,7 @@ function renderX(m) {
   if (!f) return [modKopf(m), h('div', null, liste, xPaketPanel(null))];
   return [modKopf(m), h('div', { class: 'split x-layout' }, h('div', null, liste, xPaketPanel(f)), h('div', null,
     xBriefing(f),
-    panel(f.id + ' · ' + f.titel, null, h('div', { class: 'pad' }, xForm(f))),
+    panel(f.id + ' · ' + f.titel, [xBtn('x-terminal', 'Im Terminal', function () { if (typeof terminalImTerminal === 'function') terminalImTerminal('fall', f.id); })], h('div', { class: 'pad' }, xForm(f))),
     xBezugPanel(f, false), xBezugPanel(f, true), xUnterlagen(f),
     panel('Fall löschen', null, h('div', { class: 'pad' },
       h('p', { class: 'note' }, 'Löscht den Fall und seine Unterlagen. Dossiers und Pins bleiben erhalten.'),

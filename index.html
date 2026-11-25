@@ -2704,8 +2704,8 @@ const ACTIONS = {
     const id = 'DN-' + p3(STATE.seq.notiz), t = nowIso();
     d.notizen.push({ id: id, t: t, text: text });
     dossierStempel(d, t);
-    delete VIEW.draft['dn-' + e.id];
-    return { modul: 'Dossier', aktion: 'Dossiernotiz hinzugefügt', detail: e.id + ' ' + e.name + ', ' + id + ': ' + kuerzen(text, 120) };
+    if (a.quelle !== 'Terminal') delete VIEW.draft['dn-' + e.id];   /* eine Notiz aus dem Terminal lässt den Entwurf im Notizfeld der Oberfläche stehen */
+    return { modul: 'Dossier', aktion: 'Dossiernotiz hinzugefügt', detail: e.id + ' ' + e.name + ', ' + id + ': ' + kuerzen(text, 120) + (a.quelle === 'Terminal' ? ' (Terminal)' : '') };
   },
   SICHTUNG_HINZU: function (a) {
     const e = entitaet(a.id), ort = String(a.ort || '').trim().slice(0, 160), text = String(a.text || '').trim().slice(0, 400);
@@ -2812,7 +2812,54 @@ const ACTIONS = {
 /* Phase 5b7: Der alte Missionsbetrieb ist stillgelegt. Ein gespeichertes Feld STATE.missionsbetrieb
    bleibt als Altfeld unverändert erhalten, hat aber keine Wirkung mehr; Missionsaktionen setzen es nicht. */
 function missionsbetrieb() { return false; }
-function dispatch(action) {
+/* Dossiernotiz mit dauerhaftem Erfolgsstatus (Paket 2, E7; Architektur 9a.5; Review #138): genau eine Aktion DOSSIER_NOTIZ über dispatch im
+   kontrollierten Modus (dispatch speichert nicht selbst), danach ein Commit: Zustand mit Rücklesen (Store.saveGeprueft), dann Profil mit
+   Rücklesen. Vorher werden Zustand und Profil vollständig im Speicher (einschließlich Protokoll, auch bei LOG_LIMIT) und die beiden
+   gespeicherten Texte zeichengenau gesichert. Scheitert der Commit, wird beides im Speicher und im lokalen Speicher zurückgesetzt; gelingt
+   das Zurückschreiben nicht, ist das Ergebnis ausdrücklich { fehler: 'EIO', inkonsistent: true }. Während eines Profilaufschubs oder einer
+   Speichersperre wird nichts ausgeführt (EAGAIN). Ergebnis { ok, id } oder { fehler: 'EACCES' | 'ENOENT' | 'EINVAL' | 'EAGAIN' | 'EIO' }. */
+function dossierProfilText() { const o = {}; Object.keys(PROFIL).forEach(function (k) { if (k !== 'leer') o[k] = PROFIL[k]; }); return JSON.stringify(o); }
+function dossierNotizDauerhaft(id, text, quelle) {
+  const e = entitaet(id), klar = String(text || '').trim();
+  if (!e || !STATE.dossiers.entitaeten[e.id]) return { fehler: 'ENOENT' };
+  if (dossierGesperrt(e)) return { fehler: 'EACCES' };
+  if (!klar) return { fehler: 'EINVAL' };
+  if (PROFIL_AUFSCHUB.an || Store.sperrgrund) return { fehler: 'EAGAIN' };
+  let rohZustand, rohProfil;
+  try { rohZustand = window.localStorage.getItem(STORAGE_KEY); rohProfil = window.localStorage.getItem(PROFIL_KEY); } catch (ex) { return { fehler: 'EIO' }; }
+  const kopie = function (o) { return JSON.parse(JSON.stringify(o)); };
+  const zustandVorher = kopie(STATE), profilVorher = kopie(PROFIL);
+  const ersetzen = function (ziel, quelleObj) { Object.keys(ziel).forEach(function (k) { delete ziel[k]; }); Object.assign(ziel, quelleObj); };
+  const anzahl = STATE.dossiers.entitaeten[e.id].notizen.length;
+  dispatch({ type: 'DOSSIER_NOTIZ', id: e.id, text: klar, quelle: quelle || 'Terminal' }, { kontrolliert: true });
+  const d = STATE.dossiers.entitaeten[e.id], neu = d.notizen.length === anzahl + 1 ? d.notizen[d.notizen.length - 1] : null;
+  let ok = false;
+  if (neu && Store.saveGeprueft(STATE) === 'ok' && profilSpeichern()) {
+    try { ok = window.localStorage.getItem(PROFIL_KEY) === dossierProfilText(); } catch (ex) { ok = false; }
+  }
+  if (ok) return { ok: true, id: neu.id };
+  /* Rücknahme: Speicher und lokaler Speicher auf den Stand vor der Aktion */
+  ersetzen(STATE, zustandVorher); ersetzen(PROFIL, profilVorher);
+  /* je Schlüssel: steht der vorherige Text noch unverändert da, ist nichts zurückzuschreiben; sonst schreiben und zeichengenau prüfen */
+  const rueck = function (schluessel, roh) {
+    try {
+      if (window.localStorage.getItem(schluessel) === roh) return true;
+      if (roh === null) window.localStorage.removeItem(schluessel); else window.localStorage.setItem(schluessel, roh);
+      return window.localStorage.getItem(schluessel) === roh;
+    } catch (ex) { return false; }
+  };
+  const zurueckZustand = rueck(STORAGE_KEY, rohZustand), zurueckProfil = rueck(PROFIL_KEY, rohProfil), zurueck = zurueckZustand && zurueckProfil;
+  if (typeof terminalSchutzPruefen === 'function') terminalSchutzPruefen();
+  render();
+  if (!zurueck) {
+    meldung('Speicherstand möglicherweise inkonsistent: Die Notiz aus dem Terminal wurde nicht gespeichert, und der vorherige Stand konnte nicht vollständig zurückgeschrieben werden.');
+    return { fehler: 'EIO', inkonsistent: true };
+  }
+  meldung('Notiz aus dem Terminal nicht gespeichert. Der bisherige Stand bleibt erhalten.');
+  return { fehler: 'EIO' };
+}
+/* opt.kontrolliert: ohne eigene Speicherung (Schritt 3); der Aufrufer übernimmt den geprüften Commit (dossierNotizDauerhaft) */
+function dispatch(action, opt) {
   const handler = ACTIONS[action.type];
   if (!handler) return;
   const ergebnis = handler(action);                      /* (1) */
@@ -2830,8 +2877,10 @@ function dispatch(action) {
     try { if (typeof kartenProtokollErfassen === 'function' && kartenProtokollErfassen(eintrag, e, action.type)) kpNeu = true; } catch (ex) { /* das Kartenprotokoll darf den Ablauf nicht stoppen */ }
   });
   if (STATE.log.length > LOG_LIMIT) STATE.log.splice(0, STATE.log.length - LOG_LIMIT);
-  Store.save(STATE);                                     /* (3) */
-  if ((PROFIL_AKTIONEN[action.type] || kpNeu) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
+  if (!(opt && opt.kontrolliert)) {
+    Store.save(STATE);                                   /* (3) */
+    if ((PROFIL_AKTIONEN[action.type] || kpNeu) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
+  }
   if (typeof terminalSchutzPruefen === 'function') terminalSchutzPruefen();   /* gelesene geschützte Archivtexte nach jeder Zustandsänderung neu prüfen */
   render(liste.every(function (e) { return e.leicht; })); /* (4) */
 }
@@ -3490,6 +3539,7 @@ function dossierAnsicht(e) {
     h('div', { class: 'row' },
       h('button', { type: 'button', id: 'btn-dbearb', onclick: function () { dossierBearbeiten(e); } }, 'Dossier bearbeiten'),
       xDossierKnopf(e),
+      h('button', { type: 'button', id: 'btn-dterminal', title: 'Im Terminal in /intel öffnen', onclick: function () { if (typeof terminalImTerminal === 'function') terminalImTerminal('dossier', e.id); } }, 'Im Terminal'),
       PROFIL.aenderungen[e.id] ? h('button', { type: 'button', id: 'btn-dorig', onclick: function () { dispatch({ type: 'DOSSIER_ZURUECKGESETZT', id: e.id }); } }, 'Auf Original zurücksetzen') : null,
       PROFIL.aenderungen[e.id] ? h('span', { class: 'bearb-hinweis', title: 'Vom Original abweichend' }, 'bearbeitet') : null),
     kartenKnopf(e),
@@ -4612,6 +4662,7 @@ else window.addEventListener('load', function () { Zugang.start(init); });   /* 
 <script src="terminal-locale.js"></script>
 <script src="terminal-vfs.js"></script>
 <script src="terminal-dateibefehle.js"></script>
+<script src="terminal-intel.js"></script>
 <script src="profil-modul.js"></script>
 <script src="fall-modul.js"></script>
 <script src="arbeitsstand-modul.js"></script>

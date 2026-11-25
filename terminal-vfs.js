@@ -454,7 +454,7 @@ const TERMINAL_VFS = (function () {
     fehlerText: function (f) {
       return { ENOENT: 'No such file or directory', ENOTDIR: 'Not a directory', EISDIR: 'Is a directory', EACCES: 'Permission denied', EEXIST: 'File exists',
         ENOTEMPTY: 'Directory not empty', EINVAL: 'Invalid argument', ENOSPC: 'No space left on device', EFBIG: 'File too large', EXDEV: 'Invalid cross-device link',
-        ENAMETOOLONG: 'File name too long', EBUSY: 'Device or resource busy', EIO: 'Input/output error', EROFS: 'Read-only file system', ESAME: 'same file' }[f] || String(f);
+        ENAMETOOLONG: 'File name too long', EBUSY: 'Device or resource busy', EIO: 'Input/output error', EROFS: 'Read-only file system', EAGAIN: 'Resource temporarily unavailable', EPERM: 'Operation not permitted', ESAME: 'same file' }[f] || String(f);
     }
   };
 })();

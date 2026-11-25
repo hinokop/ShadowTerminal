@@ -666,27 +666,39 @@ function pinNaehe(x, maxM) {
   try { karteMarker().forEach(function (m) { if (m.id === x.id || !m.ll || m.kat === 'sichtung') return; const d = pinEntfernungM(x.ll, m.ll); if (d <= maxM) L.push({ id: m.id, name: m.name, d: d }); }); } catch (e) { /* ohne Umgebungsdaten */ }
   return L.sort(function (p, q) { return p.d - q.d; }).slice(0, 8);
 }
-function pinText(x) {
-  const z = [x.id + ' ' + x.name, 'Position: ' + x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5), 'Zweck: ' + (x.zwecke && x.zwecke.length ? x.zwecke.join(', ') : 'nicht festgelegt'), ''];
-  PIN_UMGEBUNG.forEach(function (u) { z.push(u[1] + ': ' + ((x.umgebung && x.umgebung[u[0]]) || '–')); });
-  z.push('', 'Notiz: ' + (x.notiz || '–'), '', 'Angelegt: ' + dtg(new Date(x.t)));
+/* Beschriftung der Textblätter (Archivexport deutsch; /intel im Terminal übergibt eine englische Fassung, Paket 2 E5). Eine Aufbereitung, zwei Sprachen. */
+const KARTE_TEXT_DE = {
+  position: 'Position', zweck: 'Zweck', zweckLeer: 'nicht festgelegt', umgebung: function (u) { return u[1]; }, notiz: 'Notiz', angelegt: 'Angelegt',
+  zeitAngelegt: function (t) { return dtg(new Date(t)); }, radius: 'Radius', stand: 'Stand', zeitStand: function (t) { return fmtZ(t); }, pruefung: 'Bemerkung zur Prüfung',
+  kopfSichtung: function (si, e) { return si.id + ' · Dossier ' + e.id + ' ' + e.name; }, zeit: 'Zeit', zeitSichtung: function (t) { return fmtZ(t); },
+  ortMeldung: 'Ort laut Meldung', ungefaehr: function (g) { return 'ungefähr, aus ' + g; }, guete: 'Güte', gueteLabel: function (k, d) { return d.label; },
+  aktualitaet: 'Aktualität', stufe: function (s) { return s; }, beobachtung: 'Beobachtung', entwurf: 'Entwurf', leer: '–'
+};
+function pinText(x, L) {
+  L = L || KARTE_TEXT_DE;
+  const z = [x.id + ' ' + x.name, L.position + ': ' + x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5), L.zweck + ': ' + (x.zwecke && x.zwecke.length ? x.zwecke.map(L.zweckWert || function (w) { return w; }).join(', ') : L.zweckLeer), ''];
+  PIN_UMGEBUNG.forEach(function (u) { z.push(L.umgebung(u) + ': ' + ((x.umgebung && x.umgebung[u[0]]) || L.leer)); });
+  z.push('', L.notiz + ': ' + (x.notiz || L.leer), '', L.angelegt + ': ' + L.zeitAngelegt(x.t));
   return z.join('\n');
 }
 /* Nur Profilobjekte exportieren, ohne abgeleitete Missions- oder Umgebungsdaten. */
-function eigeneZoneText(x) {
-  return [x.id + ' ' + x.name, 'Position: ' + x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5),
-    'Radius: ' + x.r + ' m', 'Notiz: ' + (x.notiz || '–'), 'Stand: ' + fmtZ(x.stand || x.t),
-    'Bemerkung zur Prüfung: ' + (x.standBemerkung || '–')].join('\n');
+function eigeneZoneText(x, L) {
+  L = L || KARTE_TEXT_DE;
+  return [x.id + ' ' + x.name, L.position + ': ' + x.ll[0].toFixed(5) + ', ' + x.ll[1].toFixed(5),
+    L.radius + ': ' + x.r + ' m', L.notiz + ': ' + (x.notiz || L.leer), L.stand + ': ' + L.zeitStand(x.stand || x.t),
+    L.pruefung + ': ' + (x.standBemerkung || L.leer)].join('\n');
 }
 /* Bestätigte Sichtung als Textblatt: Sichtungsdaten und, falls vorhanden, die Daten des Entwurfs-Pins, aus dem sie entstand */
 function sichtungText(e, si) {
+  const L = arguments[2] || KARTE_TEXT_DE;   /* Beschriftung als optionales drittes Argument; die Stelligkeit bleibt 2 (phase5c2b-sichtungtext) */
   const k = sichtungKoord(si), pin = sichtungPin(si, e.id);
   /* Güte = gespeicherte Bewertung der Sichtung (Beschriftung aus SCENARIO.guete, ohne Angabe „unbewertet“); Aktualität = Einstufung nach Alter (frische) */
-  const gueteDef = Object.prototype.hasOwnProperty.call(SCENARIO.guete, si.guete) ? SCENARIO.guete[si.guete] : SCENARIO.guete.unbewertet, aktualitaet = isFinite(Date.parse(si.t)) ? frische('E', si.t).stufe : '–';
-  const z = [si.id + ' · Dossier ' + e.id + ' ' + e.name, 'Zeit: ' + fmtZ(si.t), 'Ort laut Meldung: ' + (si.ort || '–'),
-    'Position: ' + (k ? k.ll[0].toFixed(5) + ', ' + k.ll[1].toFixed(5) + ' (ungefähr, aus ' + k.genau + ')' : '–'),
-    'Güte: ' + gueteDef.label, 'Aktualität: ' + aktualitaet, 'Beobachtung: ' + (si.text || '–')];
-  if (pin) z.push('', 'Entwurf: ' + pinText(pin));
+  const gueteKey = Object.prototype.hasOwnProperty.call(SCENARIO.guete, si.guete) ? si.guete : 'unbewertet', gueteDef = SCENARIO.guete[gueteKey],
+    aktualitaet = isFinite(Date.parse(si.t)) ? L.stufe(frische('E', si.t).stufe) : L.leer;
+  const z = [L.kopfSichtung(si, e), L.zeit + ': ' + L.zeitSichtung(si.t), L.ortMeldung + ': ' + (si.ort || L.leer),
+    L.position + ': ' + (k ? k.ll[0].toFixed(5) + ', ' + k.ll[1].toFixed(5) + ' (' + L.ungefaehr(k.genau) + ')' : L.leer),
+    L.guete + ': ' + L.gueteLabel(gueteKey, gueteDef), L.aktualitaet + ': ' + aktualitaet, L.beobachtung + ': ' + (si.text || L.leer)];
+  if (pin) z.push('', L.entwurf + ': ' + pinText(pin, L));
   return z.join('\n');
 }
 function kartenTxtExport(art, id, entId) {
@@ -761,6 +773,7 @@ function pinPopup(x, fertig) {
     h('div', { class: 'k-pop-akt' },
       h('button', { type: 'button', class: 'link', id: 'pin-zentrum', onclick: function () { karteFlug(x.ll[0], x.ll[1], Math.max(K.zoom, 16.5), karteAuswahlAnzeige, x.id); } }, 'Zentrieren'),
       h('button', { type: 'button', class: 'link', id: 'pin-export', title: 'Lageblatt als Textdatei speichern', onclick: function () { kartenTxtExport('pin', x.id); } }, 'Als TXT exportieren'),
+      h('button', { type: 'button', class: 'link', id: 'pin-terminal', title: 'Im Terminal in /intel öffnen', onclick: function () { if (typeof terminalImTerminal === 'function') terminalImTerminal('pin', x.id); } }, 'Im Terminal'),
       VIEW.draft['pin-weg'] === x.id ? h('button', { type: 'button', id: 'pin-weg-ja', onclick: function () { delete VIEW.draft['pin-weg']; K.auswahl = null; dispatch({ type: 'PIN_ENTFERNT', id: x.id }); } }, 'Wirklich entfernen')
         : h('button', { type: 'button', class: 'link', id: 'pin-weg', onclick: function () { VIEW.draft['pin-weg'] = x.id; karteAuswahlAnzeige(); } }, 'Entfernen'))]);
 }
@@ -1023,7 +1036,8 @@ function karteAuswahlAnzeige() {
       feld('Beobachtung', m.si.text || '–', 'full')),
       h('div', { class: 'pin-form' }, h('label', { for: 'si-bewerten' }, 'Bewertung'), h('select', { id: 'si-bewerten', 'aria-label': 'Güte der Sichtung', onchange: function (ev) { dispatch({ type: 'SICHTUNG_BEWERTET', id: m.entId, sid: m.si.id, guete: ev.target.value }); karteNeuZeichnen(); } },
         SICHTUNG_BEWERTUNGEN.map(function (g) { return h('option', { value: g, selected: (m.si.guete || 'unbewertet') === g }, SCENARIO.guete[g].label + ' (' + SCENARIO.guete[g].text + ')'); }))),
-      h('div', { class: 'k-pop-akt' }, h('button', { type: 'button', class: 'link', id: 'si-export', title: 'Sichtung als Textdatei speichern', onclick: function () { kartenTxtExport('sichtung', m.id, m.entId); } }, 'Als TXT exportieren')),
+      h('div', { class: 'k-pop-akt' }, h('button', { type: 'button', class: 'link', id: 'si-export', title: 'Sichtung als Textdatei speichern', onclick: function () { kartenTxtExport('sichtung', m.id, m.entId); } }, 'Als TXT exportieren'),
+        h('button', { type: 'button', class: 'link', id: 'si-terminal', title: 'Im Terminal in /intel öffnen', onclick: function () { if (typeof terminalImTerminal === 'function') terminalImTerminal('sichtung', m.id, m.entId); } }, 'Im Terminal')),
       pinX ? [h('h3', null, 'Aus Entwurf ' + pinX.name), pinFormular(pinX, function (patch) { dispatch(Object.assign({ type: 'PIN_GEAENDERT', id: pinX.id }, patch)); karteNeuZeichnen(); }, false)] : null]);
     return;
   }
@@ -1141,6 +1155,7 @@ function eigeneZonePopup(zn, fertig) {
       h('button', { type: 'button', class: 'link', id: 'oz-protokoll', onclick: function () { K.kpObjekt = zn.id; K.kpFilter = ''; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen'),
       h('button', { type: 'button', class: 'link', id: 'oz-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 15), karteAuswahlAnzeige, zn.id); } }, 'Zentrieren'),
       h('button', { type: 'button', class: 'link', id: 'oz-export', onclick: function () { kartenTxtExport('zone', zn.id); } }, 'Als TXT exportieren'),
+      h('button', { type: 'button', class: 'link', id: 'oz-terminal', title: 'Im Terminal in /intel öffnen', onclick: function () { if (typeof terminalImTerminal === 'function') terminalImTerminal('zone', zn.id); } }, 'Im Terminal'),
       VIEW.draft['oz-weg'] === zn.id ? h('button', { type: 'button', id: 'oz-weg-ja', onclick: function () { delete VIEW.draft['oz-weg']; K.auswahl = null; dispatch({ type: 'OZONE_ENTFERNT', id: zn.id }); } }, 'Wirklich entfernen')
         : h('button', { type: 'button', class: 'link', id: 'oz-weg', onclick: function () { VIEW.draft['oz-weg'] = zn.id; karteAuswahlAnzeige(); } }, 'Entfernen'))].filter(Boolean));
 }

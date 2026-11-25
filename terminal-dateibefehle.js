@@ -165,6 +165,8 @@ async function terminalBefehlCp(ctx) {
     const seg = await terminalDateiSeg(ctx, name);
     if (!seg) { fehler.push('cp: cannot stat ' + terminalLsQuote(name) + ': ' + terminalDateiFehlerText(ctx.segFehler)); continue; }
     const basis = terminalBasisname(name) || '';
+    /* E6: Inhalte aus /intel werden vorerst nicht ins VFS übernommen (späteres Export-/Herkunftsmodell) */
+    if (seg[0] === 'intel') { fehler.push('cp: cannot copy ' + terminalLsQuote(name) + ': Operation not permitted'); continue; }
     /* Schutz (Architektur 11): Exportobjekte der Anwendung werden nie kopiert; die Prüfung steht vor jedem Lesen */
     if (seg[0] === TERMINAL_DB && terminalArchivNameZiel(seg.at(-1))) { fehler.push('cp: cannot open ' + terminalLsQuote(name) + ' for reading: Permission denied'); continue; }
     const st = await terminalDateiStat(ctx, seg);
@@ -215,25 +217,33 @@ async function terminalBefehlMv(ctx) {
 }
 
 /* cat, head, tail auf TERMINAL_FS (VFS-Pfade und Umleitung). head/tail: -n N, -nN. Mehrere Dateien: Kopfzeilen "==> name <==" wie GNU. */
+/* Argumente von cat/head/tail: { n, namen } oder { fehler: Befehlsergebnis }; cat nimmt jedes Argument als Dateinamen.
+   Auch die Vorprüfung der Umleitung (terminalLiestIntel) nutzt diesen Parser, damit sie dieselben Operanden sieht wie der Befehl. */
+function terminalLeserArgs(befehl, args) {
+  let n = 10, i = 0;
+  const namen = [];
+  if (befehl !== 'cat') {
+    for (; i < args.length; i++) {
+      const a = args[i];
+      if (a === '--') { i++; break; }
+      if (a === '-n' && i + 1 < args.length) { n = Number(args[++i]); continue; }
+      if (/^-n\d+$/.test(a)) { n = Number(a.slice(2)); continue; }
+      if (a.length > 1 && a[0] === '-' && a !== '-') return { fehler: { code: 1, stdout: [], stderr: [befehl + ": invalid option -- '" + a.replace(/^-+/, '')[0] + "'", terminalGnuTry(befehl)] } };
+      break;
+    }
+    if (!Number.isInteger(n) || n < 0) return { fehler: { code: 1, stdout: [], stderr: [befehl + ': invalid number of lines: ' + terminalLsQuote(String(n))] } };
+  }
+  for (; i < args.length; i++) namen.push(args[i]);
+  return { n: n, namen: namen };
+}
 function terminalLeser(befehl) {
   return async function (ctx) {
-    let n = 10, i = 0;
-    const namen = [];
-    if (befehl !== 'cat') {
-      for (; i < ctx.args.length; i++) {
-        const a = ctx.args[i];
-        if (a === '--') { i++; break; }
-        if (a === '-n' && i + 1 < ctx.args.length) { n = Number(ctx.args[++i]); continue; }
-        if (/^-n\d+$/.test(a)) { n = Number(a.slice(2)); continue; }
-        if (a.length > 1 && a[0] === '-' && a !== '-') return { code: 1, stdout: [], stderr: [befehl + ": invalid option -- '" + a.replace(/^-+/, '')[0] + "'", terminalGnuTry(befehl)] };
-        break;
-      }
-      if (!Number.isInteger(n) || n < 0) return { code: 1, stdout: [], stderr: [befehl + ': invalid number of lines: ' + terminalLsQuote(String(n))] };
-    }
-    for (; i < ctx.args.length; i++) namen.push(ctx.args[i]);
+    const pa = terminalLeserArgs(befehl, ctx.args);
+    if (pa.fehler) return pa.fehler;
+    const n = pa.n, namen = pa.namen;
     if (!namen.length) return { code: 1, stdout: [], stderr: [befehl + ': missing file operand'] };
-    const aus = [], fehler = [];
-    let roh = '', erst = true, code = 0;
+    const aus = [], fehler = [], stuecke = [];
+    let roh = '', erst = true, code = 0, intel = false;
     for (const name of namen) {
       const seg = await terminalDateiSeg(ctx, name);
       let r;
@@ -249,24 +259,61 @@ function terminalLeser(befehl) {
         code = 1;
         continue;
       }
-      let text = r.text;
+      if (r.deps) intel = true;
+      /* Abhängigkeiten je Zeile (/intel): zeilenDeps der Datei, sonst die Abhängigkeiten der ganzen Datei */
+      /* Vereinigung: Abhängigkeiten der ganzen Datei und der einzelnen Zeile (eine leere Zeilenliste hebt die Dateiabhängigkeit nicht auf) */
+      const depsVon = function (j) { const d = (r.deps || []).concat((r.zeilenDeps && r.zeilenDeps[j]) || []); return d.length ? d : null; };
+      let text = r.text, zeilenDeps = text.split('\n').map(function (_, j) { return depsVon(j); });
       if (befehl !== 'cat') {
         const zeilen = text.split('\n');
         if (zeilen.at(-1) === '') zeilen.pop();
-        const ausw = befehl === 'head' ? zeilen.slice(0, n) : n === 0 ? [] : zeilen.slice(-n);
-        text = ausw.length ? ausw.join('\n') + (befehl === 'head' || text.endsWith('\n') ? '\n' : '') : '';
-        if (namen.length > 1) { const kopf = (erst ? '' : '\n') + '==> ' + name + ' <==\n'; text = kopf + text; }
+        const idx = zeilen.map(function (_, j) { return j; }), ausw = befehl === 'head' ? idx.slice(0, n) : n === 0 ? [] : idx.slice(-n);
+        text = ausw.length ? ausw.map(function (j) { return zeilen[j]; }).join('\n') + (befehl === 'head' || text.endsWith('\n') ? '\n' : '') : '';
+        zeilenDeps = ausw.map(depsVon).concat([null]);
+        if (namen.length > 1) { const kopf = (erst ? '' : '\n') + '==> ' + name + ' <==\n'; stuecke.push({ text: kopf, deps: [] }); roh += kopf; }
       }
       erst = false;
       roh += text;
+      stuecke.push({ text: text, deps: zeilenDeps });
     }
     if (roh) { const z = roh.split('\n'); if (z.at(-1) === '') z.pop(); aus.push.apply(aus, z); }
-    return { code: code, stdout: aus, stderr: fehler, text: roh };
+    let schutzZeilen = null;
+    if (intel) {
+      /* Zeilen der Ausgabe den Stücken zuordnen (auch wenn eine Datei ohne Zeilenende in die nächste übergeht) */
+      const metas = [[]];
+      stuecke.forEach(function (st) {
+        st.text.split('\n').forEach(function (teil, k) {
+          if (k > 0) metas.push([]);
+          const d = st.deps && st.deps[k];
+          if (d && (teil !== '' || k === 0)) metas[metas.length - 1] = metas[metas.length - 1].concat(d);
+        });
+      });
+      schutzZeilen = aus.map(function (_, i) { return metas[i] && metas[i].length ? metas[i] : null; });
+    }
+    return { code: code, stdout: aus, stderr: fehler, text: roh, schutzZeilen: schutzZeilen };
   };
+}
+
+/* readlink (ohne Optionen): Ziel eines symbolischen Links; kein Link oder Fehler ergibt keine Ausgabe und Rückgabewert 1 (GNU ohne -v) */
+async function terminalBefehlReadlink(ctx) {
+  const z = terminalGnuOptionen('readlink', ctx.args, '', {});
+  if (z.fehler) return z.fehler;
+  if (!z.operanden.length) return { code: 1, stdout: [], stderr: ['readlink: missing operand', terminalGnuTry('readlink')] };
+  const aus = [], schutz = [];
+  let code = 0;
+  for (const name of z.operanden) {
+    const seg = await ctx.fs.resolve(name, { cwd: ctx.cwd });
+    const r = seg ? await ctx.fs.readlink(seg) : { fehler: 'EACCES' };
+    if (r.ziel) { aus.push(r.ziel); schutz.push(r.deps && r.deps.length ? r.deps : null); } else code = 1;
+  }
+  return { code: code, stdout: aus, stderr: [], schutzZeilen: schutz.some(Boolean) ? schutz : null };
 }
 
 /* ---- Umleitung ---- */
 const TERMINAL_UMLEITBAR = new Set(['echo', 'pwd', 'ls', 'cat', 'head', 'tail', 'date', 'whoami', 'uname', 'true', 'false', 'touch', 'mkdir', 'rm', 'rmdir', 'cp', 'mv']);
+/* Umleitung mit gepufferter Ausgabe nur für lesende, seiteneffektfreie Befehle (Review #138): schreibende Befehle (touch, mkdir, rm, rmdir,
+   cp, mv) werden mit Umleitung vor jeder Ausführung abgewiesen; ohne Umleitung arbeiten sie unverändert */
+const TERMINAL_UMLEITBAR_SCHREIBEND = new Set(['touch', 'mkdir', 'rm', 'rmdir', 'cp', 'mv']);
 function terminalBefehlFn(befehl) {
   return { pwd: terminalBefehlPwd, ls: terminalBefehlLs, cat: terminalLeser('cat'), head: terminalLeser('head'), tail: terminalLeser('tail'),
     touch: terminalBefehlTouch, mkdir: terminalBefehlMkdir, rmdir: terminalBefehlRmdir, rm: terminalBefehlRm, cp: terminalBefehlCp, mv: terminalBefehlMv }[befehl] || null;
@@ -274,24 +321,78 @@ function terminalBefehlFn(befehl) {
 /* Befehle, die auch ohne Umleitung über die ctx-Schnittstelle laufen (cat, head, tail nur bei VFS-Pfaden, siehe terminalDateiAusfuehren) */
 function terminalBefehlDirekt(befehl) {
   return { touch: terminalBefehlTouch, mkdir: terminalBefehlMkdir, rmdir: terminalBefehlRmdir, rm: terminalBefehlRm, cp: terminalBefehlCp, mv: terminalBefehlMv,
-    nano: terminalBefehlNano, 'home-backup': terminalBefehlHomeBackup, 'home-restore': terminalBefehlHomeRestore, 'home-import': terminalBefehlHomeImport, 'home-export': terminalBefehlHomeExport }[befehl] || null;
+    nano: terminalBefehlNano, readlink: terminalBefehlReadlink, 'home-backup': terminalBefehlHomeBackup, 'home-restore': terminalBefehlHomeRestore, 'home-import': terminalBefehlHomeImport, 'home-export': terminalBefehlHomeExport }[befehl] || null;
 }
 /* Das Ziel wird vor dem Befehl geöffnet (angelegt, bei ">" geleert), auch wenn der Befehl scheitert, wie in bash. stdout geht nur in die Datei,
    stderr bleibt auf dem Bildschirm; Rückgabewert ist der des Befehls, bei Schreibfehler 1. */
+/* E6, Vorprüfung vor dem Öffnen der Zieldatei: liest der Befehl nach seinem eigenen Parser einen Operanden aus /intel (bei ls ohne Operand das
+   Arbeitsverzeichnis)? Die Entscheidung über den Anbieter folgt der Pfadauflösung der Befehle (lexikalisch; nur /intel kennt Links). Die
+   verbindliche Durchsetzung geschieht danach am tatsächlichen Lesepfad (terminalFsMitHerkunft). */
+function terminalLiestIntel(befehl, args) {
+  let ops;
+  if (befehl === 'ls') { const z = terminalLsOptionen(args); if (z.fehler || z.hilfe) return false; ops = z.operanden.length ? z.operanden : ['.']; }
+  else if (befehl === 'cat' || befehl === 'head' || befehl === 'tail') { const z = terminalLeserArgs(befehl, args); if (z.fehler) return false; ops = z.namen; }
+  else return false;
+  return ops.some(function (o) { const seg = terminalShellPfad(o); return !!seg && seg[0] === 'intel'; });
+}
+/* Dateischnittstelle mit Herkunftsaufzeichnung: merkt sich die Anbieter aller gelesenen Pfade (stat, readdir, readFile, readlink) und in
+   opt.gelesen die mit readFile gelesenen Pfade. opt.intelSperren (Umleitung, E6): jeder Zugriff auf /intel wird aufgezeichnet und sofort
+   verweigert (fail-closed), sodass keine /intel-Inhalte in die gepufferte Ausgabe gelangen. */
+function terminalFsMitHerkunft(herkunft, opt) {
+  opt = opt || {};
+  const verweigert = { fehler: 'Operation not permitted' };
+  const zugriff = function (seg, weiter) {
+    if (seg) herkunft.add(terminalAnbieter(seg).name);
+    if (seg && opt.intelSperren && terminalAnbieter(seg).name === 'intel') return Promise.resolve(verweigert);
+    return weiter();
+  };
+  return Object.assign({}, TERMINAL_FS, {
+    stat: function (seg, o) { return zugriff(seg, function () { return TERMINAL_FS.stat(seg, o); }); },
+    readdir: function (seg, o) { return zugriff(seg, function () { return TERMINAL_FS.readdir(seg, o); }); },
+    readFile: function (seg) { if (seg && opt.gelesen) opt.gelesen.push(seg.join('/')); return zugriff(seg, function () { return TERMINAL_FS.readFile(seg); }); },
+    readlink: function (seg) { return zugriff(seg, function () { return TERMINAL_FS.readlink(seg); }); }
+  });
+}
 async function terminalUmgeleitet(woerter, um, status) {
   const t = TERMINAL_ZUSTAND, version = t.version;
   const ziel = um.ziel;
+  if (woerter.length && terminalLiestIntel(woerter[0], woerter.slice(1))) {
+    terminalAusgabe('bash: ' + woerter[0] + ': Operation not permitted');   /* E6: keine dauerhafte Übernahme von /intel-Inhalten */
+    return 1;
+  }
+  const zielSeg = ziel ? terminalShellPfad(ziel) : null;
+  if (zielSeg && zielSeg[0] === 'intel' && um.art === '>>') return terminalIntelNotizUmleitung(woerter, um, zielSeg);
   const pctx = { fs: TERMINAL_FS }, uopt = { fehltVerzeichnis: 'EISDIR' }, seg = await terminalSegPruefen(pctx, terminalShellPfad(ziel), uopt);
   const f = function (kuerzel) { return 'bash: ' + ziel + ': ' + terminalDateiFehlerText(kuerzel); };
   if (!ziel) { terminalAusgabe('bash: : No such file or directory'); return 1; }
   if (t.version !== version) return 1;
   if (!seg) { terminalAusgabe(f(pctx.segFehler)); return 1; }
-  const auf = await TERMINAL_FS.schreiben(seg, '', { anhaengen: um.art === '>>' });
-  if (t.version !== version) return 1;
-  if (auf.fehler) { terminalAusgabe(f(auf.fehler)); return 1; }
-  if (!woerter.length) return 0;
+  /* Reihenfolge (Review #138, E6): erst den Befehl mit gepufferter Ausgabe ausführen und über die Herkunft entscheiden, danach die Zieldatei
+     genau einmal über den abgesicherten Schreibpfad öffnen und schreiben. Bei Abweisung wird das Ziel nicht berührt (auch nicht angelegt).
+     Abweichung von bash: das Ziel entsteht erst nach dem Befehl (eine Liste des Zielordners zeigt die neue Datei nicht); liest der Befehl
+     das Ziel selbst, wird wie bei bash nichts aus ihm übernommen (">": Ziel danach leer; ">>": unverändert; cat meldet
+     "input file is output file"). */
+  /* Ein einziger abgesicherter VFS-Schreibvorgang nach der Herkunftsentscheidung (">": Inhalt ersetzen, ">>": anhängen bzw. anlegen), mit
+     erneuter Pfadprüfung; scheitert er (z. B. Quote), bleibt der bisherige Inhalt erhalten (Transaktion des VFS) */
+  const oeffnen = async function (text, befehlName) {
+    if (!(await terminalSegPruefen(pctx, seg, uopt))) { if (t.version === version) terminalAusgabe(f(pctx.segFehler)); return false; }
+    if (t.version !== version) return false;
+    const w = await TERMINAL_FS.schreiben(seg, text, { anhaengen: um.art === '>>' });
+    if (t.version !== version) return false;
+    if (w.fehler) {
+      terminalAusgabe(text && (w.fehler === 'ENOSPC' || w.fehler === 'EFBIG') ? 'bash: ' + befehlName + ': write error: ' + terminalDateiFehlerText(w.fehler) : f(w.fehler));
+      return false;
+    }
+    return true;
+  };
+  if (!woerter.length) return (await oeffnen('')) ? 0 : 1;
   const befehl = woerter[0], args = woerter.slice(1);
+  if (TERMINAL_UMLEITBAR_SCHREIBEND.has(befehl)) {
+    terminalAusgabe('bash: ' + befehl + ': output redirection is not supported for commands that change files');   /* nichts ausgeführt, Ziel unberührt */
+    return 1;
+  }
   if (!TERMINAL_UMLEITBAR.has(befehl)) {
+    if (!(await oeffnen(''))) return 1;   /* bash legt die Zieldatei an, bevor der Befehl scheitert */
     terminalAusgabe(terminalBefehlEintrag(befehl) ? 'bash: ' + befehl + ': output redirection is not supported for this command' : befehl + ': command not found');
     return terminalBefehlEintrag(befehl) ? 1 : 127;
   }
@@ -300,6 +401,7 @@ async function terminalUmgeleitet(woerter, um, status) {
     return 1;
   }
   let res;
+  const gelesen = [];
   const einfach = { echo: function () { return [args.join(' ')]; }, whoami: function () { return [TERMINAL_BENUTZER]; }, uname: function () { return args.length === 1 && args[0] === '-a' ? [TERMINAL_UBUNTU] : null; },
     date: function () { return args.length ? null : [fmtZ(new Date())]; }, true: function () { return args.length ? null : []; }, false: function () { return args.length ? null : []; } };
   if (einfach[befehl]) {
@@ -309,10 +411,19 @@ async function terminalUmgeleitet(woerter, um, status) {
   } else {
     const fn = terminalBefehlFn(befehl);
     const env = t.oldpwd ? { OLDPWD: t.oldpwd } : {};
-    res = await fn({ args: args, arg: terminalArgText(args), cwd: terminalArbeitsverzeichnis(), env: env, fs: TERMINAL_FS });
+    const herkunft = new Set();
+    res = await fn({ args: args, arg: terminalArgText(args), cwd: terminalArbeitsverzeichnis(), env: env, fs: terminalFsMitHerkunft(herkunft, { intelSperren: true, gelesen: gelesen }) });
     if (t.version !== version) return 1;
     if (res.cwd) { t.oldpwd = terminalArbeitsverzeichnis(); t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; }
+    /* E6 am tatsächlichen Lesepfad: jeder Zugriff auf /intel (auch nur die Prüfung eines Zwischenordners) führt zur Abweisung; das Ziel
+       ist bis hierhin unberührt */
+    if (herkunft.has('intel') || res.schutzBloecke || res.schutzZeilen) {
+      if (t.version === version) terminalAusgabe('bash: ' + befehl + ': Operation not permitted');
+      return 1;
+    }
   }
+  const selbst = gelesen.includes(seg.join('/'));
+  if (selbst && befehl === 'cat') res.stderr = (res.stderr || []).concat(['cat: ' + ziel + ': input file is output file']);
   const fehlerZeilen = (res.stderr || []).filter(function (z) { return z !== ''; });
   if (fehlerZeilen.length) terminalAusgabe(fehlerZeilen);
   /* Archivlistung (ls): Namen der Exportobjekte (Lageblatt, Zone, Sichtung) gelangen nie in eine Datei, gleich ob gesperrt oder frei; so
@@ -322,14 +433,56 @@ async function terminalUmgeleitet(woerter, um, status) {
       .filter(function (z) { return z !== ''; });
     delete res.text;
   }
-  const text = typeof res.text === 'string' ? res.text : (res.stdout || []).length ? res.stdout.join('\n') + '\n' : '';
-  if (text) {
-    /* Der Befehl kann inzwischen selbst geändert haben: Pfad erneut prüfen und binden (gleiche Segmentliste, kein neues Auflösen) */
-    if (!(await terminalSegPruefen(pctx, seg, uopt))) { if (t.version === version) terminalAusgabe(f(pctx.segFehler)); return 1; }
+  const text = selbst ? '' : typeof res.text === 'string' ? res.text : (res.stdout || []).length ? res.stdout.join('\n') + '\n' : '';
+  if (!(await oeffnen(text, befehl))) return 1;
+  return selbst && befehl === 'cat' ? 1 : res.code;
+}
+
+/* Paket 2, Meilenstein 5 (E7): "befehl >> /intel/dossiers/<typ>/<id>/notes" hängt genau eine Dossiernotiz an, über dieselbe Anwendungsaktion wie
+   die Oberfläche (DOSSIER_NOTIZ) mit dauerhaftem Erfolgsstatus (dossierNotizDauerhaft, index.html): erst nach geprüfter Speicherung gilt der
+   Befehl als erfolgreich, sonst wird zurückgenommen und "Input/output error" gemeldet. Andere Ziele in /intel und ">" sind schreibgeschützt. */
+async function terminalIntelNotizUmleitung(woerter, um, seg) {
+  const t = TERMINAL_ZUSTAND, version = t.version, ziel = um.ziel;
+  const f = function (k) { terminalAusgabe('bash: ' + ziel + ': ' + terminalDateiFehlerText(k)); return 1; };
+  /* Ziel: echte Komponenten prüfen (fehlende Zwischenordner, "notes/", "notes/."), danach das Notizziel des Anbieters */
+  const pctx = { fs: TERMINAL_FS }, zopt = { fehltVerzeichnis: 'ENOTDIR' };
+  const zielPruefen = async function () {
+    if (!(await terminalSegPruefen(pctx, seg, zopt))) return { fehler: pctx.segFehler };
+    if (seg.endeVerzeichnis) return { fehler: 'ENOTDIR' };
+    const nz = INTEL.notizZiel(seg.slice(1));
+    if (nz.fehler) return { fehler: nz.fehler === 'Permission denied' ? 'EACCES' : nz.fehler };
+    return nz.id ? { id: nz.id } : { fehler: 'EROFS' };
+  };
+  const z1 = await zielPruefen();
+  if (z1.fehler) return f(z1.fehler);
+  if (!woerter.length) return 0;
+  const befehl = woerter[0], args = woerter.slice(1);
+  /* Quellen: nur echo oder Textdateien aus dem VFS (cat/head/tail); keine Listen, keine Archiv- oder /intel-Inhalte */
+  const nurQuellen = 'bash: ' + ziel + ': only echo or text files from /home and /tmp can be appended to notes';
+  let res;
+  if (befehl === 'echo') res = { code: 0, stdout: [args.join(' ')], stderr: [] };
+  else if (befehl === 'cat' || befehl === 'head' || befehl === 'tail') {
+    const herkunft = new Set(), env = t.oldpwd ? { OLDPWD: t.oldpwd } : {};
+    res = await terminalBefehlFn(befehl)({ args: args, arg: terminalArgText(args), cwd: terminalArbeitsverzeichnis(), env: env, fs: terminalFsMitHerkunft(herkunft) });
     if (t.version !== version) return 1;
-    const w = await TERMINAL_FS.schreiben(seg, text, { anhaengen: true });
-    if (t.version !== version) return 1;
-    if (w.fehler) { terminalAusgabe('bash: ' + befehl + ': write error: ' + terminalDateiFehlerText(w.fehler)); return 1; }
+    if (Array.from(herkunft).some(function (a) { return a !== 'vfs'; }) || res.schutzZeilen) { terminalAusgabe(nurQuellen); return 1; }
+  } else {
+    terminalAusgabe(TERMINAL_UMLEITBAR.has(befehl) || terminalBefehlEintrag(befehl) ? nurQuellen : befehl + ': command not found');
+    return TERMINAL_UMLEITBAR.has(befehl) || terminalBefehlEintrag(befehl) ? 1 : 127;
+  }
+  const fehlerZeilen = (res.stderr || []).filter(function (z) { return z !== ''; });
+  if (fehlerZeilen.length) terminalAusgabe(fehlerZeilen);
+  const text = (typeof res.text === 'string' ? res.text : (res.stdout || []).join('\n')).replace(/\n$/, '');
+  if (!text.trim()) return res.code;
+  /* nach dem asynchronen Lesen erneut: Ziel, Sperre, gleiches Dossier */
+  const z2 = await zielPruefen();
+  if (t.version !== version) return 1;
+  if (z2.fehler) return f(z2.fehler);
+  if (z2.id !== z1.id) return f('ENOENT');
+  const r = dossierNotizDauerhaft(z1.id, text, 'Terminal');
+  if (r.fehler) {
+    if (r.inkonsistent) { terminalAusgabe('bash: ' + ziel + ': Input/output error (storage could not be restored; the saved state may be inconsistent)'); return 1; }
+    return f(r.fehler);
   }
   return res.code;
 }
@@ -344,6 +497,7 @@ async function terminalBefehlNano(ctx) {
   const name = z.operanden[0], seg = await terminalDateiSeg(ctx, name, { fehltVerzeichnis: 'EISDIR' });
   if (!seg || !seg.length) return { code: 1, stdout: [], stderr: ['nano: ' + name + ': ' + terminalDateiFehlerText(seg ? 'EACCES' : ctx.segFehler)] };
   if (seg[0] === TERMINAL_DB && terminalArchivNameZiel(seg.at(-1))) return { code: 1, stdout: [], stderr: ['nano: ' + name + ': Permission denied'] };
+  if (seg[0] === 'intel') return { code: 1, stdout: [], stderr: ['nano: ' + name + ': Read-only file system'] };   /* /intel: kein Editor (E6, E7) */
   let text = '', neu = false;
   const st = await ctx.fs.stat(seg, { pruefen: true });
   if (st.fehler && st.fehler !== 'ENOENT') return { code: 1, stdout: [], stderr: ['nano: ' + name + ': ' + terminalDateiFehlerText(st.fehler)] };
