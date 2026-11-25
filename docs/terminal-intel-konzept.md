@@ -34,7 +34,7 @@ Englischumstellung des Terminals angeglichen, nicht in Paket 2.
 | O2 | Pfadsemantik für bestehende Befehle: `open .`, `open /intel/cases/F-001`, `map .`, `map ../pins/PIN-004`, `readlink dossier`, `cd dossier`. |
 | O3 | Keine vollständige POSIX-Symlink-Implementierung, keine zusätzliche GNU-Detailarbeit; `ls -l` nutzt die vorhandene Formatierung und ergänzt nur die für `/intel` nötigen Metadaten. |
 
-Die Windows-Neustartprüfung von Paket 1 bleibt Abnahmebedingung, blockiert die Entwicklung von Paket 2 aber nicht.
+Die Windows-Neustartprüfung von Paket 1 ist bestanden (25.11.2026, bestätigt von Shadow: `~/projects` mit Unterordnern nach vollständigem Neustart vorhanden).
 
 ## 1. Ziel
 
@@ -211,8 +211,8 @@ die Aktion ausführt, das Profil sichert und bei Fehlschlag zurückrollt (Muster
 `bash: notes: Input/output error`. `>` (Überschreiben), `nano`, `rm` auf `notes` ergeben `Read-only file system`. Mehrzeiliger Text wird eine Notiz.
 Gesperrtes Dossier: `Permission denied`, nichts geschrieben.
 
-Hinweis zur Windows-Abnahme: Diese Notiz landet im Anwendungsprofil (wie jede Notiz aus der Oberfläche), **nicht im VFS**. Sie hängt daher nicht von der
-noch ausstehenden Neustartprüfung des VFS ab. VFS-abhängig ist in Paket 2 nur das Kopieren aus `/intel` nach `/home` (E6).
+Hinweis zur Windows-Abnahme: Diese Notiz landet im Anwendungsprofil (wie jede Notiz aus der Oberfläche), **nicht im VFS**. Sie hing daher nicht von der
+Neustartprüfung des VFS ab (inzwischen bestanden, 25.11.2026). VFS-abhängig ist in Paket 2 nur das Kopieren aus `/intel` nach `/home` (E6).
 
 ## 10. Verhältnis zu den Archivexporten
 
