@@ -1,6 +1,6 @@
 # Shadow Terminal – aktueller Stand
 
-**Stand:** 24.11.2026. Zuletzt geprüft gegen `main` `88686de` (Merge von #134, Push-Lauf der CI grün, 104 Skripte; davor #133 als `40773b3`; davor #131 als `facb741`, #132 als `ec313af`; davor #130 als `639c21d`, #129 als `95b3388`, #128 als `210a422`, #127 als `b9bf8d2`, #126 als `c6dd00d`, #125 als `4db60d6`, #124 als `696784b6ce9c`, #123 als `67e1279`, #120 als `072c2d3`, #122 als `d6753b8`, #121 als `5501b38`, #119 als `5c5a545`, #118 als `1cb1195`, #116 als `ebe44f6`, #115 als `036f4eb`, #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
+**Stand:** 25.11.2026: Paket 1 (#137, `07a736d`) und Paket 2 `/intel` (#138, `8773b37`) gemergt, Push-Lauf der CI für `8773b37` grün; Windows-Neustartprüfung von Paket 1 bestanden (bestätigt von Shadow), Windows-Abnahme von Paket 2 offen. Ältere Prüfstände: 24.11.2026, geprüft gegen `main` `88686de` (Merge von #134, Push-Lauf der CI grün, 104 Skripte; davor #133 als `40773b3`; davor #131 als `facb741`, #132 als `ec313af`; davor #130 als `639c21d`, #129 als `95b3388`, #128 als `210a422`, #127 als `b9bf8d2`, #126 als `c6dd00d`, #125 als `4db60d6`, #124 als `696784b6ce9c`, #123 als `67e1279`, #120 als `072c2d3`, #122 als `d6753b8`, #121 als `5501b38`, #119 als `5c5a545`, #118 als `1cb1195`, #116 als `ebe44f6`, #115 als `036f4eb`, #117 als `9205644`, #113 als `75f2592`, #114 als `c9e48ab`, #111 als `dc78f0c`) und GitHub (Pull Requests, Branches, Workflows). Die genannte SHA ist ein Prüfstand und nach jedem weiteren Merge historisch.
 
 Diese Datei ist die zentrale Statusdatei. Sie trennt streng zwischen dem, was **in `main`** gilt, und dem, was nur in **offenen Pull Requests** vorliegt. Pflege: bei jedem Merge in `main` aktualisieren, Stand und `main`-Commit nachführen. Entwicklungsregeln stehen in [CLAUDE.md](../CLAUDE.md), nicht hier.
 
@@ -58,7 +58,7 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 
 | PR | Inhalt | Stand |
 |---|---|---|
-| #138 | Paket 2: `/intel` (Anbieter-Tabelle, Zugriffsschutz, Baum, Navigation, Notiz anhängen), Konzept docs/terminal-intel-konzept.md | Draft; Prüfung und Freigabe ausstehend. Paket 1 (#137) ist gemergt; dessen Windows-Neustartprüfung ist bestanden (25.11.2026, bestätigt von Shadow). Offen: Windows-Abnahme der Paket-2-Oberfläche. |
+| – | Paket 3 `sys`: Konzept docs/terminal-sys-konzept.md auf Branch `feat/paket3-sys-20261125`, noch kein Pull Request | Entscheidungen S1 bis S9 von Master Wayne ausstehend; Implementierung erst danach. |
 
 Zurzeit ist kein Pull Request offen; #55 wurde am 24.11.2026 auf Anweisung von Master Wayne geschlossen (ungemergt). Stand 24.11.2026, nach dem Merge von #131 (`facb741`), #132 und #133 (`40773b3`). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
