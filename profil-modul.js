@@ -329,12 +329,16 @@ function terminalZeileMitGesperrtemName(zeile, sicht) {
    mit Archivnamen: Listen-Zwischenspeicher, Auswahlliste, Ergänzungsvorschlag und Verlaufseinträge mit gesperrten Namen. */
 const TERMINAL_VORSCHLAG_LS = new Map();
 let terminalSperrstandLetzter = null;
+/* Sperrgeneration: steigt bei jeder Änderung des Sperrstands; Ergänzung und Vorschlag gelten nur in der Generation, in der sie begannen
+   (ein neu gestarteter gleicher Vorschlag übernimmt kein Ergebnis aus einer früheren Generation, Review #138) */
+let terminalSperrGeneration = 0;
 function terminalSperrstandPruefen() {
   if (typeof PROFIL === 'undefined' || !PROFIL) return;
   const stand = terminalVaultObjekte().filter(function (o) { return o.gesperrt; }).map(function (o) { return o.art + ':' + o.id; }).sort().join(',') +
     '|' + (PROFIL.gesperrt || []).slice().sort().join(',');
   if (stand === terminalSperrstandLetzter) return;
   terminalSperrstandLetzter = stand;
+  terminalSperrGeneration++;
   /* erst die Datenquellen verwerfen, dann Auswahlliste und Vorschlags-Overlay neu zeichnen (sonst bliebe ein bereits angezeigter Name stehen) */
   TERMINAL_VORSCHLAG_LS.clear();
   const t = TERMINAL_ZUSTAND;
@@ -397,18 +401,12 @@ function terminalSchutzBereinigen() {
   const sicht = terminalArchivSichtbarkeit();
   t.ausgabe.forEach(function (zeile, i) {
     let ziel = meta[i] || null;
-    if (ziel && (ziel.intel || ziel.intelZeilen)) {   /* /intel: Eintrag bzw. einzelne Zeilen mit nun gesperrter Abhängigkeit entfernen */
-      const m = terminalIntelMetaFiltern(zeile, ziel);
+    if (ziel && (ziel.intel || ziel.intelZeilen || ziel.liste)) {
+      /* /intel-Abhängigkeiten und Archivlistung (auch kombiniert): nur Zeilen mit nun gesperrter Abhängigkeit bzw. gesperrtem Namen entfernen */
+      const m = terminalSchutzFiltern(zeile, ziel, sicht);
       if (m && m.zeile === zeile) { ausgabe.push(zeile); neueMeta.push(ziel); return; }
       geaendert = true;
       if (m) { ausgabe.push(m.zeile); neueMeta.push(m.meta); }
-      return;
-    }
-    if (ziel && ziel.liste) {       /* Archivlistung (ls): nur Zeilen mit nun gesperrtem Namen entfernen, übrige Einträge bleiben */
-      const alle = String(zeile).split('\n'), rein = alle.filter(function (l) { return sicht(terminalListenName(l)); });
-      if (rein.length === alle.length) { ausgabe.push(zeile); neueMeta.push(ziel); return; }
-      geaendert = true;
-      if (rein.length) { ausgabe.push(rein.join('\n')); neueMeta.push(ziel); }
       return;
     }
     const m = !ziel && /^VAULT :: RECORD ACCESS\nOBJECT\s+((PIN|ZO)-\d{3,15})\b/.exec(zeile);
@@ -420,15 +418,26 @@ function terminalSchutzBereinigen() {
   t.ausgabe = ausgabe; t.ausgabeMeta = neueMeta;
   return true;
 }
-/* Ein Ausgabeeintrag mit /intel-Metadaten gegen die aktuellen Sperren: null (ganz entfernen) oder { zeile, meta } mit den verbliebenen Zeilen */
-function terminalIntelMetaFiltern(zeile, meta) {
+/* Ein Ausgabeeintrag gegen die aktuellen Sperren: null (ganz entfernen) oder { zeile, meta } mit den verbliebenen Zeilen. Beide Schutzarten
+   wirken je Zeile zusammen: /intel-Abhängigkeiten (intel für den ganzen Eintrag, intelZeilen je Zeile) und Archivlistung (liste: Exportname
+   am Zeilenende, sicht aus terminalArchivSichtbarkeit). */
+function terminalSchutzFiltern(zeile, meta, sicht) {
   if (!meta) return { zeile: zeile, meta: null };
-  if (meta.intel) return meta.intel.some(INTEL.gesperrt) ? null : { zeile: zeile, meta: meta };
-  if (!meta.intelZeilen) return { zeile: zeile, meta: meta };
+  if (meta.intel && meta.intel.some(INTEL.gesperrt)) return null;
+  if (!meta.intelZeilen && !meta.liste) return { zeile: zeile, meta: meta };
+  sicht = sicht || terminalArchivSichtbarkeit();
   const teile = String(zeile).split('\n'), rein = [], deps = [];
-  teile.forEach(function (l, j) { const d = meta.intelZeilen[j] || []; if (!d.some(INTEL.gesperrt)) { rein.push(l); deps.push(d); } });
+  teile.forEach(function (l, j) {
+    const d = meta.intelZeilen ? (meta.intelZeilen[j] || []) : null;
+    if (d && d.some(INTEL.gesperrt)) return;
+    if (meta.liste && !sicht(terminalListenName(l))) return;
+    rein.push(l); deps.push(d);
+  });
   if (rein.length === teile.length) return { zeile: zeile, meta: meta };
-  return rein.length && rein.some(function (l) { return l !== ''; }) ? { zeile: rein.join('\n'), meta: { intelZeilen: deps } } : null;
+  if (!rein.length || (meta.intelZeilen && !rein.some(function (l) { return l !== ''; }))) return null;
+  const neu = Object.assign({}, meta);
+  if (meta.intelZeilen) neu.intelZeilen = deps;
+  return { zeile: rein.join('\n'), meta: neu };
 }
 /* Nach jeder Zustandsänderung (index.html, dispatch) */
 function terminalSchutzPruefen() { terminalSperrstandPruefen(); if (terminalSchutzBereinigen()) terminalAusgabe([]); }
@@ -788,30 +797,19 @@ async function terminalBefehlLauf(fn, args, arg, version) {
   const res = await fn({ args: args, arg: arg || '', cwd: cwdVorher, env: env, fs: TERMINAL_FS });
   if (t.version !== version) return 1;
   if (res.cwd) { t.oldpwd = cwdVorher; t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; terminalKanalPromptSync(); }
-  /* /intel: Schutzmetadaten je stdout-Eintrag (schutzBloecke: zeilenweise innerhalb eines Blocks; schutzZeilen: je Eintrag) */
-  const intelMeta = res.schutzBloecke || res.schutzZeilen ? (res.stdout || []).map(function (_, i) {
-    return res.schutzBloecke ? (res.schutzBloecke[i] || null) : res.schutzZeilen[i] ? { intel: res.schutzZeilen[i] } : null;
-  }) : null;
-  if (intelMeta) {
-    const err = (res.stderr || []).map(function () { return null; });
-    const metas = res.stderrZuerst ? err.concat(intelMeta) : intelMeta.concat(err);
-    const alle = res.stderrZuerst ? (res.stderr || []).concat(res.stdout || []) : (res.stdout || []).concat(res.stderr || []);
-    /* letzte Prüfung unmittelbar vor der Ausgabe: inzwischen gesperrte Zeilen fallen weg */
-    const rein = [], reinMeta = [];
-    alle.forEach(function (z, i) {
-      const m = terminalIntelMetaFiltern(z, metas[i]);
-      if (m) { rein.push(m.zeile); reinMeta.push(m.meta); }
-    });
-    if (rein.length) terminalAusgabe(rein, { jeEintrag: reinMeta });
-    return res.code;
-  }
-  let zeilen = res.stderrZuerst ? (res.stderr || []).concat(res.stdout || []) : (res.stdout || []).concat(res.stderr || []);
-  if (res.archivListe) {   /* letzte Prüfung gegen die aktuellen Sperren unmittelbar vor der Ausgabe */
-    const sicht = terminalArchivSichtbarkeit();
-    zeilen = zeilen.map(function (z) { return String(z).split('\n').filter(function (l) { return sicht(terminalListenName(l)); }).join('\n'); })
-      .filter(function (z) { return z !== ''; });
-  }
-  if (zeilen.length) terminalAusgabe(zeilen, res.archivListe ? { liste: true } : null);
+  /* Schutzmetadaten je Ausgabeeintrag, beide Arten kombinierbar (gemischte Operanden): /intel-Abhängigkeiten (schutzBloecke zeilenweise je
+     Block, schutzZeilen je Eintrag) und Archivlistung (liste: Exportnamen). Letzte Prüfung unmittelbar vor der Ausgabe. */
+  const out = res.stdout || [], err = res.stderr || [];
+  const intelMeta = out.map(function (_, i) { return res.schutzBloecke ? (res.schutzBloecke[i] || null) : res.schutzZeilen && res.schutzZeilen[i] ? { intel: res.schutzZeilen[i] } : null; });
+  const alle = res.stderrZuerst ? err.concat(out) : out.concat(err);
+  const metas = (res.stderrZuerst ? err.map(function () { return null; }).concat(intelMeta) : intelMeta.concat(err.map(function () { return null; })))
+    .map(function (m) { return res.archivListe ? Object.assign({}, m || {}, { liste: true }) : m; });
+  const sicht = terminalArchivSichtbarkeit(), rein = [], reinMeta = [];
+  alle.forEach(function (z, i) {
+    const m = terminalSchutzFiltern(z, metas[i], sicht);
+    if (m && (m.zeile !== '' || !metas[i])) { rein.push(m.zeile); reinMeta.push(m.meta); }   /* leere Ausgabezeilen ohne Schutz (echo "") bleiben */
+  });
+  if (rein.length) terminalAusgabe(rein, reinMeta.some(Boolean) ? { jeEintrag: reinMeta } : null);
   return res.code;
 }
 function terminalBefehlFehler(text) { return { code: 1, stdout: [], stderr: [text] }; }
@@ -1102,7 +1100,8 @@ async function terminalBefehlLs(ctx) {
     const kopfZeilen = kopf ? kopf.split('\n').length - 1 : 0;
     if (operanden.length > 1 || zeilen.length) {
       aus.push(text); erst = false;
-      schutz.push({ intelZeilen: Array(kopfZeilen).fill([]).concat(geordnet.map(function (x) { return x.deps || []; })) });
+      const dirDeps = dir.deps || [];   /* Abhängigkeiten des Verzeichnisses selbst gelten für jede Zeile seiner Ausgabe */
+      schutz.push({ intelZeilen: Array(kopfZeilen).fill(dirDeps).concat(geordnet.map(function (x) { return dirDeps.concat(x.deps || []); })) });
     }
   }
   return { code: code, stdout: aus, stderr: fehler, stderrZuerst: true, archivListe: archiv, schutzBloecke: intelAusgabe ? schutz : null };
@@ -3473,7 +3472,7 @@ function terminalTabAnzeigename(x) {
 }
 function terminalTabKontext(lauf) {
   const t = TERMINAL_ZUSTAND;
-  return t.version === lauf.version && t.kanal === lauf.kanal && (!t.kanal || t.kanal.phase === 'eingabe') && t.tmux?.fokus !== 'oben' &&
+  return t.version === lauf.version && lauf.sperrGen === terminalSperrGeneration && t.kanal === lauf.kanal && (!t.kanal || t.kanal.phase === 'eingabe') && t.tmux?.fokus !== 'oben' &&
     terminalArbeitsverzeichnis() === lauf.ort;
 }
 function terminalTabGueltig(lauf) {
@@ -3584,7 +3583,9 @@ async function terminalTab(lauf, m) {
     if (r.fehler) return;
     if (lauf.nurVorschlag) lauf.fertigLs = true;
     const ordner = function (x) { return x.dir || (x.link && x.zielDir); };
-    const dateien = r.eintraege.filter(function (x) { return ordner(x) || !nurDir; }).map(function (x) { return basis + x.name + (ordner(x) ? '/' : ''); });
+    /* Entnahme: Abhängigkeiten jedes Eintrags unmittelbar vor der Übernahme erneut gegen die Sperren prüfen */
+    const dateien = r.eintraege.filter(function (x) { return (ordner(x) || !nurDir) && !(x.deps || []).concat(r.deps || []).some(INTEL.gesperrt); })
+      .map(function (x) { return basis + x.name + (ordner(x) ? '/' : ''); });
     fertig(kopfB + anfang, pfad, dateien, function (x) { return x + anfang; });
     return;
   }
@@ -3751,7 +3752,7 @@ function terminalTabTaste(ev) {
   ev.preventDefault();
   if (terminalTabLauf?.wert === bisher && terminalTabGueltig(terminalTabLauf)) return;
   terminalTabAuswahl = null;
-  const lauf = { input, wert: bisher, version: t.version, kanal: t.kanal, ort: terminalArbeitsverzeichnis() };
+  const lauf = { input, wert: bisher, version: t.version, kanal: t.kanal, ort: terminalArbeitsverzeichnis(), sperrGen: terminalSperrGeneration };
   terminalTabLauf = lauf;
   (t.kanal ? terminalKanalTab(lauf) : terminalTab(lauf, m)).catch(function () {}).finally(function () {
     if (terminalTabLauf === lauf) terminalTabLauf = null;
@@ -3784,7 +3785,7 @@ function terminalVorschlag() {
   }
   // Zweite Quelle wie ZSH_AUTOSUGGEST_STRATEGY=(history completion): der erste Treffer der Tab-Ergänzung.
   const k = t.vorschlagErgaenzung;
-  if (k && k.wert === input.value && k.version === t.version && k.ort === terminalArbeitsverzeichnis())
+  if (k && k.wert === input.value && k.version === t.version && k.sperrGen === terminalSperrGeneration && k.ort === terminalArbeitsverzeichnis())
     return terminalZeileMitGesperrtemName(k.wert + k.rest) ? '' : k.rest;
   if (!k || k.wert !== input.value) terminalVorschlagErgaenzen(input);
   return '';
@@ -3794,9 +3795,9 @@ function terminalVorschlag() {
    genau fortsetzt. Asynchron wie ZSH_AUTOSUGGEST_USE_ASYNC: das Ergebnis gilt nur, solange die Eingabe gleich bleibt. */
 function terminalVorschlagErgaenzen(input) {
   const t = TERMINAL_ZUSTAND, wert = input.value, m = /^(\S+)(?:\s+(.*))?$/.exec(wert);
-  t.vorschlagErgaenzung = { wert, rest: '', version: t.version, ort: terminalArbeitsverzeichnis() };
+  t.vorschlagErgaenzung = { wert, rest: '', version: t.version, ort: terminalArbeitsverzeichnis(), sperrGen: terminalSperrGeneration };
   if (!m || t.dateiLaeuft || (m[2] !== undefined && !terminalBefehlEintrag(m[1])?.tab)) return;
-  const lauf = { input, wert, version: t.version, kanal: null, ort: terminalArbeitsverzeichnis(), nurVorschlag: true };
+  const lauf = { input, wert, version: t.version, kanal: null, ort: terminalArbeitsverzeichnis(), nurVorschlag: true, sperrGen: terminalSperrGeneration };
   terminalTab(lauf, m).then(function () {
     const e = lauf.ergebnis, eintrag = t.vorschlagErgaenzung;
     if (!e || eintrag?.wert !== wert || !terminalVorschlagGueltig(lauf)) return;
@@ -3807,7 +3808,7 @@ function terminalVorschlagErgaenzen(input) {
 }
 function terminalVorschlagGueltig(lauf) {
   const t = TERMINAL_ZUSTAND, input = lauf.input, n = lauf.wert.length;
-  return t.version === lauf.version && !t.kanal && terminalArbeitsverzeichnis() === lauf.ort && input.isConnected &&
+  return t.version === lauf.version && lauf.sperrGen === terminalSperrGeneration && !t.kanal && terminalArbeitsverzeichnis() === lauf.ort && input.isConnected &&
     input.value === lauf.wert && input.selectionStart === n && input.selectionEnd === n;
 }
 // Ordnerinhalt für den Vorschlag: je Ordner eine Anfrage an die Brücke, 10 s zwischengespeichert.

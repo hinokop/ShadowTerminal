@@ -18,6 +18,11 @@ const INTEL = (function () {
     genau: { Koordinate: 'coordinate', Ortschaft: 'locality', Richtung: 'direction' },
     umgebung: { zufahrt: 'Access routes', sicht: 'Lines of sight', flucht: 'Escape routes', publikum: 'Public traffic', kameras: 'Cameras, lighting', nachbarn: 'Neighbourhood, businesses' },
     zweck: { Treffpunkt: 'meeting point', Beobachtungspunkt: 'observation point', 'Übergabe': 'handover', Unterstand: 'shelter', Fluchtweg: 'escape route', 'Parkmöglichkeit': 'parking', Sammelpunkt: 'assembly point', Sonstiges: 'other' },
+    /* Statuswerte der Dossiers (SCENARIO.dossierStatus), Beziehungsarten (SCENARIO.verbindungstypen), Richtung, Falleinträge (X_EINTRAG_ARTEN) */
+    status: { beobachtet: 'under observation', relevant: 'relevant', abgeschlossen: 'closed', archiviert: 'archived', beendet: 'ended', eliminiert: 'eliminated' },
+    beziehung: { Leitung: 'leadership', 'Beschäftigung': 'employment', Unterstellung: 'subordination', Finanzierung: 'financing', 'Zugehörigkeit': 'affiliation',
+      Kontakt: 'contact', Nutzung: 'use', Aufenthalt: 'presence', Transport: 'transport' },
+    eintrag: { lage: 'situation', schritt: 'next step', frage: 'open question' },
     fundstelle: { Seite: 'page', Absatz: 'paragraph', Abschnitt: 'section', Zeitmarke: 'timestamp', Zeichenbereich: 'character range', 'ganze Datei': 'whole file' }
   };
   const wert = function (tabelle, x) { return Object.prototype.hasOwnProperty.call(tabelle, x) ? tabelle[x] : x; };
@@ -64,7 +69,10 @@ const INTEL = (function () {
   function F(name, render, mtime, deps) { return { name: name, art: 'file', render: render, deps: deps || [], mtime: mtime || INTEL_START }; }
   function L(name, ziel, mtime, deps) { return { name: name, art: 'link', ziel: ziel, deps: deps || [], mtime: mtime || INTEL_START }; }
   /* Tabelle mit Kopfzeile; je Zeile eigene Abhängigkeiten (granulare Schutzmetadaten für zusammengesetzte Ausgaben, E4) */
+  /* Zellen einer Tabelle sind immer einzeilig (kontrollierte Escape-Darstellung), damit physische Zeilen und Schutzmetadaten übereinstimmen */
+  function zelle(x) { return String(x).replace(/\r\n|\r|\n/g, '\\n').replace(/\t/g, '\\t').replace(/[\u0000-\u001f\u007f]/g, '?'); }
   function tabelle(kopf, zeilen) {
+    zeilen = zeilen.map(function (z) { return { spalten: z.spalten.map(zelle), deps: z.deps }; });
     const alle = [kopf].concat(zeilen.map(function (z) { return z.spalten; })), breite = kopf.map(function (_, i) { return Math.max.apply(null, alle.map(function (r) { return String(r[i]).length; })); });
     const fmt = function (r) { return r.map(function (x, i) { return i === r.length - 1 ? String(x) : String(x).padEnd(breite[i]); }).join('  '); };
     return { text: [fmt(kopf)].concat(zeilen.map(function (z) { return fmt(z.spalten); })).join('\n') + '\n', zeilenDeps: [[]].concat(zeilen.map(function (z) { return z.deps; })) };
@@ -83,13 +91,13 @@ const INTEL = (function () {
   function dossierIndex(typFilter) {
     const liste = dossiers().filter(function (e) { return (!typFilter || typDir(e.typ) === typFilter) && !dossierGesperrtId(e.id); })
       .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
-    return tabelle(['ID', 'TYPE', 'STATUS', 'NAME'], liste.map(function (e) { return { spalten: [e.id, typName(e.typ), zustand(e.id).status || '-', e.name], deps: [dep.dossier(e.id)] }; }));
+    return tabelle(['ID', 'TYPE', 'STATUS', 'NAME'], liste.map(function (e) { return { spalten: [e.id, typName(e.typ), zustand(e.id).status ? wert(EN.status, zustand(e.id).status) : '-', e.name], deps: [dep.dossier(e.id)] }; }));
   }
   function profil(e) {
     const st = zustand(e.id), ll = typeof karteKoord === 'function' ? karteKoord(e.id) : null;
     const el = typeof erkenntnisLage === 'function' && e.typ !== 'Ort' ? erkenntnisLage(e) : null;
     return { text: felder([['ID', e.id], ['Name', e.name], ['Type', typName(e.typ)], ['Country', e.land], ['Aliases', (e.aliase || []).length ? e.aliase.join(', ') : 'none known'],
-      ['Status', st.status ? st.status + (st.statusAm ? ' since ' + zeit(st.statusAm) : '') : 'none'],
+      ['Status', st.status ? wert(EN.status, st.status) + (st.statusAm ? ' since ' + zeit(st.statusAm) : '') : 'none'],
       ['Register number', (typeof dossierRegisternummer === 'function' && dossierRegisternummer(e, st)) || 'none'],
       ['Position', ll ? ll[0].toFixed(5) + ', ' + ll[1].toFixed(5) : null],
       el ? ['Findings', el.anzahl ? el.anzahl + ', latest ' + el.juengste.art + ' ' + zeit(el.juengste.t) : 'none recorded'] : null,
@@ -105,7 +113,7 @@ const INTEL = (function () {
     const z = kanten.filter(function (v) { return v.von === e.id || v.nach === e.id; }).map(function (v) {
       const anderer = v.von === e.id ? v.nach : v.von, o = entitaet(anderer);
       const pfeil = v.richtung === 'beidseitig' ? '<->' : v.von === e.id ? '->' : '<-';
-      return { spalten: [pfeil, anderer, v.typ || '-', v.bewertung || '-', o ? o.name : '-'], deps: [dep.dossier(anderer)] };
+      return { spalten: [pfeil, anderer, v.typ ? wert(EN.beziehung, v.typ) : '-', v.bewertung || '-', o ? o.name : '-'], deps: [dep.dossier(anderer)] };
     });
     return tabelle(['DIR', 'ID', 'RELATION', 'RATING', 'NAME'], z);
   }
@@ -119,9 +127,16 @@ const INTEL = (function () {
     const e = entitaet(id), mitUnterlagen = new Set((e && typeof rchBelege === 'function' ? rchBelege(e) : []).filter(function (z) { return !!z.fall; }).map(function (z) { return z.fall.id; }));
     return faelle().filter(function (f) { return (Array.isArray(f.dossiers) && f.dossiers.includes(id)) || mitUnterlagen.has(f.id); });
   }
+  /* Fall mit den Einträgen aus Modul X (Lage, nächste Schritte, offene Fragen; xEintraege, Klartext über xTextPlain) */
   function fallText(f) {
-    return { text: felder([['ID', f.id], ['Title', f.titel], ['Question', f.frage], ['State', wert(EN.zustand, f.zustand)], ['Assessment', wert(EN.bewertung, f.bewertung || 'unbewertet')],
-      ['Rationale', f.begruendung], ['Next step', f.naechsterSchritt && f.naechsterSchritt.text], ['Created', zeit(f.erfasst)], ['Last modified', zeit(f.geaendert || f.erfasst)]]) };
+    const eintraege = typeof xEintraege === 'function' ? xEintraege(f) : [];
+    const klar = function (t) { return typeof xTextPlain === 'function' ? xTextPlain(t).replace(/\n+$/, '') : String(t); };
+    const kopf = felder([['ID', f.id], ['Title', f.titel], ['Question', f.frage], ['State', wert(EN.zustand, f.zustand)], ['Assessment', wert(EN.bewertung, f.bewertung || 'unbewertet')],
+      ['Rationale', f.begruendung], ['Note', f.notiz], ['Created', zeit(f.erfasst)], ['Last modified', zeit(f.geaendert || f.erfasst)]]);
+    if (!eintraege.length) return { text: kopf + '\nEntries: none\n' };
+    return { text: kopf + '\nEntries:\n' + eintraege.map(function (e) {
+      return '[' + wert(EN.eintrag, e.art) + '] ' + zeit(e.erfasst) + (e.geaendert ? ' (changed ' + zeit(e.geaendert) + ')' : '') + '\n' + klar(e.text);
+    }).join('\n\n') + '\n' };
   }
   function fallIndex() { return tabelle(['ID', 'STATE', 'TITLE'], faelle().map(function (f) { return { spalten: [f.id, wert(EN.zustand, f.zustand), f.titel], deps: [] }; })); }
   function quelleText(q) {
@@ -286,7 +301,7 @@ const INTEL = (function () {
       if (r.fehler) return f(r);
       if (r.eintrag.art === 'file') return { fehler: 'ENOTDIR' };
       const k = kinder(r.kanonisch) || [];
-      return { eintraege: k.filter(function (e) { return !e.deps.some(gesperrt); }).map(anzeige), kanonisch: ['intel'].concat(r.kanonisch) };
+      return { eintraege: k.filter(function (e) { return !e.deps.some(gesperrt); }).map(anzeige), kanonisch: ['intel'].concat(r.kanonisch), deps: r.eintrag.deps };
     },
     readFile: function (rel) {
       const r = aufloesen(rel, true);
