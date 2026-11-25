@@ -48,7 +48,8 @@ const { altzustandOeffnen, altbestandPruefen, altbestandUnveraendert } = require
     /* Sichtungs-Popup */
     await oeffnen(s.si); await p.locator('#si-export').waitFor();
     let m = await mass(); assert.ok(m.w >= 360, 'Sichtungs-Popup breit genug: ' + m.w); assert.ok(m.scroll <= m.client + 1, 'keine waagerechte Leiste (Sichtung): ' + JSON.stringify(m));
-    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#si-export')]);
+    await p.click('#si-export'); await p.selectOption('#k-txt-ordner', 'download');   /* Paket 4: Ziel im Dialog (bevorzugt /exports), Download ausdrücklich */
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#dlg-ok')]);
     assert.equal(dl.suggestedFilename(), 'sichtung-' + s.d + '-' + s.si + '.txt');
     const txt = await readFile(await dl.path(), 'utf8');
     for (const f of [s.si, 'Exportperson', 'Person gesehen', 'Güte', 'Treffpunkt Nord', 'zwei Zufahrten']) assert.ok(txt.includes(f), 'TXT enthält ' + f);
@@ -77,7 +78,7 @@ const { altzustandOeffnen, altbestandPruefen, altbestandUnveraendert } = require
       'Freigabestufen ohne Wirkung (Zustand ohne Altbestand); manuelle Sperre nicht gesetzt');
     const [legacyDownload] = await Promise.all([
       p.waitForEvent('download'),
-      p.evaluate(id => kartenTxtExport('sichtung', 'SI-090', id), historisch.id)
+      p.evaluate(id => kartenTxtExport('sichtung', 'SI-090', id, 'download'), historisch.id)
     ]);
     assert.equal(legacyDownload.suggestedFilename(), 'sichtung-' + historisch.id + '-SI-090.txt',
       'alte Ansprechpartnerfreigabe blockiert den Sichtungs-Export nicht');
@@ -88,7 +89,7 @@ const { altzustandOeffnen, altbestandPruefen, altbestandUnveraendert } = require
     p.on('download', beiDownload);
     await p.evaluate(id => {
       dispatch({ type: 'DOSSIER_SPERREN', id });
-      kartenTxtExport('sichtung', 'SI-090', id);
+      kartenTxtExport('sichtung', 'SI-090', id, 'download');
     }, historisch.id);
     await p.waitForTimeout(200);
     assert.match(await p.locator('#sys-msg').innerText(), /TXT-Export blockiert/,
@@ -186,7 +187,7 @@ const { altzustandOeffnen, altbestandPruefen, altbestandUnveraendert } = require
       }, alle);
       for (const v of vor) assert.deepEqual([v.wissen, v.info, v.gesperrt], ['frei', false, false], 'historische Stufe ohne Wirkung, keine manuelle Sperre: ' + v.id);
       for (const id of alle.slice(0, 3)) {
-        const [dl] = await Promise.all([a.waitForEvent('download'), a.evaluate(i => kartenTxtExport('sichtung', 'SI-090', i), id)]);
+        const [dl] = await Promise.all([a.waitForEvent('download'), a.evaluate(i => kartenTxtExport('sichtung', 'SI-090', i, 'download'), id)]);
         assert.equal(dl.suggestedFilename(), 'sichtung-' + id + '-SI-090.txt', 'Export bei historischer Stufe nicht blockiert: ' + id);
         assert.match(await readFile(await dl.path(), 'utf8'), new RegExp('Sichtungsbeleg bei Altbestand ' + id));
       }
@@ -194,16 +195,16 @@ const { altzustandOeffnen, altbestandPruefen, altbestandUnveraendert } = require
       const verboten = [];
       const beiDl = d => verboten.push(d.suggestedFilename());
       a.on('download', beiDl);
-      await a.evaluate(id => { dispatch({ type: 'DOSSIER_SPERREN', id }); kartenTxtExport('sichtung', 'SI-090', id); }, ids.gesperrtFrei);
+      await a.evaluate(id => { dispatch({ type: 'DOSSIER_SPERREN', id }); kartenTxtExport('sichtung', 'SI-090', id, 'download'); }, ids.gesperrtFrei);
       await a.waitForTimeout(200);
       assert.match(await a.locator('#sys-msg').innerText(), /TXT-Export blockiert/, 'manuelle Sperre blockiert trotz historischer Freigabe');
       assert.deepEqual(verboten, [], 'kein Download trotz manueller Sperre');
       a.off('download', beiDl);
       /* Die anderen Stufen bleiben exportierbar, nach Entsperren auch das gesperrte Dossier */
-      const [dl2] = await Promise.all([a.waitForEvent('download'), a.evaluate(i => kartenTxtExport('sichtung', 'SI-090', i), ids.bekannt)]);
+      const [dl2] = await Promise.all([a.waitForEvent('download'), a.evaluate(i => kartenTxtExport('sichtung', 'SI-090', i, 'download'), ids.bekannt)]);
       assert.equal(dl2.suggestedFilename(), 'sichtung-' + ids.bekannt + '-SI-090.txt', 'Sperre wirkt nur auf das gesperrte Dossier');
       await a.evaluate(id => dispatch({ type: 'DOSSIER_ENTSPERREN', id }), ids.gesperrtFrei);
-      const [dl3] = await Promise.all([a.waitForEvent('download'), a.evaluate(i => kartenTxtExport('sichtung', 'SI-090', i), ids.gesperrtFrei)]);
+      const [dl3] = await Promise.all([a.waitForEvent('download'), a.evaluate(i => kartenTxtExport('sichtung', 'SI-090', i, 'download'), ids.gesperrtFrei)]);
       assert.equal(dl3.suggestedFilename(), 'sichtung-' + ids.gesperrtFrei + '-SI-090.txt', 'nach Entsperren exportierbar');
 
       const nach = await altbestandUnveraendert(a, assert, alt, 'sichtung-export');

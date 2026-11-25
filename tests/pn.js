@@ -17,7 +17,8 @@ const x=await p.evaluate(()=>PROFIL.pins[0]);
 ok(x.name==='Treffpunkt Nord'&&x.zwecke.length===2&&x.umgebung.zufahrt==='Zufahrt über Hofeinfahrt'&&x.notiz==='Abends wenig Betrieb','Name, Mehrfachzweck, Umgebung, Notiz gespeichert');
 ok(await p.evaluate(()=>!!document.querySelector('.k-marker[data-id="PIN-001"]')),'Marker auf der Karte');
 const t=await p.evaluate(()=>pinText(PROFIL.pins[0]));ok(/Treffpunkt, Fluchtweg/.test(t)&&/Hofeinfahrt/.test(t)&&/Notiz: Abends/.test(t),'Textexport enthält Angaben');
-const dl=p.waitForEvent('download',{timeout:5000});await p.click('#pin-export');const d=await dl;ok(/lageblatt-PIN-001\.txt/.test(d.suggestedFilename()),'Download als Textdatei');
+await p.click('#pin-export');await p.selectOption('#k-txt-ordner','download');const dl=p.waitForEvent('download',{timeout:5000});await p.click('#dlg-ok');const d=await dl;   /* Paket 4: Ziel im Dialog, Download ausdrücklich */
+ok(/lageblatt-PIN-001\.txt/.test(d.suggestedFilename()),'Download als Textdatei');
 await p.evaluate(()=>dispatch({type:'RESET'}));
 ok(await p.evaluate(()=>PROFIL.pins.length===1),'Pin übersteht das Zurücksetzen');
 await p.reload();await p.waitForTimeout(5200);

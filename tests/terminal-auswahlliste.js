@@ -56,8 +56,8 @@ const { chatBereit } = require('./_kestrel');
     await inp.press('h'); assert.equal(await liste.isVisible(), false); assert.equal(await inp.inputValue(), 'wh');
     /* Pfade: virtuelle Ordner, Ordner markiert */
     await inp.fill('cat /'); await inp.press('Tab'); await liste.waitFor({ state: 'visible' });
-    assert.deepEqual(await eintraege(), ['etc/', 'home/', 'intel/', 'tmp/', 'usr/', 'var/', 'pgcl-eu3.arch07/']);
-    assert.equal(await liste.locator('span.ordner').count(), 7);
+    assert.deepEqual(await eintraege(), ['etc/', 'exports/', 'home/', 'intel/', 'tmp/', 'usr/', 'var/', 'pgcl-eu3.arch07/']);
+    assert.equal(await liste.locator('span.ordner').count(), 8);
     await inp.press('Escape');
 
     /* /sendfile im Chat: mehrere Dateien, nichts wird eingesetzt, Ordner markiert */

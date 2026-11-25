@@ -51,7 +51,7 @@ const PW = 'pw-test-123';
     const D = '/intel/dossiers/persons/P-0001';
 
     /* ---- A: Baum ---- */
-    assert.equal(await lauf('ls /'), 'etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar');   /* Paket 3: /usr */
+    assert.equal(await lauf('ls /'), 'etc\nexports\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar');   /* Paket 3: /usr, Paket 4: /exports */
     assert.equal(await lauf('ls /intel'), 'cases\ndossiers\ngeospatial\nREADME');
     assert.equal(await lauf('ls /intel/dossiers'), 'index\nlocations\norganizations\npersons');
     assert.equal(await lauf('ls /intel/geospatial'), 'pins\nsightings\nzones');
