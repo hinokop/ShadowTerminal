@@ -250,7 +250,8 @@ const INTEL = (function () {
   }
   /* Auflösen: folgt Links in Zwischenkomponenten und, mit folgen, auch in der letzten. Linkziele sind kanonisch und enthalten keine Links,
      ein Folgen endet daher nach einem Schritt (keine Zyklen, auch bei gegenseitigen Verweisen Dossier <-> Fall). */
-  function aufloesen(rel, folgen, tiefe) {
+  /* sammeln (optional): nimmt die Abhängigkeiten jedes durchlaufenen Eintrags auf, auch der Links (Versand, Paket 4) */
+  function aufloesen(rel, folgen, tiefe, sammeln) {
     if ((tiefe || 0) > 4) return { fehler: 'ELOOP' };
     let cur = [], eintrag = D('', INTEL_START);
     for (let i = 0; i < rel.length; i++) {
@@ -258,10 +259,11 @@ const INTEL = (function () {
       if (!k) return { fehler: 'ENOENT' };
       const e = k.find(function (x) { return x.name === rel[i]; });
       if (!e) return { fehler: 'ENOENT' };
+      if (sammeln) sammeln.push.apply(sammeln, e.deps);
       if (e.deps.some(gesperrt)) return { fehler: 'EACCES', bei: e.art === 'link' ? e.ziel : cur.concat(rel[i]) };
       const letzt = i === rel.length - 1;
       if (e.art === 'link' && (!letzt || folgen)) {
-        const z = aufloesen(e.ziel, true, (tiefe || 0) + 1);
+        const z = aufloesen(e.ziel, true, (tiefe || 0) + 1, sammeln);
         if (z.fehler) return z;
         cur = z.kanonisch; eintrag = z.eintrag;
         continue;
@@ -278,6 +280,35 @@ const INTEL = (function () {
     if (e.art === 'link') { x.link = true; x.ziel = '/intel/' + e.ziel.join('/'); x.zielDir = true; x.bytes = x.ziel.length; }
     else x.bytes = e.art === 'dir' ? 4096 : bytes(rendern(e).text);
     return x;
+  }
+  /* ---- Versand (Paket 4, M3): Momentaufnahme mit Ursprung und Bindung ----
+     Bindung einer Abhängigkeit: der Zustand des Objekts beim Versand (Pin und Zone mit Anlegezeit und Dossier, Sichtung mit dauerhafter UID).
+     Gültig bleibt sie nur, solange das Objekt mit derselben Identität besteht und weder das damalige noch das heutige Dossier gesperrt ist;
+     eine neu vergebene Kennung wird nicht als der alte Ursprung gedeutet. */
+  function bindung(d) {
+    if (d.art === 'pin' || d.art === 'zone') {
+      const x = (d.art === 'pin' ? pins() : zonen()).find(function (y) { return y.id === d.id; });
+      return { art: d.art, id: d.id, t: x ? x.t : null, dossier: x ? x.dossier || null : null, da: !!x };
+    }
+    if (d.art === 'sichtung') { const si = sichtungen(d.dossier).find(function (y) { return y.id === d.id; }); return { art: 'sichtung', dossier: d.dossier, id: d.id, uid: si ? si.uid || null : null, da: !!si }; }
+    return { art: d.art, id: d.id, da: d.art !== 'dossier' || !!entitaet(d.id) };
+  }
+  function bindungGueltig(b) {
+    if (!b || !b.da) return false;
+    if (b.art === 'dossier') return !!entitaet(b.id) && !dossierGesperrtId(b.id);
+    if (b.art === 'pin' || b.art === 'zone') {
+      const x = (b.art === 'pin' ? pins() : zonen()).find(function (y) { return y.id === b.id; });
+      return !!x && x.t === b.t && !(b.dossier && dossierGesperrtId(b.dossier)) && !(x.dossier && dossierGesperrtId(x.dossier));
+    }
+    if (b.art === 'sichtung') {
+      const si = sichtungen(b.dossier).find(function (y) { return y.id === b.id; });
+      return !!si && (!b.uid || si.uid === b.uid) && !dossierGesperrtId(b.dossier);
+    }
+    return !gesperrt(b);
+  }
+  function eindeutig(liste) {
+    const s = new Set();
+    return liste.filter(function (d) { const k = JSON.stringify([d.art, d.id, d.dossier || null]); if (s.has(k)) return false; s.add(k); return true; });
   }
   const FEHLER = { EACCES: 'Permission denied' };
   const f = function (r) { return { fehler: FEHLER[r.fehler] || r.fehler }; };
@@ -312,6 +343,18 @@ const INTEL = (function () {
       if (r.eintrag.deps.some(gesperrt)) return { fehler: 'Permission denied' };
       return { text: x.text, deps: r.eintrag.deps, zeilenDeps: x.zeilenDeps };
     },
+    /* Versand einer Blattdatei: { text, deps, bindung, kanonisch } aus genau einer Darstellung. deps vereinigt Pfad (einschließlich Links),
+       Datei und alle enthaltenen Zeilen; zusammengesetzte Indizes sind die Momentaufnahme der sichtbaren Zeilen. */
+    versand: function (rel) {
+      const pfad = [], r = aufloesen(rel, true, 0, pfad);
+      if (r.fehler) return f(r);
+      if (r.eintrag.art !== 'file') return { fehler: 'EISDIR' };
+      const x = rendern(r.eintrag);
+      const deps = eindeutig(pfad.concat(r.eintrag.deps, [].concat.apply([], (x.zeilenDeps || []).map(function (z) { return z || []; }))));
+      if (deps.some(gesperrt)) return { fehler: 'Permission denied' };
+      return { text: x.text, deps: deps, bindung: deps.map(bindung), kanonisch: ['intel'].concat(r.kanonisch) };
+    },
+    bindungGueltig: bindungGueltig,
     readlink: function (rel) {
       const r = aufloesen(rel, false);
       if (r.fehler) return f(r);

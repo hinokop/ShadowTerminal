@@ -437,7 +437,7 @@ function terminalSchutzFiltern(zeile, meta, sicht) {
   return { zeile: rein.join('\n'), meta: neu };
 }
 /* Nach jeder Zustandsänderung (index.html, dispatch) */
-function terminalSchutzPruefen() { terminalSperrstandPruefen(); if (terminalSchutzBereinigen()) terminalAusgabe([]); }
+function terminalSchutzPruefen() { terminalSperrstandPruefen(); terminalPppSchutzBereinigen(); if (terminalSchutzBereinigen()) terminalAusgabe([]); }
 /* Name am Zeilenende einer ls-Ausgabe (kurz: ganze Zeile; lang: letztes Feld nach zwei oder mehr Leerzeichen), ohne Ordnerzeichen und
    ohne Pfad: Dateioperanden erscheinen so, wie sie eingegeben wurden (absolut, relativ, mit ./ oder ../), geprüft wird der Basisname.
    Fehlerzeilen (ls: cannot access '<Pfad>': ...) enthalten keinen Basisnamen am Ende und werden nicht als Listeneintrag gewertet;
@@ -1740,7 +1740,9 @@ function terminalPppChatLog(chat, text, ziel, opt) {
   // opt.zeit: Zeit der Zeile, wenn sie nicht die Ankunft ist (Verzögerungsvermerk, XEP-0203)
   const fenster = ziel || chat.fenster[0], kopf = terminalPppZeit(opt?.zeit ?? Date.now()) + ' ' + (opt?.zeichen || '-') + ' ';
   // opt.eintrag: Zeile mit Kennung, die später an derselben Stelle ersetzt wird (Uploadstatus); die Zeit bleibt.
-  const eintrag = opt?.eintrag ? { kopf, zeile: kopf + text } : kopf + text;
+  /* opt.schutz: Schutzabhängigkeiten der Zeile (Versand aus /intel, Paket 4 M3); bei Sperre wird die Zeile entfernt (terminalPppSchutzBereinigen) */
+  const eintrag = opt?.eintrag || opt?.schutz ? { kopf, zeile: kopf + text } : kopf + text;
+  if (opt?.schutz) eintrag.schutz = opt.schutz;
   fenster.log = fenster.log.concat(eintrag).slice(-70);
   if (fenster !== chat.fenster[chat.aktiv] && !opt?.stumm) fenster.neu = true;
   terminalPppAnzeige();
@@ -2500,7 +2502,7 @@ function terminalPppFalscheNutzung(chat, fenster, befehl) {
 }
 /* Nachricht senden (cl_ev_send_msg). Im OMEMO-Gespräch ohne Bundle findet omemo_on_message_send keinen Schlüssel, die
    Nachricht geht nicht hinaus. Rückgabe: ob sie gesendet wurde. */
-function terminalPppNachricht(chat, fenster, text) {
+function terminalPppNachricht(chat, fenster, text, schutz) {
   const t = TERMINAL_ZUSTAND;
   if (fenster.omemo && !TERMINAL_OMEMO_SITZUNGEN.has(fenster.kontakt)) {
     const fehler = { stumm: true, zeichen: '!' };
@@ -2509,7 +2511,7 @@ function terminalPppNachricht(chat, fenster, text) {
     return false;
   }
   const zeichen = fenster.omemo ? '~' : '-';
-  terminalPppChatLog(chat, 'me: ' + text, fenster, { stumm: true, zeichen });
+  terminalPppChatLog(chat, 'me: ' + text, fenster, { stumm: true, zeichen, schutz });
   if (/^auftrag (erledigt|gescheitert)\.?$/i.test(text)) {
     // Die Nachricht ist beim Server; der Kontakt antwortet nach 7 s, gleich ob wir dann noch verbunden sind. Die Antwort
     // hängt nicht am Fenster: jede Meldung erhält ihre eigene, auch über einen Verbindungsabbruch hinweg.
@@ -2574,42 +2576,132 @@ function terminalPppZufallHex(bytes) {
 function terminalPppSlot() {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(12)))).replace(/\+/g, '-').replace(/\//g, '_');
 }
+/* Versand (Paket 4, M1 bis M3): Pfad wie Profanity (get_expanded_path: "file://" fällt weg, nur "~/" wird zu $HOME); die Meldungen nennen
+   diesen Pfad. Relative Pfade gelten ab dem Arbeitsverzeichnis der Shell, aus der Profanity gestartet wurde (es ändert sich im Chat nicht). */
+function terminalSendAnzeige(arg) {
+  let pfad = terminalName(arg);
+  if (pfad.startsWith('file://')) pfad = pfad.slice(7);
+  return pfad.startsWith('~/') ? '/' + TERMINAL_HEIM.join('/') + pfad.slice(1) : pfad;
+}
+/* Name der Datei beim Empfänger für /intel (endungslos im Baum): Kennungen des Pfads und Blattname, ohne Personennamen;
+   Indizes mit ihrem Verzeichnis (dossiers-index.txt, pins-index.txt). */
+function terminalIntelVersandName(kanonisch) {
+  const teile = kanonisch.slice(1), blatt = teile[teile.length - 1];
+  const ids = teile.slice(0, -1).filter(function (x) { return /^[A-Z]{1,3}-\d+$/.test(x); });
+  return (ids.length ? ids : [teile[teile.length - 2] || 'intel']).concat(blatt).join('-') + '.txt';
+}
+function terminalUtf8Bytes(text) { return new TextEncoder().encode(text).length; }
+/* Gemeinsamer Versandadapter über TERMINAL_FS: { quelle, name, bytes [, schutz] } oder { fehler: 'fehlt' | 'keineDatei' | 'bruecke', text }.
+   Reihenfolge wie cmd_sendfile: access() (File not found, auch ohne Leserecht oder bei gesperrtem Objekt), dann Datei (Not a file).
+   Freigegebene Quellen (F1): /home, /tmp, /intel, das Archiv. Systembereiche (/etc, /usr, /var, Wurzel) sind keine Versandquellen;
+   ein Verzeichnis dort ergibt wie überall Not a file. Das Archiv liest weiter die Brücke (echte Bytezahl auch für Binärdateien,
+   Schutz der Exportnamen, Hostregeln); /intel und VFS werden mit einer einzigen Darstellung gelesen (Byte-Snapshot beim Start). */
+async function terminalSendQuelle(pfad) {
+  const fehlt = { fehler: 'fehlt' }, keineDatei = { fehler: 'keineDatei' };
+  const seg = terminalShellPfad(pfad === '~' ? './~' : pfad);
+  if (!seg) return fehlt;
+  /* Verzeichnisse, die ".." nur lexikalisch überspringt, müssen bestehen (fehlt/../datei: File not found) */
+  for (const z of seg.zwischen || []) { const st = await TERMINAL_FS.stat(z, { pruefen: true }); if (st.fehler || st.typ !== 'dir') return fehlt; }
+  const art = TERMINAL_FS.anbieter(seg);
+  if (art === 'archiv') {
+    let a;
+    try { a = await terminalBruecke('send', seg.slice(1)); } catch (e) { a = { error: TERMINAL_BRUECKE_FEHLER }; }
+    if (a.notfile) return keineDatei;
+    if (TERMINAL_UPLOAD_DATEIFEHLER.includes(a.error)) return fehlt;
+    if (a.error && a.error !== 'Datei zu groß') return { fehler: 'bruecke', text: a.error };
+    if (seg.endeVerzeichnis) return fehlt;   /* Datei mit "/" (ENOTDIR) */
+    /* Exportobjekte der Anwendung im Archiv (Lageblatt, Zone, Sichtung): Zuordnung als Schutz des Uploads und seiner Zeilen */
+    const ziele = terminalArchivZiele('send', seg.slice(1), a);
+    return { quelle: 'archiv', name: a.name, bytes: a.error ? Infinity : a.bytes, schutz: ziele.length ? { archiv: ziele } : undefined };
+  }
+  if (art === 'intel') {
+    const r = INTEL.versand(seg.slice(1));
+    if (r.fehler === 'EISDIR') return keineDatei;
+    if (r.fehler || seg.endeVerzeichnis) return fehlt;
+    return { quelle: 'intel', name: terminalIntelVersandName(r.kanonisch), bytes: terminalUtf8Bytes(r.text), schutz: { deps: r.deps, bindung: r.bindung } };
+  }
+  if (art === 'vfs' && (seg[0] === 'home' || seg[0] === 'tmp')) {
+    const st = await TERMINAL_FS.stat(seg);
+    if (st.fehler) return fehlt;
+    if (st.typ === 'dir') return keineDatei;
+    if (seg.endeVerzeichnis) return fehlt;
+    const r = await TERMINAL_FS.readFile(seg);
+    if (r.fehler) return r.fehler === 'EISDIR' ? keineDatei : fehlt;
+    return { quelle: 'vfs', name: seg[seg.length - 1], bytes: terminalUtf8Bytes(r.text) };
+  }
+  const st = await TERMINAL_FS.stat(seg, { pruefen: true });
+  return !st.fehler && st.typ === 'dir' ? keineDatei : fehlt;
+}
+/* Schutz eines Versands: /intel mit Abhängigkeiten nicht gesperrt und jeder Bindung (Ursprung) noch derselben (M3, F4); Archiv mit der
+   Zuordnung des Exportnamens nicht gesperrt (gleiche Regel wie terminalBruecke) */
+function terminalSendSchutzGueltig(schutz) {
+  if (!schutz) return true;
+  if (schutz.deps && (schutz.deps.some(INTEL.gesperrt) || !schutz.bindung.every(INTEL.bindungGueltig))) return false;
+  return !(schutz.archiv && schutz.archiv.some(terminalArchivZielGesperrt));
+}
 async function terminalPppSendfile(chat, fenster, arg) {
-  const t = TERMINAL_ZUSTAND, konsole = chat.fenster[0], datei = terminalName(arg);
+  const t = TERMINAL_ZUSTAND, konsole = chat.fenster[0], datei = terminalSendAnzeige(arg);
   const fehler = function (text) { terminalPppChatLog(chat, text, konsole); }; // cons_show_error
-  const pfad = terminalArchivDateipfad(arg);
-  if (!pfad?.length) { fehler("Uploading '" + datei + "' failed: File not found!"); return; }
-  // chat.pruefung: Dateiprüfungen in Arbeit (Antwort der Brücke steht aus)
-  let antwort;
+  // chat.pruefung: Dateiprüfungen in Arbeit (Antwort der Brücke bzw. des Dateisystems steht aus)
+  let q;
   chat.pruefung = (chat.pruefung || 0) + 1;
-  try { antwort = await terminalBruecke('send', pfad); } catch (e) { antwort = { error: TERMINAL_BRUECKE_FEHLER }; }
+  try { q = await terminalSendQuelle(datei); } catch (e) { q = { fehler: 'bruecke', text: TERMINAL_BRUECKE_FEHLER }; }
   finally { chat.pruefung--; }
   if (t.kanal !== chat) return;
-  if (antwort.notfile) { fehler("Uploading '" + datei + "' failed: Not a file!"); return; }
-  if (TERMINAL_UPLOAD_DATEIFEHLER.includes(antwort.error)) { fehler("Uploading '" + datei + "' failed: File not found!"); return; }
-  // Ohne Brücke ist die Datei nicht lesbar; das ist ein Zustand des Terminals, kein Profanity-Text.
-  if (antwort.error && antwort.error !== 'Datei zu groß') { terminalPppChatLog(chat, '/sendfile: ' + antwort.error, fenster); return; }
+  /* nach dem asynchronen Zugriff noch einmal: eine inzwischen gesetzte Sperre gilt wie ein fehlender Zugriff */
+  if (q.fehler === 'fehlt' || (q.schutz && !terminalSendSchutzGueltig(q.schutz))) { fehler("Uploading '" + datei + "' failed: File not found!"); return; }
+  if (q.fehler === 'keineDatei') { fehler("Uploading '" + datei + "' failed: Not a file!"); return; }
+  // Ohne Brücke ist eine Archivdatei nicht lesbar; das ist ein Zustand des Terminals, kein Profanity-Text.
+  if (q.fehler) { terminalPppChatLog(chat, '/sendfile: ' + q.text, fenster); return; }
   if (chat.phase !== 'eingabe' || !terminalSatLinkAktiv(chat.link)) {
     terminalPppChatLog(chat, 'You are not currently connected.', konsole, { stumm: true }); // cons_show
     return;
   }
   if (!fenster.kontakt) { fehler('Unsupported window for file transmission.'); return; }
   const omemo = fenster.omemo, dienst = 'upload.' + chat.domain;
-  const bytes = antwort.error ? Infinity : antwort.bytes + (omemo ? 16 : 0);
-  const u = { fenster, datei, status: null, timer: null, bytes: Math.max(64, bytes), gesendet: 0, prozent: 0, omemo, name: antwort.name };
+  const bytes = q.bytes + (omemo ? 16 : 0);
+  const u = { fenster, datei, status: null, timer: null, bytes: Math.max(64, bytes), gesendet: 0, prozent: 0, omemo, name: q.name, schutz: q.schutz || null };
   (chat.uploads ||= []).push(u);
   u.timer = setTimeout(function () {
     u.timer = null;
     // Die Antwort auf die Slot-Anfrage kommt nur über einen stehenden Link (auch wenn dieser Zeitgeber vor dem Link-Takt läuft).
     if (!terminalSatLinkAktiv(chat.link)) return;
+    if (!terminalSendSchutzGueltig(u.schutz)) { terminalPppUploadVerwerfen(chat, u); return; }
     if (bytes > TERMINAL_UPLOAD_GRENZE) {
       chat.uploads = chat.uploads.filter(function (x) { return x !== u; });
       fehler("Uploading '" + datei + "' failed for " + dienst + ': File too large');
       return;
     }
-    u.status = terminalPppChatLog(chat, "Uploading '" + datei + "': 0%", fenster, { stumm: true, zeichen: '!', eintrag: true });
+    u.status = terminalPppChatLog(chat, "Uploading '" + datei + "': 0%", fenster, { stumm: true, zeichen: '!', eintrag: true, schutz: u.schutz });
     terminalPppUploadTaktStarten(chat);
   }, TERMINAL_UPLOAD_SLOT_MS);
+}
+/* Upload wegen Sperre oder geänderter Herkunft verwerfen (M3): kein Abschluss, kein Link, keine neue Zeile. Die vorhandenen Zeilen dieses
+   Uploads tragen dieselben Abhängigkeiten und werden von terminalPppSchutzBereinigen entfernt. */
+function terminalPppUploadVerwerfen(chat, u) {
+  clearTimeout(u.timer); u.timer = null;
+  chat.uploads = (chat.uploads || []).filter(function (x) { return x !== u; });
+  if (!chat.uploads.some(function (x) { return x.status; })) { clearInterval(chat.uploadTakt); chat.uploadTakt = null; }
+}
+/* Chatverlauf gegen die aktuellen Sperren (F4, §9.10): Zeilen mit Schutzabhängigkeiten, deren Abhängigkeit gesperrt oder deren Ursprung
+   nicht mehr derselbe ist, und Zeilen mit Namen gesperrter Archivobjekte werden aus allen Fenstern entfernt (nicht nur ausgeblendet, kein
+   Wiederauftauchen); laufende Uploads mit ungültigem Schutz werden verworfen. Bereits abgeschlossene Übertragungen bleiben erfolgt. */
+function terminalPppSchutzBereinigen() {
+  const chat = TERMINAL_ZUSTAND && TERMINAL_ZUSTAND.kanal;
+  if (!chat || chat.ui !== 'xmpp' || typeof PROFIL === 'undefined' || !PROFIL) return false;
+  (chat.uploads || []).slice().forEach(function (u) { if (!terminalSendSchutzGueltig(u.schutz)) terminalPppUploadVerwerfen(chat, u); });
+  const sicht = terminalArchivSichtbarkeit();
+  let geaendert = false;
+  chat.fenster.forEach(function (f) {
+    const rein = f.log.filter(function (e) {
+      const ok = !(e && e.schutz && !terminalSendSchutzGueltig(e.schutz)) && !terminalZeileMitGesperrtemName(e.zeile ?? e, sicht);
+      if (!ok) geaendert = true;
+      return ok;
+    });
+    if (rein.length !== f.log.length) f.log = rein;
+  });
+  if (geaendert) terminalPppAnzeige();
+  return geaendert;
 }
 /* Gemeinsamer Upload-Takt je Chat (250 ms). Alle laufenden Uploads teilen sich die Funkrate (2400 bit/s): das Budget eines
    Takts wird gleichmäßig verteilt, was ein fast fertiger Upload nicht braucht, geht an die übrigen. Ohne Deckelung passen in
@@ -2623,6 +2715,9 @@ function terminalPppUploadTaktStarten(chat) {
 }
 function terminalPppUploadSchritt(chat) {
   if (TERMINAL_ZUSTAND.kanal !== chat || !terminalSatLinkAktiv(chat.link)) return;
+  /* Sperre oder geänderter Ursprung während des Uploads: verwerfen und die Zeilen entfernen, vor jedem Fortschritt (M3) */
+  if ((chat.uploads || []).some(function (u) { return !terminalSendSchutzGueltig(u.schutz); })) terminalPppSchutzBereinigen();
+  if (!chat.uploadTakt) return;
   const jetzt = Date.now();
   let budget = (jetzt - chat.uploadZuletzt) * TERMINAL_SAT_RATE / 8000;
   chat.uploadZuletzt = jetzt;
@@ -2641,13 +2736,15 @@ function terminalPppUploadSchritt(chat) {
       if (prozent !== u.prozent) { u.prozent = prozent; zeile(': ' + prozent + '%'); }
       return;
     }
+    /* unmittelbar vor der Veröffentlichung des Links noch einmal */
+    if (!terminalSendSchutzGueltig(u.schutz)) { terminalPppUploadVerwerfen(chat, u); terminalPppSchutzBereinigen(); return; }
     u.gesendet = u.bytes;
     chat.uploads = chat.uploads.filter(function (x) { return x !== u; });
     zeile(': done');
     // Basis-URL des Dienstes auf dem Onion-Host (https, XEP-0363); im OMEMO-Gespräch Schema aesgcm (format_alt_url).
     const url = (u.omemo ? 'aesgcm' : 'https') + '://' + chat.domain + '/file_share/' + terminalPppSlot() + '/' +
       encodeURIComponent(u.name) + (u.omemo ? '#' + terminalPppZufallHex(12 + 32) : '');
-    terminalPppNachricht(chat, u.fenster, url);
+    terminalPppNachricht(chat, u.fenster, url, u.schutz || undefined);
   });
   if (!chat.uploads.some(function (u) { return u.status; })) { clearInterval(chat.uploadTakt); chat.uploadTakt = null; }
 }
@@ -3911,6 +4008,11 @@ async function terminalTab(lauf, m) {
     const mm = /^(.*\s)?(\S*)$/.exec(arg);
     kopfB += mm[1] || ''; arg = mm[2];
   }
+  return terminalTabPfad(lauf, kopfB, arg, befehl === 'cd' || befehl === 'rmdir', fertig);
+}
+/* Pfadergänzung, gemeinsam für die Shell und /sendfile in Profanity (Paket 4, M2): dieselbe Auflösung, Listung und Sichtbarkeit
+   (gesperrte Objekte in /intel und gesperrte Exportnamen im Archiv fehlen; Prüfung unmittelbar vor der Übernahme). */
+async function terminalTabPfad(lauf, kopfB, arg, nurDir, fertig) {
   const anfang = arg[0] === '"' || arg[0] === "'" ? arg[0] : '';
   const pfad = anfang ? arg.slice(1, arg.endsWith('/' + anfang) ? -1 : undefined) : arg;
   if ((anfang && pfad.includes(anfang)) || /[:\\]|[\u0000-\u001f\u007f]/.test(pfad)) return;
@@ -3918,7 +4020,6 @@ async function terminalTab(lauf, m) {
   const basis = pfad.slice(0, slash), prefix = pfad.slice(slash);
   const teile = terminalShellPfad(basis);
   if (!teile) return;
-  const nurDir = befehl === 'cd' || befehl === 'rmdir';
   const listing = !teile.length ? TERMINAL_WURZEL_LISTE.map(function (x) { return x === TERMINAL_DB + '/' && !basis ? TERMINAL_DB : x; }) : TERMINAL_TLE_DIRS.get('/' + teile.join('/'));
   if (listing) {
     const namen = listing.filter(x => !nurDir || x.endsWith('/') || x === TERMINAL_DB).map(x => basis + x);
@@ -3990,31 +4091,8 @@ async function terminalKanalTab(lauf) {
   }
   const m = /^\/sendfile\s+(.*)$/.exec(lauf.wert);
   if (!m) return;
-  const anfang = m[1][0] === '"' || m[1][0] === "'" ? m[1][0] : '';
-  const pfad = anfang ? m[1].slice(1, m[1].length > 1 && m[1].endsWith(anfang) ? -1 : undefined) : m[1];
-  if (anfang && pfad.includes(anfang)) return;
-  const kopf = kommando + ' ' + anfang;
-  const format = function (x) {
-    const quote = anfang || (/\s|^'/.test(x) ? '"' : '');
-    return (quote && !anfang ? quote : '') + x + quote;
-  };
-  const prefix = '/' + TERMINAL_DB + '/';
-  if (!pfad || (pfad.startsWith('/') && !pfad.startsWith(prefix)) || (!TERMINAL_ZUSTAND.ort && !pfad.includes('/'))) {
-    terminalTabKandidaten(lauf, kopf, pfad, [pfad.startsWith('/') || !pfad ? prefix : prefix.slice(1)], function () { return format(prefix); });
-    return;
-  }
-  const basis = pfad.slice(0, pfad.lastIndexOf('/') + 1);
-  const parent = basis.replace(/\/$/, '');
-  const teile = basis === prefix ? [] : basis ? terminalArchivDateipfad('"' + parent + '"') : TERMINAL_ZUSTAND.ort;
-  if (!teile) return;
-  const antwort = await terminalBruecke('ls', teile, pfad.slice(basis.length).startsWith('.'));
-  if (!terminalTabGueltig(lauf)) return;
-  if (!antwort.entries) { terminalTabFehler(lauf, antwort); return; }
-  terminalTabFehlerZuletzt = '';
-  const sichtJetzt = terminalArchivSichtbarkeit();   /* letzte Prüfung unmittelbar vor der Übernahme */
-  terminalTabKandidaten(lauf, kopf, pfad, antwort.entries.filter(function (x) { return sichtJetzt(x.name); }).map(function (x) {
-    return basis + x.name + (x.dir ? '/' : '');
-  }), format);
+  /* gleiche Pfadergänzung wie die Shell, ab deren Arbeitsverzeichnis (Profanity ergänzt Pfade des Dateisystems) */
+  await terminalTabPfad(lauf, kommando + ' ', m[1], false, function (kopf, prefix, kandidaten, format) { terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format); });
 }
 /* Befehlsverlauf: nur im Speicher der Sitzung (50 Einträge), nicht im Profil. Nicht aufgenommen werden exit und alles innerhalb des Kanals. */
 function terminalVerlaufNehmen(zeile) {
