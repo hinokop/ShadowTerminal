@@ -79,14 +79,21 @@ Was gelesen wurde, gilt bis zum nächsten Start des Dienstes, so wie bei einem e
 
 **Datenvertrag.** Alte Profile haben kein Overlay, für sie gelten die Standards. Das Fallpaket ist nicht betroffen. Für das Sicherungspaket siehe S2.
 
+**Umsetzung (Abweichung von diesem Entwurf, zur Prüfung im Pull Request):** Statt eines Overlays mit Löschmarken werden die Standards bei der
+ersten Anmeldung je Datei genau einmal ins VFS installiert (`TERMINAL_VFS.installieren`, Verzeichnis `sysInstalliert` in `meta`). Nach außen
+ist das gleichwertig (gelöschte Dateien bleiben gelöscht, Vorlagen unter `/usr` bleiben unverändert, Zurücksetzen mit `sudo cp`), aber
+einfacher und näher an einem Paket mit Konfigurationsdateien. Folge: Ändert eine spätere Programmversion einen Standard, erhält ein bereits
+installiertes `/etc` die neue Fassung nicht von selbst (wie eine geänderte Konfigurationsdatei eines Pakets); neue Standarddateien werden
+dagegen installiert. Einzelheiten, Quellen und Vereinfachungen: docs/terminal.md, Abschnitt „Systemkonfiguration (Paket 3)“.
+
 ## 4. Kandidaten nach Dienst
 
 | Dienst | Dateien | Ausgewertete Schlüssel (Vorschlag) | Wirkung |
 |---|---|---|---|
 | PPP | `/etc/ppp/peers/kestrel`, `/etc/chatscripts/kestrel`, neue Peers unter `/etc/ppp/peers/` | Gerät, `holdoff`, `maxfail`, `persist`, `connect`-Zeile mit Pfad des Chatskripts; im Chatskript `ABORT`, `TIMEOUT`, Wählbefehl `ATDT<Nummer>` | anderes Gerät, andere Nummer, kürzere Zeitgrenze, fehlerhaftes Skript wirken auf die Einwahl |
 | WireGuard | `/etc/wireguard/wg-sat.conf` (neu) | `PrivateKey`, `Address`, `MTU`, `ListenPort`; Peer `PublicKey`, `Endpoint`, `AllowedIPs` | Schlüssel bleiben über `up`/`down` hinweg gleich, `wg show` zeigt die Konfiguration; optional `wg genkey`/`wg pubkey` |
-| Identität | `/etc/hostname`, `/etc/hosts`, `/etc/os-release` (neu) | Hostname, Namen in `hosts` | Prompt und `uname -n` konsistent; `ping` löst Namen über `hosts` auf (bisher fest `relay`) |
-| predict | `~/.predict/predict.qth`, `~/.predict/predict.tle` (Benutzerdateien im VFS, nicht `/etc`) | Format nach predict(1) | QTH und Satellitenbestand aus Dateien; Verhältnis zum Ausgangsort der Oberfläche siehe S7 |
+| Identität | `/etc/hostname`, `/etc/hosts`, `/etc/os-release` (neu) | Hostname, Namen in `hosts` | Prompt und `uname -n` konsistent; Namen in `hosts` für Endpunkte von WireGuard. Umsetzung: `ping relay` ist eine echte HTTPS-Prüfung (Abschnitt „Echte Zugriffe“ in docs/terminal.md) und bleibt von `hosts` unberührt |
+| predict | `~/.predict/predict.qth`, `~/.predict/predict.tle` (Benutzerdateien im VFS, nicht `/etc`) | Format nach predict(1) | QTH und Satellitenbestand aus Dateien; Verhältnis zum Ausgangsort der Oberfläche siehe S7. Umsetzung: nur `predict.qth`; `predict.tle` offen |
 | profanity | `~/.config/profanity/profrc` | – | Vorschlag: nicht in Paket 3 |
 | Logs, `/run` | `/var/log/syslog`, `/run/ppp0.pid` u. a. | – | weiter nur durch Dienste erzeugt; `/run` optional |
 

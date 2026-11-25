@@ -58,7 +58,7 @@ Vorangegangen: Terminal-`sudo`, Namensnavigation und Archivkatalog sowie Test-Ba
 
 | PR | Inhalt | Stand |
 |---|---|---|
-| – | Paket 3 `sys`: Konzept docs/terminal-sys-konzept.md auf Branch `feat/paket3-sys-20261125`, noch kein Pull Request | S1 bis S9 entschieden (25.11.2026), Abnahmekriterium A0 (Kommunikationsablauf unverändert); Beginn der Implementierung nach Freigabe durch Master Wayne. |
+| (Draft) | Paket 3 `sys`: `/etc` im VFS (Installation, Rechte), Vorlagen unter `/usr`, eingeschränktes sudo der Systemverwaltung, pppd/chat und WireGuard aus Dateien, Hostname, QTH von predict, Sicherung Format 3; Konzept docs/terminal-sys-konzept.md, Branch `feat/paket3-sys-20261125` | Implementierung freigegeben (25.11.2026), Draft; Abnahmekriterium A0 automatisiert geprüft (tests/terminal-sys.js). Review durch ChatGPT und Windows-Abnahme ausstehend. |
 
 Zurzeit ist kein Pull Request offen; #55 wurde am 24.11.2026 auf Anweisung von Master Wayne geschlossen (ungemergt). Stand 24.11.2026, nach dem Merge von #131 (`facb741`), #132 und #133 (`40773b3`). Pull Requests werden hier nur geführt, solange sie offen sind. Was nur in einem offenen PR gilt, gehört nicht in Abschnitt 1.
 
