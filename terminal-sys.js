@@ -372,9 +372,19 @@ async function sysWgPostUp(befehl, iface) {
 }
 /* Handshake mit der Gegenstelle ist nur möglich, wenn Endpunkt und Schlüssel der Gegenstelle stimmen, ein privater Schlüssel gesetzt ist und
    die erlaubten Adressen die Tunneladresse der Gegenstelle enthalten (S6: realistische Folgen nur bei eigener Änderung). */
+/* Address wie ip address add (iproute2 6.1.0, get_prefix): IPv4 mit optionaler Präfixlänge 0-32; IPv6 nur grob (Doppelpunktschreibweise) */
+function sysWgAdresseGueltig(a) {
+  if (a.includes(':')) return /^[0-9a-fA-F:.]+(\/\d{1,3})?$/.test(a) && (!a.includes('/') || Number(a.split('/')[1]) <= 128);
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(a);
+  return !!m && m.slice(1, 5).every(function (x) { return Number(x) <= 255; }) && (m[5] === undefined || Number(m[5]) <= 32);
+}
+/* MTU wie ip link set mtu (get_integer): ganze Zahl; Grenzen des Kernels werden nicht nachgebildet */
+function sysWgMtuGueltig(m) { return /^[+-]?\d+$/.test(m) || /^0[xX][0-9a-fA-F]+$/.test(m); }
 function sysWgErreichbar(k, privat) {
   const p = k.peers.find(function (x) { return x.publicKey === SYS_WG.gegenstelle; });
   if (!p || p.endpunkt !== SYS_WG.endpunkt || !privat) return false;
+  /* eigene Tunneladresse im Netz der Gegenstelle (10.200.200.0/24), nicht deren Adresse */
+  if (!k.adressen.some(function (a) { const ip = a.split('/')[0]; return /^10\.200\.200\.\d{1,3}$/.test(ip) && ip !== SYS_WG.tunnelGegenstelle && Number(ip.split('.')[3]) < 255 && Number(ip.split('.')[3]) > 0; })) return false;
   return p.erlaubt.some(function (a) {
     const [netz, bits] = a.split('/'), b = bits === undefined ? 32 : Number(bits);
     const zahl = function (ip) { return ip.split('.').reduce(function (s, x) { return s * 256 + Number(x); }, 0); };
@@ -400,19 +410,45 @@ async function sysHostsAufloesen(name) {
   }
   return null;
 }
-/* ---------- predict: QTH (~/.predict/predict.qth) ---------- */
-/* Format von predict: Name, Breite (Nord positiv), Länge (WEST positiv), Höhe in Metern, je eine Zeile. Ungültig oder fehlend: null. */
+/* ---------- predict: QTH (~/.predict/predict.qth) und Bahndaten (~/.predict/predict.tle) ---------- */
+/* Format von predict: Name, Breite (Nord positiv), Länge (WEST positiv), Höhe in Metern, je eine Zeile. Zahlen streng (kein leerer Wert als 0).
+   Ergebnis { qth } oder { fehler: Text } */
 function sysQthParse(text) {
-  const z = text.split('\n').map(function (x) { return x.trim(); });
-  if (z.length < 4) return null;
-  const lat = Number(z[1]), lonW = Number(z[2]), hoehe = Number(z[3]);
-  if (!z[0] || !Number.isFinite(lat) || !Number.isFinite(lonW) || !Number.isFinite(hoehe) || Math.abs(lat) > 90 || Math.abs(lonW) > 360) return null;
-  const lonE = ((-lonW % 360) + 540) % 360 - 180;
-  return { name: z[0].slice(0, 24), lat: lat, lon: lonE, hoehe: hoehe };
+  const z = text.split('\n').map(function (x) { return x.trim(); }).filter(function (x, i, a) { return x !== '' || i < a.length - 1; });
+  const zahl = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
+  if (z.length < 4 || !z[0]) return { fehler: 'expected four lines: name, latitude (N), longitude (W), altitude (m)' };
+  if (!zahl.test(z[1]) || Math.abs(Number(z[1])) > 90) return { fehler: "invalid latitude '" + z[1] + "'" };
+  if (!zahl.test(z[2]) || Math.abs(Number(z[2])) > 360) return { fehler: "invalid longitude '" + z[2] + "'" };
+  if (!zahl.test(z[3]) || Math.abs(Number(z[3])) > 9000) return { fehler: "invalid altitude '" + z[3] + "'" };
+  const lonW = Number(z[2]), lonE = ((-lonW % 360) + 540) % 360 - 180;
+  return { qth: { name: z[0].slice(0, 24), lat: Number(z[1]), lon: lonE, hoehe: Number(z[3]), quelle: 'datei' } };
 }
-/* Beim Start von predict (S5): eigene QTH-Datei hat Vorrang; sonst dynamisch der Ausgangsort des Profils, danach Berlin (kestrelQth). */
-async function sysPredictQthLaden() {
-  const r = await sysDateiLesen('/home/raizo/.predict/predict.qth', true);   /* predict läuft als raizo */
-  TERMINAL_SYS.qth = r.fehler ? null : sysQthParse(r.text);
-  return TERMINAL_SYS.qth;
+/* TLE-Prüfsumme (Spalte 69): Summe der Ziffern, "-" zählt 1, modulo 10 */
+function sysTlePruefsumme(zeile) { let s = 0; for (const c of zeile.slice(0, 68)) s += c === '-' ? 1 : /\d/.test(c) ? Number(c) : 0; return s % 10; }
+/* Bahndaten im Format von predict.tle (je Satellit Name, Zeile 1, Zeile 2). Ergebnis { tle: [[name, l1, l2], …] } oder { fehler: Text } */
+function sysTleParse(text) {
+  const z = text.split('\n').map(function (x) { return x.replace(/\s+$/, ''); }).filter(Boolean), aus = [];
+  if (!z.length || z.length % 3) return { fehler: 'expected groups of three lines (name, line 1, line 2)' };
+  for (let i = 0; i < z.length; i += 3) {
+    const name = z[i].trim(), l1 = z[i + 1], l2 = z[i + 2];
+    if (!name || name.length > 24) return { fehler: 'invalid satellite name in line ' + (i + 1) };
+    for (const [nr, l] of [['1', l1], ['2', l2]]) {
+      if (l.length !== 69 || l[0] !== nr || l[1] !== ' ') return { fehler: name + ': line ' + nr + ' is not a valid TLE line' };
+      if (sysTlePruefsumme(l) !== Number(l[68])) return { fehler: name + ': checksum error in line ' + nr };
+    }
+    if (l1.slice(2, 7) !== l2.slice(2, 7)) return { fehler: name + ': catalog numbers of line 1 and 2 differ' };
+    aus.push([name, l1, l2]);
+  }
+  return { tle: aus };
+}
+/* Beim Start (Anmeldung, nach Änderungen): eigene Dateien von predict, gelesen als raizo. Fehlend und ungültig werden unterschieden. */
+async function sysPredictLaden() {
+  const q = await sysDateiLesen('/home/raizo/.predict/predict.qth', true), t = await sysDateiLesen('/home/raizo/.predict/predict.tle', true);
+  const qp = q.fehler ? null : sysQthParse(q.text), tp = t.fehler ? null : sysTleParse(t.text);
+  return {
+    qth: qp && qp.qth ? qp.qth : null,
+    qthStatus: q.fehler ? (q.fehler === 'ENOENT' ? 'fehlt' : TERMINAL_VFS.fehlerText(q.fehler)) : qp.fehler || 'ok',
+    tle: tp && tp.tle ? tp.tle : null,
+    tleStatus: t.fehler ? (t.fehler === 'ENOENT' ? 'fehlt' : TERMINAL_VFS.fehlerText(t.fehler)) : tp.fehler || 'ok'
+  };
 }

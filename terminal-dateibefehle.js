@@ -612,10 +612,16 @@ function terminalHomeIndex(liste, mitUid) {
   });
 }
 function terminalHomeBytes(liste) { return liste.reduce(function (s, e) { return s + (e.typ === 'file' ? new TextEncoder().encode(e.inhalt).length : 0); }, 0); }
-async function terminalHomePaket() {
+async function terminalHomePaket(nurHome) {
   const ex = await TERMINAL_VFS.exportieren();
   if (ex.fehler) return { fehler: ex.fehler };
   const eintraege = terminalHomeIndex(ex.eintraege, false), etc = terminalHomeIndex(ex.etc || [], true);
+  if (nurHome) {   /* home-export --home: Format 2 ohne /etc (kein privater Schlüssel in der Datei) */
+    const summe2 = await terminalHomeHash(JSON.stringify(eintraege));
+    if (!summe2) return { fehler: 'EIO' };
+    const paket2 = { format: TERMINAL_HOME_FORMAT, version: 2, erstellt: new Date().toISOString(), manifest: { eintraege: eintraege.length, bytes: terminalHomeBytes(eintraege), sha256: summe2 }, eintraege: eintraege };
+    return { paket: paket2, text: JSON.stringify(paket2), gen: ex.gen };
+  }
   const summe = await terminalHomeHash(JSON.stringify(eintraege)), summeEtc = await terminalHomeHash(JSON.stringify(etc));
   if (!summe || !summeEtc) return { fehler: 'EIO' };
   const paket = { format: TERMINAL_HOME_FORMAT, version: 3, erstellt: new Date().toISOString(),
@@ -640,6 +646,9 @@ function terminalHomeBereichPruefen(liste, praefix, mitUid) {
   for (const e of liste) {
     if (!e || typeof e.pfad !== 'string' || !e.pfad || (e.typ !== 'dir' && e.typ !== 'file') || !Number.isInteger(e.modus) || e.modus < 0 || e.modus > 0o7777 ||
       !Number.isFinite(e.erstellt) || !Number.isFinite(e.geaendert) || (mitUid && e.uid !== 0 && e.uid !== 1000)) return { fehler: 'not a valid backup (entry)' };
+    /* Rechtevertrag für /etc (Review #139): alles gehört root; das Verzeichnis /etc/wireguard ohne Rechte für andere (es schützt Schlüssel und
+       Konfiguration darin, wie 0700 unter Linux; Dateien darin dürfen wie mit umask 022 angelegt 0644 haben) */
+    if (mitUid && (e.uid !== 0 || (e.pfad === 'wireguard' && (e.typ !== 'dir' || (e.modus & 0o007))))) return { fehler: 'not a valid backup (owner or permissions in /etc)' };
     if (e.typ === 'file' && typeof e.inhalt !== 'string') return { fehler: 'not a valid backup (entry)' };
     const teile = e.pfad.split('/');
     /* Namen und Tiefe wie bei jeder Operation (einschließlich des Präfixes); der Elternpfad muss ein bereits aufgeführtes VERZEICHNIS sein */
@@ -674,6 +683,13 @@ async function terminalHomePruefen(text) {
   if (h.bytes + e.bytes > g.gesamt) return { fehler: 'backup exceeds the limits of this file system' };
   if (p.manifest.bytes !== h.bytes || (p.etcV1 && p.manifest.etc.bytes !== e.bytes)) return { fehler: 'backup is damaged (byte count)' };
   return { paket: p };
+}
+/* /etc nur mit Freigabe der Systemverwaltung (Review #139, S1): einmal vor jeder Änderung das sudo-Kennwort; --yes ist nur eine Bestätigung.
+   Nicht bei --home und nicht bei Sicherungen ohne /etc; die automatische Sicherung bleibt ohne Kennwort (A0). null: freigegeben. */
+async function terminalHomeEtcFreigabe(befehl) {
+  const ok = await terminalSudoKennwort();
+  if (ok === true) return null;
+  return { code: ok === 'abbruch' ? 130 : 1, stdout: [], stderr: [befehl + ': changing /etc requires administrator authentication; nothing changed'] };
 }
 /* Bereiche einer Wiederherstellung (S9: Befehle behalten ihre Namen, die Bereiche sind getrennt wählbar): --home nur /home/raizo,
    --etc nur /etc; ohne Angabe beide, soweit die Sicherung sie enthält (Formate 1 und 2 nur /home/raizo). */
@@ -761,13 +777,14 @@ async function terminalBefehlHomeRestore(ctx) {
   const gp = await terminalHomePruefen(geladen.data);
   if (gp.fehler) return { code: 1, stdout: [], stderr: ['home-restore: ' + name + ': ' + gp.fehler + '; nothing changed'] };
   if (bereich.etc && !bereich.home && !gp.paket.etcV1) return { code: 1, stdout: [], stderr: ['home-restore: ' + name + ': this backup contains no /etc; nothing changed'] };
-  if (!yes) return { code: 1, stdout: [], stderr: ['home-restore: this replaces everything in ' + terminalHomeUmfang(gp, bereich).join(' and in ') + '. The current state is saved first.', 'Run again with --yes to proceed.'] };
+  if (!yes) return { code: 1, stdout: [], stderr: ['home-restore: this replaces everything in ' + terminalHomeUmfang(gp, bereich).join(' and in ') + '. The current state is saved first.' + (bereich.etc && gp.paket.etcV1 ? ' Changing /etc requires the sudo password.' : ''), 'Run again with --yes to proceed.'] };
+  if (bereich.etc && gp.paket.etcV1) { const f = await terminalHomeEtcFreigabe('home-restore'); if (f) return f; }
   const vorher = await terminalHomeSichern(false);
   if (vorher.fehler) return { code: 1, stdout: [], stderr: ['home-restore: could not save the current state first (' + vorher.fehler + '); nothing changed'] };
   const r = await TERMINAL_VFS.importieren(bereich.home ? gp.paket.eintraegeV1 : null, { gen: vorher.gen, etc: bereich.etc ? gp.paket.etcV1 : null });
   if (r.fehler === 'EBUSY') return { code: 1, stdout: [], stderr: ['home-restore: files changed in another window while restoring; nothing changed. Run the command again.'] };
   if (r.fehler) return { code: 1, stdout: [], stderr: ['home-restore: ' + terminalDateiFehlerText(r.fehler) + '; nothing changed'] };
-  terminalHomeGeaendert(); if (r.etc !== null) terminalSysGeaendert();
+  terminalHomeGeaendert(); terminalSysGeaendert();   /* auch --home: ~/.predict kann sich geändert haben */
   return { code: 0, stdout: [terminalHomeErgebnis('home-restore', r, name), 'previous state saved as ' + vorher.name], stderr: [] };
 }
 /* Manueller Rückweg ohne Brücke: eine mit home-export erzeugte Datei wird über die Dateiauswahl des Browsers gelesen und genauso geprüft und
@@ -799,6 +816,8 @@ async function terminalBefehlHomeImport(ctx) {
   if (d.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + d.fehler + '; nothing changed'] };
   const gp = await terminalHomePruefen(d.text);
   if (gp.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + d.name + ': ' + gp.fehler + '; nothing changed'] };
+  if (bereich.etc && !bereich.home && !gp.paket.etcV1) return { code: 1, stdout: [], stderr: ['home-import: ' + d.name + ': this file contains no /etc; nothing changed'] };
+  if (bereich.etc && gp.paket.etcV1) { const f = await terminalHomeEtcFreigabe('home-import'); if (f) return f; }
   let gen, vorherName = null;
   if (terminalBrueckenAdresse()) {
     const vorher = await terminalHomeSichern(false);
@@ -809,18 +828,22 @@ async function terminalBefehlHomeImport(ctx) {
     if (ex.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + terminalDateiFehlerText(ex.fehler) + '; nothing changed'] };
     gen = ex.gen;
   }
-  if (bereich.etc && !bereich.home && !gp.paket.etcV1) return { code: 1, stdout: [], stderr: ['home-import: ' + d.name + ': this file contains no /etc; nothing changed'] };
   const r = await TERMINAL_VFS.importieren(bereich.home ? gp.paket.eintraegeV1 : null, { gen: gen, etc: bereich.etc ? gp.paket.etcV1 : null });
   if (r.fehler === 'EBUSY') return { code: 1, stdout: [], stderr: ['home-import: files changed in another window while importing; nothing changed. Run the command again.'] };
   if (r.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + terminalDateiFehlerText(r.fehler) + '; nothing changed'] };
-  terminalHomeGeaendert(); if (r.etc !== null) terminalSysGeaendert();
+  terminalHomeGeaendert(); terminalSysGeaendert();   /* auch --home: ~/.predict kann sich geändert haben */
   return { code: 0, stdout: [terminalHomeErgebnis('home-import', r, d.name)].concat(vorherName ? ['previous state saved as ' + vorherName] : []), stderr: [] };
 }
+/* home-export: ohne Option /home/raizo und /etc (mit privatem WireGuard-Schlüssel) nach sudo-Kennwort und mit Hinweis; --home nur das
+   Heimverzeichnis ohne Kennwort (Format 2). Die Datei ist unverschlüsselt; ihr Schutz liegt beim Ablageort. */
 async function terminalBefehlHomeExport(ctx) {
-  if (ctx.args.length) return { code: 2, stdout: [], stderr: ['usage: home-export'] };
-  const pk = await terminalHomePaket();
+  const nurHome = ctx.args.length === 1 && ctx.args[0] === '--home';
+  if (ctx.args.length && !nurHome) return { code: 2, stdout: [], stderr: ['usage: home-export [--home]'] };
+  if (!nurHome) { const f = await terminalSudoKennwort(); if (f !== true) return { code: f === 'abbruch' ? 130 : 1, stdout: [], stderr: ['home-export: exporting /etc requires administrator authentication; nothing exported (home-export --home exports /home/raizo only)'] }; }
+  const pk = await terminalHomePaket(nurHome);
   if (pk.fehler) return { code: 1, stdout: [], stderr: ['home-export: ' + terminalDateiFehlerText(pk.fehler)] };
   const stempel = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
   terminalDownload({ name: 'home-' + stempel + '.json' }, pk.text);
-  return { code: 0, stdout: ['home-export: home-' + stempel + '.json (' + pk.paket.manifest.eintraege + ' entries) handed to the browser download'], stderr: [] };
+  return { code: 0, stdout: ['home-export: home-' + stempel + '.json (' + pk.paket.manifest.eintraege + ' entries' + (nurHome ? '' : ' in /home/raizo, ' + pk.paket.manifest.etc.eintraege + ' in /etc') + ') handed to the browser download']
+    .concat(nurHome ? [] : ['home-export: the file contains /etc including the private WireGuard key (/etc/wireguard/wg-sat.key) unencrypted; keep it private']), stderr: [] };
 }

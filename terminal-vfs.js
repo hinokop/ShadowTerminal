@@ -423,27 +423,36 @@ const TERMINAL_VFS = (function () {
     },
     /* Installation der Systemdateien (Paket 3): liste = [{ pfad: 'etc/…', typ, modus, uid, inhalt }], Eltern vor Kindern. Jeder Pfad wird genau
        einmal installiert (Verzeichnis "sysInstalliert" in meta): was die Verwaltung später entfernt oder ändert, bleibt so (wie eine
-       Konfigurationsdatei eines Pakets). Vorhandenes wird nie überschrieben. Ein Eintrag ohne vorhandenes Elternverzeichnis oder über den
-       Grenzen bleibt uninstalliert (nächste Sitzung erneut). Die Generation steigt nur, wenn etwas angelegt wurde. */
+       Konfigurationsdatei eines Pakets); neue Standards einer späteren Version werden nur für neue Pfade installiert, nie überschrieben.
+       Liegt ein Eintrag unter einem bewusst entfernten (bereits installierten) Verzeichnis, gilt er ebenfalls als installiert.
+       Transaktion (Review #139): reicht der Platz nicht für alle fehlenden Standards, wird nichts installiert ({ fehler: 'ENOSPC', fehlend }),
+       der nächste Versuch folgt bei der nächsten Anmeldung. Die Generation steigt nur, wenn etwas angelegt wurde. */
     installieren: function (liste) {
       return tx('readwrite', async function (k, m) {
         const reg = (await anf(m.get('sysInstalliert'))) || { key: 'sysInstalliert', wert: {} }, z = await zaehlerLesen(m);
         let angelegt = 0, registriert = 0;
+        const fehlend = [], neu = new Map();   /* in dieser Transaktion angelegte Verzeichnisse: Pfad -> id */
         for (const e of liste) {
           if (reg.wert[e.pfad]) continue;
           const seg = e.pfad.split('/');
           if (pfadFehler(seg) || seg[0] !== 'etc') continue;
-          const p = await lauf(k, seg.slice(0, -1), true);
-          if (p.fehler || p.n.typ !== 'dir') continue;
-          const vorhanden = await anf(k.index('ename').get([p.n.id, seg[seg.length - 1]]));
+          const elternPfad = seg.slice(0, -1).join('/');
+          let eltern = neu.has(elternPfad) ? { n: { id: neu.get(elternPfad), typ: 'dir' } } : await lauf(k, seg.slice(0, -1), true);
+          if (eltern.fehler || eltern.n.typ !== 'dir') {
+            if (reg.wert[elternPfad]) { reg.wert[e.pfad] = true; registriert++; }   /* Eltern bewusst entfernt: nicht neu anlegen */
+            continue;
+          }
+          const vorhanden = await anf(k.index('ename').get([eltern.n.id, seg[seg.length - 1]]));
           if (!vorhanden) {
-            const nk = neuerKnoten(p.n.id, seg[seg.length - 1], e.typ, false, e.typ === 'file' ? e.inhalt : '', e.uid);
+            const nk = neuerKnoten(eltern.n.id, seg[seg.length - 1], e.typ, false, e.typ === 'file' ? e.inhalt : '', e.uid);
             nk.modus = e.modus;
-            if (nk.groesse > TERMINAL_VFS_GRENZE.datei || z.bytes + nk.groesse > TERMINAL_VFS_GRENZE.gesamt || z.knoten + 1 > TERMINAL_VFS_GRENZE.knoten) continue;
-            await anf(k.add(nk)); z.knoten++; z.bytes += nk.groesse; angelegt++;
+            if (nk.groesse > TERMINAL_VFS_GRENZE.datei || z.bytes + nk.groesse > TERMINAL_VFS_GRENZE.gesamt || z.knoten + 1 > TERMINAL_VFS_GRENZE.knoten) { fehlend.push(e.pfad); continue; }
+            const id = await anf(k.add(nk)); z.knoten++; z.bytes += nk.groesse; angelegt++;
+            if (e.typ === 'dir') neu.set(e.pfad, id);
           }
           reg.wert[e.pfad] = true; registriert++;
         }
+        if (fehlend.length) return { fehler: 'ENOSPC', fehlend: fehlend };   /* bricht die Transaktion ab: nichts angelegt, nichts registriert */
         if (registriert) { m.put(reg); m.put(z); }
         if (angelegt) { const g = await anf(m.get('gen')); m.put({ key: 'gen', wert: (g ? g.wert : 0) + 1 }); }
         return { ok: true, angelegt: angelegt };
@@ -488,7 +497,7 @@ const TERMINAL_VFS = (function () {
         const bereiche = [{ wurzel: RAIZO, liste: eintraege, praefix: TERMINAL_HEIM, mitUid: false }];
         if (etcKnoten) bereiche.push({ wurzel: etcKnoten.id, liste: etcListe, praefix: ['etc'], mitUid: true });
         const z = { key: 'zaehler', bytes: 0, knoten: 0 }, tmp = summe(await unterbaum(k, TMP));
-        z.knoten += tmp.knoten; z.bytes += tmp.bytes;
+        z.knoten += tmp.knoten + (etcKnoten ? 1 : 0); z.bytes += tmp.bytes;   /* der Knoten /etc selbst zählt wie in installieren und pruefenKern */
         /* Vorabprüfung ohne jede Änderung */
         for (const b of bereiche) {
           b.alt = await unterbaum(k, b.wurzel);
