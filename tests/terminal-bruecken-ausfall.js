@@ -11,6 +11,7 @@ const PF = require('./_pfad');
     const antworten = [];
     await p.route(/^http:\/\/127\.0\.0\.1:3847[12]\/db$/, async r => {
       const { op, parts } = r.request().postDataJSON();
+      if (op === 'home-save') return r.fulfill({ json: { name: 'home-20261125T000000Z.json', bytes: 1 } });   /* Paket 3: Sicherung nach der Installation von /etc */
       antworten.push(op);
       if (new URL(r.request().url()).port === '38471') return r.abort('connectionrefused');
       assert.equal(r.request().headers()['x-shadow-token'], 'b'.repeat(43));

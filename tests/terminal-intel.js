@@ -51,7 +51,7 @@ const PW = 'pw-test-123';
     const D = '/intel/dossiers/persons/P-0001';
 
     /* ---- A: Baum ---- */
-    assert.equal(await lauf('ls /'), 'etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar');
+    assert.equal(await lauf('ls /'), 'etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar');   /* Paket 3: /usr */
     assert.equal(await lauf('ls /intel'), 'cases\ndossiers\ngeospatial\nREADME');
     assert.equal(await lauf('ls /intel/dossiers'), 'index\nlocations\norganizations\npersons');
     assert.equal(await lauf('ls /intel/geospatial'), 'pins\nsightings\nzones');
@@ -105,7 +105,7 @@ const PW = 'pw-test-123';
       ['rm -r /intel/cases/F-001', "rm: cannot remove '/intel/cases/F-001': Read-only file system"],
       ['mv /intel/README r.txt', "mv: cannot move '/intel/README' to 'r.txt': Invalid cross-device link"],
       ['mv a.txt /intel/x', "mv: cannot move 'a.txt' to '/intel/x': Invalid cross-device link"],
-      ['mv a.txt /etc/x', "mv: cannot move 'a.txt' to '/etc/x': Invalid cross-device link"],
+      ['mv a.txt /usr/x', "mv: cannot move 'a.txt' to '/usr/x': Invalid cross-device link"],   /* Paket 3: /etc liegt im VFS, /usr ist eigener Einhängepunkt */
       ['cp /intel/README r.txt', "cp: cannot copy '/intel/README': Operation not permitted"],
       ['cp a.txt /intel/x', "cp: cannot create regular file '/intel/x': Read-only file system"],
       ['cat /intel/README > r.txt', 'bash: cat: Operation not permitted'],

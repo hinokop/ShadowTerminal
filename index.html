@@ -1269,7 +1269,7 @@ function zonenImportieren(q, abbildung) {
   });
   return (neu ? '; ' + neu + ' Zone(n) übernommen' : '') + (neuId ? '; ' + neuId + ' Zone(n) mit gleicher Kennung, aber abweichendem Inhalt unter neuer Kennung übernommen' : '') + (doppelt ? '; ' + doppelt + ' Zone(n) bereits vorhanden' : '') + (verworfen ? '; ' + verworfen + ' Bezug/Bezüge zu Dossier oder Unterlage nicht eindeutig zuzuordnen und weggelassen' : '');
 }
-const PROFIL_AKTIONEN = { TEXT_GEAENDERT: 1, IMPORT: 1, LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, DOSSIER_NOTIZ: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, SICHTUNG_BEWERTET: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_KURZLAGE: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, DOSSIER_SPERREN: 1, DOSSIER_ENTSPERREN: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1, EXPORT_VERMERKT: 1, SICHTUNG_KENNUNG: 1, ARBEITSSTAND_GESPEICHERT: 1 };
+const PROFIL_AKTIONEN = { TEXT_GEAENDERT: 1, IMPORT: 1, LEGENDE_GEWECHSELT: 1, NACHRICHT_TEXT_GEAENDERT: 1, PERSON_UEBERMITTELN: 1, DOSSIER_ANGELEGT: 1, DOSSIER_GELOESCHT: 1, VERBINDUNG_ANGELEGT: 1, DOSSIER_NOTIZ: 1, DOSSIER_NOTIZ_GELOESCHT: 1, SICHTUNG_HINZU: 1, SICHTUNG_ENTFERNT: 1, SICHTUNG_BEWERTET: 1, DOSSIER_STATUS: 1, DOSSIER_BILD: 1, LEGENDE_BILD: 1, DOSSIER_FOTO_HINZU: 1, DOSSIER_FOTO_ENTFERNT: 1, DOSSIER_ORT: 1, DOSSIER_BEARBEITET: 1, DOSSIER_KURZLAGE: 1, DOSSIER_ZURUECKGESETZT: 1, AUSGANG_ANGELEGT: 1, AUSGANG_GELOESCHT: 1, AUSGANG_ORT: 1, PROFIL_IMPORT: 1, PROFIL_LEEREN: 1, PIN_ANGELEGT: 1, PIN_GEAENDERT: 1, PIN_ENTFERNT: 1, DOSSIER_SPERREN: 1, DOSSIER_ENTSPERREN: 1, OZONE_ANGELEGT: 1, OZONE_GEAENDERT: 1, OZONE_STAND: 1, OZONE_UNTERLAGE: 1, OZONE_ENTFERNT: 1, EXPORT_VERMERKT: 1, SICHTUNG_KENNUNG: 1, ARBEITSSTAND_GESPEICHERT: 1 };
 function profilSpeichern() {
   if (STATE && STATE.dossiers) {
     const d = STATE.dossiers, daten = {};
@@ -2707,6 +2707,17 @@ const ACTIONS = {
     if (a.quelle !== 'Terminal') delete VIEW.draft['dn-' + e.id];   /* eine Notiz aus dem Terminal lässt den Entwurf im Notizfeld der Oberfläche stehen */
     return { modul: 'Dossier', aktion: 'Dossiernotiz hinzugefügt', detail: e.id + ' ' + e.name + ', ' + id + ': ' + kuerzen(text, 120) + (a.quelle === 'Terminal' ? ' (Terminal)' : '') };
   },
+  /* Paket 3 (Ergänzung nach der Windows-Abnahme von Paket 2): eine einzelne Dossiernotiz löschen, gemeinsam für Oberfläche und Terminal
+     (notes delete DN-nnn). Protokolliert mit Kennung und Textanfang; die Zählung der Kennungen bleibt (keine Wiederverwendung). */
+  DOSSIER_NOTIZ_GELOESCHT: function (a) {
+    const e = entitaet(a.id);
+    if (!e || !STATE.dossiers.entitaeten[e.id]) return null;
+    const d = STATE.dossiers.entitaeten[e.id], i = d.notizen.findIndex(function (n) { return n.id === a.notiz; });
+    if (i < 0) return null;
+    const weg = d.notizen.splice(i, 1)[0], t = nowIso();
+    dossierStempel(d, t);
+    return { modul: 'Dossier', aktion: 'Dossiernotiz gelöscht', detail: e.id + ' ' + e.name + ', ' + weg.id + ': ' + kuerzen(weg.text, 120) + (a.quelle === 'Terminal' ? ' (Terminal)' : '') };
+  },
   SICHTUNG_HINZU: function (a) {
     const e = entitaet(a.id), ort = String(a.ort || '').trim().slice(0, 160), text = String(a.text || '').trim().slice(0, 400);
     if (!e || (!ort && !text)) return null;
@@ -2820,24 +2831,43 @@ function missionsbetrieb() { return false; }
    Speichersperre wird nichts ausgeführt (EAGAIN). Ergebnis { ok, id } oder { fehler: 'EACCES' | 'ENOENT' | 'EINVAL' | 'EAGAIN' | 'EIO' }. */
 function dossierProfilText() { const o = {}; Object.keys(PROFIL).forEach(function (k) { if (k !== 'leer') o[k] = PROFIL[k]; }); return JSON.stringify(o); }
 function dossierNotizDauerhaft(id, text, quelle) {
-  const e = entitaet(id), klar = String(text || '').trim();
+  const klar = String(text || '').trim();
+  return dossierAktionDauerhaft(id, function (e) {
+    if (!klar) return { fehler: 'EINVAL' };
+    const anzahl = STATE.dossiers.entitaeten[e.id].notizen.length;
+    dispatch({ type: 'DOSSIER_NOTIZ', id: e.id, text: klar, quelle: quelle || 'Terminal' }, { kontrolliert: true });
+    const d = STATE.dossiers.entitaeten[e.id], neu = d.notizen.length === anzahl + 1 ? d.notizen[d.notizen.length - 1] : null;
+    return neu ? { ok: true, id: neu.id } : { fehler: 'EIO' };
+  }, 'Die Notiz aus dem Terminal wurde nicht gespeichert');
+}
+/* Notiz löschen (Oberfläche und Terminal): dieselbe geprüfte Aktion; { fehler: 'ENOENT' } bei unbekannter Notiz, ohne Änderung */
+function dossierNotizLoeschenDauerhaft(id, notiz, quelle) {
+  return dossierAktionDauerhaft(id, function (e) {
+    const d = STATE.dossiers.entitaeten[e.id];
+    if (!d.notizen.some(function (n) { return n.id === notiz; })) return { fehler: 'ENOENT', vorAktion: true };
+    dispatch({ type: 'DOSSIER_NOTIZ_GELOESCHT', id: e.id, notiz: notiz, quelle: quelle }, { kontrolliert: true });
+    return d.notizen.some(function (n) { return n.id === notiz; }) ? { fehler: 'EIO' } : { ok: true, id: notiz };
+  }, 'Die Notiz wurde nicht gelöscht');
+}
+/* Gemeinsamer Ablauf einer Dossieraktion mit dauerhaftem Erfolgsstatus (siehe oben): Sperre, Aufschub, Sicherung des Stands, Aktion,
+   geprüfter Commit, sonst Rücknahme. aktion(e) führt genau einen kontrollierten dispatch aus; { fehler, vorAktion } heißt: nichts geändert. */
+function dossierAktionDauerhaft(id, aktion, fehlerText) {
+  const e = entitaet(id);
   if (!e || !STATE.dossiers.entitaeten[e.id]) return { fehler: 'ENOENT' };
   if (dossierGesperrt(e)) return { fehler: 'EACCES' };
-  if (!klar) return { fehler: 'EINVAL' };
   if (PROFIL_AUFSCHUB.an || Store.sperrgrund) return { fehler: 'EAGAIN' };
   let rohZustand, rohProfil;
   try { rohZustand = window.localStorage.getItem(STORAGE_KEY); rohProfil = window.localStorage.getItem(PROFIL_KEY); } catch (ex) { return { fehler: 'EIO' }; }
   const kopie = function (o) { return JSON.parse(JSON.stringify(o)); };
   const zustandVorher = kopie(STATE), profilVorher = kopie(PROFIL);
   const ersetzen = function (ziel, quelleObj) { Object.keys(ziel).forEach(function (k) { delete ziel[k]; }); Object.assign(ziel, quelleObj); };
-  const anzahl = STATE.dossiers.entitaeten[e.id].notizen.length;
-  dispatch({ type: 'DOSSIER_NOTIZ', id: e.id, text: klar, quelle: quelle || 'Terminal' }, { kontrolliert: true });
-  const d = STATE.dossiers.entitaeten[e.id], neu = d.notizen.length === anzahl + 1 ? d.notizen[d.notizen.length - 1] : null;
+  const erg = aktion(e);
+  if (erg.fehler && erg.vorAktion) return { fehler: erg.fehler };
   let ok = false;
-  if (neu && Store.saveGeprueft(STATE) === 'ok' && profilSpeichern()) {
+  if (erg.ok && Store.saveGeprueft(STATE) === 'ok' && profilSpeichern()) {
     try { ok = window.localStorage.getItem(PROFIL_KEY) === dossierProfilText(); } catch (ex) { ok = false; }
   }
-  if (ok) return { ok: true, id: neu.id };
+  if (ok) return erg;
   /* Rücknahme: Speicher und lokaler Speicher auf den Stand vor der Aktion */
   ersetzen(STATE, zustandVorher); ersetzen(PROFIL, profilVorher);
   /* je Schlüssel: steht der vorherige Text noch unverändert da, ist nichts zurückzuschreiben; sonst schreiben und zeichengenau prüfen */
@@ -2852,10 +2882,10 @@ function dossierNotizDauerhaft(id, text, quelle) {
   if (typeof terminalSchutzPruefen === 'function') terminalSchutzPruefen();
   render();
   if (!zurueck) {
-    meldung('Speicherstand möglicherweise inkonsistent: Die Notiz aus dem Terminal wurde nicht gespeichert, und der vorherige Stand konnte nicht vollständig zurückgeschrieben werden.');
+    meldung('Speicherstand möglicherweise inkonsistent: ' + fehlerText + ', und der vorherige Stand konnte nicht vollständig zurückgeschrieben werden.');
     return { fehler: 'EIO', inkonsistent: true };
   }
-  meldung('Notiz aus dem Terminal nicht gespeichert. Der bisherige Stand bleibt erhalten.');
+  meldung(fehlerText + '. Der bisherige Stand bleibt erhalten.');
   return { fehler: 'EIO' };
 }
 /* opt.kontrolliert: ohne eigene Speicherung (Schritt 3); der Aufrufer übernimmt den geprüften Commit (dossierNotizDauerhaft) */
@@ -3546,7 +3576,17 @@ function dossierAnsicht(e) {
     sichtungKnopf(e),
     galerieBlock(e),
     h('h3', null, 'Notizen (' + st.notizen.length + ')'),
-    tabelle(['Zeit (UTC)', 'ID', 'Notiz'], st.notizen.slice().reverse().map(function (n) { return [td('nw', fmtZ(n.t)), td('nw', n.id), td('txt', n.text)]; }), 'Keine Notizen zu diesem Dossier.'),
+    tabelle(['Zeit (UTC)', 'ID', 'Notiz', ''], st.notizen.slice().reverse().map(function (n) {
+      return [td('nw', fmtZ(n.t)), td('nw', n.id), td('txt', n.text), td('nw', h('button', { type: 'button', class: 'dn-loeschen', 'data-notiz': n.id, 'aria-label': 'Notiz ' + n.id + ' löschen', onclick: function () {
+        bestaetigen('Dossiernotiz löschen', n.id + ' zu ' + e.id + ' wird gelöscht: "' + kuerzen(n.text, 160) + '". Die Löschung wird protokolliert.', 'Notiz löschen', function () {
+          const r = dossierNotizLoeschenDauerhaft(e.id, n.id, 'Oberfläche');
+          if (r.fehler === 'EACCES') meldung('Dossier gesperrt: Notiz nicht gelöscht.');
+          else if (r.fehler === 'EAGAIN') meldung('Speichern derzeit nicht möglich: Notiz nicht gelöscht.');
+          else if (r.fehler === 'ENOENT') meldung('Notiz ' + n.id + ' nicht mehr vorhanden.');
+          render();
+        });
+      } }, 'Löschen'))];
+    }), 'Keine Notizen zu diesem Dossier.'),
     h('div', { class: 'row top' },
       entwurf('input', 'dn-text', 'dn-' + e.id, { type: 'text', 'aria-label': 'Neue Notiz zu ' + e.id, style: 'flex:1 1 220px;min-width:0', autocomplete: 'off',
         onkeydown: function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); $('btn-dn').click(); } } }),
@@ -4663,6 +4703,7 @@ else window.addEventListener('load', function () { Zugang.start(init); });   /* 
 <script src="terminal-vfs.js"></script>
 <script src="terminal-dateibefehle.js"></script>
 <script src="terminal-intel.js"></script>
+<script src="terminal-sys.js"></script>
 <script src="profil-modul.js"></script>
 <script src="fall-modul.js"></script>
 <script src="arbeitsstand-modul.js"></script>

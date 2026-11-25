@@ -23,16 +23,16 @@ const { APP } = require('./_pfad');
     const info = await p.evaluate(() => ({ namen: TERMINAL_BEFEHLE, ohneAus: TERMINAL_TABELLE.filter(e => typeof e.aus !== 'function').map(e => e.name) }));
     assert.equal(new Set(info.namen).size, info.namen.length);
     assert.deepEqual(info.ohneAus, []);
-    assert.deepEqual(info.namen, ['ls', 'cd', 'cat', 'head', 'tail', 'wget', 'help', 'pwd', 'whoami', 'uname', 'date', 'ping', 'clear', 'exit',
-      'predict', 'pon', 'pppd', 'poff', 'plog', 'nmap', 'exports', 'map', 'open', 'sudo', 'touch', 'mkdir', 'rmdir', 'rm', 'cp', 'mv', 'nano', 'readlink', 'home-backup', 'home-restore', 'home-import', 'home-export', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
+    assert.deepEqual(info.namen, ['ls', 'cd', 'cat', 'head', 'tail', 'wget', 'help', 'pwd', 'whoami', 'uname', 'hostname', 'date', 'ping', 'clear', 'exit',
+      'predict', 'pon', 'pppd', 'poff', 'plog', 'nmap', 'exports', 'map', 'open', 'sudo', 'touch', 'mkdir', 'rmdir', 'rm', 'cp', 'mv', 'nano', 'readlink', 'notes', 'home-backup', 'home-restore', 'home-import', 'home-export', 'echo', 'true', 'false', 'wg-quick', 'wg', 'profanity', 'tmux']);
     /* Hilfe aus der Tabelle erzeugt (map, open und sudo neu) */
     assert.deepEqual(await nach('help'), [
-      'ls [OPTION]... [FILE]... · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · nmap <options> <target> · exports [query] · map [pins [query]|zones [query]|PIN-nnn|ZO-nnn|name] · open <id|name|export name> · sudo <command> · touch <file>... · mkdir [-p] <dir>... · rmdir <dir>... · rm [-rf] <path>... · cp [-r] <src>... <dest> · mv <src>... <dest> · nano <file> · readlink <link> · home-backup [list] · home-restore [--yes] [name] · home-import [--yes] · home-export · echo [> file | >> file] · true · false · whoami · uname -a · date [+%s] · ping relay · clear · exit',
+      'ls [OPTION]... [FILE]... · cd <ordner> · pwd · cat <datei> · head <datei> · tail <datei> · wget <datei> · nmap <options> <target> · exports [query] · map [pins [query]|zones [query]|PIN-nnn|ZO-nnn|name] · open <id|name|export name> · sudo <command> · touch <file>... · mkdir [-p] <dir>... · rmdir <dir>... · rm [-rf] <path>... · cp [-r] <src>... <dest> · mv <src>... <dest> · nano <file> · readlink <link> · notes delete <DN-nnn> · home-backup [list] · home-restore [--yes] [name] · home-import [--yes] · home-export · echo [> file | >> file] · true · false · whoami · uname [-a|-n] · hostname · date [+%s] · ping relay · clear · exit',
       'predict · pon kestrel · pppd call kestrel [updetach] · poff [kestrel] · plog [-n N] [-f] · wg-quick · wg · profanity (/msg, /omemo, /sendfile, /quit)',
       "tmux · tmux split-window -bd predict · tmux split-window -bd plog -f · Ctrl+B ↑/↓ switch pane · tmux kill-pane -t '{up-of}'",
       'cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?']);
     /* Aufruffehler und Rückgabewerte wie bisher */
-    for (const [z, erwartet, code] of [['help x', 'usage: help', '2'], ['uname', 'usage: uname -a', '2'],
+    for (const [z, erwartet, code] of [['help x', 'usage: help', '2'], ['uname -x', 'usage: uname [-a|-n]', '2'], ['hostname -x', 'usage: hostname', '2'],
       ['date x', 'usage: date', '2'], ['true x', 'usage: true', '2'], ['clear x', 'usage: clear', '2'], ['foo', 'foo: command not found', '127'],
       ['ping', 'ping: usage: ping <destination>', '1'], ['ping x', 'ping: x: Name or service not known', '2']]) {
       assert.deepEqual(await nach(z), [erwartet], z);

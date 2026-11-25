@@ -1,6 +1,9 @@
 /* Testhilfe: simulierte Uhr in den nächsten KESTREL-Überflug mit ausreichender Elevation setzen (echte Bahnrechnung). */
 const assert = require('node:assert/strict');
 async function imUeberflug(p, { minMax = 15, el = 10, wahl = 'ok' } = {}) {
+  /* Paket 3: Die Anmeldung beim Öffnen des Terminals liest die Konfiguration (/etc). Danach starten pon und wg-quick ohne Lesezugriff; Tests mit
+     künstlicher Uhr warten deshalb zuerst auf die abgeschlossene Anmeldung. */
+  await p.waitForFunction(() => terminalSysAktuell());
   const ziel = await p.evaluate(({ minMax, el }) => {
     let ab = Date.now();
     for (let k = 0; k < 60; k++) {

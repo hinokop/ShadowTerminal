@@ -206,7 +206,8 @@ function profilAssessmentAktualisieren(now) {
 
 const TERMINAL_RELAY = 'https://www.wikidata.org/w/api.php?action=query&meta=siteinfo&siprop=general&format=json&origin=*';
 const TERMINAL_DB = 'pgcl-eu3.arch07';
-const TERMINAL_UBUNTU = 'Linux ubuntu-server 6.8.0-45-generic #45-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug 30 12:02:04 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux';
+/* uname -a: Knotenname ist der aktive Hostname (Paket 3, TERMINAL_SYS.hostname) */
+function terminalUname() { return 'Linux ' + TERMINAL_SYS.hostname + ' 6.8.0-45-generic #45-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug 30 12:02:04 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux'; }
 function terminalBrueckenAdresse() { return /^#db=(\d{1,5})\.([\w-]{43})$/.exec(window.location.hash); }
 const TERMINAL_BRUECKE_START = 'Starte START_TERMINAL.bat erneut und lass das Konsolenfenster offen.';
 const TERMINAL_BRUECKE_FEHLER = 'Lokale Datenbank nicht erreichbar. ' + TERMINAL_BRUECKE_START;
@@ -259,15 +260,11 @@ function terminalPfadAufloesen(arg, cwdSegmente) {
   return out;
 }
 const TERMINAL_TLE_DIRS = new Map([['/var', ['cache/', 'log/']], ['/var/cache', ['tle/']],
-  ['/var/cache/tle', ['kestrel.tle']], ['/var/log', ['syslog']],
-  ['/etc', ['chatscripts/', 'ppp/']], ['/etc/ppp', ['peers/']], ['/etc/ppp/peers', ['kestrel']], ['/etc/chatscripts', ['kestrel']]]);
-// Virtuelle Textdateien der Einwahlkette (Inhalt bei Aufruf erzeugt).
+  ['/var/cache/tle', ['kestrel.tle']], ['/var/log', ['syslog']]]);
+/* Virtuelle Textdateien (Inhalt bei Aufruf erzeugt). Die Konfiguration der Einwahl liegt seit Paket 3 als echte Dateien unter /etc
+   (terminal-sys.js: Installation ins VFS, Vorlagen unter /usr/share). */
 const TERMINAL_VIRT_DATEIEN = new Map([
-  ['/var/cache/tle/kestrel.tle', function () { return KESTREL_TLE.map(function (e) { return e.join('\n'); }).join('\n'); }],
-  ['/etc/ppp/peers/kestrel', function () { return ['/dev/ttyUSB0', '19200', 'crtscts', 'lock', 'noauth', 'defaultroute', 'usepeerdns',
-    'persist', 'holdoff ' + TERMINAL_PPP_HOLDOFF / 1000, 'maxfail 0',
-    'connect "/usr/sbin/chat -v -f /etc/chatscripts/kestrel"'].join('\n'); }],
-  ['/etc/chatscripts/kestrel', function () { return ['ABORT BUSY', "ABORT 'NO CARRIER'", "'' ATZ", 'OK AT+CSQ', 'TIMEOUT ' + TERMINAL_PPP_DAUER.timeout / 1000, 'OK ATDT' + TERMINAL_PPP_WAHL, "CONNECT ''"].join('\n'); }]
+  ['/var/cache/tle/kestrel.tle', function () { return KESTREL_TLE.map(function (e) { return e.join('\n'); }).join('\n'); }]
 ]);
 function terminalArbeitsverzeichnis() {
   const t = TERMINAL_ZUSTAND;
@@ -505,7 +502,7 @@ function terminalPrompt() {
   if (TERMINAL_ZUSTAND.kette && !TERMINAL_ZUSTAND.kanal) return '';
   const kanal = TERMINAL_ZUSTAND.kanal;
   if (kanal) return '>';
-  return TERMINAL_BENUTZER + '@terminal:' + terminalPromptOrt() + '$';
+  return TERMINAL_BENUTZER + '@' + TERMINAL_SYS.hostname + ':' + terminalPromptOrt() + '$';
 }
 function terminalName(arg) {
   if (!arg) return '';
@@ -617,7 +614,7 @@ async function terminalDateiBefehl(befehl, arg, version) {
    der virtuelle Baum (TERMINAL_TLE_DIRS, TERMINAL_VIRT_DATEIEN, Wurzel) und die Archivbrücke (TERMINAL_DB, nur lesend).
    Fehler sind Objekte { fehler: 'ENOENT' | 'EROFS' | 'ENOSYS' | <Text der Brücke> }, keine Ausnahmen.
    Bewusst noch NICHT auf dieser Schnittstelle: cat, head, tail, wget (terminalDateiBefehl) und die Tab-Ergänzung. */
-const TERMINAL_WURZEL_LISTE = ['etc/', 'home/', 'intel/', 'tmp/', 'var/', TERMINAL_DB + '/'];
+const TERMINAL_WURZEL_LISTE = ['etc/', 'home/', 'intel/', 'tmp/', 'usr/', 'var/', TERMINAL_DB + '/'];
 /* Einhängepunkte (Anbieter-Tabelle, Review #137 / Paket 2): längster passender Präfix entscheidet. Jeder Anbieter liefert stat, readdir,
    readFile (alle mit voller Segmentliste ab der Wurzel), optional readlink; schreibbar ist nur das VFS. schreibFehler ist die Abweisung für
    schreibende Operationen (EROFS für den schreibgeschützten Einhängepunkt /intel, EACCES für Wurzel und Archiv). Über Einhängepunkte
@@ -649,10 +646,13 @@ const TERMINAL_ANBIETER = {
   },
   vfs: {
     name: 'vfs', schreibbar: true,
-    stat: async function (seg) { await terminalVfsBereit(); return TERMINAL_VFS.stat(seg); },
-    readdir: async function (seg) { await terminalVfsBereit(); return TERMINAL_VFS.readdir(seg); },
-    readFile: async function (seg) { await terminalVfsBereit(); return TERMINAL_VFS.readFile(seg); }
+    /* opt.privilegiert: eingeschränktes sudo der Systemverwaltung (Paket 3, S1) */
+    stat: async function (seg, opt) { await terminalVfsBereit(); return TERMINAL_VFS.stat(seg, terminalFsPriv(opt)); },
+    readdir: async function (seg, opt) { await terminalVfsBereit(); return TERMINAL_VFS.readdir(seg, terminalFsPriv(opt)); },
+    readFile: async function (seg, opt) { await terminalVfsBereit(); return TERMINAL_VFS.readFile(seg, terminalFsPriv(opt)); }
   },
+  /* /usr: schreibgeschützte Vorlagen der Systemdateien (terminal-sys.js, S3) */
+  paket: SYS_USR_ANBIETER,
   /* /intel (terminal-intel.js): synchron gerendert, jede Antwort prüft die aktuellen Sperren */
   intel: {
     name: 'intel', schreibFehler: 'EROFS',
@@ -699,7 +699,10 @@ const TERMINAL_ANBIETER = {
     }
   }
 };
-const TERMINAL_EINHAENGEPUNKTE = [{ pfad: ['intel'], anbieter: 'intel' }, { pfad: ['home'], anbieter: 'vfs' }, { pfad: ['tmp'], anbieter: 'vfs' }];
+const TERMINAL_EINHAENGEPUNKTE = [{ pfad: ['intel'], anbieter: 'intel' }, { pfad: ['home'], anbieter: 'vfs' }, { pfad: ['tmp'], anbieter: 'vfs' },
+  { pfad: ['etc'], anbieter: 'vfs' }, { pfad: ['usr'], anbieter: 'paket' }];
+/* Nur die Kennzeichnung der Systemverwaltung wird an das VFS durchgereicht */
+function terminalFsPriv(opt) { return opt && opt.privilegiert ? { privilegiert: true } : undefined; }
 function terminalAnbieter(seg) {
   if (seg.length && seg[0] === TERMINAL_DB) return TERMINAL_ANBIETER.archiv;   /* Archivname zur Laufzeit (TERMINAL_DB) */
   let treffer = null;
@@ -723,7 +726,7 @@ const TERMINAL_FS = {
   /* Einträge { name, dir [, bytes, mtime, link, ziel] } eines Verzeichnisses; opt.versteckt nur im Archiv wirksam */
   readdir: function (seg, opt) { return terminalAnbieter(seg).readdir(seg, opt); },
   /* Textinhalt { text [, deps, zeilenDeps] } */
-  readFile: function (seg) { return terminalAnbieter(seg).readFile(seg); },
+  readFile: function (seg, opt) { return terminalAnbieter(seg).readFile(seg, opt); },
   /* Ziel eines symbolischen Links { ziel } oder { fehler } (EINVAL: kein Link) */
   readlink: async function (seg) {
     const a = terminalAnbieter(seg);
@@ -736,28 +739,124 @@ const TERMINAL_FS = {
   schreiben: function (seg, text, opt) { return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.schreiben(seg, text, Object.assign({}, opt, g)); }, { eltern: false }); },
   mkdir: function (seg, opt) { return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.mkdir(seg, Object.assign({}, opt, g)); }, { mkdir: !!(opt && opt.eltern) }); },
   entfernen: function (seg, opt) { return terminalFsSchreibOp([seg], function (g) { return TERMINAL_VFS.entfernen(seg, Object.assign({}, opt, g)); }, {}); },
-  umbenennen: function (von, nach) { return terminalFsSchreibOp([von, nach], function (g) { return TERMINAL_VFS.umbenennen(von, nach, g); }, { umbenennen: true }); },
+  umbenennen: function (von, nach, opt) { return terminalFsSchreibOp([von, nach], function (g) { return TERMINAL_VFS.umbenennen(von, nach, Object.assign({}, terminalFsPriv(opt), g)); }, { umbenennen: true }); },
   kopieren: function (von, nach, opt) { return terminalFsSchreibOp([von, nach], function (g) { return TERMINAL_VFS.kopieren(von, nach, Object.assign({}, opt, g)); }, {}); },
   writeFile: function (seg, text, opt) { return TERMINAL_FS.schreiben(seg, text, opt); }
 };
+/* Dateischnittstelle der Systemverwaltung (eingeschränktes sudo, Paket 3 S1): dieselben Operationen mit opt.privilegiert. Das VFS erlaubt
+   damit Lesen aller Knoten und Schreiben unter /etc; /intel, das Archiv und /usr bleiben unverändert geschützt (eigene Anbieter). */
+/* Jedes Ziel einer Änderung im VFS muss unter /etc liegen; sonst EPERM ohne jede Änderung (geschützte Inhalte gelangen so nicht nach /home oder /tmp) */
+function terminalFsNurEtc(segs) { return segs.every(function (s) { return s && (s[0] === 'etc' || !TERMINAL_VFS.zugehoerig(s)); }); }   /* andere Anbieter weisen selbst ab (EROFS, EACCES) */
+const TERMINAL_FS_ADMIN = Object.assign({}, TERMINAL_FS, {
+  stat: function (seg, opt) { return TERMINAL_FS.stat(seg, Object.assign({}, opt, { privilegiert: true })); },
+  readdir: function (seg, opt) { return TERMINAL_FS.readdir(seg, Object.assign({}, opt, { privilegiert: true })); },
+  readFile: function (seg) { return TERMINAL_FS.readFile(seg, { privilegiert: true }); },
+  schreiben: function (seg, text, opt) { return terminalFsNurEtc([seg]) ? TERMINAL_FS.schreiben(seg, text, Object.assign({}, opt, { privilegiert: true })) : Promise.resolve({ fehler: 'EPERM' }); },
+  writeFile: function (seg, text, opt) { return TERMINAL_FS_ADMIN.schreiben(seg, text, opt); },
+  mkdir: function (seg, opt) { return terminalFsNurEtc([seg]) ? TERMINAL_FS.mkdir(seg, Object.assign({}, opt, { privilegiert: true })) : Promise.resolve({ fehler: 'EPERM' }); },
+  entfernen: function (seg, opt) { return terminalFsNurEtc([seg]) ? TERMINAL_FS.entfernen(seg, Object.assign({}, opt, { privilegiert: true })) : Promise.resolve({ fehler: 'EPERM' }); },
+  umbenennen: function (von, nach) { return terminalFsNurEtc([von, nach]) ? TERMINAL_FS.umbenennen(von, nach, { privilegiert: true }) : Promise.resolve({ fehler: 'EPERM' }); },
+  kopieren: function (von, nach, opt) { return terminalFsNurEtc([nach]) ? TERMINAL_FS.kopieren(von, nach, Object.assign({}, opt, { privilegiert: true })) : Promise.resolve({ fehler: 'EPERM' }); }
+});
 let terminalVfsStart = null;
 /* Die VFS-Sitzung beginnt mit der ersten Dateioperation: /tmp wird geleert, wenn kein anderes Fenster lebt (Architektur 9a.2) */
+/* Anmeldung (Paket 3, Review #139): Beginn der VFS-Sitzung, Installation der Systemdateien (je Datei genau einmal, als Transaktion) und danach der
+   Stand der Konfiguration dieser Sitzung (terminalSysLaden). Dienste (pon, pppd, wg-quick, predict) warten bei ihrem Start nur, solange dieser Stand
+   fehlt oder veraltet ist; sonst starten sie synchron wie bisher (A0). */
+let terminalSysSitzung = 0, terminalSysLauf = null, terminalSysLadeNr = 0;
+const TERMINAL_SYS_MARKE = 'fieldterminal.vfs.sysStand';
+/* Änderungsmarke für /etc und ~/.predict, über alle Fenster (localStorage): ein Dienst erkennt beim Start synchron, ob sein Stand veraltet ist */
+function terminalSysMarke() { try { return localStorage.getItem(TERMINAL_SYS_MARKE) || ''; } catch (e) { return ''; } }
+function terminalSysMarkeSetzen() { try { localStorage.setItem(TERMINAL_SYS_MARKE, Date.now().toString(36) + Math.random().toString(36).slice(2, 8)); } catch (e) { /* ohne Speicher: nur dieses Fenster */ } }
 function terminalVfsBereit() {
-  if (!terminalVfsStart) terminalVfsStart = TERMINAL_VFS.sitzungStart();
+  if (!terminalVfsStart || (terminalVfsEndeLauf && terminalVfsStart === terminalVfsEndeSitzung)) {
+    const sitzung = ++terminalSysSitzung, vorher = terminalVfsEndeLauf;
+    Object.assign(TERMINAL_SYS, { bereit: false, ppp: null, wg: null, qth: null, qthStatus: null, tle: null, tleStatus: null, installFehler: null });
+    terminalVfsStart = (vorher || Promise.resolve()).then(function () { return TERMINAL_VFS.sitzungStart(); }).then(async function (r) {
+      if (r && r.fehler) return r;
+      try {
+        const inst = await TERMINAL_VFS.installieren(sysInstallListe());
+        if (inst && inst.fehler) TERMINAL_SYS.installFehler = inst;
+        else if (inst && inst.angelegt) { terminalHomeGeaendert(); terminalSysMarkeSetzen(); }   /* neue Systemdateien und Schlüssel in die Sicherung */
+      } catch (e) { TERMINAL_SYS.installFehler = { fehler: 'EIO' }; }
+      return r;
+    });
+    terminalSysLauf = terminalVfsStart.then(function () { return terminalSysLaden(sitzung, true); });
+  }
   return terminalVfsStart;
 }
-async function terminalVfsEnde() {
+/* Stand aktuell: geladen in dieser Sitzung und seither keine Änderung unter /etc oder ~/.predict (auch nicht aus einem anderen Fenster) */
+function terminalSysAktuell() { return !!TERMINAL_SYS.bereit && TERMINAL_SYS.sitzung === terminalSysSitzung && TERMINAL_SYS.marke === terminalSysMarke(); }
+/* Für den Start eines Dienstes: aktueller Stand, notfalls nach Abschluss der Anmeldung oder neuem Lesen */
+async function terminalSysBereit() {
+  void terminalVfsBereit();
+  if (terminalSysLauf) await terminalSysLauf;
+  if (!terminalSysAktuell()) { terminalSysLauf = terminalSysLaden(terminalSysSitzung, false); await terminalSysLauf; }
+  return TERMINAL_SYS;
+}
+/* Liest den Stand: bei der Anmeldung zusätzlich den Hostnamen (S8, gilt bis zur Abmeldung) und meldet eine gescheiterte Installation.
+   Ein Ergebnis einer beendeten Sitzung oder ein überholter Ladevorgang wird verworfen. */
+async function terminalSysLaden(sitzung, anmeldung) {
+  const nr = ++terminalSysLadeNr, marke = terminalSysMarke(), neu = {};
+  try {
+    if (anmeldung) { const h = await sysDateiLesen('/etc/hostname'), n = h.fehler ? '' : h.text.split('\n')[0].trim(); neu.hostname = sysHostnameGueltig(n) ? n : 'localhost'; }
+    Object.assign(neu, await sysPredictLaden());
+    const d = await TERMINAL_VFS.readdir(['etc', 'ppp', 'peers'], { privilegiert: true }), stand = new Map();
+    for (const e of d.fehler ? [] : d.eintraege) if (!e.dir) stand.set(e.name, await terminalPppKonfig(e.name));
+    /* WireGuard: je <if>.conf die geprüfte Konfiguration und die Ergebnisse ihrer PostUp-Befehle (Schlüsseldatei) */
+    const w = await TERMINAL_VFS.readdir(['etc', 'wireguard'], { privilegiert: true }), wg = new Map();
+    for (const e of w.fehler ? [] : w.eintraege) {
+      const m = /^([a-zA-Z0-9_=+.-]{1,15})\.conf$/.exec(e.name);
+      if (!m || e.dir) continue;
+      wg.set(m[1], await terminalWgVorbereiten(m[1]));
+    }
+    neu.ppp = stand; neu.wg = wg;
+  } catch (e) { return; }
+  if (sitzung !== terminalSysSitzung || nr !== terminalSysLadeNr) return;
+  Object.assign(TERMINAL_SYS, neu, { bereit: true, sitzung: sitzung, marke: marke });
+  if (anmeldung) {
+    terminalKanalPromptSync();
+    const f = TERMINAL_SYS.installFehler;
+    if (f) terminalAusgabe('terminal: the default configuration in /etc could not be installed (' + TERMINAL_VFS.fehlerText(f.fehler) + (f.fehlend ? ': ' + f.fehlend.length + ' files' : '') + '); free space in /home or /tmp, then exit and open the terminal again');
+  }
+}
+/* wg-quick up: Konfiguration und PostUp-Ergebnisse (Schlüsseldatei) vorab, damit der Ablauf nach "ip link add" ohne Lesezugriff weiterläuft */
+async function terminalWgVorbereiten(name) {
+  const kf = await sysWgKonfig(name);
+  if (kf.fehler) return { kf: kf };
+  const post = [];
+  for (const hook of kf.konfig.postUp) { const r = await sysWgPostUp(hook, name); post.push(r); if (r.fehler) break; }
+  return { kf: kf, post: post };
+}
+/* Änderung unter /etc oder ~/.predict (Befehle, Wiederherstellung): Marke für alle Fenster setzen und den Stand neu lesen */
+function terminalSysGeaendert() {
+  terminalSysMarkeSetzen();
+  if (terminalVfsStart) terminalSysLauf = terminalSysLaden(terminalSysSitzung, false);
+}
+/* Abmeldung: letzte Sicherung, /tmp der letzten Sitzung. Läuft sie noch, wenn das Terminal wieder geöffnet wird, beginnt die neue Sitzung erst
+   danach (terminalVfsBereit); eine neue Sitzung wird von dieser Abmeldung nicht zurückgesetzt. */
+let terminalVfsEndeLauf = null, terminalVfsEndeSitzung = null;
+function terminalVfsEnde() {
+  if (terminalVfsEndeLauf) return terminalVfsEndeLauf;
+  const eigene = terminalVfsEndeSitzung = terminalVfsStart;
+  terminalVfsEndeLauf = terminalVfsEndeKern(eigene).finally(function () { terminalVfsEndeLauf = null; });
+  return terminalVfsEndeLauf;
+}
+async function terminalVfsEndeKern(eigene) {
   clearTimeout(terminalHomeTimer);
   let ergebnis = { ok: true };
   /* Eine laufende (automatische) Sicherung wird abgewartet; danach wird gesichert, wenn seither oder während ihr geändert wurde oder sie scheiterte */
   if (terminalHomeLaufend) { try { await terminalHomeLaufend; } catch (e) { /* Ergebnis über homeAenderung */ } }
-  if (terminalVfsStart && TERMINAL_ZUSTAND.homeAenderung && terminalBrueckenAdresse()) {
+  if (eigene && TERMINAL_ZUSTAND.homeAenderung && terminalBrueckenAdresse()) {
     const r = await terminalHomeSichern(true);
     if (r.fehler) ergebnis = { fehler: 'last backup failed: ' + r.fehler };
   }
-  if (!terminalVfsStart) return ergebnis;
+  if (!eigene) return ergebnis;
   const e = await TERMINAL_VFS.sitzungEnde();
-  terminalVfsStart = null;
+  if (terminalVfsStart === eigene) {
+    terminalVfsStart = null;
+    terminalSysSitzung++; terminalSysLauf = null; TERMINAL_SYS.bereit = false;   /* Antworten dieser Sitzung gelten in der nächsten nicht */
+  }
   if (e && e.fehler && !ergebnis.fehler) ergebnis = { fehler: 'session could not be closed (' + TERMINAL_VFS.fehlerText(e.fehler) + ')' };
   return ergebnis;
 }
@@ -780,7 +879,8 @@ async function terminalFsSchreibOp(segs, op, ziel) {
   if (bindungen.some(function (b) { return b.gen !== bindungen[0].gen; })) return { fehler: 'EBUSY' };
   const r = await op(bindungen.length ? { gen: bindungen[0].gen } : {});
   if (!r.fehler && r.gen !== undefined) bindungen.forEach(function (b) { b.gen = r.gen; });
-  if (!r.fehler && segs.some(function (s) { return s[0] === 'home'; })) terminalHomeGeaendert();
+  if (!r.fehler && segs.some(function (s) { return s[0] === 'home' || s[0] === 'etc'; })) terminalHomeGeaendert();   /* Sicherung auch für /etc (S2) */
+  if (!r.fehler && segs.some(function (s) { return s[0] === 'etc' || (s[0] === 'home' && (s[2] === '.predict' || s.length <= 2)); })) terminalSysGeaendert();
   return r;
 }
 function terminalFsFehlerText(befehl, name, fehler) {
@@ -790,11 +890,11 @@ function terminalFsFehlerText(befehl, name, fehler) {
 /* Befehlskontext und Ergebnis: eine Befehlsfunktion erhält { args, arg, cwd, env, fs } und liefert
    { code, stdout: [...], stderr: [...], cwd?: { ort, virtuellerOrt } }. Der Aufrufer setzt das Arbeitsverzeichnis und schreibt die
    Ausgabe. Keine Pipes, Ströme oder Prozesse. */
-async function terminalBefehlLauf(fn, args, arg, version) {
+async function terminalBefehlLauf(fn, args, arg, version, fs) {
   const t = TERMINAL_ZUSTAND;
   const env = t.oldpwd ? { OLDPWD: t.oldpwd } : {};
   const cwdVorher = terminalArbeitsverzeichnis();
-  const res = await fn({ args: args, arg: arg || '', cwd: cwdVorher, env: env, fs: TERMINAL_FS });
+  const res = await fn({ args: args, arg: arg || '', cwd: cwdVorher, env: env, fs: fs || TERMINAL_FS });
   if (t.version !== version) return 1;
   if (res.cwd) { t.oldpwd = cwdVorher; t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; terminalKanalPromptSync(); }
   /* Schutzmetadaten je Ausgabeeintrag, beide Arten kombinierbar (gemischte Operanden): /intel-Abhängigkeiten (schutzBloecke zeilenweise je
@@ -926,9 +1026,12 @@ async function terminalBefehlCd(ctx) {
     const f = r.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : r.fehler;
     if (f === 'ENOENT') return terminalBefehlFehler('bash: cd: ' + ziel + ': No such file or directory');
     if (f === 'ENOTDIR') return terminalBefehlFehler('bash: cd: ' + ziel + ': Not a directory');
-    if (f === 'Permission denied') return terminalBefehlFehler('bash: cd: ' + ziel + ': Permission denied');
+    if (f === 'Permission denied' || f === 'EACCES') return terminalBefehlFehler('bash: cd: ' + ziel + ': Permission denied');
     return terminalBefehlFehler('bash: cd: ' + f);
   }
+  /* chdir verlangt das Durchsuchrecht des Ziels (Paket 3: Verzeichnisse von root, etwa /etc/wireguard mit 0700) */
+  const zst = await ctx.fs.stat(r.seg, { pruefen: true });
+  if (zst && zst.eintrag && zst.eintrag.uid === 0 && Number.isInteger(zst.eintrag.modus) && !(zst.eintrag.modus & 0o001)) return terminalBefehlFehler('bash: cd: ' + ziel + ': Permission denied');
   return { code: 0, stdout: ausgeben ? ['/' + r.seg.join('/')] : [], stderr: [], cwd: terminalCdCwd(r.seg) };
 }
 /* ls (Phase 6a-3, Referenz GNU coreutils 9.4, Ausgabe ohne TTY): Optionen und Operanden wie getopt_long mit Umstellung (Optionen auch hinter
@@ -1055,6 +1158,8 @@ async function terminalBefehlLs(ctx) {
   const marke = function (name, dir, link) { return name + (opt.F && dir ? '/' : opt.F && link ? '@' : ''); };
   /* Langformat: vorhandene Spalten; /intel ergänzt nur Modus (schreibgeschützt, Link) und das Linkziel */
   const modus = function (adapter, dir, e) {
+    /* gespeicherte Rechte (VFS, /usr): Typzeichen und drei rwx-Gruppen wie ls -l */
+    if ((adapter === 'vfs' || adapter === 'paket') && Number.isInteger(e.modus)) return (dir ? 'd' : '-') + [6, 3, 0].map(function (s) { const m = e.modus >> s; return (m & 4 ? 'r' : '-') + (m & 2 ? 'w' : '-') + (m & 1 ? 'x' : '-'); }).join('');
     if (adapter === 'vfs') return dir ? 'drwxr-xr-x' : '-rw-r--r--';
     if (adapter === 'intel') return e.link ? 'lrwxrwxrwx' : dir ? 'dr-xr-xr-x' : '-r--r--r--';
     return dir ? 'dr-x' : '-r--';
@@ -1070,7 +1175,7 @@ async function terminalBefehlLs(ctx) {
     const r = await terminalLsAufloesen(ctx, op);
     if (r.fehler) {
       const f = r.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : r.fehler;
-      fehler.push('ls: cannot access ' + terminalLsQuote(op) + ': ' + (f === 'ENOENT' ? 'No such file or directory' : f === 'ENOTDIR' ? 'Not a directory' : f));
+      fehler.push('ls: cannot access ' + terminalLsQuote(op) + ': ' + (f === 'ENOENT' ? 'No such file or directory' : f === 'ENOTDIR' ? 'Not a directory' : /^E[A-Z]+$/.test(f) ? TERMINAL_VFS.fehlerText(f) : f));
       continue;
     }
     if (r.adapter === 'archiv') archiv = true;
@@ -1090,7 +1195,7 @@ async function terminalBefehlLs(ctx) {
   let code = fehler.length ? 2 : 0;
   for (const v of verzeichnisse) {
     const dir = await ctx.fs.readdir(v.seg, { versteckt: opt.alle !== null });
-    if (dir.fehler) { fehler.push('ls: cannot open directory ' + terminalLsQuote(v.op) + ': ' + (dir.fehler === 'ENOENT' || dir.fehler === 'Datei oder Ordner nicht gefunden' ? 'No such file or directory' : dir.fehler)); code = 2; continue; }
+    if (dir.fehler) { fehler.push('ls: cannot open directory ' + terminalLsQuote(v.op) + ': ' + (dir.fehler === 'ENOENT' || dir.fehler === 'Datei oder Ordner nicht gefunden' ? 'No such file or directory' : /^E[A-Z]+$/.test(dir.fehler) ? TERMINAL_VFS.fehlerText(dir.fehler) : dir.fehler)); code = 2; continue; }
     let eintraege = dir.eintraege.filter(function (x) { return opt.alle !== null || !x.name.startsWith('.'); });
     if (opt.alle === 'a') eintraege = eintraege.concat([{ name: '.', dir: true }, { name: '..', dir: true }]);
     const geordnet = ordne(eintraege, function (x) { return x.name; });
@@ -1289,14 +1394,57 @@ const KESTREL_FUNK = { wahl: 5, ende: 3 };
 const KESTREL_MIN_EL = KESTREL_FUNK.wahl;
 const KESTREL_QTH_STANDARD = { name: 'DEFAULT', lat: 52.52, lon: 13.405, hoehe: 34 };
 let KESTREL_SATS = null;
+/* predict mit eigenen Bahndaten (~/.predict/predict.tle, Paket 3 M5): kestrelMitPredict setzt Satelliten und QTH für eine synchrone Rechnung.
+   Einwahl, Sichtbarkeit und Link bleiben auf dem eigenen Relaisbestand (KESTREL_TLE). */
+let KESTREL_SATS_AKTIV = null;
+const KESTREL_SATS_DATEI = new Map();
+function kestrelSatsAus(tle) {
+  const schluessel = JSON.stringify(tle);
+  if (!KESTREL_SATS_DATEI.has(schluessel)) {
+    KESTREL_SATS_DATEI.clear();
+    KESTREL_SATS_DATEI.set(schluessel, tle.map(function (e) { return { name: e[0], l1: e[1], l2: e[2], rec: satellite.twoline2satrec(e[1], e[2]), rev: Number(e[2].slice(63, 68)) }; }));
+  }
+  return KESTREL_SATS_DATEI.get(schluessel);
+}
+/* Rechenbarkeit eigener Bahndaten beim Start von predict (Review 2 zu #139): SGP4-Initialisierung ohne Fehler und eine Position mit endlichen
+   Werten zur Epoche. Ergebnis { sats } oder { fehler } (erster nicht rechenbarer Satellit). Geprüft wird ein frischer Datensatz: propagate
+   setzt rec.error bei jedem Aufruf neu, ein früherer Fehlerzeitpunkt des zwischengespeicherten Datensatzes darf den Start nicht bestimmen. */
+function kestrelSatsPruefen(tle) {
+  const sats = kestrelSatsAus(tle);
+  for (const s of sats) {
+    const rec = satellite.twoline2satrec(s.l1, s.l2), ep = kestrelEpoche(s);
+    const pv = !rec.error && Number.isFinite(ep) ? satellite.propagate(rec, new Date(ep)) : null;
+    if (!pv || !pv.position || ![pv.position.x, pv.position.y, pv.position.z].every(Number.isFinite)) return { fehler: s.name + ': orbital elements cannot be propagated (SGP4)' };
+  }
+  return { sats };
+}
 function kestrelSats() {
+  if (KESTREL_SATS_AKTIV) return KESTREL_SATS_AKTIV;
   if (!KESTREL_SATS) KESTREL_SATS = KESTREL_TLE.map(function (e) {
     return { name: e[0], l1: e[1], l2: e[2], rec: satellite.twoline2satrec(e[1], e[2]), rev: Number(e[2].slice(63, 68)) };
   });
   return KESTREL_SATS;
 }
 function kestrelSat(name) { return kestrelSats().find(function (x) { return x.name === name; }) || null; }
-function kestrelQth() {
+/* Beobachter der Rechnung. Standard ist der Standort der Station (Ausgangsort des Profils, sonst Berlin): danach richten sich Sichtbarkeit,
+   Einwahl und LOS. predict rechnet mit seinem eigenen QTH (Paket 3, S7): kestrelMitPredict setzt ihn für die Dauer einer synchronen Rechnung. */
+let KESTREL_QTH_AKTIV = null;
+function kestrelMitPredict(k, fn) {
+  const altQ = KESTREL_QTH_AKTIV, altS = KESTREL_SATS_AKTIV;
+  KESTREL_QTH_AKTIV = k.qth; KESTREL_SATS_AKTIV = k.sats || null;
+  try { return fn(); } finally { KESTREL_QTH_AKTIV = altQ; KESTREL_SATS_AKTIV = altS; }
+}
+/* Konfiguration aus dem Stand im Speicher, ohne Lesen (nur Tab-Vervollständigung). Der Start von predict läuft über terminalPredictStart. */
+function terminalPredictKonfig() {
+  const S = TERMINAL_SYS;
+  if (S.qthStatus && S.qthStatus !== 'ok' && S.qthStatus !== 'fehlt') return { fehler: '~/.predict/predict.qth: ' + S.qthStatus };
+  if (S.tleStatus && S.tleStatus !== 'ok' && S.tleStatus !== 'fehlt') return { fehler: '~/.predict/predict.tle: ' + S.tleStatus };
+  return { qth: S.qth || kestrelQthStation(), sats: S.tle ? kestrelSatsAus(S.tle) : null, eigeneQth: !!S.qth, eigeneTle: !!S.tle };
+}
+/* QTH von predict: eigene Datei ~/.predict/predict.qth (Stand der Anmeldung bzw. nach Änderung) hat Vorrang, sonst dynamisch der Ausgangsort
+   des Profils, danach Berlin */
+function kestrelQth() { return KESTREL_QTH_AKTIV || kestrelQthStation(); }
+function kestrelQthStation() {
   const o = (typeof PROFIL !== 'undefined' && Array.isArray(PROFIL.ausgang) ? PROFIL.ausgang : []).find(function (x) { return x && Array.isArray(x.ll); });
   return o ? { name: String(o.name || 'QTH').slice(0, 24), lat: Number(o.ll[0]), lon: Number(o.ll[1]), hoehe: 100 } : KESTREL_QTH_STANDARD;
 }
@@ -1331,7 +1479,7 @@ function kestrelEl(sat, ms) { const l = kestrelLage(sat, ms); return l ? l.el : 
 // Nächster Überflug ab "ab" (läuft einer, dann dieser): Aufgang, Untergang, höchster Punkt; null, wenn keiner in 48 h.
 function kestrelUeberflug(sat, ab) {
   // Zwischenspeicher: ein berechneter Überflug gilt für alle späteren Anfragen bis zu seinem Untergang (gleicher QTH).
-  const q = kestrelQth(), schluessel = q.lat + ',' + q.lon, c = sat.cache;
+  const q = kestrelQth(), schluessel = q.lat + ',' + q.lon + ',' + q.hoehe, c = sat.cache;
   if (c && c.schluessel === schluessel && ab >= c.ab && (c.u ? ab <= c.u.bis : ab - c.ab < 3600000)) return c.u;
   const u = kestrelUeberflugRechnen(sat, ab);
   sat.cache = { schluessel, ab, u };
@@ -1405,7 +1553,7 @@ function terminalPppZeit(ms) {
 }
 const TERMINAL_PREDICT_USAGE = 'usage: predict [-t <tlefile>] [-p <satellite> [start] | -f <satellite> [start [end|+n[m]]]]';
 const TERMINAL_PREDICT_MAX = 600;
-function terminalPredictOptionen(args) {
+function terminalPredictOptionen(args, nurSyntax) {
   const o = { modus: 'live' };
   let datei = null;
   for (let i = 0; i < args.length; i++) {
@@ -1427,15 +1575,52 @@ function terminalPredictOptionen(args) {
     }
     return { fehler: 'usage' };
   }
-  // Ohne -t liest predict seine Datenbank ~/.predict/predict.tle (predict(1)); hier dieselben Bahndaten.
-  if (datei !== null && datei !== TERMINAL_PPP_DATEI && datei !== TERMINAL_PREDICT_DB) return { fehler: datei + ': No such file or directory' };
-  if (o.modus !== 'live') { o.satObj = kestrelSat(o.sat); if (!o.satObj) return { fehler: '"' + o.sat + '" not found in ' + (datei || TERMINAL_PREDICT_DB) }; }
+  /* Ohne -t liest predict seine Datenbank ~/.predict/predict.tle (predict(1)); fehlt sie, die Bahndaten des Systems. -t liest terminalPredictStart. */
+  o.datei = datei;
+  if (o.modus !== 'live' && !nurSyntax) { o.satObj = kestrelSat(o.sat); if (!o.satObj) return { fehler: '"' + o.sat + '" not found in ' + (datei || (TERMINAL_SYS.tle ? TERMINAL_PREDICT_DB : TERMINAL_PPP_DATEI)) }; }
   return o;
 }
+/* Gemeinsamer Start von predict, direkt und im tmux-Bereich (S5, S7, M5; Review 2 zu #139). Reihenfolge wie predict: erst die Optionen, dann
+   die Dateien. Ist der Stand im Speicher veraltet oder noch nicht geladen, wird er vorher gelesen (keine künstliche Wartezeit). -t hat Vorrang
+   vor ~/.predict/predict.tle: eine gültige -t-Datei gilt auch, wenn die eigene Datenbank ungültig ist; der QTH wird immer geprüft.
+   Eigene Bahndaten müssen mit SGP4 rechenbar sein. Ergebnis { k, o } (Konfiguration für genau diesen Lauf), { fehler } oder { abbruch }
+   (Sitzung oder Vordergrund wurde inzwischen beendet). */
+async function terminalPredictStart(args) {
+  const t = TERMINAL_ZUSTAND, version = t.version;
+  if (!terminalSysAktuell()) { await terminalSysBereit(); if (t.version !== version) return { abbruch: true }; }
+  const roh = terminalPredictOptionen(args, true);
+  if (roh.fehler) return roh;
+  const S = TERMINAL_SYS;
+  if (S.qthStatus && S.qthStatus !== 'ok' && S.qthStatus !== 'fehlt') return { fehler: '~/.predict/predict.qth: ' + S.qthStatus };
+  let sats = null, eigeneTle = false;
+  if (roh.datei !== null && roh.datei !== TERMINAL_PPP_DATEI) {
+    /* -t <Datei>: Bahndaten aus /home, /tmp, /etc, /usr oder /var; Archiv und /intel bleiben außen vor (wie bisher ENOENT) */
+    const seg = terminalShellPfad(roh.datei), art = seg ? TERMINAL_FS.anbieter(seg) : null;
+    const r = art === 'vfs' || art === 'paket' || art === 'wurzel' ? await TERMINAL_FS.readFile(seg) : { fehler: 'ENOENT' };
+    if (t.version !== version) return { abbruch: true };
+    const tp = r.fehler ? null : sysTleParse(r.text), ks = tp && tp.tle ? kestrelSatsPruefen(tp.tle) : null;
+    const fehler = r.fehler ? TERMINAL_VFS.fehlerText(r.fehler) : tp.fehler || ks.fehler;
+    if (fehler) return { fehler: roh.datei + ': ' + fehler };
+    sats = ks.sats; eigeneTle = true;
+  } else if (roh.datei === null) {
+    if (S.tleStatus && S.tleStatus !== 'ok' && S.tleStatus !== 'fehlt') return { fehler: TERMINAL_PREDICT_DB + ': ' + S.tleStatus };
+    if (S.tle) {
+      const ks = kestrelSatsPruefen(S.tle);
+      if (ks.fehler) return { fehler: TERMINAL_PREDICT_DB + ': ' + ks.fehler };
+      sats = ks.sats; eigeneTle = true;
+    }
+  }
+  const k = { qth: S.qth || kestrelQthStation(), sats: sats, eigeneQth: !!S.qth, eigeneTle: eigeneTle, datei: roh.datei };
+  const o = kestrelMitPredict(k, function () { return terminalPredictOptionen(args); });
+  return o.fehler ? o : { k: k, o: o };
+}
+function terminalPredictFehler(s) { terminalAusgabe(s.fehler === 'usage' ? TERMINAL_PREDICT_USAGE : 'predict: ' + s.fehler); return s.fehler === 'usage' ? 2 : 1; }
 // Zeile wie predict -f/-p: Unix-Zeit, Datum/Zeit (UTC), Elevation, Azimut, Phase (0-255), Breite, Länge (West),
 // Entfernung (km), Umlauf, Sichtbarkeit ('*' sonnig, ' ' im Erdschatten, '+' sichtbar: sonnig und am Ort dunkel).
+/* null, wenn SGP4 für diesen Zeitpunkt keine Position liefert (Aufrufer melden das) */
 function terminalPppZeile(sat, ms) {
   const datum = new Date(ms), l = kestrelLage(sat, ms);
+  if (!l) return null;
   const tag = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }).format(datum);
   const mon = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(datum);
   const iso = datum.toISOString();
@@ -1461,10 +1646,10 @@ function terminalPppAnzeige() {
   for (const id of ['profil-terminal-xmpp-titel', 'profil-terminal-xmpp-status']) { const el = $(id); if (el) el.hidden = !chat; }
   if (!chat && !live) { shell.hidden = false; return; }
   shell.hidden = !!chat;
-  if (!chat) { delete oben.dataset.chat; terminalPredictSetzen(oben, terminalZeitstand()); return; }
+  if (!chat) { delete oben.dataset.chat; terminalPredictSetzen(oben, terminalZeitstand(), t.orbitLive.konfig); return; }
   if (!block) { delete oben.dataset.chat; oben.replaceChildren(); }
   else {
-    const kopf = chat.link.sat.name + '  [' + terminalSatEnde(chat.link) + ' ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand());
+    const kopf = chat.link.sat.name + '  [' + terminalSatEnde(chat.link) + ' ' + terminalSatRest(chat.link) + ']', telemetrie = terminalPppZeile(chat.link.sat, terminalZeitstand()) || '';
     const daten = kopf + '\n' + telemetrie;
     if (oben.dataset.chat !== daten) {
       delete oben.dataset.predict; oben.dataset.chat = daten;
@@ -1504,29 +1689,39 @@ function kestrelEpoche(sat) {
 /* Interaktives predict (Real-Time Multi-Tracking Mode): alle Satelliten der Datei mit nächstem Ereignis. Kopf mit QTH, Zeit
    und der Spanne der TLE-Epochen; AOS/LOS mit UTC-Datum und Countdown HH:MM:SS; Entfernung in km. Zeilen über dem
    geometrischen Horizont (El >= 0) sind markiert (oben); das bedeutet Sicht, keine Verbindung. */
-function terminalPredictLiveTeile(ms) {
+function terminalPredictLiveTeile(ms, k) {
+  /* Konfiguration des einzelnen Laufs, beim Start festgehalten (S5): direktes predict (orbitLive.konfig) oder tmux-Bereich (bereich.konfig).
+     Ohne Lauf (Aufruf zur Prüfung) gilt der Stand im Speicher. */
+  if (!k) k = terminalPredictKonfig();
+  if (k.fehler) return { kopf: ['predict: ' + k.fehler], zeilen: [] };
+  return kestrelMitPredict(k, function () { return terminalPredictLiveTeileKern(ms, k); });
+}
+function terminalPredictLiveTeileKern(ms, k) {
   const q = kestrelQth(), sats = kestrelSats(), uhr = function (x) { return kestrelDatum(x) + ' ' + terminalPppZeit(x); };
-  const epochen = sats.map(kestrelEpoche), von = Math.min(...epochen), bis = Math.max(...epochen);
+  const epochen = sats.map(kestrelEpoche).filter(Number.isFinite), von = Math.min(...epochen), bis = Math.max(...epochen);
   const ep = function (x) { return kestrelDatum(x) + ' ' + terminalPppZeit(x).slice(0, 5); };
   // Kompakt: drei Kopfzeilen, damit die vier Satelliten auch neben plog in einem Bereich Platz finden.
   const kopf = ['PREDICT Real-Time Multi-Tracking Mode · ' + uhr(ms) + ' UTC',
     'QTH ' + q.name + ' ' + Math.abs(q.lat).toFixed(2) + (q.lat >= 0 ? 'N ' : 'S ') + Math.abs(q.lon).toFixed(2) + (q.lon >= 0 ? 'E' : 'W') +
-      ' · TLE epoch ' + (ep(von) === ep(bis) ? ep(von) : ep(von) + ' - ' + ep(bis)) + ' UTC',
+      (k && k.eigeneQth ? ' (predict.qth)' : '') + (k && k.eigeneTle ? ' · predict.tle' : '') + ' · TLE epoch ' + (ep(von) === ep(bis) ? ep(von) : ep(von) + ' - ' + ep(bis)) + ' UTC',
     'Satellite'.padEnd(12) + 'Az'.padStart(5) + 'El'.padStart(6) + 'Range km'.padStart(10) + '   Next event (UTC)'];
   const zeilen = sats.map(function (sat) {
-    const l = kestrelLage(sat, ms), u = kestrelUeberflug(sat, ms), oben = l.el >= 0;
+    const l = kestrelLage(sat, ms);
+    /* Keine Position aus SGP4 (z. B. Bahn zu diesem Zeitpunkt nicht mehr rechenbar): Zeile ohne Werte, keine Ausnahme im Takt */
+    if (!l) return { text: sat.name.padEnd(12) + '-'.padStart(5) + '-'.padStart(6) + '-'.padStart(10) + '   no position (SGP4)', oben: false };
+    const u = kestrelUeberflug(sat, ms), oben = l.el >= 0;
     const ereignis = !u ? '-' : oben ? 'LOS ' + uhr(u.bis) + ' (' + terminalCountdown(u.bis, ms) + ')' : 'AOS ' + uhr(u.von) + ' (' + terminalCountdown(u.von, ms) + ')';
     return { text: sat.name.padEnd(12) + String(Math.round(l.az)).padStart(5) + String(Math.round(l.el)).padStart(6) + String(Math.round(l.range)).padStart(10) + '   ' + ereignis, oben };
   });
   return { kopf, zeilen };
 }
-function terminalPredictLive(ms) {
-  const d = terminalPredictLiveTeile(ms);
+function terminalPredictLive(ms, k) {
+  const d = terminalPredictLiveTeile(ms, k);
   return d.kopf.concat(d.zeilen.map(function (z) { return z.text; })).join('\n');
 }
 // Setzt die Verfolgung in ein Element; Zeilen über dem Horizont fett (wie PREDICT: BOLD). Nur bei geändertem Text neu.
-function terminalPredictSetzen(el, ms) {
-  const d = terminalPredictLiveTeile(ms), text = d.kopf.concat(d.zeilen.map(function (z) { return (z.oben ? '+' : '-') + z.text; })).join('\n');
+function terminalPredictSetzen(el, ms, k) {
+  const d = terminalPredictLiveTeile(ms, k), text = d.kopf.concat(d.zeilen.map(function (z) { return (z.oben ? '+' : '-') + z.text; })).join('\n');
   if (el.dataset.predict === text) return;
   el.dataset.predict = text;
   el.replaceChildren(h('span', { class: 'predict-kopf' }, d.kopf.join('\n')), ...d.zeilen.flatMap(function (z) {
@@ -1567,7 +1762,7 @@ function terminalPppFensterWechsel(chat, i) {
 function terminalPppLog(text) {
   const t = TERMINAL_ZUSTAND, jetzt = new Date();
   const tag = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(jetzt);
-  const zeile = tag + ' ' + terminalPppZeit(+jetzt) + ' terminal ' + text;
+  const zeile = tag + ' ' + terminalPppZeit(+jetzt) + ' ' + TERMINAL_SYS.hostname + ' ' + text;   /* aktiver Hostname (Paket 3) */
   t.syslog = t.syslog.concat(zeile).slice(-60);
   terminalPlogZeile(zeile);
 }
@@ -1677,12 +1872,35 @@ function terminalCsq(el) {
    CONNECT 19-20 s. Spannen mit Streuung; BUSY und NO CARRIER nicht belegt, angenommen. */
 const TERMINAL_PPP_DAUER = { connect: [10000, 20000], ppp: [600, 1000], ip: [9000, 12000], busy: [3000, 5000], nocarrier: [15000, 30000], timeout: 60000 };
 function terminalPppDauer(spanne) { return spanne[0] + crypto.getRandomValues(new Uint32Array(1))[0] % (spanne[1] - spanne[0] + 1); }
-function terminalPppEinwahl(vordergrund) {
-  const modem = { bereit: false, vordergrund, timer: null, link: null, versuche: 0 };
+/* konfig (Paket 3): Ergebnis von terminalPppKonfig (Peer-Datei und Connect-Skript, beim Start von pppd gelesen; S5) */
+function terminalPppEinwahl(vordergrund, konfig) {
+  const modem = { bereit: false, vordergrund, timer: null, link: null, versuche: 0, fehlschlaege: 0, konfig: konfig || terminalPppKonfigStandard() };
   TERMINAL_ZUSTAND.modem = modem;
   const ende = vordergrund ? terminalVordergrund(modem) : 0;
   terminalPppWahl(modem);
   return ende;
+}
+/* Konfiguration ohne Dateizugriff (nur als Rückfall, wenn kein Aufrufer gelesen hat): dieselben Werte wie die installierten Standards */
+function terminalPppKonfigStandard() {
+  const x = sysTexte();
+  return { peer: TERMINAL_PPP_PEER, k: { geraet: '/dev/ttyUSB0', persist: true, holdoff: TERMINAL_PPP_HOLDOFF / 1000, maxfail: 0, connect: '' },
+    chat: { woerter: sysChatWoerter(x.chat).woerter, timeout: null } };
+}
+/* Beim Start von pppd (S5): Peer-Datei prüfen und das Connect-Skript lesen. Ergebnis { konfig } oder { fehler: [Zeilen] } */
+async function terminalPppKonfig(peer) {
+  const p = await sysPppPeer(peer);
+  if (p.fehler) return p;
+  const k = p.konfig, aufruf = k.connect === null ? null : sysChatAufruf(k.connect);
+  let chat;
+  if (k.connect === null) chat = { ohne: true };                     /* kein Connect-Skript: kein Wählen */
+  else if (!aufruf) chat = { fremd: true };                          /* anderes Programm als chat: hier nicht ausführbar */
+  else if (aufruf.datei === null) chat = { woerter: aufruf.skript, timeout: aufruf.timeout };
+  else {
+    const r = await sysDateiLesen(aufruf.datei);
+    const w = r.fehler ? null : sysChatWoerter(r.text);
+    chat = r.fehler ? { meldung: aufruf.datei + ' -- open failed: ' + TERMINAL_VFS.fehlerText(r.fehler) } : w.fehler ? { meldung: w.fehler } : { woerter: w.woerter, timeout: aufruf.timeout };
+  }
+  return { konfig: { peer: peer, k: k, chat: chat } };
 }
 // Ein Wählversuch: jedes Mal ein neuer chat-Prozess (neue PID), pppd bleibt derselbe.
 function terminalPppWahl(modem) {
@@ -1693,8 +1911,17 @@ function terminalPppWahl(modem) {
   const oben = kestrelSichtbar(jetzt)[0] || null;
   const ausgang = terminalWahlausgang(oben ? oben.el : -90);
   if (t.satLink) clearInterval(t.satLink.timer);
+  const c = 'chat[' + S.chat + ']: ', d = 'pppd[' + S.pppd + ']: ', D = TERMINAL_PPP_DAUER, K = modem.konfig;
+  /* chat(8) gegen das simulierte Modem (terminal-sys.js, sysChatAblauf): Skript aus /etc/chatscripts, Nummer, ABORT, TIMEOUT */
+  let plan;
+  if (K.chat.woerter) {
+    plan = sysChatAblauf(K.chat.woerter, { praefix: c, csq: terminalCsq(oben ? oben.el : -1), ausgang: ausgang, nummer: TERMINAL_PPP_WAHL, timeout: K.chat.timeout,
+      dauer: { connect: terminalPppDauer(D.connect), busy: terminalPppDauer(D.busy), nocarrier: terminalPppDauer(D.nocarrier) } });
+  } else if (K.chat.meldung) plan = { schritte: [[0, [c + K.chat.meldung]]], verbunden: false, abbruch: true };
+  else if (K.chat.fremd) plan = { schritte: [[0, []]], verbunden: false, abbruch: true };
+  else plan = { schritte: [[0, []]], verbunden: false, abbruch: false, ende: 0 };   /* ohne Connect-Skript */
   let link = null;
-  if (ausgang === 'ok') {
+  if (plan.verbunden) {
     const u = kestrelUeberflug(oben.sat, jetzt);
     link = { modus: 'ppp', sat: oben.sat, von: u.von, bis: kestrelLinkEnde(u), los: u.bis, abgelaufen: false, timer: null };
     link.timer = setInterval(function () { if (terminalSatLinkAktiv(link)) terminalTakt(); }, 250);
@@ -1703,26 +1930,21 @@ function terminalPppWahl(modem) {
   modem.link = link;
   terminalKanalPromptSync();
   terminalSatAnzeige();
-  const c = 'chat[' + S.chat + ']: ', d = 'pppd[' + S.pppd + ']: ';
-  const wahl = 'ATDT' + TERMINAL_PPP_WAHL;
-  const schritte = [
-    [0, [c + 'abort on (BUSY)', c + 'abort on (NO CARRIER)', c + 'send (ATZ^M)', c + 'expect (OK)']],
-    [150, [c + 'ATZ^M^M', c + 'OK', c + ' -- got it', c + 'send (AT+CSQ^M)', c + 'timeout set to ' + TERMINAL_PPP_DAUER.timeout / 1000 + ' seconds', c + 'expect (OK)']],
-    [550, [c + 'AT+CSQ^M^M', c + terminalCsq(oben ? oben.el : -1) + '^M', c + '^M', c + 'OK', c + ' -- got it',
-      c + 'send (' + wahl + '^M)', c + 'expect (CONNECT)']]
-  ];
-  // chat(8): ABORT-Treffer " -- failed" und "Failed (<abort>)", Timeout "alarm" und "Failed" (chat.c); danach pppd.
-  const D = TERMINAL_PPP_DAUER;
-  if (ausgang === 'ok') schritte.push(
-    [terminalPppDauer(D.connect), [c + wahl + '^M^M', c + 'CONNECT 19200', c + ' -- got it']],
+  /* Schritte relativ zum vorigen (Zeitgeber), aus den absoluten Zeitpunkten des Plans */
+  const schritte = [];
+  let vorher = 0;
+  plan.schritte.forEach(function (x) { schritte.push([x[0] - vorher, x[1].slice()]); vorher = x[0]; });
+  const geraet = K.k.geraet || '/dev/ttyUSB0';
+  if (plan.abbruch) schritte[schritte.length - 1][1].push(d + 'Connect script failed');
+  else if (plan.verbunden) schritte.push(
     [100, [d + 'Serial connection established.']],
-    [terminalPppDauer(D.ppp), [d + 'Using interface ppp0', d + 'Connect: ppp0 <--> /dev/ttyUSB0']],
+    [terminalPppDauer(D.ppp), [d + 'Using interface ppp0', d + 'Connect: ppp0 <--> ' + geraet]],
     [terminalPppDauer(D.ip), [d + 'local  IP address ' + S.lokal, d + 'remote IP address ' + S.gegenstelle]]);
-  // Ohne Antwort bleibt die Echozeile unvollständig (sie endet erst mit dem Zeilenumbruch vor einer Antwort) und erscheint nicht.
-  else if (ausgang === 'alarm') schritte.push([D.timeout, [c + 'alarm', c + 'Failed', d + 'Connect script failed']]);
   else {
-    const grund = ausgang === 'busy' ? 'BUSY' : 'NO CARRIER';
-    schritte.push([terminalPppDauer(ausgang === 'busy' ? D.busy : D.nocarrier), [c + wahl + '^M^M', c + grund, c + ' -- failed', c + 'Failed (' + grund + ')', d + 'Connect script failed']]);
+    /* Connect-Skript ohne Träger beendet (oder keins): die Leitung steht, die Gegenstelle antwortet nicht. LCP gibt nach lcp-max-configure (10)
+       mal lcp-restart (3 s) auf (Standardwerte von pppd, angenommen 30 s). */
+    schritte.push([100, [d + 'Serial connection established.']], [terminalPppDauer(D.ppp), [d + 'Using interface ppp0', d + 'Connect: ppp0 <--> ' + geraet]],
+      [30000, [d + 'LCP: timeout sending Config-Requests', terminalPppEnde()]]);
   }
   const schritt = function (i) {
     if (t.modem !== modem || (link && !terminalSatLinkAktiv(link))) return;
@@ -1730,7 +1952,7 @@ function terminalPppWahl(modem) {
     zeilen.forEach(terminalPppLog);
     if (modem.vordergrund) terminalAusgabe(zeilen);
     // Nach CONNECT ist das Connect-Skript fertig; ab "Connect: ppp0 <--> …" besteht das PPP-Interface (LCP/IPCP).
-    if (zeilen.some(function (z) { return z.endsWith('CONNECT 19200'); })) { modem.phase = 'seriell'; terminalSatAnzeige(); }
+    if (zeilen.some(function (z) { return z.endsWith('CONNECT 19200') || z.endsWith('Serial connection established.'); })) { modem.phase = 'seriell'; terminalSatAnzeige(); }
     if (zeilen.some(function (z) { return z.includes('Connect: ppp0 <--> '); })) { modem.phase = 'ppp'; terminalSatAnzeige(); }
     if (i + 1 < schritte.length) {
       modem.timer = setTimeout(() => schritt(i + 1), schritte[i + 1][0]);
@@ -1738,21 +1960,36 @@ function terminalPppWahl(modem) {
     }
     modem.timer = null;
     if (!link) {
-      // Wahl gescheitert: mit persist und maxfail 0 bleibt pppd und wählt nach holdoff neu; updetach bleibt im Vordergrund.
+      /* Versuch gescheitert (pppd main.c): ohne persist oder nach maxfail erfolglosen Versuchen endet pppd ("Exit."), sonst neue Wahl nach holdoff */
+      modem.fehlschlaege++;
+      if (!K.k.persist || (K.k.maxfail > 0 && modem.fehlschlaege >= K.k.maxfail)) { terminalPppBeendet(modem, 8); return; }
       modem.holdoff = true; modem.phase = 'holdoff';
-      modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_HOLDOFF);
+      modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, terminalPppHoldoff(modem));
       terminalKanalPromptSync();
       terminalSatAnzeige();
       return;
     }
     // Verbunden: updetach löst sich vom Terminal, spätere Neuwahlen laufen im Hintergrund.
-    modem.bereit = true; modem.phase = 'up';
+    modem.bereit = true; modem.phase = 'up'; modem.fehlschlaege = 0;
     modem.vordergrund = false;
     terminalKanalPromptSync();
     terminalSatAnzeige();
     terminalVordergrundEnde(modem, 0);
   };
   schritt(0);
+}
+/* holdoff der Peer-Datei in ms (pppd: Sekunden) */
+function terminalPppHoldoff(modem) { const h = modem && modem.konfig ? modem.konfig.k.holdoff : TERMINAL_PPP_HOLDOFF / 1000; return Math.max(0, h) * 1000; }
+/* pppd beendet sich nach gescheiterter Wahl (ohne persist oder nach maxfail): "Exit.", Rückgabewert EXIT_CONNECT_FAILED (8) */
+function terminalPppBeendet(modem, code) {
+  const t = TERMINAL_ZUSTAND;
+  terminalPppLog('pppd[' + TERMINAL_SITZUNG.pppd + ']: Exit.');
+  if (modem.vordergrund) terminalAusgabe('pppd[' + TERMINAL_SITZUNG.pppd + ']: Exit.');
+  if (t.modem === modem) t.modem = null;
+  if (t.satLink) { clearInterval(t.satLink.timer); t.satLink = null; }
+  terminalKanalPromptSync();
+  terminalSatAnzeige();
+  terminalVordergrundEnde(modem, code);
 }
 /* Die Shell endet (exit in tmux): Ihr Vordergrundjob erhält SIGHUP.
    pppd vor dem Abkoppeln (updetach): pppd(8) NOTES, main.c: "Hangup (SIGHUP)", der laufende Versuch endet (chat erhält
@@ -1772,7 +2009,7 @@ function terminalShellSighup() {
     if (modem.phase === 'ppp' || modem.phase === 'seriell') {
       if (modem.phase === 'ppp') terminalPppLog(terminalPppEnde());
       modem.holdoff = true; modem.phase = 'holdoff';
-      modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, TERMINAL_PPP_HOLDOFF);
+      modem.timer = setTimeout(function () { if (t.modem === modem) terminalPppWahl(modem); }, terminalPppHoldoff(modem));
     } else terminalPppWahl(modem);
     terminalVordergrundEnde(modem, 5);
   }
@@ -1791,10 +2028,13 @@ async function terminalPppShell(befehl, arg, args = []) {
   if (befehl === 'predict') {
     // predict(1): -t <tlefile>, -p <sat> [start] (ein Überflug), -f <sat> [start [ende]] (Positionsdaten);
     // ohne -p/-f das interaktive Programm (hier die Verfolgung aller Satelliten, Ende mit Strg+C).
-    const o = terminalPredictOptionen(args);
-    if (o.fehler) { terminalAusgabe(o.fehler === 'usage' ? TERMINAL_PREDICT_USAGE : 'predict: ' + o.fehler); return o.fehler === 'usage' ? 2 : 1; }
+    /* Start über den gemeinsamen Ablauf (S5, Review 2 zu #139): Stand lesen, falls veraltet; -t vor der eigenen Datenbank */
+    const st = await terminalPredictStart(args);
+    if (st.abbruch) return 1;
+    if (st.fehler) return terminalPredictFehler(st);
+    const k = st.k, o = st.o;
     if (o.modus === 'live') {
-      const orbit = { fertig: null, timer: setInterval(terminalTakt, 250) };
+      const orbit = { fertig: null, konfig: k, timer: setInterval(terminalTakt, 250) };
       const ende = terminalVordergrund(orbit);
       t.orbitLive = orbit;
       terminalPppAnzeige();
@@ -1804,32 +2044,60 @@ async function terminalPppShell(befehl, arg, args = []) {
     const jetzt = Math.floor(Date.now() / 1000);
     if (o.modus === 'f') {
       const start = o.start ?? jetzt;
-      if (o.ende === undefined) { terminalAusgabe(terminalPppZeile(o.satObj, start * 1000)); return 0; }
+      if (o.ende === undefined) {
+        const z = kestrelMitPredict(k, function () { return terminalPppZeile(o.satObj, start * 1000); });
+        if (z === null) return terminalPredictFehler({ fehler: o.sat + ': no position at ' + start + ' (SGP4)' });
+        terminalAusgabe(z); return 0;
+      }
       const ende = o.ende.relativ ? start + o.ende.wert * (o.ende.minuten ? 60 : 1) : o.ende.wert;
       const schritt = o.ende.minuten ? 60 : 1;
       if (ende < start) return 0;
       const zeilen = [];
-      for (let z = start; z <= ende && zeilen.length < TERMINAL_PREDICT_MAX; z += schritt) zeilen.push(terminalPppZeile(o.satObj, z * 1000));
+      let ohne = null;
+      kestrelMitPredict(k, function () {
+        for (let z = start; z <= ende && zeilen.length < TERMINAL_PREDICT_MAX; z += schritt) { const zl = terminalPppZeile(o.satObj, z * 1000); if (zl === null) { ohne = z; break; } zeilen.push(zl); }
+      });
+      if (ohne !== null) { terminalAusgabe(zeilen); return terminalPredictFehler({ fehler: o.sat + ': no position at ' + ohne + ' (SGP4)' }); }
       const gekuerzt = Math.floor((ende - start) / schritt) + 1 > zeilen.length;
       terminalAusgabe(gekuerzt ? zeilen.concat('predict: output limited to ' + TERMINAL_PREDICT_MAX + ' lines') : zeilen);
       return 0;
     }
     // -p: Überflug ab Startzeit in Minutenschritten vom Aufgang bis zum Untergang (Schrittweite eigene Näherung).
-    const u = kestrelUeberflug(o.satObj, (o.start ?? jetzt) * 1000);
-    if (!u) return 0;
-    const zeiten = [];
-    for (let z = u.von; z < u.bis; z += 60000) zeiten.push(z);
-    zeiten.push(u.bis);
-    terminalAusgabe(zeiten.map(function (ms) { return terminalPppZeile(o.satObj, ms); }));
+    const aus = kestrelMitPredict(k, function () {
+      const u = kestrelUeberflug(o.satObj, (o.start ?? jetzt) * 1000);
+      if (!u) return null;
+      const zeiten = [];
+      for (let z = u.von; z < u.bis; z += 60000) zeiten.push(z);
+      zeiten.push(u.bis);
+      return zeiten.map(function (ms) { return terminalPppZeile(o.satObj, ms); });
+    });
+    if (!aus) return 0;
+    if (aus.includes(null)) { terminalAusgabe(aus.slice(0, aus.indexOf(null))); return terminalPredictFehler({ fehler: o.sat + ': no position during pass (SGP4)' }); }
+    terminalAusgabe(aus);
     return 0;
   }
   if (befehl === 'pppd' || befehl === 'pon') {
     // pon <peer> entspricht pppd call <peer> (pon(1)); updetach hält die Shell bis zur fertigen Verbindung an.
     const m = befehl === 'pon' ? /^(\S+)$/.exec(arg) : /^call (\S+)( updetach)?$/.exec(arg);
     if (!m) { terminalAusgabe(befehl === 'pon' ? 'usage: pon <peer>' : 'usage: pppd call <peer> [updetach]'); return 2; }
-    if (m[1] !== TERMINAL_PPP_PEER) { terminalAusgabe('pppd: unable to open /etc/ppp/peers/' + m[1] + ': No such file or directory'); return 2; }
-    if (t.modem) { terminalAusgabe('pppd: ' + TERMINAL_PPP_PEER + ' already running'); return 1; }
-    return terminalPppEinwahl(befehl === 'pppd' && !!m[2]);
+    if (t.modem) { terminalAusgabe('pppd: ' + t.modem.konfig.peer + ' already running'); return 1; }
+    /* Paket 3: pon prüft, ob es die Peer-Datei gibt (pon-Skript), pppd liest sie wie call (options_from_file); das Connect-Skript wird beim
+       Start gelesen. Mit den installierten Standards entsteht dabei keine Wartezeit außer dem Lesen der Dateien (A0). */
+    if (/(^|\/)\.\.(\/|$)|^\//.test(m[1])) { terminalAusgabe('pppd: call option value may not contain .. or start with /'); return 2; }
+    const version = t.version;
+    /* Stand aktuell (Anmeldung abgeschlossen, keine Änderung seither, auch nicht aus einem anderen Fenster): synchron wie bisher; sonst lesen */
+    if (!terminalSysAktuell()) { await terminalSysBereit(); if (t.version !== version) return 1; }
+    const stand = TERMINAL_SYS.ppp;
+    const fehlt = stand ? !stand.has(m[1]) : (await sysDateiStat('/etc/ppp/peers/' + m[1])).fehler;
+    if (befehl === 'pon' && fehlt) {
+      if (t.version === version) terminalAusgabe(['The file /etc/ppp/peers/' + m[1] + ' does not exist. Please create it or use', 'a command line argument to use another file in the /etc/ppp/peers/ directory.']);
+      return 1;
+    }
+    const k = stand ? (stand.get(m[1]) || { fehler: ["pppd: Can't open options file /etc/ppp/peers/" + m[1] + ': No such file or directory'] }) : await terminalPppKonfig(m[1]);
+    if (t.version !== version) return 1;
+    if (k.fehler) { terminalAusgabe(k.fehler); return 2; }   /* EXIT_OPTION_ERROR */
+    if (t.modem) { terminalAusgabe('pppd: ' + t.modem.konfig.peer + ' already running'); return 1; }
+    return terminalPppEinwahl(befehl === 'pppd' && !!m[2], k.konfig);
   }
   if (befehl === 'tail' && /^-n \d{1,2} \/var\/log\/syslog$/.test(arg)) {
     terminalSyslog(Number(arg.split(' ')[1]));
@@ -1843,54 +2111,92 @@ async function terminalPppShell(befehl, arg, args = []) {
       terminalAusgabe(args.length ? "poff: I could not find a pppd process for provider '" + args[0] + "'. None stopped." : 'poff: No pppd is running.  None stopped.');
       return 1;
     }
-    if (args.length && args[0] !== TERMINAL_PPP_PEER) { terminalAusgabe("poff: I could not find a pppd process for provider '" + args[0] + "'. None stopped."); return 1; }
+    if (args.length && args[0] !== t.modem.konfig.peer) { terminalAusgabe("poff: I could not find a pppd process for provider '" + args[0] + "'. None stopped."); return 1; }
     // Erfolg ist still; der Abbau steht im Syslog. Nur ein unerwarteter Abbruch meldet sich selbst in der Shell.
     terminalPppModemAus('Terminating on signal 15', false);
     return 0;
   }
   if (befehl === 'wg-quick') {
-    if (arg === 'up wg-sat') {
-      if (t.wgSat) { terminalAusgabe('wg-quick: wg-sat already exists'); return 1; }
+    /* Paket 3: Konfiguration aus /etc/wireguard/<if>.conf (wg-quick parse_options, wg setconf), Schlüssel über PostUp aus der Schlüsseldatei
+       (begrenzte Simulationsfunktion). Mit der installierten Standardkonfiguration Ablauf und Zeiten wie bisher (A0). */
+    const m = /^(up|down) ([a-zA-Z0-9_=+.-]{1,15})$/.exec(arg);
+    if (m && m[1] === 'up') {
+      const name = m[2], version = t.version;
+      if (!terminalSysAktuell()) { await terminalSysBereit(); if (t.version !== version) return 1; }
+      const stand = TERMINAL_SYS.wg;
+      /* Stand der Anmeldung (synchron wie bisher, A0); fehlt er (gerade geändert), werden die Dateien jetzt gelesen */
+      const vorbereitet = stand ? (stand.get(name) || { kf: { fehler: ['wg-quick: `/etc/wireguard/' + name + ".conf' does not exist"], phase: 'parse' } }) : await terminalWgVorbereiten(name);
+      if (t.version !== version) return 1;
+      const kf = vorbereitet.kf;
+      if (kf.fehler && kf.phase === 'parse') { terminalAusgabe(kf.fehler); return 1; }
+      if (kf.warnung) terminalAusgabe(kf.warnung);
+      if (t.wgSat) { terminalAusgabe('wg-quick: `' + name + "' already exists"); return 1; }
       if (!t.modem?.bereit || link?.modus !== 'ppp' || !terminalSatLinkAktiv(link)) { terminalAusgabe('wg-quick: ppp0 is not ready'); return 1; }
       {
-        const kennung = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
-        const interfaceSat = { bereit: false, handshake: null, lokal: kennung(), peer: kennung(), timer: null };
+        const interfaceSat = { name: name, bereit: false, handshake: null, lokal: null, konfig: kf.konfig || null, erreichbar: false, timer: null };
         t.wgSat = interfaceSat;
         const ende = terminalVordergrund(interfaceSat);
-        terminalAusgabe('[#] ip link add wg-sat type wireguard');
+        terminalAusgabe('[#] ip link add ' + name + ' type wireguard');
+        const abbau = function (zeilen) { t.wgSat = null; terminalAusgabe(zeilen.concat('[#] ip link delete dev ' + name)); terminalVordergrundEnde(interfaceSat, 1); terminalSatAnzeige(); };
         interfaceSat.timer = setTimeout(function () {
           if (t.wgSat !== interfaceSat) return;
           if (!t.modem?.bereit || !terminalSatLinkAktiv(link)) {
             t.wgSat = null;
-            terminalAusgabe(['wg-quick: ppp0: Network unreachable', '[#] ip link delete dev wg-sat']);
+            terminalAusgabe(['wg-quick: ppp0: Network unreachable', '[#] ip link delete dev ' + name]);
             terminalVordergrundEnde(interfaceSat, 1);
             return;
           }
+          /* wg setconf; bei Fehler beendet set -e das Skript, die EXIT-Falle (del_if) entfernt die Schnittstelle */
+          if (kf.fehler) { abbau(['[#] wg setconf ' + name + ' /dev/fd/63'].concat(kf.fehler)); return; }
+          const k = kf.konfig, zeilen = ['[#] wg setconf ' + name + ' /dev/fd/63'];
+          /* ip address add / ip link set mtu (iproute2 6.1.0): ungültige Werte beenden wg-quick (set -e), die EXIT-Falle baut ab */
+          for (const a of k.adressen) {
+            zeilen.push('[#] ip ' + (a.includes(':') ? '-6' : '-4') + ' address add ' + a + ' dev ' + name);
+            if (!sysWgAdresseGueltig(a)) { abbau(zeilen.concat('Error: ' + (a.includes(':') ? 'inet6' : 'inet') + ' prefix is expected rather than "' + a + '".')); return; }
+          }
+          zeilen.push('[#] ip link set mtu ' + (k.mtu || 1420) + ' up dev ' + name);   /* ohne MTU: 1420 angenommen (Pfad-MTU 1500 abzüglich 80) */
+          if (k.mtu && !sysWgMtuGueltig(k.mtu)) { abbau(zeilen.concat('Error: argument "' + k.mtu + '" is wrong: Invalid "mtu" value')); return; }
+          let privat = k.privat;
+          for (const r of vorbereitet.post) {
+            zeilen.push(...r.zeilen);
+            if (r.fehler) { abbau(zeilen); return; }
+            if (r.privat !== undefined) privat = r.privat;
+          }
+          interfaceSat.lokal = privat ? sysB64(sysX25519Basis(sysB64Bytes(privat))) : null;
+          interfaceSat.erreichbar = sysWgErreichbar(k, privat);
           interfaceSat.bereit = true;
-          terminalAusgabe(['[#] wg setconf wg-sat /dev/fd/63', '[#] ip -4 address add 10.200.200.2/24 dev wg-sat',
-            '[#] ip link set mtu 1280 up dev wg-sat']);
+          terminalAusgabe(zeilen);
           terminalVordergrundEnde(interfaceSat, 0);
         }, 650);
         return ende;
       }
     }
-    if (arg === 'down wg-sat') {
-      if (!t.wgSat) { terminalAusgabe('wg-quick: wg-sat is not a WireGuard interface'); return 1; }
+    if (m && m[1] === 'down') {
+      const name = m[2];
+      if (!t.wgSat || t.wgSat.name !== name) { terminalAusgabe('wg-quick: `' + name + "' is not a WireGuard interface"); return 1; }
       clearTimeout(t.wgSat.timer); terminalVordergrundEnde(t.wgSat, 1); t.wgSat = null;
-      terminalAusgabe('[#] ip link delete dev wg-sat'); terminalSatAnzeige();
+      terminalAusgabe('[#] ip link delete dev ' + name); terminalSatAnzeige();
       return 0;
     }
     terminalAusgabe('usage: wg-quick [ up | down ] wg-sat');
     return 2;
   }
   if (befehl === 'wg') {
-    if (arg !== 'show wg-sat') { terminalAusgabe('usage: wg show wg-sat'); return 2; }
-    if (!t.wgSat) { terminalAusgabe('Unable to access interface: No such device'); return 1; }
-    if (!t.wgSat.bereit) { terminalAusgabe('wg-sat: configuring'); return 1; }
+    const m = /^show ([a-zA-Z0-9_=+.-]{1,15})$/.exec(arg);
+    if (!m) { terminalAusgabe('usage: wg show wg-sat'); return 2; }
+    if (!t.wgSat || t.wgSat.name !== m[1]) { terminalAusgabe('Unable to access interface: No such device'); return 1; }
+    if (!t.wgSat.bereit) { terminalAusgabe(m[1] + ': configuring'); return 1; }
     {
-      const zeilen = ['interface: wg-sat', '  public key: ' + t.wgSat.lokal, '  private key: (hidden)', '  listening port: 51820',
-        '', 'peer: ' + t.wgSat.peer, '  endpoint: 192.0.2.42:51820', '  allowed ips: 10.200.200.0/24'];
-      if (t.wgSat.handshake !== null) zeilen.push('  latest handshake: ' + Math.floor((Date.now() - t.wgSat.handshake) / 1000) + ' seconds ago');
+      /* Anzeige wie wg show: öffentlicher Schlüssel aus dem privaten (X25519), privater verborgen; Gegenstellen aus der Konfiguration */
+      const w = t.wgSat, k = w.konfig, zeilen = ['interface: ' + w.name];
+      if (w.lokal) zeilen.push('  public key: ' + w.lokal, '  private key: (hidden)');
+      zeilen.push('  listening port: ' + (k.port || 51820));
+      k.peers.forEach(function (pe) {
+        zeilen.push('', 'peer: ' + pe.publicKey);
+        if (pe.endpunkt) zeilen.push('  endpoint: ' + pe.endpunkt);
+        zeilen.push('  allowed ips: ' + (pe.erlaubt.length ? pe.erlaubt.join(', ') : '(none)'));
+        if (pe.publicKey === SYS_WG.gegenstelle && w.handshake !== null) zeilen.push('  latest handshake: ' + Math.floor((Date.now() - w.handshake) / 1000) + ' seconds ago');
+      });
       terminalAusgabe(zeilen);
     }
     return 0;
@@ -1912,6 +2218,8 @@ async function terminalPppShell(befehl, arg, args = []) {
       terminalPppChatLog(chat, 'Connecting with account ' + chat.account + ' as ' + chat.jid); // cl_ev_connect_account
       chat.anmeldung = setTimeout(function () {
         if (t.kanal !== chat || chat.phase !== 'anmeldung' || !terminalSatLinkAktiv(link)) return;
+        /* Ohne Handshake (eigene, abweichende WireGuard-Konfiguration, S6) kommt keine Verbindung zustande: "Login failed." (server_events.c) */
+        if (!t.wgSat?.erreichbar) { chat.phase = 'offline'; terminalPppChatLog(chat, 'Login failed.'); terminalKanalPromptSync(); return; }
         chat.phase = 'eingabe';
         t.wgSat.handshake = Date.now();
         terminalPppChatLog(chat, chat.jid + ' logged in successfully, online (priority 0).'); // cons_show_login_success
@@ -2531,7 +2839,7 @@ function terminalTmuxStatus() {
     '"terminal" ' + z(jetzt.getUTCHours()) + ':' + z(jetzt.getUTCMinutes()) + ' ' + z(jetzt.getUTCDate()) + '-' + mon + '-' + String(jetzt.getUTCFullYear()).slice(2);
 }
 function terminalTmuxBereichText(bereich) {
-  if (bereich.art === 'predict') return terminalPredictLive(Date.now());
+  if (bereich.art === 'predict') return terminalPredictLive(Date.now(), bereich.konfig);
   return bereich.zeilen.join('\n');
 }
 function terminalTmuxPaneAnzeige() {
@@ -2557,7 +2865,7 @@ function terminalTmuxPaneAnzeige() {
           b.el.textContent = b.zeilen.slice(-k).join('\n');
           while (k > 1 && b.el.scrollHeight > b.el.clientHeight) b.el.textContent = b.zeilen.slice(-(--k)).join('\n');
         }
-      } else terminalPredictSetzen(b.el, terminalZeitstand());
+      } else terminalPredictSetzen(b.el, terminalZeitstand(), b.konfig);
     });
   }
   const input = $('profil-terminal-eingabe');
@@ -2612,20 +2920,20 @@ function terminalTmuxPlogZeile(zeile) {
   terminalTmuxPaneAnzeige();
 }
 // Befehlsfolgen wie in tmux(1): "tmux new \; split-window -bd predict" (Trenner ";" als eigenes Wort).
-function terminalTmux(args) {
+async function terminalTmux(args) {
   const teile = [[]];
   for (const a of args) { if (a === ';') teile.push([]); else teile.at(-1).push(a); }
   if (teile.length === 1) return terminalTmuxEinzeln(args);
   let code = 0;
   for (let i = 0; i < teile.length; i++) {
-    if (!teile[i].length && i === 0) { code = terminalTmuxEinzeln([]); if (code !== 0) return code; continue; }
+    if (!teile[i].length && i === 0) { code = await terminalTmuxEinzeln([]); if (code !== 0) return code; continue; }
     if (!teile[i].length) continue;
-    code = terminalTmuxEinzeln(teile[i]);
+    code = await terminalTmuxEinzeln(teile[i]);
     if (code !== 0) return code;
   }
   return code;
 }
-function terminalTmuxEinzeln(args) {
+async function terminalTmuxEinzeln(args) {
   const t = TERMINAL_ZUSTAND, unter = args[0] === undefined ? 'new-session' : args[0];
   const sitzungsBefehle = ['new-session', 'new', 'split-window', 'splitw', 'kill-pane', 'killp', 'kill-server'];
   if (!sitzungsBefehle.includes(unter)) { terminalAusgabe('unknown command: ' + unter); return 1; }
@@ -2661,8 +2969,13 @@ function terminalTmuxEinzeln(args) {
   // Alle anderen enden sofort, ihr Bereich schließt sich wieder.
   let bereich = null;
   if (befehl[0] === 'predict') {
-    const o = terminalPredictOptionen(befehl.slice(1));
-    if (o && !o.fehler && o.modus === 'live') bereich = { art: 'predict', timer: setInterval(terminalTakt, 250) };
+    /* Derselbe Start wie direkt (Review 2 zu #139): Stand vor dem Öffnen lesen, falls veraltet; -t wird geprüft. Die Konfiguration gehört
+       allein diesem Bereich (bereich.konfig); endet die Sitzung oder tmux während des Lesens, entsteht kein Bereich. */
+    const tmux = t.tmux, version = t.version, st = await terminalPredictStart(befehl.slice(1));
+    if (st.abbruch || t.tmux !== tmux || t.version !== version) return 1;
+    if (st.fehler) return terminalPredictFehler(st);
+    if (t.tmux.panes.length >= TERMINAL_TMUX_BEREICHE) { terminalAusgabe('create pane failed: pane too small'); return 1; }
+    if (st.o.modus === 'live') bereich = { art: 'predict', konfig: st.k, timer: setInterval(terminalTakt, 250) };
   } else if (befehl[0] === 'plog') {
     const opt = terminalPlogTail(befehl.slice(1));
     if (!opt.fehler && opt.folgen) {
@@ -2705,9 +3018,9 @@ function terminalLeserNurVfs(befehl, args) {
   return op.length > 0 && op.every(terminalVfsPfad);
 }
 /* Pfad auf einem Anbieter mit eigenem Leser über die ctx-Schnittstelle (VFS und /intel); das Archiv behält seinen alten Pfad */
-function terminalVfsPfad(name) { const seg = terminalShellPfad(name); return !!seg && (TERMINAL_VFS.zugehoerig(seg) || seg[0] === 'intel'); }
+function terminalVfsPfad(name) { const seg = terminalShellPfad(name); return !!seg && (TERMINAL_VFS.zugehoerig(seg) || seg[0] === 'intel' || seg[0] === 'usr'); }
 function terminalUsage(text) { terminalAusgabe('usage: ' + text); return 2; }
-async function terminalDateiAusfuehren(befehl, arg, args) {
+async function terminalDateiAusfuehren(befehl, arg, args, admin) {
   const t = TERMINAL_ZUSTAND;
   if (t.dateiLaeuft) { terminalAusgabe('Datenbankanfrage läuft bereits'); return 1; }
   t.dateiLaeuft = true;
@@ -2716,7 +3029,8 @@ async function terminalDateiAusfuehren(befehl, arg, args) {
     const fn = befehl === 'cd' ? terminalBefehlCd : befehl === 'ls' ? terminalBefehlLs :
       (befehl === 'cat' || befehl === 'head' || befehl === 'tail') && terminalLeserNurVfs(befehl, args) ? terminalLeser(befehl) :
       terminalBefehlDirekt(befehl);
-    return fn ? await terminalBefehlLauf(fn, args || [], arg, version) : await terminalDateiBefehl(befehl, arg, version);
+    if (admin && (!fn || befehl === 'cd')) { terminalAusgabe('sudo: ' + befehl + ': not supported in Shadow Terminal'); return 1; }
+    return fn ? await terminalBefehlLauf(fn, args || [], arg, version, admin ? TERMINAL_FS_ADMIN : null) : await terminalDateiBefehl(befehl, arg, version);
   } catch (e) {
     if (t.version === version) terminalAusgabe('Dateioperation fehlgeschlagen');
     return 1;
@@ -3231,12 +3545,20 @@ async function terminalSudo(args) {
   if (!args.length) { terminalAusgabe(TERMINAL_SUDO_USAGE); return 1; }
   const befehl = args[0], eintrag = terminalBefehlEintrag(befehl), rest = args.slice(1);
   if (!eintrag) { terminalAusgabe('sudo: ' + befehl + ': command not found'); return 1; }
+  /* Systemverwaltung (Paket 3, S1): Dateibefehle mit Leserechten auf alles im VFS und Schreibrecht nur unter /etc; Kennwort bei jedem Aufruf
+     (wie bisher ohne Zwischenspeicher). Getrennt davon die Rechercheberechtigung (map, open: Entsperren manuell gesperrter Dossiers). */
+  if (TERMINAL_SUDO_ADMIN.has(befehl)) {
+    const ok = await terminalSudoKennwort();
+    if (ok !== true) return ok === 'abbruch' ? 130 : 1;
+    return terminalDateiAusfuehren(befehl, terminalArgText(rest), rest, true);
+  }
   if (befehl !== 'map' && befehl !== 'open') {
     terminalAusgabe('sudo: ' + befehl + ': not supported in Shadow Terminal');
     return 1;
   }
   return terminalNavigation(befehl, rest, true);
 }
+const TERMINAL_SUDO_ADMIN = new Set(['nano', 'cp', 'mv', 'rm', 'mkdir', 'rmdir', 'touch', 'cat', 'head', 'tail', 'ls']);
 /* Verdeckte Eingabe: die Zeichen landen nur in TERMINAL_ZUSTAND.sudo.puffer, nie im Eingabefeld, im Verlauf oder in der Ausgabe. */
 function terminalSudoKennwort() {
   return new Promise(function (fertig) {
@@ -3307,8 +3629,21 @@ const TERMINAL_TABELLE = [
   { name: 'help', aus: function (args, arg) { if (arg) return terminalUsage('help'); terminalAusgabe(terminalHilfe()); return 0; } },
   { name: 'pwd', hilfe: [[0, 2, 'pwd']], aus: function (args, arg) { return terminalBefehlLauf(terminalBefehlPwd, args, arg, TERMINAL_ZUSTAND.version); } },
   { name: 'whoami', hilfe: [[0, 10, 'whoami']], aus: function (args, arg) { if (arg) return terminalUsage('whoami'); terminalAusgabe(TERMINAL_BENUTZER); return 0; } },
-  { name: 'uname', hilfe: [[0, 11, 'uname -a']], tab: { art: 'optionen', werte: ['-a'] },
-    aus: function (args, arg) { if (arg !== '-a') return terminalUsage('uname -a'); terminalAusgabe(TERMINAL_UBUNTU); return 0; } },
+  { name: 'uname', hilfe: [[0, 11, 'uname [-a|-n]']], tab: { art: 'optionen', werte: ['-a'] },   /* Tab wie bisher; -n steht in der Hilfe */
+    aus: async function (args, arg) {
+      if (arg === '') { terminalAusgabe('Linux'); return 0; }
+      if (TERMINAL_SYS.sitzung !== terminalSysSitzung || !TERMINAL_SYS.bereit) await terminalSysBereit();   /* Name dieser Sitzung */
+      if (arg === '-n') { terminalAusgabe(TERMINAL_SYS.hostname); return 0; }
+      if (arg !== '-a') return terminalUsage('uname [-a|-n]');
+      terminalAusgabe(terminalUname()); return 0;
+    } },
+  /* hostname(1): ohne Argument der aktive Name; Setzen nur als root (hier nie; dauerhaft über /etc/hostname, wirksam ab der nächsten Anmeldung) */
+  { name: 'hostname', hilfe: [[0, 11.5, 'hostname']], aus: async function (args) {
+    if (TERMINAL_SYS.sitzung !== terminalSysSitzung || !TERMINAL_SYS.bereit) await terminalSysBereit();
+    if (!args.length) { terminalAusgabe(TERMINAL_SYS.hostname); return 0; }
+    if (args.length === 1 && args[0][0] !== '-') { terminalAusgabe('hostname: you must be root to change the host name'); return 1; }
+    return terminalUsage('hostname');
+  } },
   { name: 'date', hilfe: [[0, 12, 'date [+%s]']], aus: function (args, arg) {
     if (arg === '+%s') { terminalAusgabe(String(Math.floor(Date.now() / 1000))); return 0; }
     if (arg) return terminalUsage('date');
@@ -3363,6 +3698,20 @@ const TERMINAL_TABELLE = [
   { name: 'mv', hilfe: [[0, 6.96, 'mv <src>... <dest>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('mv') },
   { name: 'nano', hilfe: [[0, 6.97, 'nano <file>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('nano') },
   { name: 'readlink', hilfe: [[0, 6.975, 'readlink <link>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('readlink') },
+  /* Dossiernotiz löschen (Paket 3, Ergänzung): nur im Verzeichnis eines Dossiers unter /intel, gezielt nach Kennung; dieselbe geprüfte Aktion wie
+     in der Oberfläche (Sperre, dauerhafte Speicherung mit Rücknahme, Protokoll). Die Datei notes bleibt schreibgeschützt (außer Anhängen). */
+  { name: 'notes', hilfe: [[0, 6.976, 'notes delete <DN-nnn>']], tab: { art: 'fest', werte: ['delete DN-'] }, aus: function (args) {
+    if (args.length !== 2 || args[0] !== 'delete' || !/^DN-\d{3,}$/.test(args[1])) return terminalUsage('notes delete <DN-nnn>');
+    const seg = terminalArbeitsverzeichnis().split('/').filter(Boolean), dn = args[1];
+    const o = seg[0] === 'intel' && seg[1] === 'dossiers' && seg.length >= 4 ? INTEL.objekt(seg.slice(1)) : null;
+    if (o && o.fehler) { terminalAusgabe('notes: ' + dn + ': Permission denied'); return 1; }
+    if (!o || !o.objekt || o.objekt.art !== 'dossier') { terminalAusgabe('notes: not in a dossier directory (cd /intel/dossiers/<type>/<ID>)'); return 1; }
+    const r = dossierNotizLoeschenDauerhaft(o.objekt.id, dn, 'Terminal');
+    if (!r.fehler) return 0;
+    terminalAusgabe(r.inkonsistent ? 'notes: ' + dn + ': Input/output error (storage could not be restored; the saved state may be inconsistent)'
+      : 'notes: ' + dn + ': ' + (r.fehler === 'ENOENT' ? 'No such note' : TERMINAL_VFS.fehlerText(r.fehler)));
+    return 1;
+  } },
   { name: 'home-backup', hilfe: [[0, 6.98, 'home-backup [list]']], tab: { art: 'optionen', werte: ['list'] }, aus: TERMINAL_DATEI('home-backup') },
   { name: 'home-restore', hilfe: [[0, 6.985, 'home-restore [--yes] [name]']], aus: TERMINAL_DATEI('home-restore') },
   { name: 'home-import', hilfe: [[0, 6.987, 'home-import [--yes]']], aus: TERMINAL_DATEI('home-import') },
@@ -3532,7 +3881,7 @@ async function terminalTab(lauf, m) {
   }
   if (tab.art === 'predict') {
     let rest = arg, kopf = 'predict ';
-    const vorgabe = [['-t'], [TERMINAL_PPP_DATEI], ['-p'], kestrelSats().map(function (x) { return x.name; })];
+    const pk = terminalPredictKonfig(), vorgabe = [['-t'], [TERMINAL_PPP_DATEI], ['-p'], (pk.sats || kestrelSats()).map(function (x) { return x.name; })];
     for (let i = 0; i < vorgabe.length; i++) {
       const liste = i === 2 && /^-f(?:\s|$)/.test(rest) ? ['-f'] : vorgabe[i];
       const wort = liste.find(function (w) { return rest.startsWith(w) && /^\s+/.test(rest.slice(w.length)); });
@@ -3589,9 +3938,9 @@ async function terminalTab(lauf, m) {
     fertig(kopfB + anfang, pfad, dateien, function (x) { return x + anfang; });
     return;
   }
-  if (TERMINAL_VFS.zugehoerig(teile)) {
+  if (TERMINAL_VFS.zugehoerig(teile) || teile[0] === 'usr') {
     await terminalVfsBereit();
-    const r = await TERMINAL_VFS.readdir(teile);
+    const r = await TERMINAL_FS.readdir(teile);   /* VFS mit Rechten des Benutzers, /usr als Anbieter "paket" (Paket 3) */
     if (lauf.nurVorschlag ? !terminalVorschlagGueltig(lauf) : !terminalTabGueltig(lauf)) return;
     if (r.fehler) return;
     if (lauf.nurVorschlag) lauf.fertigLs = true;
@@ -4043,6 +4392,7 @@ function terminalKonsoleOeffnen() {
   }
   if (!TERMINAL_ZUSTAND.offen) terminalKonsoleFokus = document.activeElement;
   TERMINAL_ZUSTAND.offen = true;
+  void terminalVfsBereit();   /* Anmeldung: Systemdateien, Hostname und Einwahlkonfiguration bereitstellen (Paket 3) */
   konsole.hidden = false;
   if (konsole.classList.contains('minimiert')) $('profil-terminal-minimieren').click();
   terminalKonsoleLayout();

@@ -310,7 +310,7 @@ async function terminalBefehlReadlink(ctx) {
 }
 
 /* ---- Umleitung ---- */
-const TERMINAL_UMLEITBAR = new Set(['echo', 'pwd', 'ls', 'cat', 'head', 'tail', 'date', 'whoami', 'uname', 'true', 'false', 'touch', 'mkdir', 'rm', 'rmdir', 'cp', 'mv']);
+const TERMINAL_UMLEITBAR = new Set(['echo', 'pwd', 'ls', 'cat', 'head', 'tail', 'date', 'whoami', 'uname', 'hostname', 'true', 'false', 'touch', 'mkdir', 'rm', 'rmdir', 'cp', 'mv']);
 /* Umleitung mit gepufferter Ausgabe nur für lesende, seiteneffektfreie Befehle (Review #138): schreibende Befehle (touch, mkdir, rm, rmdir,
    cp, mv) werden mit Umleitung vor jeder Ausführung abgewiesen; ohne Umleitung arbeiten sie unverändert */
 const TERMINAL_UMLEITBAR_SCHREIBEND = new Set(['touch', 'mkdir', 'rm', 'rmdir', 'cp', 'mv']);
@@ -402,7 +402,8 @@ async function terminalUmgeleitet(woerter, um, status) {
   }
   let res;
   const gelesen = [];
-  const einfach = { echo: function () { return [args.join(' ')]; }, whoami: function () { return [TERMINAL_BENUTZER]; }, uname: function () { return args.length === 1 && args[0] === '-a' ? [TERMINAL_UBUNTU] : null; },
+  const einfach = { echo: function () { return [args.join(' ')]; }, whoami: function () { return [TERMINAL_BENUTZER]; }, uname: function () { return !args.length ? ['Linux'] : args.length === 1 && args[0] === '-a' ? [terminalUname()] : args.length === 1 && args[0] === '-n' ? [TERMINAL_SYS.hostname] : null; },
+    hostname: function () { return args.length ? null : [TERMINAL_SYS.hostname]; },
     date: function () { return args.length ? null : [fmtZ(new Date())]; }, true: function () { return args.length ? null : []; }, false: function () { return args.length ? null : []; } };
   if (einfach[befehl]) {
     const zeilen = einfach[befehl]();
@@ -535,7 +536,7 @@ async function terminalBefehlNano(ctx) {
       const stand = version, text = feld.value;
       /* Pfad vor jedem Schreiben neu prüfen und binden (der Editor kann lange offen sein) */
       const pr = await terminalSegPruefen(ctx, seg, { fehltVerzeichnis: 'EISDIR' });
-      const r = pr ? await TERMINAL_FS.schreiben(seg, text, {}) : { fehler: ctx.segFehler };
+      const r = pr ? await ctx.fs.schreiben(seg, text, {}) : { fehler: ctx.segFehler };   /* ctx.fs: mit sudo die Systemverwaltung */
       speichert = false;
       if (r.fehler) { meldung('Error writing ' + name + ': ' + terminalDateiFehlerText(r.fehler)); return false; }
       neu = false;
@@ -597,58 +598,116 @@ async function terminalHomeHash(text) {
 }
 /* Format 2 (Review #137): jeder Eintrag nennt nur seinen Namen und den Index seines Elternverzeichnisses (-1: /home/raizo), statt den ganzen
    relativen Pfad zu wiederholen. So bleibt jeder gültige Bestand im Größenvertrag (5000 Knoten mit Namen bis 255 Bytes bei beliebiger Tiefe).
-   Format 1 (Pfade) wird weiterhin gelesen. */
-async function terminalHomePaket() {
-  const ex = await TERMINAL_VFS.exportieren();
-  if (ex.fehler) return { fehler: ex.fehler };
-  const index = new Map([['', -1]]), eintraege = ex.eintraege.map(function (e, i) {
+   Format 3 (Paket 3, S2): zusätzlich "etc" im selben Indexformat mit Eigentümer (uid 0 oder 1000) und eigenem Manifest (manifest.etc), damit
+   Systemkonfiguration und WireGuard-Schlüssel mitgesichert werden. Formate 1 und 2 werden weiterhin gelesen (dann nur /home/raizo). */
+function terminalHomeIndex(liste, mitUid) {
+  const index = new Map([['', -1]]);
+  return liste.map(function (e, i) {
     const teile = e.pfad.split('/'), name = teile.pop();
     index.set(e.pfad, i);
     const x = { eltern: index.get(teile.join('/')), name: name, typ: e.typ, modus: e.modus, erstellt: e.erstellt, geaendert: e.geaendert };
+    if (mitUid) x.uid = e.uid;
     if (e.typ === 'file') x.inhalt = e.inhalt;
     return x;
   });
-  const koerper = JSON.stringify(eintraege), summe = await terminalHomeHash(koerper);
-  if (!summe) return { fehler: 'EIO' };
-  const bytes = eintraege.reduce(function (s, e) { return s + (e.typ === 'file' ? new TextEncoder().encode(e.inhalt).length : 0); }, 0);
-  const paket = { format: TERMINAL_HOME_FORMAT, version: 2, erstellt: new Date().toISOString(),
-    manifest: { eintraege: eintraege.length, bytes: bytes, sha256: summe }, eintraege: eintraege };
+}
+function terminalHomeBytes(liste) { return liste.reduce(function (s, e) { return s + (e.typ === 'file' ? new TextEncoder().encode(e.inhalt).length : 0); }, 0); }
+async function terminalHomePaket(nurHome) {
+  const ex = await TERMINAL_VFS.exportieren();
+  if (ex.fehler) return { fehler: ex.fehler };
+  const eintraege = terminalHomeIndex(ex.eintraege, false), etc = terminalHomeIndex(ex.etc || [], true);
+  if (nurHome) {   /* home-export --home: Format 2 ohne /etc (kein privater Schlüssel in der Datei) */
+    const summe2 = await terminalHomeHash(JSON.stringify(eintraege));
+    if (!summe2) return { fehler: 'EIO' };
+    const paket2 = { format: TERMINAL_HOME_FORMAT, version: 2, erstellt: new Date().toISOString(), manifest: { eintraege: eintraege.length, bytes: terminalHomeBytes(eintraege), sha256: summe2 }, eintraege: eintraege };
+    return { paket: paket2, text: JSON.stringify(paket2), gen: ex.gen };
+  }
+  const summe = await terminalHomeHash(JSON.stringify(eintraege)), summeEtc = await terminalHomeHash(JSON.stringify(etc));
+  if (!summe || !summeEtc) return { fehler: 'EIO' };
+  const paket = { format: TERMINAL_HOME_FORMAT, version: 3, erstellt: new Date().toISOString(),
+    manifest: { eintraege: eintraege.length, bytes: terminalHomeBytes(eintraege), sha256: summe, etc: { eintraege: etc.length, bytes: terminalHomeBytes(etc), sha256: summeEtc } },
+    eintraege: eintraege, etc: etc };
   return { paket: paket, text: JSON.stringify(paket), gen: ex.gen };
+}
+/* Index-Format -> Pfadliste; null bei ungültigem Elternindex oder Namen */
+function terminalHomePfade(liste) {
+  const pfade = [];
+  for (let i = 0; i < liste.length; i++) {
+    const e = liste[i];
+    if (!e || !Number.isInteger(e.eltern) || e.eltern < -1 || e.eltern >= i || typeof e.name !== 'string' || !e.name || e.name.includes('/')) return null;
+    pfade.push(e.eltern === -1 ? e.name : pfade[e.eltern] + '/' + e.name);
+  }
+  return liste.map(function (e, i) { const x = { pfad: pfade[i], typ: e.typ, modus: e.modus, erstellt: e.erstellt, geaendert: e.geaendert }; if ('uid' in e) x.uid = e.uid; if ('inhalt' in e) x.inhalt = e.inhalt; return x; });
+}
+/* Einträge eines Bereichs prüfen (Namen, Tiefe samt Präfix, Eltern, Arten, Grenzen); Rückgabe { bytes } oder { fehler } */
+function terminalHomeBereichPruefen(liste, praefix, mitUid) {
+  const g = TERMINAL_VFS.GRENZE, art = new Map([['', 'dir']]);
+  let summe = 0;
+  for (const e of liste) {
+    if (!e || typeof e.pfad !== 'string' || !e.pfad || (e.typ !== 'dir' && e.typ !== 'file') || !Number.isInteger(e.modus) || e.modus < 0 || e.modus > 0o7777 ||
+      !Number.isFinite(e.erstellt) || !Number.isFinite(e.geaendert) || (mitUid && e.uid !== 0 && e.uid !== 1000)) return { fehler: 'not a valid backup (entry)' };
+    /* Rechtevertrag für /etc (Review #139): alles gehört root; das Verzeichnis /etc/wireguard ohne Rechte für andere (es schützt Schlüssel und
+       Konfiguration darin, wie 0700 unter Linux; Dateien darin dürfen wie mit umask 022 angelegt 0644 haben) */
+    if (mitUid && (e.uid !== 0 || (e.pfad === 'wireguard' && (e.typ !== 'dir' || (e.modus & 0o007))))) return { fehler: 'not a valid backup (owner or permissions in /etc)' };
+    if (e.typ === 'file' && typeof e.inhalt !== 'string') return { fehler: 'not a valid backup (entry)' };
+    const teile = e.pfad.split('/');
+    /* Namen und Tiefe wie bei jeder Operation (einschließlich des Präfixes); der Elternpfad muss ein bereits aufgeführtes VERZEICHNIS sein */
+    if (TERMINAL_VFS.pfadFehler(praefix.concat(teile)) || art.has(e.pfad) || art.get(teile.slice(0, -1).join('/')) !== 'dir') return { fehler: 'not a valid backup (path)' };
+    art.set(e.pfad, e.typ);
+    if (e.typ === 'file') { const b = new TextEncoder().encode(e.inhalt).length; if (b > g.datei) return { fehler: 'backup exceeds the limits of this file system' }; summe += b; }
+  }
+  return { bytes: summe };
 }
 /* Vollständige Prüfung vor jeder Wiederherstellung; nichts wird verändert, bevor alles gültig ist. */
 async function terminalHomePruefen(text) {
   let p;
   try { p = JSON.parse(text); } catch (e) { return { fehler: 'not a valid backup (unreadable)' }; }
-  if (!p || p.format !== TERMINAL_HOME_FORMAT || (p.version !== 1 && p.version !== 2) || !Array.isArray(p.eintraege) || !p.manifest) return { fehler: 'not a valid backup (format)' };
-  const koerper = JSON.stringify(p.eintraege);
-  if ((await terminalHomeHash(koerper)) !== p.manifest.sha256) return { fehler: 'backup is damaged (checksum mismatch)' };
+  if (!p || p.format !== TERMINAL_HOME_FORMAT || ![1, 2, 3].includes(p.version) || !Array.isArray(p.eintraege) || !p.manifest) return { fehler: 'not a valid backup (format)' };
+  if ((await terminalHomeHash(JSON.stringify(p.eintraege))) !== p.manifest.sha256) return { fehler: 'backup is damaged (checksum mismatch)' };
   if (p.manifest.eintraege !== p.eintraege.length) return { fehler: 'backup is damaged (entry count)' };
-  const g = TERMINAL_VFS.GRENZE, art = new Map([['', 'dir']]);
-  let summe = 0;
-  if (p.eintraege.length > g.knoten) return { fehler: 'backup exceeds the limits of this file system' };
-  /* Format 2 -> Pfade: der Elternindex muss auf einen FRÜHEREN Eintrag zeigen; der Name ist ein einzelner gültiger Name */
-  if (p.version === 2) {
-    const pfade = [];
-    for (let i = 0; i < p.eintraege.length; i++) {
-      const e = p.eintraege[i];
-      if (!e || !Number.isInteger(e.eltern) || e.eltern < -1 || e.eltern >= i || typeof e.name !== 'string' || !e.name || e.name.includes('/')) return { fehler: 'not a valid backup (path)' };
-      pfade.push(e.eltern === -1 ? e.name : pfade[e.eltern] + '/' + e.name);
-    }
-    p.eintraegeV1 = p.eintraege.map(function (e, i) { const x = { pfad: pfade[i], typ: e.typ, modus: e.modus, erstellt: e.erstellt, geaendert: e.geaendert }; if ('inhalt' in e) x.inhalt = e.inhalt; return x; });
-  } else p.eintraegeV1 = p.eintraege;
-  for (const e of p.eintraegeV1) {
-    if (!e || typeof e.pfad !== 'string' || !e.pfad || (e.typ !== 'dir' && e.typ !== 'file') || !Number.isInteger(e.modus) || e.modus < 0 || e.modus > 0o7777 ||
-      !Number.isFinite(e.erstellt) || !Number.isFinite(e.geaendert)) return { fehler: 'not a valid backup (entry)' };
-    if (e.typ === 'file' && typeof e.inhalt !== 'string') return { fehler: 'not a valid backup (entry)' };
-    const teile = e.pfad.split('/');
-    /* Namen und Tiefe wie bei jeder Operation (einschließlich /home/raizo); der Elternpfad muss ein bereits aufgeführtes VERZEICHNIS sein */
-    if (TERMINAL_VFS.pfadFehlerHeim(teile) || art.has(e.pfad) || art.get(teile.slice(0, -1).join('/')) !== 'dir') return { fehler: 'not a valid backup (path)' };
-    art.set(e.pfad, e.typ);
-    if (e.typ === 'file') { const b = new TextEncoder().encode(e.inhalt).length; if (b > g.datei) return { fehler: 'backup exceeds the limits of this file system' }; summe += b; }
+  const g = TERMINAL_VFS.GRENZE;
+  if (p.version === 3) {
+    if (!Array.isArray(p.etc) || !p.manifest.etc) return { fehler: 'not a valid backup (format)' };
+    if ((await terminalHomeHash(JSON.stringify(p.etc))) !== p.manifest.etc.sha256) return { fehler: 'backup is damaged (checksum mismatch)' };
+    if (p.manifest.etc.eintraege !== p.etc.length) return { fehler: 'backup is damaged (entry count)' };
   }
-  if (summe > g.gesamt) return { fehler: 'backup exceeds the limits of this file system' };
-  if (p.manifest.bytes !== summe) return { fehler: 'backup is damaged (byte count)' };
+  if (p.eintraege.length + (p.version === 3 ? p.etc.length : 0) > g.knoten) return { fehler: 'backup exceeds the limits of this file system' };
+  /* Format 2 und 3 -> Pfade: der Elternindex muss auf einen FRÜHEREN Eintrag zeigen; der Name ist ein einzelner gültiger Name */
+  p.eintraegeV1 = p.version === 1 ? p.eintraege : terminalHomePfade(p.eintraege);
+  p.etcV1 = p.version === 3 ? terminalHomePfade(p.etc) : null;
+  if (!p.eintraegeV1 || (p.version === 3 && !p.etcV1)) return { fehler: 'not a valid backup (path)' };
+  const h = terminalHomeBereichPruefen(p.eintraegeV1, TERMINAL_HEIM, false);
+  if (h.fehler) return h;
+  const e = p.etcV1 ? terminalHomeBereichPruefen(p.etcV1, ['etc'], true) : { bytes: 0 };
+  if (e.fehler) return e;
+  if (h.bytes + e.bytes > g.gesamt) return { fehler: 'backup exceeds the limits of this file system' };
+  if (p.manifest.bytes !== h.bytes || (p.etcV1 && p.manifest.etc.bytes !== e.bytes)) return { fehler: 'backup is damaged (byte count)' };
   return { paket: p };
+}
+/* /etc nur mit Freigabe der Systemverwaltung (Review #139, S1): einmal vor jeder Änderung das sudo-Kennwort; --yes ist nur eine Bestätigung.
+   Nicht bei --home und nicht bei Sicherungen ohne /etc; die automatische Sicherung bleibt ohne Kennwort (A0). null: freigegeben. */
+async function terminalHomeEtcFreigabe(befehl) {
+  const ok = await terminalSudoKennwort();
+  if (ok === true) return null;
+  return { code: ok === 'abbruch' ? 130 : 1, stdout: [], stderr: [befehl + ': changing /etc requires administrator authentication; nothing changed'] };
+}
+/* Bereiche einer Wiederherstellung (S9: Befehle behalten ihre Namen, die Bereiche sind getrennt wählbar): --home nur /home/raizo,
+   --etc nur /etc; ohne Angabe beide, soweit die Sicherung sie enthält (Formate 1 und 2 nur /home/raizo). */
+function terminalHomeBereiche(args, befehl) {
+  const nurHome = args.includes('--home'), nurEtc = args.includes('--etc');
+  if (nurHome && nurEtc) return { fehler: 'usage: ' + befehl + ' [--yes] [--home | --etc]' + (befehl === 'home-restore' ? ' <name>' : '') };
+  return { home: !nurEtc, etc: !nurHome, rest: args.filter(function (a) { return a !== '--home' && a !== '--etc'; }) };
+}
+/* Meldung nach dem Einspielen: Anzahl für /home/raizo wie bisher vorn, /etc als Zusatz; nur /etc: eigene Form */
+function terminalHomeErgebnis(befehl, r, quelle) {
+  if (r.home === null) return befehl + ': ' + r.etc + ' entries restored to /etc from ' + quelle;
+  return befehl + ': ' + r.home + ' entries restored from ' + quelle + (r.etc !== null ? ' (/etc: ' + r.etc + ' entries)' : '');
+}
+function terminalHomeUmfang(gp, b) {
+  const teile = [];
+  if (b.home) teile.push('/home/raizo (' + gp.paket.manifest.eintraege + ' entries in the backup)');
+  if (b.etc && gp.paket.etcV1) teile.push('/etc (' + gp.paket.manifest.etc.eintraege + ' entries in the backup)');
+  return teile;
 }
 /* Sicherungen laufen nacheinander (automatische, manuelle und die letzte bei der Abmeldung): eine neue wartet auf die laufende. */
 let terminalHomeLaufend = null;
@@ -672,7 +731,7 @@ async function terminalHomeSichernKern(automatisch) {
   }
   const antwort = await terminalBrueckeSenden(anfrage);
   if (antwort.error) { t.homeAenderung = true; return { fehler: antwort.error }; }
-  return { name: antwort.name, bytes: antwort.bytes, eintraege: pk.paket.manifest.eintraege, gen: pk.gen };
+  return { name: antwort.name, bytes: antwort.bytes, eintraege: pk.paket.manifest.eintraege, etc: pk.paket.manifest.etc.eintraege, gen: pk.gen };
 }
 /* Änderungen unter /home lösen nach einer Ruhezeit eine automatische Sicherung aus (nur mit verbundener Brücke); Fehler werden einmal gemeldet. */
 let terminalHomeTimer = null, terminalHomeRuhe = 20000;   /* Ruhezeit in ms; Tests verkürzen sie */
@@ -699,12 +758,14 @@ async function terminalBefehlHomeBackup(ctx) {
   }
   const r = await terminalHomeSichern(false);
   if (r.fehler) return { code: 1, stdout: [], stderr: ['home-backup: ' + r.fehler] };
-  return { code: 0, stdout: ['home-backup: ' + r.name + ' (' + r.eintraege + ' entries, ' + r.bytes + ' B)'], stderr: [] };
+  return { code: 0, stdout: ['home-backup: ' + r.name + ' (' + r.eintraege + ' entries in /home/raizo, ' + r.etc + ' in /etc, ' + r.bytes + ' B)'], stderr: [] };
 }
 async function terminalBefehlHomeRestore(ctx) {
   if (!terminalBrueckenAdresse()) return { code: 1, stdout: [], stderr: ['home-restore: local bridge not connected. ' + TERMINAL_BRUECKE_START] };
-  const yes = ctx.args.includes('--yes'), rest = ctx.args.filter(function (a) { return a !== '--yes'; });
-  if (rest.length > 1) return { code: 2, stdout: [], stderr: ['usage: home-restore [--yes] <name>'] };
+  const bereich = terminalHomeBereiche(ctx.args, 'home-restore');
+  if (bereich.fehler) return { code: 2, stdout: [], stderr: [bereich.fehler] };
+  const yes = bereich.rest.includes('--yes'), rest = bereich.rest.filter(function (a) { return a !== '--yes'; });
+  if (rest.length > 1) return { code: 2, stdout: [], stderr: ['usage: home-restore [--yes] [--home | --etc] <name>'] };
   const liste = await terminalBrueckeSenden({ op: 'home-list' });
   if (liste.error) return { code: 1, stdout: [], stderr: ['home-restore: ' + liste.error] };
   if (!rest.length) return { code: 0, stdout: liste.backups.length ? ['Available backups (newest first):'].concat(liste.backups.map(function (b) { return '  ' + b.name; }), ['Restore with: home-restore --yes <name>']) : ['no backups'], stderr: [] };
@@ -715,14 +776,16 @@ async function terminalBefehlHomeRestore(ctx) {
   if ((await terminalHomeHash(geladen.data)) !== geladen.sha256) return { code: 1, stdout: [], stderr: ['home-restore: ' + name + ': checksum mismatch in transfer; nothing changed'] };
   const gp = await terminalHomePruefen(geladen.data);
   if (gp.fehler) return { code: 1, stdout: [], stderr: ['home-restore: ' + name + ': ' + gp.fehler + '; nothing changed'] };
-  if (!yes) return { code: 1, stdout: [], stderr: ['home-restore: this replaces everything in /home/raizo (' + gp.paket.manifest.eintraege + ' entries in the backup). The current state is saved first.', 'Run again with --yes to proceed.'] };
+  if (bereich.etc && !bereich.home && !gp.paket.etcV1) return { code: 1, stdout: [], stderr: ['home-restore: ' + name + ': this backup contains no /etc; nothing changed'] };
+  if (!yes) return { code: 1, stdout: [], stderr: ['home-restore: this replaces everything in ' + terminalHomeUmfang(gp, bereich).join(' and in ') + '. The current state is saved first.' + (bereich.etc && gp.paket.etcV1 ? ' Changing /etc requires the sudo password.' : ''), 'Run again with --yes to proceed.'] };
+  if (bereich.etc && gp.paket.etcV1) { const f = await terminalHomeEtcFreigabe('home-restore'); if (f) return f; }
   const vorher = await terminalHomeSichern(false);
   if (vorher.fehler) return { code: 1, stdout: [], stderr: ['home-restore: could not save the current state first (' + vorher.fehler + '); nothing changed'] };
-  const r = await TERMINAL_VFS.importieren(gp.paket.eintraegeV1, { gen: vorher.gen });
+  const r = await TERMINAL_VFS.importieren(bereich.home ? gp.paket.eintraegeV1 : null, { gen: vorher.gen, etc: bereich.etc ? gp.paket.etcV1 : null });
   if (r.fehler === 'EBUSY') return { code: 1, stdout: [], stderr: ['home-restore: files changed in another window while restoring; nothing changed. Run the command again.'] };
   if (r.fehler) return { code: 1, stdout: [], stderr: ['home-restore: ' + terminalDateiFehlerText(r.fehler) + '; nothing changed'] };
-  terminalHomeGeaendert();
-  return { code: 0, stdout: ['home-restore: ' + r.anzahl + ' entries restored from ' + name, 'previous state saved as ' + vorher.name], stderr: [] };
+  terminalHomeGeaendert(); terminalSysGeaendert();   /* auch --home: ~/.predict kann sich geändert haben */
+  return { code: 0, stdout: [terminalHomeErgebnis('home-restore', r, name), 'previous state saved as ' + vorher.name], stderr: [] };
 }
 /* Manueller Rückweg ohne Brücke: eine mit home-export erzeugte Datei wird über die Dateiauswahl des Browsers gelesen und genauso geprüft und
    atomar eingespielt wie eine Sicherung der Brücke. Ohne Brücke wird der vorherige Stand nicht gesondert abgelegt (Hinweis vor dem Ersetzen). */
@@ -742,15 +805,19 @@ function terminalHomeDateiWaehlen() {
   });
 }
 async function terminalBefehlHomeImport(ctx) {
-  const yes = ctx.args.includes('--yes'), rest = ctx.args.filter(function (a) { return a !== '--yes'; });
-  if (rest.length) return { code: 2, stdout: [], stderr: ['usage: home-import [--yes]'] };
-  if (!yes) return { code: 1, stdout: [], stderr: ['home-import: this replaces everything in /home/raizo with the contents of a file created by home-export.',
+  const bereich = terminalHomeBereiche(ctx.args, 'home-import');
+  if (bereich.fehler) return { code: 2, stdout: [], stderr: [bereich.fehler] };
+  const yes = bereich.rest.includes('--yes'), rest = bereich.rest.filter(function (a) { return a !== '--yes'; });
+  if (rest.length) return { code: 2, stdout: [], stderr: ['usage: home-import [--yes] [--home | --etc]'] };
+  if (!yes) return { code: 1, stdout: [], stderr: ['home-import: this replaces everything in ' + (bereich.home && bereich.etc ? '/home/raizo (and /etc, if the file contains it)' : bereich.home ? '/home/raizo' : '/etc') + ' with the contents of a file created by home-export.',
     terminalBrueckenAdresse() ? 'The current state is saved first.' : 'The local bridge is not connected: the current state is NOT saved separately. Use home-export first.', 'Run again with --yes and choose the file.'] };
   const d = await terminalHomeDateiWaehlen();
   if (!d) return { code: 1, stdout: [], stderr: ['home-import: no file chosen; nothing changed'] };
   if (d.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + d.fehler + '; nothing changed'] };
   const gp = await terminalHomePruefen(d.text);
   if (gp.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + d.name + ': ' + gp.fehler + '; nothing changed'] };
+  if (bereich.etc && !bereich.home && !gp.paket.etcV1) return { code: 1, stdout: [], stderr: ['home-import: ' + d.name + ': this file contains no /etc; nothing changed'] };
+  if (bereich.etc && gp.paket.etcV1) { const f = await terminalHomeEtcFreigabe('home-import'); if (f) return f; }
   let gen, vorherName = null;
   if (terminalBrueckenAdresse()) {
     const vorher = await terminalHomeSichern(false);
@@ -761,17 +828,22 @@ async function terminalBefehlHomeImport(ctx) {
     if (ex.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + terminalDateiFehlerText(ex.fehler) + '; nothing changed'] };
     gen = ex.gen;
   }
-  const r = await TERMINAL_VFS.importieren(gp.paket.eintraegeV1, { gen: gen });
+  const r = await TERMINAL_VFS.importieren(bereich.home ? gp.paket.eintraegeV1 : null, { gen: gen, etc: bereich.etc ? gp.paket.etcV1 : null });
   if (r.fehler === 'EBUSY') return { code: 1, stdout: [], stderr: ['home-import: files changed in another window while importing; nothing changed. Run the command again.'] };
   if (r.fehler) return { code: 1, stdout: [], stderr: ['home-import: ' + terminalDateiFehlerText(r.fehler) + '; nothing changed'] };
-  terminalHomeGeaendert();
-  return { code: 0, stdout: ['home-import: ' + r.anzahl + ' entries restored from ' + d.name].concat(vorherName ? ['previous state saved as ' + vorherName] : []), stderr: [] };
+  terminalHomeGeaendert(); terminalSysGeaendert();   /* auch --home: ~/.predict kann sich geändert haben */
+  return { code: 0, stdout: [terminalHomeErgebnis('home-import', r, d.name)].concat(vorherName ? ['previous state saved as ' + vorherName] : []), stderr: [] };
 }
+/* home-export: ohne Option /home/raizo und /etc (mit privatem WireGuard-Schlüssel) nach sudo-Kennwort und mit Hinweis; --home nur das
+   Heimverzeichnis ohne Kennwort (Format 2). Die Datei ist unverschlüsselt; ihr Schutz liegt beim Ablageort. */
 async function terminalBefehlHomeExport(ctx) {
-  if (ctx.args.length) return { code: 2, stdout: [], stderr: ['usage: home-export'] };
-  const pk = await terminalHomePaket();
+  const nurHome = ctx.args.length === 1 && ctx.args[0] === '--home';
+  if (ctx.args.length && !nurHome) return { code: 2, stdout: [], stderr: ['usage: home-export [--home]'] };
+  if (!nurHome) { const f = await terminalSudoKennwort(); if (f !== true) return { code: f === 'abbruch' ? 130 : 1, stdout: [], stderr: ['home-export: exporting /etc requires administrator authentication; nothing exported (home-export --home exports /home/raizo only)'] }; }
+  const pk = await terminalHomePaket(nurHome);
   if (pk.fehler) return { code: 1, stdout: [], stderr: ['home-export: ' + terminalDateiFehlerText(pk.fehler)] };
   const stempel = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
   terminalDownload({ name: 'home-' + stempel + '.json' }, pk.text);
-  return { code: 0, stdout: ['home-export: home-' + stempel + '.json (' + pk.paket.manifest.eintraege + ' entries) handed to the browser download'], stderr: [] };
+  return { code: 0, stdout: ['home-export: home-' + stempel + '.json (' + pk.paket.manifest.eintraege + ' entries' + (nurHome ? '' : ' in /home/raizo, ' + pk.paket.manifest.etc.eintraege + ' in /etc') + ') handed to the browser download']
+    .concat(nurHome ? [] : ['home-export: the file contains /etc including the private WireGuard key (/etc/wireguard/wg-sat.key) unencrypted; keep it private']), stderr: [] };
 }

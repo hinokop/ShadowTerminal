@@ -118,7 +118,7 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
       'rm -r /': "rm: it is dangerous to operate recursively on '/'\nrm: use --no-preserve-root to override this failsafe",
       'rm -r .': "rm: refusing to remove '.' or '..' directory: skipping '.'",
       'rm /etc/ppp': "rm: cannot remove '/etc/ppp': Is a directory",
-      'rm /etc/hosts': "rm: cannot remove '/etc/hosts': No such file or directory",
+      'rm /etc/hosts': "rm: cannot remove '/etc/hosts': Permission denied",   /* Paket 3: /etc/hosts installiert, gehört root */
       'rm -r /home/raizo': "rm: cannot remove '/home/raizo': Permission denied",
       'cp': "cp: missing file operand\nTry 'cp --help' for more information.",
       'cp neu.txt': "cp: missing destination file operand after 'neu.txt'\nTry 'cp --help' for more information.",
@@ -131,8 +131,9 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
       'mv nix x': "mv: cannot stat 'nix': No such file or directory",
       'mv projects projects/alpha/in': "mv: cannot move 'projects' to a subdirectory of itself, 'projects/alpha/in'",
       'mv neu.txt neu.txt': "mv: 'neu.txt' and 'neu.txt' are the same file",
-      'mv neu.txt /etc/x': "mv: cannot move 'neu.txt' to '/etc/x': Invalid cross-device link",
-      'mv /etc/ppp x': "mv: cannot move '/etc/ppp' to 'x': Invalid cross-device link",
+      'mv neu.txt /etc/x': "mv: cannot move 'neu.txt' to '/etc/x': Permission denied",   /* Paket 3: /etc im selben Dateisystem, gehört root */
+      'mv /etc/ppp x': "mv: cannot move '/etc/ppp' to 'x': Permission denied",
+      'mv neu.txt /usr/x': "mv: cannot move 'neu.txt' to '/usr/x': Invalid cross-device link",
       'cat nix': 'cat: nix: No such file or directory',
       'cat projects': 'cat: projects: Is a directory',
       'cat projects/alpha/nix': 'cat: projects/alpha/nix: No such file or directory'
@@ -210,7 +211,7 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
     await fsAufruf(p, "TERMINAL_FS.entfernen(['home','raizo','fuell-rest'])");
     assert.equal(await s.lauf('echo mehr > extra.txt; cat extra.txt'), 'mehr', 'nach dem Löschen wieder Platz');
     /* Zähler stimmt mit den Daten überein */
-    const rechnung = await fsAufruf(p, `(async () => { const gesamt = async seg => { const d = await TERMINAL_VFS.readdir(seg); let b = 0, k = 0; for (const e of d.eintraege) { k++; if (e.dir) { const r = await gesamt(seg.concat(e.name)); b += r.b; k += r.k; } else b += (await TERMINAL_VFS.readFile(seg.concat(e.name))).text.length; } return { b, k }; }; const a = await gesamt(['home','raizo']), t = await gesamt(['tmp']), z = await TERMINAL_VFS.zaehler(); return { z, bk: a.k + t.k, bb: a.b + t.b }; })()`);
+    const rechnung = await fsAufruf(p, `(async () => { const gesamt = async seg => { const d = await TERMINAL_VFS.readdir(seg, { privilegiert: true }); let b = 0, k = 0; for (const e of d.eintraege) { k++; if (e.dir) { const r = await gesamt(seg.concat(e.name)); b += r.b; k += r.k; } else b += (await TERMINAL_VFS.readFile(seg.concat(e.name), { privilegiert: true })).text.length; } return { b, k }; }; const a = await gesamt(['home','raizo']), t = await gesamt(['tmp']), e = await gesamt(['etc']), z = await TERMINAL_VFS.zaehler(); return { z, bk: a.k + t.k + e.k + 1, bb: a.b + t.b + e.b }; })()`);
     assert.equal(rechnung.z.knoten, rechnung.bk, 'Knotenzähler');
     assert.ok(rechnung.z.bytes >= rechnung.bb, 'Bytezähler (UTF-8 ≥ Zeichen)');
 
@@ -284,7 +285,7 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
       await t.lauf('echo "Zeile eins" > daten/a.txt');
       await t.lauf('echo "Umlaute: äöü ß € 𝄞" > daten/sub/b.txt');
       const b1 = await t.lauf('home-backup');
-      assert.match(b1, /^home-backup: home-\d{8}T\d{6}Z\.json \(4 entries, \d+ B\)$/, b1);
+      assert.match(b1, /^home-backup: home-\d{8}T\d{6}Z\.json \(4 entries in \/home\/raizo, 11 in \/etc, \d+ B\)$/, b1);   /* Paket 3: /etc mitgesichert */
       assert.match(await t.lauf('home-backup list'), /^home-\d{8}T\d{6}Z\.json {2}\d+ B$/);
       const dateien = fs.readdirSync(sicher).filter(x => x.startsWith('home-'));
       assert.equal(dateien.length, 1);
@@ -298,7 +299,7 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
       assert.match(await t.lauf('home-restore ' + name), /this replaces everything in \/home\/raizo \(4 entries in the backup\)[\s\S]*--yes/, 'ohne --yes wird nichts ersetzt');
       assert.equal(await t.lauf('cat neu.txt'), 'ersatz');
       await new Promise(r => setTimeout(r, 1100));   /* neuer Zeitstempel der Sicherheitskopie */
-      const r1 = await t.lauf('home-restore --yes ' + name);
+      const r1 = await t.lauf('home-restore --yes --home ' + name);   /* Paket 3: /etc nur mit Kennwort (tests/terminal-sys-review.js) */
       assert.match(r1, /^home-restore: 4 entries restored from home-.*\nprevious state saved as home-\d{8}T\d{6}Z(-\d)?\.json$/, r1);
       assert.equal(await t.lauf('cat daten/sub/b.txt'), 'Umlaute: äöü ß € 𝄞');
       assert.equal(await t.lauf('cat neu.txt'), 'cat: neu.txt: No such file or directory', 'Wiederherstellung ersetzt den Stand vollständig');
@@ -330,7 +331,7 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
       assert.equal(await t.lauf('echo x > lageblatt-PIN-123.txt; cat lageblatt-PIN-123.txt'), 'x', 'gewöhnlicher Datei im VFS mit solchem Namen ist erlaubt (kein Archivobjekt)');
       assert.equal(await t.lauf('cp /pgcl-eu3.arch07/zone-ZO-123.txt z.txt'), "cp: cannot open '/pgcl-eu3.arch07/zone-ZO-123.txt' for reading: Permission denied");
       assert.equal(await t.lauf('cat /pgcl-eu3.arch07/zone-ZO-123.txt > z.txt'), 'bash: cat: Permission denied');
-      assert.match(await t.lauf('home-export'), /^home-export: home-\d{8}T\d{6}Z\.json \(\d+ entries\) handed to the browser download$/);
+      assert.match(await t.lauf('home-export --home'), /^home-export: home-\d{8}T\d{6}Z\.json \(\d+ entries\) handed to the browser download$/);
       assert.deepEqual(q.fehler, []);
     } finally { await ctx2.close(); py.kill(); }
     console.log('OK: terminal-vfs (Abnahmeszenario, Neustart, Editor, Meldungen, Umleitung, Quoten, Selbstprüfung, mehrere Fenster, Sicherung)');

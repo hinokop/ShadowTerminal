@@ -21,7 +21,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     const pass = await imUeberflug(p);
     const inp = p.locator('#profil-terminal-eingabe'), out = p.locator('#profil-terminal-ausgabe');
     const cmd = async z => { await inp.fill(z); await inp.press('Enter'); };
-    const nach = async z => { await cmd(z); const t = await out.textContent(); return t.slice(t.lastIndexOf('$ ' + z) + z.length + 2).split('\n').filter(Boolean); };
+    const nach = async z => { await cmd(z); await p.waitForFunction(() => !TERMINAL_ZUSTAND.kette && !TERMINAL_ZUSTAND.dateiLaeuft); const t = await out.textContent(); return t.slice(t.lastIndexOf('$ ' + z) + z.length + 2).split('\n').filter(Boolean); };
     const status = async () => { await cmd('echo $?'); return (await out.textContent()).split('\n').at(-1); };
     const F = '/var/cache/tle/kestrel.tle', S = pass.name;
     const spalte = (z, i) => Number(z.trim().split(/\s+/)[i]);
@@ -78,7 +78,9 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     /* Konfiguration: Peer und Chatscript */
     assert.ok((await nach('cat /etc/ppp/peers/kestrel')).includes('connect "/usr/sbin/chat -v -f /etc/chatscripts/kestrel"'));
     assert.ok((await nach('cat /etc/chatscripts/kestrel')).includes('OK ATDT00882994401'));
-    assert.deepEqual(await nach('pon other'), ['pppd: unable to open /etc/ppp/peers/other: No such file or directory']);
+    /* Paket 3: Meldung des pon-Skripts (ppp 2.4.9), pppd call wie options_from_file */
+    assert.deepEqual(await nach('pon other'), ['The file /etc/ppp/peers/other does not exist. Please create it or use', 'a command line argument to use another file in the /etc/ppp/peers/ directory.']);
+    assert.deepEqual(await nach('pppd call other'), ["pppd: Can't open options file /etc/ppp/peers/other: No such file or directory"]);
 
     /* BUSY und NO CARRIER gezielt: chat bricht ab; mit persist bleibt pppd und wählt nach holdoff neu */
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'busy'; });

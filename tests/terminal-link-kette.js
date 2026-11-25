@@ -15,6 +15,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
       const req = r.request();
       if (req.url() !== 'http://127.0.0.1:45678/db') { netz.push(req.url()); return r.abort(); }
       const data = req.postDataJSON();
+      if (data.op === 'home-save') return r.fulfill({ json: { name: 'home-20261125T000000Z.json', bytes: 1 } });   /* Paket 3: erste automatische Sicherung nach der Installation von /etc */
       netz.push(data.op);
       assert.deepEqual(data.parts, data.op === 'ls' ? ['ops'] : ['ops', 'lagebericht final.txt']);
       await r.fulfill({ json: data.op === 'ls' ? { entries: [{ name: 'lagebericht final.txt', dir: false }] } :
@@ -40,7 +41,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     for (const alt of ['satcon-tx', 'secure-channel', 'send']) { await cmd(alt); assert.match(await out.textContent(), new RegExp(alt + ': command not found$')); }
     await inp.fill('sec'); await inp.press('Tab'); assert.equal(await inp.inputValue(), 'sec');
     await cmd('ls /var/cache/tle'); assert.match(await out.textContent(), /\nkestrel\.tle$/);
-    await cmd('pppd call iridium'); assert.match(await out.textContent(), /pppd: unable to open \/etc\/ppp\/peers\/iridium: No such file or directory$/);
+    await cmd('pppd call iridium'); assert.match(await out.textContent(), /pppd: Can't open options file \/etc\/ppp\/peers\/iridium: No such file or directory$/);
     await inp.fill('pre'); await inp.press('Tab');
     let eingabe = 'predict ';
     assert.equal(await inp.inputValue(), eingabe);

@@ -17,6 +17,7 @@ const { APP } = require('./_pfad');
       const req = r.request();
       if (req.url() !== 'http://127.0.0.1:45678/db') return r.abort();
       const d = req.postDataJSON();
+      if (d.op === 'home-save') return r.fulfill({ json: { name: 'home-20261125T000000Z.json', bytes: 1 } });   /* Paket 3: erste automatische Sicherung nach der Installation von /etc */
       if (d.op === 'ls') ls.push(d.parts.join('/'));
       const ordner = { '': [{ name: 'dossiers', dir: true }, { name: 'dokumente', dir: true }, { name: 'ops', dir: true }],
         'dokumente': [{ name: 'lageblatt.txt', dir: false }, { name: 'referenz material.txt', dir: false }] };

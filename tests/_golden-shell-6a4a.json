@@ -37,43 +37,43 @@
   },
   {
     "befehl": "ls",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -a",
-    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -l",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -la",
-    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -al",
-    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -1",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -lh",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -85,7 +85,7 @@
   },
   {
     "befehl": "ls -F",
-    "ausgabe": "etc/\nhome/\nintel/\npgcl-eu3.arch07/\ntmp/\nvar/",
+    "ausgabe": "etc/\nhome/\nintel/\npgcl-eu3.arch07/\ntmp/\nusr/\nvar/",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -109,13 +109,13 @@
   },
   {
     "befehl": "ls /",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nvar",
+    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls /etc",
-    "ausgabe": "chatscripts\nppp",
+    "ausgabe": "chatscripts\nhostname\nhosts\nos-release\nppp\nwireguard",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -133,13 +133,13 @@
   },
   {
     "befehl": "ls /etc /var",
-    "ausgabe": "/etc:\nchatscripts\nppp\n\n/var:\ncache\nlog",
+    "ausgabe": "/etc:\nchatscripts\nhostname\nhosts\nos-release\nppp\nwireguard\n\n/var:\ncache\nlog",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -l /etc",
-    "ausgabe": "chatscripts\nppp",
+    "ausgabe": "drwxr-xr-x      4096  <ZEIT>  chatscripts\n-rw-r--r--         9  <ZEIT>  hostname\n-rw-r--r--       223  <ZEIT>  hosts\n-rw-r--r--       400  <ZEIT>  os-release\ndrwxr-xr-x      4096  <ZEIT>  ppp\ndrwx------      4096  <ZEIT>  wireguard",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -151,7 +151,7 @@
   },
   {
     "befehl": "ls etc",
-    "ausgabe": "chatscripts\nppp",
+    "ausgabe": "chatscripts\nhostname\nhosts\nos-release\nppp\nwireguard",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },

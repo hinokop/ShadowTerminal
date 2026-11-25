@@ -20,6 +20,7 @@ const { chatBereit } = require('./_kestrel');
     await p.route(/^https?:/, async r => {
       const req = r.request();
       if (req.url() !== 'http://127.0.0.1:45678/db') return r.abort();
+      if (req.postDataJSON().op === 'home-save') return r.fulfill({ json: { name: 'home-20261125T000000Z.json', bytes: 1 } });   /* Paket 3: erste automatische Sicherung nach der Installation von /etc */
       const d = req.postDataJSON(), name = d.parts?.at(-1);
       if (d.op === 'send' && name === 'ordner') return r.fulfill({ json: { notfile: true } });
       if (d.op === 'send') return r.fulfill({ json: name in dateien ? { name, bytes: dateien[name] } : { error: 'Datei oder Ordner nicht gefunden' } });
