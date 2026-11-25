@@ -1,0 +1,95 @@
+{
+ "hinweis": "Deutscher Archivexport (pinText, eigeneZoneText, sichtungText), erzeugt mit den unveränderten Renderern von main 07a736d; Zeile \"Aktualität\" ist zeitabhängig und wird im Test vereinheitlicht.",
+ "objekte": {
+  "pin": {
+   "id": "PIN-007",
+   "name": "Treffpunkt Nord",
+   "ll": [
+    52.473711,
+    13.451299
+   ],
+   "zwecke": [
+    "Treffpunkt",
+    "Übergabe"
+   ],
+   "umgebung": {
+    "zufahrt": "zwei Zufahrten",
+    "publikum": "Wochenmarkt"
+   },
+   "notiz": "Hinterhof",
+   "t": "2026-01-02T03:04:05.000Z"
+  },
+  "pin2": {
+   "id": "PIN-008",
+   "name": "Leer",
+   "ll": [
+    52.5,
+    13.4
+   ],
+   "t": "2026-03-04T05:06:07.000Z"
+  },
+  "zone": {
+   "id": "ZO-003",
+   "name": "Umfeld",
+   "ll": [
+    52.47,
+    13.45
+   ],
+   "r": 250,
+   "notiz": "Park",
+   "t": "2026-01-02T03:04:05.000Z",
+   "stand": "2026-02-03T04:05:06.000Z",
+   "standBemerkung": "Begangen"
+  },
+  "zone2": {
+   "id": "ZO-004",
+   "name": "Kurz",
+   "ll": [
+    52.4,
+    13.3
+   ],
+   "r": 50,
+   "t": "2026-01-02T03:04:05.000Z"
+  },
+  "si": {
+   "id": "SI-004",
+   "t": "2026-01-02T03:04:05.000Z",
+   "ort": "52.4737, 13.4513",
+   "text": "Fahrzeug gesehen",
+   "guete": "gesichert"
+  },
+  "si2": {
+   "id": "SI-005",
+   "t": "2026-01-05T03:04:05.000Z",
+   "ort": "Sonnenallee",
+   "text": "",
+   "guete": "unbekannt"
+  }
+ },
+ "erwartet": [
+  {
+   "f": "pinText",
+   "text": "PIN-007 Treffpunkt Nord\nPosition: 52.47371, 13.45130\nZweck: Treffpunkt, Übergabe\n\nZufahrten und Wege: zwei Zufahrten\nSichtlinien: –\nFluchtmöglichkeiten: –\nPublikumsverkehr: Wochenmarkt\nKameras, Beleuchtung: –\nNachbarschaft, Gewerbe: –\n\nNotiz: Hinterhof\n\nAngelegt: 020304ZJAN26"
+  },
+  {
+   "f": "pinText",
+   "text": "PIN-008 Leer\nPosition: 52.50000, 13.40000\nZweck: nicht festgelegt\n\nZufahrten und Wege: –\nSichtlinien: –\nFluchtmöglichkeiten: –\nPublikumsverkehr: –\nKameras, Beleuchtung: –\nNachbarschaft, Gewerbe: –\n\nNotiz: –\n\nAngelegt: 040506ZMRZ26"
+  },
+  {
+   "f": "eigeneZoneText",
+   "text": "ZO-003 Umfeld\nPosition: 52.47000, 13.45000\nRadius: 250 m\nNotiz: Park\nStand: 03.02.2026 04:05:06Z\nBemerkung zur Prüfung: Begangen"
+  },
+  {
+   "f": "eigeneZoneText",
+   "text": "ZO-004 Kurz\nPosition: 52.40000, 13.30000\nRadius: 50 m\nNotiz: –\nStand: 02.01.2026 03:04:05Z\nBemerkung zur Prüfung: –"
+  },
+  {
+   "f": "sichtungText",
+   "text": "SI-004 · Dossier P-0001 Emre Kaya\nZeit: 02.01.2026 03:04:05Z\nOrt laut Meldung: 52.4737, 13.4513\nPosition: 52.47370, 13.45130 (ungefähr, aus Koordinate)\nGüte: gesichert\nAktualität: veraltet\nBeobachtung: Fahrzeug gesehen"
+  },
+  {
+   "f": "sichtungText",
+   "text": "SI-005 · Dossier P-0001 Emre Kaya\nZeit: 05.01.2026 03:04:05Z\nOrt laut Meldung: Sonnenallee\nPosition: 52.47550, 13.45280 (ungefähr, aus Ort im Dossier)\nGüte: unbewertet\nAktualität: veraltet\nBeobachtung: –"
+  }
+ ]
+}
