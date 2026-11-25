@@ -83,14 +83,17 @@ const { APP } = require('./_pfad');
     assert.equal(await r('resolve', 'a\\b'), null, 'Rückwärtsschrägstrich unzulässig');
     /* stat */
     assert.deepEqual(await r('stat', []), { adapter: 'virtuell', typ: 'dir' });
-    assert.deepEqual(await r('stat', ['etc', 'ppp', 'peers', 'kestrel']), { adapter: 'virtuell', typ: 'file' });
+    /* Paket 3: /etc liegt im VFS (Anbieter vfs, mit Größe, Zeit und Rechten) */
+    const stPeer = await r('stat', ['etc', 'ppp', 'peers', 'kestrel']);
+    assert.deepEqual({ adapter: stPeer.adapter, typ: stPeer.typ, modus: stPeer.eintrag.modus }, { adapter: 'vfs', typ: 'file', modus: 0o644 });
+    assert.deepEqual(await r('stat', ['usr', 'share', 'ppp']), { adapter: 'paket', typ: 'dir', bytes: 4096, mtime: 1725019324, eintrag: { name: 'ppp', dir: true, bytes: 4096, mtime: 1725019324, modus: 0o755 } });
     assert.deepEqual(await r('stat', ['nichts']), { fehler: 'ENOENT' });
     assert.deepEqual(await r('stat', [db, 'ops']), { adapter: 'archiv', typ: null }, 'ohne Prüfung bleibt die Art im Archiv unbekannt');
     const stOps = await r('stat', [db, 'ops'], { pruefen: true });
     assert.deepEqual({ adapter: stOps.adapter, typ: stOps.typ, name: stOps.eintrag && stOps.eintrag.name, dir: stOps.eintrag && stOps.eintrag.dir }, { adapter: 'archiv', typ: 'dir', name: 'ops', dir: true }, 'stat mit Prüfung liefert zusätzlich den Eintrag der Quelle (6a-3, für ls -l)');
     /* readdir */
     const wurzel = await r('readdir', []);
-    assert.deepEqual(wurzel.eintraege.map(x => x.name), ['etc', 'home', 'intel', 'tmp', 'var', db]);
+    assert.deepEqual(wurzel.eintraege.map(x => x.name), ['etc', 'home', 'intel', 'tmp', 'usr', 'var', db]);
     assert.ok(wurzel.eintraege.every(x => x.dir));
     assert.deepEqual((await r('readdir', ['var', 'log'])).eintraege, [{ name: 'syslog', dir: false }]);
     const ops = await r('readdir', [db, 'ops']);
@@ -157,7 +160,8 @@ const { APP } = require('./_pfad');
         cdPunkt: await terminalBefehlCd(ctx('..')), global: terminalArbeitsverzeichnis() };
     });
     assert.deepEqual(direkt.ls.stdout, ['kestrel'], 'ls löst relativ zum Kontext-cwd auf');
-    assert.deepEqual(direkt.lsLeer.stdout, ['peers'], 'ls ohne Operand listet das Kontext-cwd (ohne Schrägstrich, nur -F markiert Verzeichnisse)');
+    /* Paket 3: /etc liegt im VFS, -l zeigt daher das Langformat */
+    assert.match(direkt.lsLeer.stdout.join('\n'), /^drwxr-xr-x +4096  \d\d\.\d\d\.\d{4} \d\d:\d\d:\d\dZ  peers$/, 'ls ohne Operand listet das Kontext-cwd');
     assert.deepEqual(direkt.cd.cwd, { ort: null, virtuellerOrt: ['etc', 'ppp', 'peers'] }, 'cd relativ zum Kontext-cwd');
     assert.deepEqual(direkt.cdPunkt.cwd, { ort: null, virtuellerOrt: ['etc'] });
     assert.equal(direkt.global, '/', 'globaler Zustand unverändert (cd liefert nur ein Ergebnis)');

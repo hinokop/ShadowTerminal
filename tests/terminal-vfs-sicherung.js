@@ -199,26 +199,29 @@ const ende = async (q) => { await q.evaluate(() => { window.close = function () 
 
     /* ---- H: Größenvertrag und Rückweg ohne Brücke ---- */
     await t.lauf('rm -r daten'); await t.lauf('rm anderes-fenster.txt mitten-drin.txt edit.txt');
-    /* kombinierter Randwert: 16 MiB Steuerzeichen-Inhalt UND alle übrigen Knoten als Verzeichnisse mit 255-Byte-Namen aus Steuerzeichen */
+    /* kombinierter Randwert: 16 MiB Steuerzeichen-Inhalt UND alle übrigen Knoten als Verzeichnisse mit 255-Byte-Namen aus Steuerzeichen.
+       Paket 3: /etc zählt zu denselben Grenzen (Knoten und Bytes); der Randwert füllt den verbleibenden Platz. */
     const randAnzahl = await q.evaluate(async () => {
-      const tmpN = (await TERMINAL_VFS.readdir(['tmp'])).eintraege.length, e = [];
-      for (let i = 0; i < 16; i++) e.push({ pfad: 'rand' + i, typ: 'file', modus: 420, erstellt: 1, geaendert: 1, inhalt: '\u0001'.repeat(1048576) });
-      for (let i = 0; e.length < TERMINAL_VFS.GRENZE.knoten - tmpN; i++) e.push({ pfad: '\u0001'.repeat(250) + String(i).padStart(5, '0'), typ: 'dir', modus: 493, erstellt: 1, geaendert: 1 });
+      const tmpN = (await TERMINAL_VFS.readdir(['tmp'])).eintraege.length, etc = (await TERMINAL_VFS.exportieren()).etc, e = [];
+      const etcBytes = etc.reduce((s, x) => s + (x.typ === 'file' ? new TextEncoder().encode(x.inhalt).length : 0), 0);
+      for (let i = 0; i < 16; i++) e.push({ pfad: 'rand' + i, typ: 'file', modus: 420, erstellt: 1, geaendert: 1, inhalt: '\u0001'.repeat(i === 15 ? 1048576 - etcBytes : 1048576) });
+      for (let i = 0; e.length < TERMINAL_VFS.GRENZE.knoten - tmpN - etc.length; i++) e.push({ pfad: '\u0001'.repeat(250) + String(i).padStart(5, '0'), typ: 'dir', modus: 493, erstellt: 1, geaendert: 1 });
       const r = await TERMINAL_VFS.importieren(e);
       if (r.fehler) throw new Error(r.fehler);
       return e.length;
     });
-    assert.ok(randAnzahl >= 4990, 'Knotenzahl am Limit: ' + randAnzahl);
+    assert.ok(randAnzahl >= 4980, 'Knotenzahl am Limit (abzüglich /etc, Paket 3): ' + randAnzahl);
     const rand = await t.lauf('home-backup');
-    assert.match(rand, /^home-backup: home-\d{8}T\d{6}Z(-\d)?\.json \(\d+ entries, \d+ B\)$/, 'Worst Case (Inhalt und Namen) wird gesichert: ' + rand);
+    assert.match(rand, /^home-backup: home-\d{8}T\d{6}Z(-\d)?\.json \(\d+ entries in \/home\/raizo, \d+ in \/etc, \d+ B\)$/, 'Worst Case (Inhalt und Namen) wird gesichert: ' + rand);
     const groesse = Number(/(\d+) B\)$/.exec(rand)[1]);
     assert.ok(groesse > 96 * 1048576 && groesse <= 112 * 1048576, 'Sicherungsgröße ' + groesse);
     const randName = /home-\S+\.json/.exec(rand)[0];
-    assert.equal(JSON.parse(fs.readFileSync(path.join(sicher, randName), 'utf8')).version, 2, 'kompaktes Format 2');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(sicher, randName), 'utf8')).version, 3, 'kompaktes Format (3: mit /etc, Paket 3)');
     await q.evaluate(async () => { const r = await TERMINAL_VFS.importieren([]); if (r.fehler) throw new Error(r.fehler); });
     await new Promise(r => setTimeout(r, 1100));
     assert.match(await t.lauf('home-restore --yes ' + randName), new RegExp('^home-restore: ' + randAnzahl + ' entries restored from '), 'Wiederherstellung des Randwerts');
-    assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readFile(['home', 'raizo', 'rand15'])).text.length), 1048576);
+    assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readFile(['home', 'raizo', 'rand14'])).text.length), 1048576);
+    assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readFile(['home', 'raizo', 'rand15'])).text.length + (await TERMINAL_VFS.exportieren()).etc.reduce((s, x) => s + (x.typ === 'file' ? x.inhalt.length : 0), 0)), 1048576, 'letzte Datei um die Bytes von /etc kleiner');
     assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readdir(['home', 'raizo'])).eintraege.length), randAnzahl);
     await q.evaluate(async () => { const r = await TERMINAL_VFS.importieren([]); if (r.fehler) throw new Error(r.fehler); });
     /* Format 2: Elternindex auf späteren Eintrag oder auf eine Datei wird abgelehnt */

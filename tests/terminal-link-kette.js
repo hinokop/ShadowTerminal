@@ -40,7 +40,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
     for (const alt of ['satcon-tx', 'secure-channel', 'send']) { await cmd(alt); assert.match(await out.textContent(), new RegExp(alt + ': command not found$')); }
     await inp.fill('sec'); await inp.press('Tab'); assert.equal(await inp.inputValue(), 'sec');
     await cmd('ls /var/cache/tle'); assert.match(await out.textContent(), /\nkestrel\.tle$/);
-    await cmd('pppd call iridium'); assert.match(await out.textContent(), /pppd: unable to open \/etc\/ppp\/peers\/iridium: No such file or directory$/);
+    await cmd('pppd call iridium'); assert.match(await out.textContent(), /pppd: Can't open options file \/etc\/ppp\/peers\/iridium: No such file or directory$/);
     await inp.fill('pre'); await inp.press('Tab');
     let eingabe = 'predict ';
     assert.equal(await inp.inputValue(), eingabe);

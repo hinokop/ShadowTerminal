@@ -178,13 +178,13 @@ const FAELLE = [
     assert.equal(await aus('ls -l -1 dossiers'), await aus('ls -l dossiers'), '-1 hebt -l nicht auf (ls 9.4 gemessen: -l -1 bleibt Langformat, ebenso -1 -l)');
     assert.equal(await aus('ls dossiers -l'), await aus('ls -l dossiers'), 'Optionen auch hinter Operanden');
     /* Operand in der virtuellen Ebene, absolute Pfade, Wurzel */
-    assert.equal(await aus('ls /etc /var'), '/etc:\nchatscripts\nppp\n\n/var:\ncache\nlog');
+    assert.equal(await aus('ls /etc /var'), '/etc:\nchatscripts\nhostname\nhosts\nos-release\nppp\nwireguard\n\n/var:\ncache\nlog');   /* Paket 3: installierte Systemdateien */
     assert.equal(await aus('ls /etc/ppp/peers/kestrel'), '/etc/ppp/peers/kestrel');
     assert.equal(await aus('ls /nonexistent'), "ls: cannot access '/nonexistent': No such file or directory");
     assert.equal(await rc(), '2');
     assert.equal(await aus('ls "it\'s"'), "ls: cannot access 'it'\\''s': No such file or directory", 'Apostroph in der Meldung wie bei ls maskiert');
     assert.equal(await aus('ls -d /'), '/');
-    assert.equal(await aus('ls -F /'), 'etc/\nhome/\nintel/\n' + db + '/\ntmp/\nvar/', 'Wurzel sortiert (en_US.UTF-8): etc, home, intel, pgcl-..., tmp, var');
+    assert.equal(await aus('ls -F /'), 'etc/\nhome/\nintel/\n' + db + '/\ntmp/\nusr/\nvar/', 'Wurzel sortiert (en_US.UTF-8): etc, home, intel, pgcl-..., tmp, usr, var');
     assert.equal(await aus('ls /' + db + '/dossiers/eins.txt'), '/' + db + '/dossiers/eins.txt');
     assert.equal(await aus('ls /' + db + '/DOSSIERS'), "ls: cannot access '/" + db + "/DOSSIERS': No such file or directory", 'Groß-/Kleinschreibung im Archiv streng');
 
