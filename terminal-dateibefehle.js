@@ -311,6 +311,9 @@ async function terminalBefehlReadlink(ctx) {
 
 /* ---- Umleitung ---- */
 const TERMINAL_UMLEITBAR = new Set(['echo', 'pwd', 'ls', 'cat', 'head', 'tail', 'date', 'whoami', 'uname', 'true', 'false', 'touch', 'mkdir', 'rm', 'rmdir', 'cp', 'mv']);
+/* Umleitung mit gepufferter Ausgabe nur für lesende, seiteneffektfreie Befehle (Review #138): schreibende Befehle (touch, mkdir, rm, rmdir,
+   cp, mv) werden mit Umleitung vor jeder Ausführung abgewiesen; ohne Umleitung arbeiten sie unverändert */
+const TERMINAL_UMLEITBAR_SCHREIBEND = new Set(['touch', 'mkdir', 'rm', 'rmdir', 'cp', 'mv']);
 function terminalBefehlFn(befehl) {
   return { pwd: terminalBefehlPwd, ls: terminalBefehlLs, cat: terminalLeser('cat'), head: terminalLeser('head'), tail: terminalLeser('tail'),
     touch: terminalBefehlTouch, mkdir: terminalBefehlMkdir, rmdir: terminalBefehlRmdir, rm: terminalBefehlRm, cp: terminalBefehlCp, mv: terminalBefehlMv }[befehl] || null;
@@ -369,23 +372,25 @@ async function terminalUmgeleitet(woerter, um, status) {
      Abweichung von bash: das Ziel entsteht erst nach dem Befehl (eine Liste des Zielordners zeigt die neue Datei nicht); liest der Befehl
      das Ziel selbst, wird wie bei bash nichts aus ihm übernommen (">": Ziel danach leer; ">>": unverändert; cat meldet
      "input file is output file"). */
-  /* Öffnen (anlegen bzw. leeren) und danach Anhängen wie bash; beide Schritte erst nach der Herkunftsentscheidung, je mit erneuter Pfadprüfung */
+  /* Ein einziger abgesicherter VFS-Schreibvorgang nach der Herkunftsentscheidung (">": Inhalt ersetzen, ">>": anhängen bzw. anlegen), mit
+     erneuter Pfadprüfung; scheitert er (z. B. Quote), bleibt der bisherige Inhalt erhalten (Transaktion des VFS) */
   const oeffnen = async function (text, befehlName) {
     if (!(await terminalSegPruefen(pctx, seg, uopt))) { if (t.version === version) terminalAusgabe(f(pctx.segFehler)); return false; }
     if (t.version !== version) return false;
-    const auf = await TERMINAL_FS.schreiben(seg, '', { anhaengen: um.art === '>>' });
+    const w = await TERMINAL_FS.schreiben(seg, text, { anhaengen: um.art === '>>' });
     if (t.version !== version) return false;
-    if (auf.fehler) { terminalAusgabe(f(auf.fehler)); return false; }
-    if (!text) return true;
-    if (!(await terminalSegPruefen(pctx, seg, uopt))) { if (t.version === version) terminalAusgabe(f(pctx.segFehler)); return false; }
-    if (t.version !== version) return false;
-    const w = await TERMINAL_FS.schreiben(seg, text, { anhaengen: true });
-    if (t.version !== version) return false;
-    if (w.fehler) { terminalAusgabe('bash: ' + befehlName + ': write error: ' + terminalDateiFehlerText(w.fehler)); return false; }
+    if (w.fehler) {
+      terminalAusgabe(text && (w.fehler === 'ENOSPC' || w.fehler === 'EFBIG') ? 'bash: ' + befehlName + ': write error: ' + terminalDateiFehlerText(w.fehler) : f(w.fehler));
+      return false;
+    }
     return true;
   };
   if (!woerter.length) return (await oeffnen('')) ? 0 : 1;
   const befehl = woerter[0], args = woerter.slice(1);
+  if (TERMINAL_UMLEITBAR_SCHREIBEND.has(befehl)) {
+    terminalAusgabe('bash: ' + befehl + ': output redirection is not supported for commands that change files');   /* nichts ausgeführt, Ziel unberührt */
+    return 1;
+  }
   if (!TERMINAL_UMLEITBAR.has(befehl)) {
     if (!(await oeffnen(''))) return 1;   /* bash legt die Zieldatei an, bevor der Befehl scheitert */
     terminalAusgabe(terminalBefehlEintrag(befehl) ? 'bash: ' + befehl + ': output redirection is not supported for this command' : befehl + ': command not found');
