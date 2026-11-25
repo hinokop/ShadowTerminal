@@ -102,7 +102,7 @@ Empfohlen: ein zusammenhängender Draft-PR nach Konzeptfreigabe; gezielte Meilen
 
 ## 9. Speicher- und Sicherungsvertrag für M4 (Verwaltete Exporte)
 
-Freigegeben vom Eigentümer am 25.11.2026: separate IndexedDB `fieldterminal.exporte`, Löschen per GUI und `rm` über eine gemeinsame validierte Aktion, Behandlung des Chatverlaufs, vorläufige Grenzen, bewusst fehlende Sicherungsabdeckung (dokumentiert). Die Abschnitte 9.1 bis 9.9 gelten für M4; 9.10 regelt den Chatverlauf für M3. **Keine Implementierung vor Freigabe dieses Vertrags.**
+Freigegeben vom Eigentümer am 25.11.2026 (einschließlich D1 bis D3, §9.11): separate IndexedDB `fieldterminal.exporte`, Löschen per GUI und `rm` über eine gemeinsame validierte Aktion, Behandlung des Chatverlaufs, vorläufige Grenzen, bewusst fehlende Sicherungsabdeckung (dokumentiert). Die Abschnitte 9.1 bis 9.9 gelten für M4; 9.10 regelt den Chatverlauf für M3. **Keine Implementierung vor Freigabe dieses Vertrags.**
 
 ### 9.1 Grundsätze
 
@@ -222,9 +222,9 @@ Die Zeilen von `fenster.log` erhalten wie der Shell-Verlauf optional Schutzabhä
 ### 9.11 Annahmen und offene Punkte
 
 - Zu bestätigen vor der Implementierung: (a) Pin und Zone tragen ein stabiles Anlegedatum (`t` bei Pin; für Zonen noch nicht geprüft), sonst ist die Identität über ein anderes Feld zu sichern; (b) ob die Oberfläche das Löschen gesperrter Pins und Zonen verhindert; (c) Verhalten der IndexedDB im Edge-Anwendungsfenster unter `file://` bei vollem Speicher (`QuotaExceededError`).
-- **D1 (Entscheidung):** GUI-Sammelbereinigung der verwaisten Exporte (Vorschlag) oder verwaiste Exporte unbegrenzt behalten und die Grenzen als einzige Schranke verstehen.
-- **D2 (Entscheidung):** einheitliche Antwort `No such file or directory` für alle unzugänglichen Zustände (Vorschlag, strenger als `/intel`) oder `Permission denied` wie bei `/intel` für gesperrte Exporte, mit dem Preis eines Existenzhinweises.
-- **D3 (Entscheidung):** Dateinamen mit Zeitstempel (Vorschlag, §9.3) statt `record.txt` mit laufender Versionsnummer.
+- **D1 (entschieden 25.11.2026):** GUI-Sammelbereinigung der verwaisten Exporte mit Bestätigung und Meldung nur der Anzahl (§9.7).
+- **D2 (entschieden 25.11.2026):** einheitliche Antwort `No such file or directory` für alle unzugänglichen Zustände (§9.5); strenger als `/intel` und ohne Sonderfälle.
+- **D3 (entschieden 25.11.2026):** Dateinamen mit UTC-Zeitstempel, keine laufende Versionsnummer (§9.3).
 
 ### 9.12 Mindestnachweis M4 (ergänzt §7)
 
