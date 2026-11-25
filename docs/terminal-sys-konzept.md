@@ -35,6 +35,12 @@ DIALING, AOS/LOS, Countdown und Verbindungsabbau bei LOS. Daraus folgt:
 - predict: Eine eigene QTH-Datei hat Vorrang. Fehlt sie, gilt dynamisch der Ausgangsort des Anwendungsprofils, danach der bisherige Standardwert Berlin.
 - Die fünf Meilensteine werden in einem zusammenhängenden Pull Request umgesetzt, mit gezielten Zwischentests sowie vollständiger CI und unabhängigem Review vor dem Merge.
 
+**Review #139 (ChatGPT, 25.11.2026) und Entscheidungen Shadow:** Korrekturen gesammelt in #139: Kennwort für das Ersetzen und Exportieren von
+`/etc`, Rechtevertrag der Sicherung, Installation als Transaktion mit Meldung, Anmeldung als Bereitschaft mit Sitzungsbindung und Änderungsmarke
+über Fenster, QTH fehlend/ungültig unterschieden, `predict.tle` umgesetzt, Prüfung von Address/MTU. Ergänzung nach der Windows-Abnahme von Paket 2
+(erfolgreich, alle elf Prüfpunkte): einzelne Dossiernotizen löschen (Oberfläche mit Sicherheitsabfrage, `notes delete DN-nnn` im
+Dossierverzeichnis, gemeinsame Aktion). `ping` über `/etc/hosts` zurückgestellt; `home-export` mit `/etc` nur nach sudo-Kennwort, `--home` ohne.
+
 **Umsetzungsdetails aus A0 (Vorschlag, im Pull Request zur Prüfung):**
 - Der Schlüssel liegt in einer eigenen Datei `/etc/wireguard/wg-sat.key`. Sie wird beim ersten `wg-quick up` erzeugt, ohne sichtbare Verzögerung. `wg-sat.conf` lädt ihn wie in der Praxis über `PostUp = wg set %i private-key …`. Wer die Konfiguration aus `/usr/share` zurücksetzt, behält deshalb den Schlüssel.
 - Der Hostname bleibt standardmäßig `terminal`, wie im Prompt; `uname -n` wird daran angeglichen. Eine Änderung wirkt ab der nächsten Anmeldung.
@@ -93,7 +99,7 @@ dagegen installiert. Einzelheiten, Quellen und Vereinfachungen: docs/terminal.md
 | PPP | `/etc/ppp/peers/kestrel`, `/etc/chatscripts/kestrel`, neue Peers unter `/etc/ppp/peers/` | Gerät, `holdoff`, `maxfail`, `persist`, `connect`-Zeile mit Pfad des Chatskripts; im Chatskript `ABORT`, `TIMEOUT`, Wählbefehl `ATDT<Nummer>` | anderes Gerät, andere Nummer, kürzere Zeitgrenze, fehlerhaftes Skript wirken auf die Einwahl |
 | WireGuard | `/etc/wireguard/wg-sat.conf` (neu) | `PrivateKey`, `Address`, `MTU`, `ListenPort`; Peer `PublicKey`, `Endpoint`, `AllowedIPs` | Schlüssel bleiben über `up`/`down` hinweg gleich, `wg show` zeigt die Konfiguration; optional `wg genkey`/`wg pubkey` |
 | Identität | `/etc/hostname`, `/etc/hosts`, `/etc/os-release` (neu) | Hostname, Namen in `hosts` | Prompt und `uname -n` konsistent; Namen in `hosts` für Endpunkte von WireGuard. Umsetzung: `ping relay` ist eine echte HTTPS-Prüfung (Abschnitt „Echte Zugriffe“ in docs/terminal.md) und bleibt von `hosts` unberührt |
-| predict | `~/.predict/predict.qth`, `~/.predict/predict.tle` (Benutzerdateien im VFS, nicht `/etc`) | Format nach predict(1) | QTH und Satellitenbestand aus Dateien; Verhältnis zum Ausgangsort der Oberfläche siehe S7. Umsetzung: nur `predict.qth`; `predict.tle` offen |
+| predict | `~/.predict/predict.qth`, `~/.predict/predict.tle` (Benutzerdateien im VFS, nicht `/etc`) | Format nach predict(1) | QTH und Satellitenbestand aus Dateien; Verhältnis zum Ausgangsort der Oberfläche siehe S7. Umsetzung: `predict.qth` und `predict.tle` (Review #139) |
 | profanity | `~/.config/profanity/profrc` | – | Vorschlag: nicht in Paket 3 |
 | Logs, `/run` | `/var/log/syslog`, `/run/ppp0.pid` u. a. | – | weiter nur durch Dienste erzeugt; `/run` optional |
 
