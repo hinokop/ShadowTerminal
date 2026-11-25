@@ -299,7 +299,7 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
       assert.match(await t.lauf('home-restore ' + name), /this replaces everything in \/home\/raizo \(4 entries in the backup\)[\s\S]*--yes/, 'ohne --yes wird nichts ersetzt');
       assert.equal(await t.lauf('cat neu.txt'), 'ersatz');
       await new Promise(r => setTimeout(r, 1100));   /* neuer Zeitstempel der Sicherheitskopie */
-      const r1 = await t.lauf('home-restore --yes ' + name);
+      const r1 = await t.lauf('home-restore --yes --home ' + name);   /* Paket 3: /etc nur mit Kennwort (tests/terminal-sys-review.js) */
       assert.match(r1, /^home-restore: 4 entries restored from home-.*\nprevious state saved as home-\d{8}T\d{6}Z(-\d)?\.json$/, r1);
       assert.equal(await t.lauf('cat daten/sub/b.txt'), 'Umlaute: äöü ß € 𝄞');
       assert.equal(await t.lauf('cat neu.txt'), 'cat: neu.txt: No such file or directory', 'Wiederherstellung ersetzt den Stand vollständig');
@@ -331,7 +331,7 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
       assert.equal(await t.lauf('echo x > lageblatt-PIN-123.txt; cat lageblatt-PIN-123.txt'), 'x', 'gewöhnlicher Datei im VFS mit solchem Namen ist erlaubt (kein Archivobjekt)');
       assert.equal(await t.lauf('cp /pgcl-eu3.arch07/zone-ZO-123.txt z.txt'), "cp: cannot open '/pgcl-eu3.arch07/zone-ZO-123.txt' for reading: Permission denied");
       assert.equal(await t.lauf('cat /pgcl-eu3.arch07/zone-ZO-123.txt > z.txt'), 'bash: cat: Permission denied');
-      assert.match(await t.lauf('home-export'), /^home-export: home-\d{8}T\d{6}Z\.json \(\d+ entries\) handed to the browser download$/);
+      assert.match(await t.lauf('home-export --home'), /^home-export: home-\d{8}T\d{6}Z\.json \(\d+ entries\) handed to the browser download$/);
       assert.deepEqual(q.fehler, []);
     } finally { await ctx2.close(); py.kill(); }
     console.log('OK: terminal-vfs (Abnahmeszenario, Neustart, Editor, Meldungen, Umleitung, Quoten, Selbstprüfung, mehrere Fenster, Sicherung)');

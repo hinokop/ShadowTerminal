@@ -114,7 +114,7 @@ const ende = async (q) => { await q.evaluate(() => { window.close = function () 
     });
     await q.exposeFunction('__stoer', async () => { await q3.evaluate(async () => { await terminalVfsBereit(); await TERMINAL_VFS.schreiben(['home', 'raizo', 'mitten-drin.txt'], 'x', {}); }); });
     await new Promise(r => setTimeout(r, 1100));
-    assert.match(await t.lauf('home-restore --yes ' + letzte), /files changed in another window while restoring; nothing changed/);
+    assert.match(await t.lauf('home-restore --yes --home ' + letzte), /files changed in another window while restoring; nothing changed/);
     assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readFile(['home', 'raizo', 'mitten-drin.txt'])).text), 'x');
     await q.evaluate(() => { TERMINAL_VFS.importieren = window.__orig; });
     await q3.close();
@@ -197,7 +197,7 @@ const ende = async (q) => { await q.evaluate(() => { window.close = function () 
     await ctx5.close();
 
 
-    /* ---- H: Größenvertrag und Rückweg ohne Brücke ---- */
+    /* ---- H: Größenvertrag und Rückweg ohne Brücke ---- (Wiederherstellung mit --home: /etc verlangt seit Paket 3 das sudo-Kennwort, geprüft in terminal-sys-review) */
     await t.lauf('rm -r daten'); await t.lauf('rm anderes-fenster.txt mitten-drin.txt edit.txt');
     /* kombinierter Randwert: 16 MiB Steuerzeichen-Inhalt UND alle übrigen Knoten als Verzeichnisse mit 255-Byte-Namen aus Steuerzeichen.
        Paket 3: /etc zählt zu denselben Grenzen (Knoten und Bytes); der Randwert füllt den verbleibenden Platz. */
@@ -205,7 +205,7 @@ const ende = async (q) => { await q.evaluate(() => { window.close = function () 
       const tmpN = (await TERMINAL_VFS.readdir(['tmp'])).eintraege.length, etc = (await TERMINAL_VFS.exportieren()).etc, e = [];
       const etcBytes = etc.reduce((s, x) => s + (x.typ === 'file' ? new TextEncoder().encode(x.inhalt).length : 0), 0);
       for (let i = 0; i < 16; i++) e.push({ pfad: 'rand' + i, typ: 'file', modus: 420, erstellt: 1, geaendert: 1, inhalt: '\u0001'.repeat(i === 15 ? 1048576 - etcBytes : 1048576) });
-      for (let i = 0; e.length < TERMINAL_VFS.GRENZE.knoten - tmpN - etc.length; i++) e.push({ pfad: '\u0001'.repeat(250) + String(i).padStart(5, '0'), typ: 'dir', modus: 493, erstellt: 1, geaendert: 1 });
+      for (let i = 0; e.length < TERMINAL_VFS.GRENZE.knoten - tmpN - etc.length - 1; i++)   /* - 1: der Knoten /etc selbst (Review #139) */ e.push({ pfad: '\u0001'.repeat(250) + String(i).padStart(5, '0'), typ: 'dir', modus: 493, erstellt: 1, geaendert: 1 });
       const r = await TERMINAL_VFS.importieren(e);
       if (r.fehler) throw new Error(r.fehler);
       return e.length;
@@ -219,7 +219,7 @@ const ende = async (q) => { await q.evaluate(() => { window.close = function () 
     assert.equal(JSON.parse(fs.readFileSync(path.join(sicher, randName), 'utf8')).version, 3, 'kompaktes Format (3: mit /etc, Paket 3)');
     await q.evaluate(async () => { const r = await TERMINAL_VFS.importieren([]); if (r.fehler) throw new Error(r.fehler); });
     await new Promise(r => setTimeout(r, 1100));
-    assert.match(await t.lauf('home-restore --yes ' + randName), new RegExp('^home-restore: ' + randAnzahl + ' entries restored from '), 'Wiederherstellung des Randwerts');
+    assert.match(await t.lauf('home-restore --yes --home ' + randName), new RegExp('^home-restore: ' + randAnzahl + ' entries restored from '), 'Wiederherstellung des Randwerts');
     assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readFile(['home', 'raizo', 'rand14'])).text.length), 1048576);
     assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readFile(['home', 'raizo', 'rand15'])).text.length + (await TERMINAL_VFS.exportieren()).etc.reduce((s, x) => s + (x.typ === 'file' ? x.inhalt.length : 0), 0)), 1048576, 'letzte Datei um die Bytes von /etc kleiner');
     assert.equal(await q.evaluate(async () => (await TERMINAL_VFS.readdir(['home', 'raizo'])).eintraege.length), randAnzahl);
@@ -242,7 +242,7 @@ const ende = async (q) => { await q.evaluate(() => { window.close = function () 
     assert.equal(fs.readdirSync(sicher).length, vorAnzahl, 'nichts gespeichert');
     await q.evaluate(() => { TERMINAL_HOME_ANFRAGE_MAX = 128 * 1024 * 1024; });
     /* home-import: Datei aus home-export */
-    const pk = await q.evaluate(async () => (await terminalHomePaket()).text);
+    const pk = await q.evaluate(async () => (await terminalHomePaket(true)).text);   /* wie home-export --home (Format 2, ohne /etc und ohne Kennwort) */
     const exportDatei = path.join(tmp('ft-exp-'), 'home-export.json'); fs.writeFileSync(exportDatei, pk);
     await t.lauf('rm klein.txt');
     assert.match(await t.lauf('home-import'), /replaces everything in \/home\/raizo[\s\S]*Run again with --yes/);

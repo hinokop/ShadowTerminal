@@ -107,6 +107,7 @@ const FAELLE = [
     await p.route(/^https?:/, async route => {
       const req = route.request();
       if (req.url() !== 'http://127.0.0.1:45674/db') return route.abort();
+      if (req.postDataJSON().op === 'home-save') return route.fulfill({ json: { name: 'home-20261125T000000Z.json', bytes: 1 } });   /* Paket 3: erste automatische Sicherung nach der Installation von /etc */
       const d = req.postDataJSON(), pfad = d.parts.join('/');
       if (d.op === 'disconnect') return route.fulfill({ json: { ok: true } });
       if (d.op === 'cd') return route.fulfill({ json: istDir(pfad) ? { ok: true } : { error: 'Datei oder Ordner nicht gefunden' } });

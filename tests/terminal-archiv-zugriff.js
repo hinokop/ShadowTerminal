@@ -27,6 +27,7 @@ const { APP } = require('./_pfad');
       const req = route.request();
       if (req.url() !== 'http://127.0.0.1:45674/db') return route.abort();
       const d = req.postDataJSON();
+      if (d.op === 'home-save') return route.fulfill({ json: { name: 'home-20261125T000000Z.json', bytes: 1 } });   /* Paket 3: erste automatische Sicherung nach der Installation von /etc */
       calls.push({ op: d.op, parts: d.parts, offset: d.offset });
       if (d.op === 'cd') return route.fulfill({ json: { ok: true } });
       if (d.op === 'ls') {

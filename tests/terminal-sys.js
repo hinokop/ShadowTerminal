@@ -39,7 +39,7 @@ function oeffentlich(privatB64) {
       await p.click('#gate-go');
       await p.waitForFunction(() => typeof APP_BEREIT !== 'undefined' && APP_BEREIT && !document.body.classList.contains('locked'));
       await p.click('#profil-terminal-oeffnen');
-      await p.waitForFunction(() => !!TERMINAL_SYS.ppp && !!TERMINAL_SYS.wg);
+      await p.waitForFunction(() => terminalSysAktuell());
       inp = p.locator('#profil-terminal-eingabe'); out = p.locator('#profil-terminal-ausgabe');
     };
     const fertig = () => p.waitForFunction(() => !TERMINAL_ZUSTAND.kette && !TERMINAL_ZUSTAND.dateiLaeuft && !TERMINAL_ZUSTAND.sudo);
@@ -65,11 +65,11 @@ function oeffentlich(privatB64) {
     /* Systemdatei direkt setzen (Verwaltung über das VFS, wie sudo); danach Stand der Konfiguration neu lesen */
     const setzeEtc = async (pfad, text) => {
       await p.evaluate(async ([seg, t]) => { const r = await TERMINAL_VFS.schreiben(seg, t, { privilegiert: true }); if (r.fehler) throw new Error(r.fehler); terminalSysGeaendert(); }, [pfad.split('/').filter(Boolean), text]);
-      await p.waitForFunction(() => !!TERMINAL_SYS.ppp && !!TERMINAL_SYS.wg);
+      await p.waitForFunction(() => terminalSysAktuell());
     };
     const entferneEtc = async pfad => {
       await p.evaluate(async seg => { const r = await TERMINAL_VFS.entfernen(seg, { privilegiert: true }); if (r.fehler) throw new Error(r.fehler); terminalSysGeaendert(); }, pfad.split('/').filter(Boolean));
-      await p.waitForFunction(() => !!TERMINAL_SYS.ppp && !!TERMINAL_SYS.wg);
+      await p.waitForFunction(() => terminalSysAktuell());
     };
     const zuruecksetzen = async () => {
       for (const [ziel, vorlage] of [['/etc/ppp/peers/kestrel', '/usr/share/ppp/kestrel.peer'], ['/etc/chatscripts/kestrel', '/usr/share/ppp/kestrel.chatscript'], ['/etc/wireguard/wg-sat.conf', '/usr/share/wireguard/wg-sat.conf']]) {
@@ -150,7 +150,7 @@ function oeffentlich(privatB64) {
     assert.equal(await sudo('sudo rm /etc/os-release'), '');
     await lauf('exit');
     await p.click('#profil-terminal-oeffnen');
-    await p.waitForFunction(() => !!TERMINAL_SYS.ppp);
+    await p.waitForFunction(() => terminalSysAktuell());
     assert.equal(await lauf('cat /etc/os-release'), 'cat: /etc/os-release: No such file or directory', 'nicht neu installiert');
     await p.close();
     await oeffnen();
@@ -231,7 +231,7 @@ function oeffentlich(privatB64) {
     /* Zurücksetzen mit sudo cp aus /usr/share: der Standard verbindet wieder */
     await p.clock.resume();
     await sudo('sudo cp /usr/share/ppp/kestrel.peer /etc/ppp/peers/kestrel');
-    await p.waitForFunction(() => !!TERMINAL_SYS.ppp);
+    await p.waitForFunction(() => terminalSysAktuell());
     assert.equal(await lauf('cat /etc/ppp/peers/kestrel'), peerStandard);
     await p.clock.install();
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'ok'; });
@@ -280,6 +280,15 @@ function oeffentlich(privatB64) {
     await setzeEtc('/etc/wireguard/wg-sat.conf', wgStandard.replace('wg-sat.key', 'fehlt.key'));
     assert.match(await wgUp(), /\[#\] wg set wg-sat private-key \/etc\/wireguard\/fehlt\.key\nfopen: No such file or directory\n\[#\] ip link delete dev wg-sat/);
     assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.wgSat), null);
+    /* ip address add / ip link set mtu (iproute2 6.1.0): ungültige Werte beenden wg-quick, Abbau */
+    await setzeEtc('/etc/wireguard/wg-sat.conf', wgStandard.replace('Address = 10.200.200.2/24', 'Address = bogus'));
+    assert.match(await wgUp(), /\[#\] ip -4 address add bogus dev wg-sat\nError: inet prefix is expected rather than "bogus"\.\n\[#\] ip link delete dev wg-sat/);
+    await setzeEtc('/etc/wireguard/wg-sat.conf', wgStandard.replace('MTU = 1280', 'MTU = abc'));
+    assert.match(await wgUp(), /\[#\] ip link set mtu abc up dev wg-sat\nError: argument "abc" is wrong: Invalid "mtu" value\n\[#\] ip link delete dev wg-sat/);
+    await setzeEtc('/etc/wireguard/wg-sat.conf', wgStandard.replace('Address = 10.200.200.2/24', 'Address = 10.9.9.2/24'));
+    await wgUp();
+    assert.deepEqual(await p.evaluate(() => [TERMINAL_ZUSTAND.wgSat?.bereit, TERMINAL_ZUSTAND.wgSat?.erreichbar]), [true, false], 'eigene Adresse außerhalb des Tunnelnetzes: kein Handshake');
+    await lauf('wg-quick down wg-sat');
     await entferneEtc('/etc/wireguard/wg-sat.conf');
     assert.equal(await lauf('wg-quick up wg-sat'), "wg-quick: `/etc/wireguard/wg-sat.conf' does not exist");
     await zuruecksetzen();
@@ -309,7 +318,7 @@ function oeffentlich(privatB64) {
     assert.equal(await lauf('uname -n'), 'localhost');
     await setzeEtc('/etc/hostname', 'terminal\n');
     await lauf('exit'); await p.click('#profil-terminal-oeffnen');
-    await p.waitForFunction(() => TERMINAL_SYS.hostname === 'terminal' && !!TERMINAL_SYS.ppp);
+    await p.waitForFunction(() => TERMINAL_SYS.hostname === 'terminal' && terminalSysAktuell());
 
     /* ---- G: Sicherung mit /etc (Brücke im Speicher nachgebildet) ---- */
     await p.evaluate(() => {
@@ -331,15 +340,15 @@ function oeffentlich(privatB64) {
     assert.ok(paket.etc.some(e => e.name === 'wg-sat.key' && e.uid === 0 && e.modus === 0o600 && e.inhalt.trim() === schluessel), 'Schlüssel in der Sicherung');
     await setzeEtc('/etc/hosts', 'geaendert\n');
     await lauf('echo neu > spaeter.txt');
-    assert.match(await lauf('home-restore --etc ' + name1), /this replaces everything in \/etc \(11 entries in the backup\)/);
-    assert.match(await lauf('home-restore --yes --etc ' + name1), /^home-restore: 11 entries restored to \/etc from home-\S+\n/);
+    assert.match(await lauf('home-restore --etc ' + name1), /this replaces everything in \/etc \(11 entries in the backup\)\. The current state is saved first\. Changing \/etc requires the sudo password\./);
+    assert.match(await sudo('home-restore --yes --etc ' + name1), /^home-restore: 11 entries restored to \/etc from home-\S+\n/, 'Review #139: /etc nur nach Kennwort');
     assert.match(await lauf('cat /etc/hosts'), /^127\.0\.0\.1 localhost/, '/etc zurückgesetzt');
     assert.equal(await lauf('ls'), 'notiz.txt\nspaeter.txt', '/home bei --etc unverändert');
     await setzeEtc('/etc/hosts', 'nochmal\n');
     assert.match(await lauf('home-restore --yes --home ' + name1), /^home-restore: 1 entries restored/);
     assert.equal(await lauf('ls'), 'notiz.txt');
     assert.equal(await lauf('cat /etc/hosts'), 'nochmal', '/etc bei --home unverändert');
-    assert.match(await lauf('home-restore --yes ' + name1), /^home-restore: 1 entries restored from home-\S+ \(\/etc: 11 entries\)\n/);
+    assert.match(await sudo('home-restore --yes ' + name1), /^home-restore: 1 entries restored from home-\S+ \(\/etc: 11 entries\)\n/);
     assert.equal(await lauf('home-restore --yes --home --etc ' + name1), 'usage: home-restore [--yes] [--home | --etc] <name>');
     /* ältere Sicherung (Format 2) ohne /etc */
     await p.evaluate(async n => {

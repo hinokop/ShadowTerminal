@@ -15,6 +15,7 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
       const req = r.request();
       if (req.url() !== 'http://127.0.0.1:45678/db') { netz.push(req.url()); return r.abort(); }
       const data = req.postDataJSON();
+      if (data.op === 'home-save') return r.fulfill({ json: { name: 'home-20261125T000000Z.json', bytes: 1 } });   /* Paket 3: erste automatische Sicherung nach der Installation von /etc */
       netz.push(data.op);
       assert.deepEqual(data.parts, data.op === 'ls' ? ['ops'] : ['ops', 'lagebericht final.txt']);
       await r.fulfill({ json: data.op === 'ls' ? { entries: [{ name: 'lagebericht final.txt', dir: false }] } :

@@ -18,6 +18,7 @@ const { APP } = require('./_pfad');
       const req = route.request();
       if (req.url() !== 'http://127.0.0.1:45674/db') return route.abort();
       const data = req.postDataJSON();
+      if (data.op === 'home-save') return route.fulfill({ json: { name: 'home-20261125T000000Z.json', bytes: 1 } });   /* Paket 3: erste automatische Sicherung nach der Installation von /etc */
       calls.push({ op: data.op, parts: data.parts, offset: data.offset });
       if (getrennt) return route.fulfill({ json: { error: 'Lokale Datenbank getrennt' } });
       if (data.op === 'ls') {

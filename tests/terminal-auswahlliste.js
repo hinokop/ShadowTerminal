@@ -17,6 +17,7 @@ const { chatBereit } = require('./_kestrel');
       const req = r.request();
       if (req.url() !== 'http://127.0.0.1:45679/db') return r.abort();
       const data = req.postDataJSON();
+      if (data.op === 'home-save') return r.fulfill({ json: { name: 'home-20261125T000000Z.json', bytes: 1 } });   /* Paket 3: erste automatische Sicherung nach der Installation von /etc */
       if (verzoegern) await new Promise(ok => setTimeout(ok, verzoegern));
       if (data.op === 'ls') return r.fulfill({ json: { entries: dateien.map(n => ({ name: n.replace(/\/$/, ''), dir: n.endsWith('/') })) } });
       return r.fulfill({ json: { name: data.parts.at(-1), bytes: 120 } });
