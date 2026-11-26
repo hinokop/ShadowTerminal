@@ -3880,9 +3880,11 @@ function renderModule() {
   const scrolls = Array.prototype.map.call(main.querySelectorAll('[data-scroll]'), function (el) {
     return [el.getAttribute('data-scroll'), el.scrollTop, el.scrollLeft];
   });
+  if (typeof karteRendererVorRender === 'function') karteRendererVorRender(m.id);
   RENDERING = true;
   try { main.replaceChildren.apply(main, RENDER[m.id](m).filter(Boolean)); }
   finally { RENDERING = false; }
+  if (typeof karteRendererNachRender === 'function') karteRendererNachRender();
   scrolls.forEach(function (x) {
     const el = main.querySelector('[data-scroll="' + x[0] + '"]');
     if (el) { el.scrollTop = x[1]; el.scrollLeft = x[2]; }
