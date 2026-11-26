@@ -33,7 +33,52 @@
   /* K2c-3: Protomaps buildings, Meterkonvention; keine eigene Höhenschätzung.
      Nur Polygon-Gebäude/-teile, ab z15 (darunter zusammengefasste Geometrien).
      1500 m ist eine konservative Plausibilitätsgrenze, kein Messnachweis. */
-  const GEBAEUDE_ID='shadow-v2-gebaeude-3d';
+  const GEBAEUDE_ID='shadow-v2-gebaeude-3d', HAUSNUMMER_ID='shadow-v2-hausnummer';
+  // Nur Provider-Style ohne eingebettete Zugangsdaten im Sitzungsspeicher halten.
+  // Konservativ: bei verdächtigen URL-Parametern oder aktuellem Key nicht cachen.
+  function styleCachebar(s,key){
+    if(!vektorStil(s)||typeof key!=='string'||!key.trim())return false;
+    const k=key.trim(), raw=JSON.stringify(s);
+    if(raw.includes(k)||raw.includes(encodeURIComponent(k))||raw.includes(new URLSearchParams({key:k}).toString().slice(4)))return false;
+    function sicher(v){
+      if(typeof v==='string'){
+        if(/(?:[?&]|%3f|%26)(?:key|api[_-]?key|access[_-]?token|token|signature|sig|auth|credential|password)(?:=|%3d)/i.test(v))return false;
+        if(/^https?:\/\//i.test(v)){try{const u=new URL(v);if(u.username||u.password)return false;}catch(e){return false;}}
+        return true;
+      }
+      if(Array.isArray(v))return v.every(sicher);
+      if(v&&typeof v==='object')return Object.entries(v).every(([n,x])=>! /^(?:api[_-]?key|access[_-]?token|token|authorization|credential|password|secret)$/i.test(n)&&sicher(x));
+      return true;
+    }
+    return sicher(s);
+  }
+  function hausnummern(copy,source){
+    // Protomaps: addr_housenumber ist ein Attribut der Adresspunkte in buildings.
+    // Vorhandene Provider-Layer respektieren; nur bei tatsächlichem Fehlen ergänzen.
+    const nummern=copy.layers.filter(l=>l.type==='symbol'&&l.source===source&&l['source-layer']==='buildings'&&
+      (JSON.stringify(l.layout?.['text-field']||'').includes('addr_housenumber')||l.id==='housenumber'));
+    if(nummern.length){
+      for(const l of nummern){
+        l.minzoom=Math.min(l.minzoom??0,17);
+        if(l.layout?.visibility==='none')l.layout.visibility='visible';
+        if(copy.layers.indexOf(l)<copy.layers.findIndex(x=>x.id===GEBAEUDE_ID)){
+          copy.layers.splice(copy.layers.indexOf(l),1);copy.layers.push(l);
+        }
+      }
+      return;
+    }
+    if(typeof copy.glyphs!=='string'||!copy.glyphs||copy.layers.some(l=>l.id===HAUSNUMMER_ID))return;
+    // Nur bereits im konkreten Dark-Matter-Stil verwendete Fontstacks.
+    const schrift=copy.layers.filter(l=>l.type==='symbol').map(l=>l.layout?.['text-font'])
+      .find(v=>Array.isArray(v)&&v.length>0&&v.every(x=>typeof x==='string'&&x.trim())&&
+        !['get','var','literal','case','match','coalesce','step','concat','to-string','format','let'].includes(v[0]));
+    if(!schrift)return;
+    copy.layers.push({id:HAUSNUMMER_ID,type:'symbol',source,'source-layer':'buildings',minzoom:17,
+      filter:['all',['==',['geometry-type'],'Point'],['==',['get','kind'],'address'],['has','addr_housenumber'],['!=',['to-string',['get','addr_housenumber']],'']],
+      layout:{'text-field':['to-string',['get','addr_housenumber']],'text-font':schrift.slice(),'text-size':11,
+        'text-pitch-alignment':'viewport','text-rotation-alignment':'viewport','text-padding':1,'text-allow-overlap':false},
+      paint:{'text-color':'#d6dbe0','text-halo-color':'#24292e','text-halo-width':1.2}});
+  }
   function gebaeudeStil(s,nacht,an){
     if(!vektorStil(s))throw Error('Keine Vektorquelle');
     const copy=JSON.parse(JSON.stringify(s));
@@ -51,9 +96,10 @@
     copy.layers.forEach((l,i)=>{if(l.source===source&&l['source-layer']==='buildings'&&(l.type==='fill'||l.type==='line'))at=i;});
     if(at<0)throw Error('Keine Gebäudegrundrisse');
     copy.layers.splice(at+1,0,layer);
+    if(nacht)hausnummern(copy,source);
     return copy;
   }
-  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, GEBAEUDE_ID });
+  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, styleCachebar, GEBAEUDE_ID, HAUSNUMMER_ID });
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KARTE_V2_QUELLEN = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

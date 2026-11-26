@@ -22,6 +22,38 @@ assert.equal(Q.gebaeudeStil(basis,true,false).layers[1].layout.visibility,'none'
 assert.notEqual(Q.gebaeudeStil(basis,true,false).layers[1].paint['fill-extrusion-color'],g.paint['fill-extrusion-color']);
 assert.throws(()=>Q.gebaeudeStil(mit,false,true));
 assert.throws(()=>Q.gebaeudeStil(Q.leererStil(),false,true));
+const detail=JSON.parse(JSON.stringify(basis));
+detail.glyphs='https://basemaps.cartocdn.com/fonts/{fontstack}/{range}.pbf';
+detail.layers[1].layout={'text-field':['get','name'],'text-font':['Fixture Regular']};
+const detailOriginal=JSON.stringify(detail);
+const dunkel=Q.gebaeudeStil(detail,true,true), haus=dunkel.layers.find(l=>l.id===Q.HAUSNUMMER_ID);
+assert.ok(haus);assert.equal(haus.minzoom,17);assert.equal(haus.source,'protomaps');
+assert.deepEqual(haus.layout['text-font'],['Fixture Regular']);
+assert.deepEqual(haus.layout['text-field'],['to-string',['get','addr_housenumber']]);
+assert.equal(haus.layout['text-pitch-alignment'],'viewport');
+assert.ok(dunkel.layers.indexOf(haus)>dunkel.layers.findIndex(l=>l.id===Q.GEBAEUDE_ID));
+assert.equal(JSON.stringify(detail),detailOriginal);
+assert.ok(!Q.gebaeudeStil(detail,false,true).layers.some(l=>l.id===Q.HAUSNUMMER_ID));
+assert.ok(!Q.gebaeudeStil(basis,true,true).layers.some(l=>l.id===Q.HAUSNUMMER_ID),'keine ungesicherte Fontquelle');
+const vorhanden=JSON.parse(JSON.stringify(detail));
+vorhanden.layers.unshift({id:'housenumber',type:'symbol',source:'protomaps','source-layer':'buildings',minzoom:19,layout:{visibility:'none','text-field':['get','addr_housenumber']}});
+const angepasst=Q.gebaeudeStil(vorhanden,true,true), nr=angepasst.layers.find(l=>l.id==='housenumber');
+assert.equal(nr.minzoom,17);assert.equal(nr.layout.visibility,'visible');
+assert.ok(angepasst.layers.indexOf(nr)>angepasst.layers.findIndex(l=>l.id===Q.GEBAEUDE_ID));
+assert.ok(!angepasst.layers.some(l=>l.id===Q.HAUSNUMMER_ID),'keine Duplikate');
+assert.ok(Q.styleCachebar(detail,key));
+for(const u of ['https://example.invalid/a?key=other','https://example.invalid/a?access_token=other','https://u:p@example.invalid/a','https://example.invalid/'+encodeURIComponent(key)]){
+  const copy=JSON.parse(JSON.stringify(detail));copy.sources.protomaps.tiles=[u];assert.equal(Q.styleCachebar(copy,key),false);
+}
+assert.equal(Q.styleCachebar({...detail,metadata:{token:'other'}},key),false);
+assert.equal(Q.styleCachebar({...detail,metadata:{name:key}},key),false);
+assert.equal(Q.styleCachebar(detail,''),false);
+const bericht=D.beschriftung(vorhanden);
+assert.ok(bericht.includes('Hausnummern: 0/1 aktive Textlayer'));
+assert.ok(D.beschriftung(angepasst).includes('Hausnummern: 1/1 aktive Textlayer; Zoom 17–24'));
+assert.ok(!bericht.includes('Fixture Regular')&&!bericht.includes('https://'));
+
+
 const ds={sources:{protomaps:{type:'vector',maxzoom:15}},layers:[{source:'protomaps','source-layer':'buildings'}]};
 const sample=[{properties:{height:12,min_height:'0',name:'A','name:de':'A',secret:'NICHT-IM-BERICHT'}},{properties:{height:'unbekannt','building:levels':'3',name:'B'}},{properties:{height:'',min_height:null,'name:de':''}}];
 const stats=D.statistik(sample);

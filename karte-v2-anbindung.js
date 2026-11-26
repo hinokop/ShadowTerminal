@@ -12,6 +12,7 @@
   // Die Lagekarte hat Datei- und Browserquelle bereits aufgelöst (Browser hat Vorrang).
   const lokalKey=()=>typeof VIEW.karte.cartoKey==='string'?VIEW.karte.cartoKey.trim():'';
   const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter'};
+  const STIL_RAM_MS=10*60*1000; // begrenzte Wiederverwendung, nur beim Neuaufbau
   /* Nur Sitzungs-RAM: Kamera, explizite Stilwahl, Gebäudewunsch; kein Schlüssel,
      keine Objekte, keine persistente Speicherung. Gemeinsame Kamera folgt in K4. */
   function knoepfe(c){
@@ -63,27 +64,36 @@
   }
   function rueckfall(c,grund){
     if(!aktiv(c)||!c.a)return;
-    ++c.generation;stop(c);c.modus='leer';c.phase='lokal';c.key='';kachelReset(c);
+    ++c.generation;stop(c);c.modus='leer';c.phase='lokal';c.key='';c.stilCache=null;c.stilKandidat=null;kachelReset(c);
     try{c.a.setStyle(KARTE_V2_QUELLEN.leererStil());sync();}catch(e){}
     knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,grund+' · Lokale Objektlayer bleiben verfügbar.');
   }
-  async function wechseln(c,n){
+  async function wechseln(c,n,cache=null){
     if(!aktiv(c)||!c.a||!Object.hasOwn(namen,n))return;
     if(n==='leer'){rueckfall(c,'Ohne Basiskarte');return;}
     const key=lokalKey();
     if(!key){rueckfall(c,'Kein lokaler CARTO-Schlüssel');return;}
     const Q=KARTE_V2_QUELLEN, g=++c.generation;stop(c);kachelReset(c);
-    c.modus=n;c.phase='abruf';c.key=key;knopfhilfe();
+    c.modus=n;c.phase='abruf';c.key=key;c.stilCache=null;c.stilKandidat=null;knopfhilfe();
     function knopfhilfe(){knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,namen[n]+' wird geladen.');}
     const ac=new AbortController();c.abort=ac;
     c.timer=setTimeout(()=>{if(aktiv(c)&&c.generation===g)rueckfall(c,'CARTO-Zeitlimit erreicht');},25000);
     try{
-      const antwort=await fetch(Q.cartoRequest(Q.stil(n),key).url,{signal:ac.signal,referrerPolicy:'no-referrer',redirect:'error',credentials:'omit'});
-      if(!antwort.ok)throw Error('Stilabruf');
-      const s=await antwort.json();
+      let s,zeit;
+      const wieder=cache&&cache.modus===n&&Date.now()-cache.zeit<STIL_RAM_MS&&Q.styleCachebar(cache.stil,key);
+      if(wieder){s=cache.stil;zeit=cache.zeit;}
+      else{
+        const antwort=await fetch(Q.cartoRequest(Q.stil(n),key).url,{signal:ac.signal,referrerPolicy:'no-referrer',redirect:'error',credentials:'omit'});
+        if(!antwort.ok)throw Error('Stilabruf');
+        s=await antwort.json();zeit=Date.now();
+      }
       if(!aktiv(c)||c.generation!==g)return;
       if(!Q.vektorStil(s))throw Error('Vektorstil');
       const stil=Q.gebaeudeStil(s,n==='dunkel',c.gebaeude);
+      if(Q.styleCachebar(s,key)){
+        c.stilKandidat={modus:n,zeit,stil:s};
+        if(wieder)c.stilCache=c.stilKandidat; // bereits in dieser Sitzung online bewährt
+      }
       c.quellen=new Set(Object.entries(stil.sources).filter(([,q])=>q.type==='vector').map(([id])=>id));
       c.phase='kacheln';c.a.setStyle(stil);sync();
     }catch(e){if(aktiv(c)&&c.generation===g)rueckfall(c,'CARTO-Stil nicht verfügbar');}
@@ -154,11 +164,12 @@
       // Auch bei fehlerhafter/entfernter Map muss der Abbau weiterlaufen.
       try{
         const kamera=c.a.camera();
-        if(kamera)sitzung={kamera,modus:c.modus,gebaeude:c.gebaeude};
+        if(kamera)sitzung={kamera,modus:c.modus,gebaeude:c.gebaeude,
+          stilCache:c.key&&c.key===lokalKey()?c.stilCache:null};
       }catch(e){sitzung=null;}
     }
     if(!c)return;
-    ++c.generation;stop(c);c.key='';
+    ++c.generation;stop(c);c.key='';c.stilCache=null;c.stilKandidat=null;
     /* Ein Fehler beim Aufräumen darf die bestehende Anwendung nicht blockieren. */
     try{if(c.a)c.a.unmount();}catch(e){}
     try{if(c.map)c.map.remove();}catch(e){}
@@ -169,7 +180,7 @@
     if(!el||!status||document.body.classList.contains('locked'))return;
     if(kontext)unmount(true);
     const alt=sitzung;
-    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,key:'',generation:0,abort:null,timer:null};
+    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null};
     kachelReset(c);kontext=c;
     bibliothek().then(()=>{
       if(!aktiv(c))return;
@@ -206,7 +217,7 @@
               if(c.kachelWarnung)rueckfall(c,'CARTO-Ressource nicht verfügbar');
               return; // ansonsten greift das bestehende Zeitlimit
             }
-            stop(c);c.phase='online';gebaeudeKnoepfe(c);
+            stop(c);c.phase='online';c.stilCache=c.stilKandidat;c.stilKandidat=null;gebaeudeKnoepfe(c);
           }else if(!c.kachelErfolg&&c.kachelFehler.size>=3){
             rueckfall(c,'CARTO-Ressource nicht verfügbar');return;
           }
@@ -219,7 +230,7 @@
       });
       knoepfe(c);gebaeudeKnoepfe(c);
       sync();
-      if(alt&&alt.modus!=='leer')wechseln(c,alt.modus);
+      if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.stilCache);
     }).catch(()=>{
       if(!aktiv(c))return;
       hinweis(c,'Lokale MapLibre-Ansicht nicht verfügbar. Bestehende Karte bleibt verfügbar.');

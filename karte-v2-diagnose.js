@@ -45,6 +45,19 @@
     for(const [l,v] of Object.entries(s.layer))lines.push(l+': '+v.fragmente+' Fragmente; name='+v.namen.name+', name:de='+v.namen['name:de']+', name:en='+v.namen['name:en']+'; Attribute: '+(v.felder.map(([k,n])=>k+'='+n).join(', ')||'keine'));
     return lines.join('\n');
   }
-  const api=Object.freeze({ORTE,statistik,quelle,stichprobe,text});
+  // Ausschließlich feste Kategorien und numerische Style-Metadaten, keine IDs,
+  // URLs, Textausdrücke oder tatsächlichen Beschriftungswerte in den Bericht.
+  function beschriftung(stil){
+    const id=quelle(stil);
+    if(!id)return 'Keine eindeutige Vektorquelle.';
+    const gruppen=[['Hausnummern','buildings','addr_housenumber'],['Straßenbeschriftung','roads',null],['POI-Beschriftung','pois',null],['Ortsbeschriftung','places',null]];
+    return gruppen.map(([titel,layer,feld])=>{
+      const ls=stil.layers.filter(l=>l.source===id&&l['source-layer']===layer&&l.type==='symbol'&&l.layout?.['text-field']&&(!feld||JSON.stringify(l.layout['text-field']).includes(feld)));
+      const aktiv=ls.filter(l=>l.layout.visibility!=='none');
+      const grenzen=aktiv.map(l=>[Number.isFinite(l.minzoom)?l.minzoom:0,Number.isFinite(l.maxzoom)?l.maxzoom:24]).map(([a,b])=>a+'–'+b);
+      return titel+': '+aktiv.length+'/'+ls.length+' aktive Textlayer; Zoom '+(grenzen.join(', ')||'—');
+    }).join('\n');
+  }
+  const api=Object.freeze({ORTE,statistik,quelle,stichprobe,text,beschriftung});
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.KARTE_V2_DIAGNOSE=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

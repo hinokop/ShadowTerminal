@@ -14,7 +14,7 @@ const field=(n,v)=>cat(vi(n*8),vi(v));
 const bytes=(n,v)=>cat(vi(n*8+2),vi(v.length),v);
 const str=(n,v)=>bytes(n,Buffer.from(v,'utf8'));
 const packed=(n,v)=>bytes(n,cat(...v.map(vi)));
-const keys=['kind','height','min_height'], values=[];
+const keys=['kind','height','min_height','addr_housenumber'], values=[];
 function value(v){let i=values.findIndex(x=>x===v);if(i<0){i=values.length;values.push(v);}return i;}
 const rows=[
  {kind:'building',height:30},
@@ -22,15 +22,17 @@ const rows=[
  {kind:'building'},
  {kind:'building',height:-5},
  {kind:'building_part',height:10,min_height:10},
- {kind:'address',height:25},
- {kind:'address',height:30,polygon:true},
+ {kind:'address',height:25,addr_housenumber:'7'},
+ {kind:'address',height:30,polygon:true,addr_housenumber:'7'},
  {kind:'building',height:'30'},
  {kind:'building_part',height:20,min_height:-2},
  {kind:'building',height:1600},
  {kind:'building',height:20,min_height:'5'},
  {kind:'building',height:0},
- {kind:'building',height:20,point:true},
- {kind:'building_part',height:15,min_height:0}
+ {kind:'building',height:20,point:true,addr_housenumber:'7'},
+ {kind:'building_part',height:15,min_height:0},
+ {kind:'address',height:20},
+ {kind:'address',addr_housenumber:''}
 ];
 const features=rows.map((r,i)=>{
  const x=300+(i%4)*950,y=300+Math.floor(i/4)*950,w=400,h=400;
@@ -41,6 +43,10 @@ const features=rows.map((r,i)=>{
 });
 const layer=cat(str(1,'buildings'),...features,...keys.map(k=>str(3,k)),...values.map(v=>bytes(4,typeof v==='string'?str(1,v):field(6,zz(v)))),field(5,4096),field(15,2));
 const tile=bytes(3,layer);
+// Deterministische synthetische SDF-Glyphe '7' (8x8, 3px Rand), kein fremder Font.
+const bitmap=Buffer.alloc(14*14);for(let y=3;y<11;y++)for(let x=3;x<11;x++)bitmap[y*14+x]=(y<5||x===10-(y-3))?255:64;
+const glyph=cat(field(1,55),bytes(2,bitmap),field(3,8),field(4,8),field(5,zz(0)),field(6,zz(8)),field(7,9));
+const glyphPbf=bytes(1,cat(str(1,'Fixture Regular'),str(2,'0-255'),bytes(3,glyph)));
 const source={type:'vector',tiles:['https://example.invalid/fixture/{z}/{x}/{y}.mvt'],maxzoom:15};
 const basis={version:8,sources:{protomaps:source},layers:[
  {id:'bg',type:'background',paint:{'background-color':'#e0e0e0'}},
@@ -50,9 +56,11 @@ const basis={version:8,sources:{protomaps:source},layers:[
  const browser=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
   const p=await browser.newPage({viewport:{width:1200,height:900},reducedMotion:'reduce'});p.setDefaultTimeout(25000);
-  const errors=[];let requests=0;p.on('pageerror',e=>errors.push(e.message));
+  const errors=[];let requests=0,glyphRequests=0;p.on('pageerror',e=>errors.push(e.message));
   await p.route(/^https?:/,r=>{
-    if(new URL(r.request().url()).hostname==='example.invalid'){requests++;return r.fulfill({body:tile,contentType:'application/vnd.mapbox-vector-tile',headers:{'access-control-allow-origin':'*'}});}
+    const u=new URL(r.request().url());
+    if(u.hostname==='example.invalid'&&u.pathname.startsWith('/fonts/')){glyphRequests++;return r.fulfill({body:glyphPbf,contentType:'application/x-protobuf',headers:{'access-control-allow-origin':'*'}});}
+    if(u.hostname==='example.invalid'){requests++;return r.fulfill({body:tile,contentType:'application/vnd.mapbox-vector-tile',headers:{'access-control-allow-origin':'*'}});}
     return r.abort();
   });
   await p.goto(pathToFileURL(path.join(ROOT,'karte-v2-prototyp.html')).href);
@@ -74,6 +82,21 @@ const basis={version:8,sources:{protomaps:source},layers:[
   await p.evaluate(()=>__m.jumpTo({zoom:14}));await idle();assert.deepEqual(await ids(Q.GEBAEUDE_ID),[],'keine Extrusion unter Zoom 15');
   await p.evaluate(()=>__m.jumpTo({zoom:15,pitch:45}));await idle();
   assert.ok((await ids(Q.GEBAEUDE_ID)).length>0,'Extrusion auch geneigt sichtbar');
+  // Echter Dark-Matter-Ersatzlayer: nur Adresspunkt mit nichtleerer Nummer,
+  // kein Adresspolygon, Gebäudepunkt oder fehlender Wert.
+  const nacht=JSON.parse(JSON.stringify(basis));
+  nacht.glyphs='https://example.invalid/fonts/{fontstack}/{range}.pbf';
+  nacht.layers.push({id:'font-fixture',type:'symbol',source:'protomaps','source-layer':'buildings',layout:{'text-field':'','text-font':['Fixture Regular']}});
+  await p.evaluate(style=>{
+    __m.setStyle(style,{diff:false});
+    const n=2**15,x=17604+1250/4096,y=10747+1250/4096;
+    __m.jumpTo({center:[x/n*360-180,Math.atan(Math.sinh(Math.PI*(1-2*y/n)))*180/Math.PI],zoom:17,pitch:0,bearing:0});
+  },Q.gebaeudeStil(nacht,true,true));
+  const hausBereit=()=>p.waitForFunction(id=>__m.loaded()&&__m.areTilesLoaded()&&__m.getLayer(id)&&__m.queryRenderedFeatures({layers:[id]}).some(f=>f.id===6),Q.HAUSNUMMER_ID);
+  await hausBereit();assert.deepEqual(await ids(Q.HAUSNUMMER_ID),[6]);assert.ok(glyphRequests>0);
+  await p.evaluate(()=>__m.jumpTo({pitch:60}));await hausBereit();
+  assert.deepEqual(await ids(Q.HAUSNUMMER_ID),[6],'Hausnummer bei 60 Grad Neigung');
+  await p.evaluate(()=>__m.jumpTo({zoom:16,pitch:0}));await idle();assert.deepEqual(await ids(Q.HAUSNUMMER_ID),[],'Hausnummer erst ab Zoom 17');
   assert.deepEqual(await p.evaluate(()=>window.__mapErr||[]),[]);
   await p.evaluate(()=>__m.remove());assert.deepEqual(errors,[]);
   console.log('OK: echte MVT-Gebäude, Ausschluss unplausibler Höhen/Adresspunkte, Zoom und Sichtbarkeit');

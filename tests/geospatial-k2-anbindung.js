@@ -95,6 +95,7 @@ function assertCamera(actual,expected){
   await click([52.51,13.41]);assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
   assert.match(await p.locator('#k-auswahl').innerText(),/K2 Sued/);
   const status=text=>p.waitForFunction(text=>$('k-v2-status')?.textContent.includes(text),text);
+  const stilAbrufe=()=>anfragen.filter(x=>x.art==='stil').length;
   const fixtureKey='K2C_FIXTURE+/k';
   // Frisches Browserprofil: die echte Datei-Quelle wird schon beim Appstart aufgelöst.
   const dateiKey=await p.evaluate(()=>window.KARTEN_SCHLUESSEL?.carto?.trim()||'');
@@ -191,10 +192,11 @@ function assertCamera(actual,expected){
   await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[13.406,52.506],zoom:14.25,pitch:45,bearing:22,duration:0}));
   await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.camera()?.pitch===45);
   const neuCam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
-  const neuKey='K2C_SECOND+/k', vorher=anfragen.length;
+  const neuKey='K2C_SECOND+/k', vorher=anfragen.length, vorKeywechsel=stilAbrufe();
   await p.evaluate(k=>{window.__alt=KARTE_V2_DEV.adapter();VIEW.karte.cartoKey=k;renderModule();},neuKey);
   await status('Voyager bereit');
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
+  assert.equal(stilAbrufe(),vorKeywechsel+1,'Keywechsel verlangt frischen Stil');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),neuCam);
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
   assert.ok(anfragen.length>vorher&&anfragen.slice(vorher).every(x=>x.key===neuKey&&!x.referer),'neuer Schlüssel bei Wiederaufbau');
@@ -204,19 +206,22 @@ function assertCamera(actual,expected){
   for(const [stil,bezeichnung,ll] of [['voyager','Voyager',[52.503,13.407]],['dunkel','Dark Matter',[52.504,13.408]]]){
     if(stil==='dunkel'){await p.click('#k-v2-dunkel');await status('Dark Matter bereit');}
     await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();VIEW.karte.pinSetzen=true;});
-    const n=await p.evaluate(()=>PROFIL.pins.length);
+    const n=await p.evaluate(()=>PROFIL.pins.length), vorPin=stilAbrufe();
     await click(ll);assert.equal(await p.evaluate(()=>PROFIL.pins.length),n+1,'gemeinsame Pin-Aktion '+stil);
     await status(bezeichnung+' bereit');
     assert.equal(await p.evaluate(()=>__alt.ready()),false,'Renderer erneuert '+stil);
+    assert.equal(stilAbrufe(),vorPin,'kein Stilabruf bei Pin-Neuaufbau '+stil);
     assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),pinCam);
     assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
     assert.equal(await p.locator('#k-v2-'+stil).getAttribute('aria-pressed'),'true');
   }
+  const vorModulwechsel=stilAbrufe();
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();dispatch({type:'NAVIGATION',modul:'dossier'});});
   assert.equal(await p.locator('#k-v2-map').count(),0);
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
   await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await status('Dark Matter bereit');
   assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
+  assert.equal(stilAbrufe(),vorModulwechsel,'kein Stilabruf nach Modulwechsel');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),pinCam);
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
   /* Reale Zugangssperre und erneute Freigabe, ohne Navigation oder Neuladen. */
@@ -231,6 +236,9 @@ function assertCamera(actual,expected){
   assert.equal(await p.locator('#k-v2-leer').getAttribute('aria-pressed'),'true');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'false');
   assert.equal(anfragen.length,gesperrt,'kein automatischer erneuter CARTO-Abruf nach Sperre');
+  const nachSperre=stilAbrufe();await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
+  assert.equal(stilAbrufe(),nachSperre+1,'Stil nach Sperre frisch abrufen');
+  await p.click('#k-v2-leer');await status('Ohne Basiskarte');
   // Echtes Laden des alten Browserprofils mit abweichender Schlüsseldatei.
   // Nur der in .kartenwahl bereits vorhandene Key darf verwendet werden.
   const browserKey='K2C_BROWSER_STORED+/k', stored=await b.newPage({reducedMotion:'reduce'});

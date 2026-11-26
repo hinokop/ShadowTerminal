@@ -68,7 +68,7 @@ header strong{margin-right:12px} button,input{font:inherit;background:#182530;co
     const knoepfe=['voyager','dunkel','leer','flach','geneigt','demo','diagnose','key'];
     knoepfe.forEach(id=>$(id).disabled=true);
     const alt={center:map.getCenter(),zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()};
-    const result=[head+'Stil: '+modus];
+    const result=[head+'Stil: '+modus+'\n'+D.beschriftung(map.getStyle())];
     function warten(ort,z){
       return new Promise(resolve=>{
         let timer, fertig=false, fehler=false;
