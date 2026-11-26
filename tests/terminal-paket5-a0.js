@@ -86,13 +86,33 @@ const PW = 'pw-test-123';
     assert.equal((await out.textContent()).split('\n').slice(vor + 1).join('\n'), '200');
     /* 3. LOS während einer laufenden Recherche */
     vor = await halte('grep -ri a0marke /intel/dossiers/persons | wc -l', lezte + '/notes');
-    /* bis wird laufend aus der Bahn berechnet: Uhr bis kurz vor das tatsächliche Linkende laufen lassen */
-    const rest = await p.evaluate(() => TERMINAL_ZUSTAND.satLink.bis - Date.now());
+    /* Die zu prüfende Verbindung festhalten: pppd darf schon 1 s nach ihrem
+       Hangup erneut wählen und satLink durch einen neuen Versuch ersetzen.
+       Der neue Versuch ist nicht der Link, dessen LOS wir prüfen. */
+    const rest = await p.evaluate(() => {
+      window.__a0Link = TERMINAL_ZUSTAND.satLink;
+      return window.__a0Link.bis - Date.now();
+    });
     assert.ok(rest > 2000 && rest < 3600000, 'Linkende in ' + rest + ' ms');
     await p.clock.runFor(rest - 1000);
-    assert.equal(await p.evaluate(() => !!TERMINAL_ZUSTAND.satLink?.abgelaufen), false, 'kein Abbau vor LOS');
+    const davor = await p.evaluate(() => ({
+      selber: TERMINAL_ZUSTAND.satLink === window.__a0Link,
+      abgelaufen: !!window.__a0Link.abgelaufen, bereit: !!TERMINAL_ZUSTAND.modem?.bereit
+    }));
+    assert.deepEqual(davor, { selber: true, abgelaufen: false, bereit: true }, 'ursprünglicher Link steht bis kurz vor LOS');
     await p.clock.runFor(2000);
-    assert.equal(await p.evaluate(() => !TERMINAL_ZUSTAND.satLink || !!TERMINAL_ZUSTAND.satLink.abgelaufen), true, 'Abbau bei LOS trotz laufender Recherche');
+    const danach = await p.evaluate(() => ({
+      altAbgelaufen: !!window.__a0Link.abgelaufen,
+      altEnde: window.__a0Link.bis, jetzt: Date.now(),
+      neuerLink: !!TERMINAL_ZUSTAND.satLink && TERMINAL_ZUSTAND.satLink !== window.__a0Link,
+      neuerSat: TERMINAL_ZUSTAND.satLink?.sat?.name || null,
+      neuerEnde: TERMINAL_ZUSTAND.satLink?.bis || null,
+      bereit: !!TERMINAL_ZUSTAND.modem?.bereit, phase: TERMINAL_ZUSTAND.modem?.phase || null
+    }));
+    assert.equal(danach.altAbgelaufen, true, 'Abbau des ursprünglichen Links bei LOS trotz laufender Recherche: ' + JSON.stringify(danach));
+    assert.equal(danach.bereit, false, 'keine bereits stehende PPP-Verbindung unmittelbar nach LOS: ' + JSON.stringify(danach));
+    console.log('A0 LOS: ' + JSON.stringify(danach));
+    await p.evaluate(() => { delete window.__a0Link; });
     assert.ok(await p.evaluate(() => TERMINAL_ZUSTAND.syslog.some(z => /Modem hangup \(NO CARRIER\)/.test(z))), 'Hangup im Systemprotokoll');
     assert.match(await p.locator('.tmux-pane').nth(0).textContent(), /Modem hangup/, 'plog -f zeigt den Abbau');
     await p.evaluate(() => window.__hA.weiter());
