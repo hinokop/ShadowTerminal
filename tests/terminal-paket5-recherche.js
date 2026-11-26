@@ -80,7 +80,8 @@ async function bruecke() {
       'zahlen.txt': '10\n9\n-3\n1,000\n2.5\nabc\n10\n',
       'woerter.txt': 'a a\nb\nb\nc\na a\n',
       'ohne-ende.txt': 'zeile eins\nzeile zwei',
-      'zahlen-c.txt': '10\n9\n-3\n2.5\nabc\n10\n007\n'
+      'zahlen-c.txt': '10\n9\n-3\n2.5\nabc\n10\n007\n',
+      'wortgrenzen.txt': 'a\n\n \n.\na b\na .\n-\na -\na-b\nx.\n'
     };
     for (const [n, t] of Object.entries(DATEN)) await vfs('/home/raizo/' + n, t);
     await mkdir('/home/raizo/projects');
@@ -169,7 +170,7 @@ async function bruecke() {
       assert.deepEqual([ich, code], [g[0].split(host + '/').join(''), g[1]], 'GNU-Vergleich: ' + zeile);
       void s;
     };
-    const q = x => x.map(a => /[\s"'|\\$*?[\]{}()<>;&]/.test(a) ? "'" + a + "'" : a).join(' ');
+    const q = x => x.map(a => a === '' || /[\s"'|\\$*?[\]{}()<>;&]/.test(a) ? "'" + a + "'" : a).join(' ');
     for (const args of [['-n', 'Berlin', 'report.txt'], ['-c', 'Berlin', 'report.txt', 'woerter.txt'], ['-v', 'Berlin', 'report.txt'], ['-i', 'BERLIN', 'report.txt'], ['-w', 'a', 'woerter.txt'],
       ['-x', 'b', 'woerter.txt'], ['-E', 'Ber(l|x)in{1,2}', 'report.txt'], ['Berl.n e\\+', 'report.txt'], ['-F', '-x', 'report.txt'], ['-l', 'a', 'woerter.txt', 'report.txt'],
       ['-rn', 'Berlin', 'projects'], ['-h', 'Berlin', 'report.txt', 'projects/notiz.txt'], ['-H', 'Hamburg', 'report.txt'], ['[[:upper:]]', 'zahlen.txt'], ['^[0-9]\\{2\\}$', 'zahlen.txt']]) {
@@ -181,6 +182,12 @@ async function bruecke() {
     await vergleich('uniq', ['-c', 'woerter.txt'], 'uniq -c woerter.txt');
     await vergleich('sha256sum', ['report.txt', 'zahlen.txt'], 'sha256sum report.txt zahlen.txt');
     await vergleich('sort', ['-n', 'zahlen-c.txt'], 'sort -n zahlen-c.txt');   /* ohne Tausendertrennzeichen: C.UTF-8 und en_US gleich */
+    /* -w und leere Muster (Review 2 zu #141): Terminierung und GNU-Semantik, auch mehrere -e */
+    for (const args of [['-Fw', '', 'wortgrenzen.txt'], ['-w', '', 'wortgrenzen.txt'], ['-Fw', '-e', '', '-e', 'a', 'wortgrenzen.txt'], ['-w', '-e', '', '-e', 'b', 'wortgrenzen.txt'],
+      ['-w', '--', '-', 'wortgrenzen.txt'], ['-Fw', '--', '-', 'wortgrenzen.txt'], ['-w', '\\.', 'wortgrenzen.txt'], ['-Fx', '', 'wortgrenzen.txt'], ['-x', '', 'wortgrenzen.txt'],
+      ['-cFw', '', 'wortgrenzen.txt'], ['-F', '', 'wortgrenzen.txt']]) {
+      await vergleich('grep', args, 'grep ' + q(args));
+    }
     await vergleich('find', ['projects', '-name', '*.txt'], 'find projects -name "*.txt"');
     await vergleich('find', ['projects', '-type', 'd'], 'find projects -type d');
     await vergleich('find', ['.', '-maxdepth', '1', '-name', 'r*'], 'find . -maxdepth 1 -name "r*"');
@@ -422,6 +429,32 @@ async function bruecke() {
     await p.evaluate(() => { RECHERCHE_GRENZE.gelesen = 100000; });
     assert.deepEqual(await mitStatus('head -n 1 ~/kurz.txt | wc -l'), ['wc: read limit reached (16 MiB); no result', 2]);
     await p.evaluate(() => { RECHERCHE_GRENZE.gelesen = 16 * 1048576; });
+
+    /* leeres Muster mit -F -w endet (vorher Endlosschleife am Zeilenende) */
+    assert.deepEqual(await mitStatus('echo a | grep -Fw ""'), ['', 1]);
+    assert.deepEqual(await mitStatus('echo "a ." | grep -Fw ""'), ['a .', 0]);
+    /* Altbestand ohne Anlegezeit (Review 2 zu #141): Existenz und Dossier zum Zeitpunkt des Treffers */
+    const alt = await p.evaluate(() => {
+      dispatch({ type: 'PIN_ANGELEGT', ll: [52.5, 13.5], name: 'Altpunkt', dossier: 'P-0003', notiz: 'ALTMARKE' });
+      const x = PROFIL.pins.at(-1); delete x.t; profilSpeichern();
+      return { id: x.id, da: INTEL.bindung({ art: 'pin', id: x.id }).da };
+    });
+    assert.equal(alt.da, false, 'Altobjekt ohne Anlegezeit');
+    fs.writeFileSync(path.join(br.db, 'ops', 'lageblatt-' + alt.id + '.txt'), 'ALT\n');
+    await sauber();
+    await lauf('grep -r ALTMARKE /intel/geospatial/pins');
+    await lauf('find ' + A + '/ops -name "lageblatt-' + alt.id + '*"');
+    await lauf('grep -rc ALTMARKE /intel/geospatial/pins/' + alt.id);
+    const altZeilen = await zeilen();
+    assert.ok(altZeilen.length >= 3 && altZeilen.every(l => l.includes(alt.id)), altZeilen.join('\n'));
+    await p.evaluate(id => { dispatch({ type: 'PIN_GEAENDERT', id, dossier: 'P-0002' }); dispatch({ type: 'DOSSIER_SPERREN', id: 'P-0003' }); }, alt.id);
+    assert.deepEqual(await zeilen(), [], 'Altobjekt: Verknüpfung A -> B und Sperre A');
+    await p.evaluate(() => dispatch({ type: 'DOSSIER_ENTSPERREN', id: 'P-0003' }));
+    await sauber();
+    await lauf('grep -r ALTMARKE /intel/geospatial/pins');
+    assert.equal((await zeilen()).length, 1);
+    await p.evaluate(id => dispatch({ type: 'PIN_ENTFERNT', id }), alt.id);
+    assert.deepEqual(await zeilen(), [], 'Altobjekt: Löschung');
 
     /* ---- P2 ---- */
     assert.deepEqual(await mitStatus('sha256sum ' + A + '/dokumente/bericht.txt'), ['sha256sum: ' + A + '/dokumente/bericht.txt: Operation not supported (archive files are delivered as decoded text)', 1], 'nur Archivoperand: keine Prüfsumme der Standardeingabe');
