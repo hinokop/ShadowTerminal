@@ -32,6 +32,16 @@ function rUtf8(s) {
 /* Ursprüngliche Bindung (wie #140): Abhängigkeiten auf Dossier, Pin, Zone und Sichtung tragen zusätzlich Identität und ursprüngliche
    Dossierzuordnung; Exportnamen im Archiv die Bindung ihres Objekts. Ohne auflösbare Identität (Altobjekt ohne Anlegezeit oder Kennung)
    bleibt die aktuelle Abhängigkeit allein. Je Operation zwischengespeichert. */
+/* Bindung eines Objekts: mit Identität wie #140 (herkunft); Altobjekt ohne Anlegezeit oder Kennung: Existenz (Kennungen werden über
+   PROFIL.seq nicht wiederverwendet) und Dossier zum Zeitpunkt des Treffers, damit Verknüpfung A -> B und Sperre A auch hier greift */
+function rObjektBindung(d) {
+  const x = INTEL.bindung(d);
+  if (x.da) return [{ art: 'herkunft', deps: [d], bindung: [x] }];
+  const alt = [{ art: 'objekt', ziel: d }];
+  if (d.art === 'sichtung') alt.push({ art: 'dossier', id: d.dossier });
+  else if ((d.art === 'pin' || d.art === 'zone') && x.dossier) alt.push({ art: 'dossier', id: x.dossier });
+  return alt;
+}
 function rBinden(op, deps) {
   if (!deps || !deps.length) return deps && deps.length ? deps : null;
   const aus = [];
@@ -41,12 +51,10 @@ function rBinden(op, deps) {
     let b = op.bindungen.get(k);
     if (b === undefined) {
       b = [d];
-      if (d.art === 'dossier' || d.art === 'pin' || d.art === 'zone' || d.art === 'sichtung') {
-        const x = INTEL.bindung(d);
-        if (x.da) b = [d, { art: 'herkunft', deps: [d], bindung: [x] }];
-      } else if (d.art === 'archivname') {
-        const z = terminalArchivNameZiel(d.name), dd = z ? terminalArchivSendDeps([z]) : [];
-        if (dd.length) b = [d, { art: 'herkunft', deps: dd, bindung: dd.map(INTEL.bindung) }];
+      if (d.art === 'dossier' || d.art === 'pin' || d.art === 'zone' || d.art === 'sichtung') b = b.concat(rObjektBindung(d));
+      else if (d.art === 'archivname') {
+        const z = terminalArchivNameZiel(d.name);
+        if (z) b = b.concat(rObjektBindung(z.art === 'sichtung' ? { art: 'sichtung', dossier: z.dossier, id: z.id.slice(z.dossier.length + 1) } : { art: z.art, id: z.id }));
       }
       op.bindungen.set(k, b);
     }
@@ -462,8 +470,9 @@ async function rAutomatTest(a, cps, op) {
         case 'e': stapel.push(z.aus); break;
         case '^': if (pos === 0) stapel.push(z.aus); break;
         case '$': if (pos === n) stapel.push(z.aus); break;
-        case 'wa': if (!rWortZeichen(cps[pos - 1]) && rWortZeichen(cps[pos])) stapel.push(z.aus); break;
-        case 'we': if (rWortZeichen(cps[pos - 1]) && !rWortZeichen(cps[pos])) stapel.push(z.aus); break;
+        /* -w wie GNU: vor dem Treffer und nach dem Treffer kein Wortzeichen (der Treffer selbst darf leer sein oder aus Satzzeichen bestehen) */
+        case 'wa': if (!rWortZeichen(cps[pos - 1])) stapel.push(z.aus); break;
+        case 'we': if (!rWortZeichen(cps[pos])) stapel.push(z.aus); break;
         case 'ok': return true;
         default: liste.push(x);
       }
@@ -495,7 +504,13 @@ function rPruefer(muster, opt) {
       for (const m of fest) {
         if (opt.x) { if (z === m) return true; continue; }
         if (!opt.w) { if (z.includes(m)) return true; continue; }
-        /* -F -w: Vorkommen über indexOf, Wortgrenzen je Vorkommen; Schritte begrenzt die Freigabe der Ereignisschleife */
+        /* -F -w: Vorkommen über indexOf, Wortgrenzen je Vorkommen; Schritte begrenzt die Freigabe der Ereignisschleife. Leeres Muster: jede
+           Position einmal (GNU: Treffer, wo davor und danach kein Wortzeichen steht); endet am Zeilenende (Review 2 zu #141). */
+        if (m === '') {
+          const cps = Array.from(z);
+          for (let k = 0; k <= cps.length; k++) if (!rWortZeichen(cps[k - 1]) && !rWortZeichen(cps[k])) return true;
+          continue;
+        }
         let p = z.indexOf(m);
         while (p >= 0) {
           const vor = Array.from(z.slice(Math.max(0, p - 2), p)).pop(), nach = Array.from(z.slice(p + m.length, p + m.length + 2))[0];
