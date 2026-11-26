@@ -16,8 +16,9 @@ const { APP } = require('./_pfad');
     await p.click('#gate-go');
     await p.waitForFunction(() => !document.body.classList.contains('locked'));
     await p.evaluate(() => {
-      VIEW.karte.reiter = 'karte'; VIEW.karte.lat = 52.5; VIEW.karte.lon = 13.4; VIEW.karte.zoom = 14;
-      dispatch({ type: 'NAVIGATION', modul: 'karte' }); renderModule();
+      /* Navigation setzt die Kamera zurück; Testposition erst danach festlegen. */
+      dispatch({ type: 'NAVIGATION', modul: 'karte' });
+      VIEW.karte.reiter = 'karte'; VIEW.karte.lat = 52.5; VIEW.karte.lon = 13.4; VIEW.karte.zoom = 14; renderModule();
     });
     await p.click('#k-ozone-neu');
     const mitte = await p.locator('#k-svg').boundingBox();
