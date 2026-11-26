@@ -119,3 +119,11 @@ IndexedDB `fieldterminal.vfs` (Stores knoten, meta) liegt außerhalb von PROFIL 
 **Lokaler Speicher (Paket 3):** `fieldterminal.vfs.sysStand` ist eine Änderungsmarke ohne Inhalt (Zeitstempel und Zufallsteil); sie zeigt anderen Fenstern, dass sich `/etc` oder `~/.predict` geändert hat. Fehlt sie oder ist sie nicht lesbar, gilt nur der Stand des eigenen Fensters.
 
 **Zustand (Paket 3):** neue Aktion `DOSSIER_NOTIZ_GELOESCHT` (`{ id, notiz, quelle }`) entfernt eine Notiz aus `notizen` des Dossiers; `seq.notiz` bleibt (Kennungen werden nicht wiederverwendet). Format und Version des Zustands sind unverändert.
+
+## Verwaltete Exporte (Paket 4, M4)
+
+- **Speicher:** eigene IndexedDB `fieldterminal.exporte`, Version 1, getrennt von Zustand und Profil (localStorage), VFS (`fieldterminal.vfs`), Belegdateien (`fieldterminal.dok`) und Fallpaket. Zwei Objektspeicher: `exporte` (Metadaten, Schlüssel `id`, eindeutiger Index `pfad`) und `texte` (`id`, `text`).
+- **Datensatz (unveränderlich):** `id`, `pfad`, `name`, `quelle` (`art|qid|dossier`), `art`, `qid`, `dossier` (nur Sichtung), `deps` und `bindung` (ursprüngliche Abhängigkeiten mit Identität, Format von `/intel`), `sprache` (`de`), `erstellt`, `bytes`, `sha256`.
+- **Grenzen:** 1.000 Exporte, 16 MiB, 64 KiB je Export (`EXPORTE_GRENZE`). Der Bestand wird in derselben Transaktion gezählt, in der angelegt wird; es gibt keinen gespeicherten Zähler, der abweichen könnte. Keine automatische Löschung.
+- **Sicherung: keine (bewusst, freigegeben am 25.11.2026).** Exporte sind nicht Teil von Profilexport, Profilimport, Fallpaket, Arbeitsstand, `home-backup`, `home-export` und `home-restore` (Formate 1 bis 3 unverändert). Sie überdauern das Neuladen und den Neustart im selben Browserprofil (Ordner `profil` neben dem Starter). Mit einem anderen Profilordner, einer neuen Installation oder dem Löschen der Browserdaten gehen sie verloren. Ein Profilimport bringt keine Exporte mit; Exporte eines anderen Rechners wären ohnehin nur über ihre Herkunft zugänglich.
+- **Protokoll:** Anlegen und Löschen erscheinen im Protokoll des Zustands (Art und Kennung, kein Inhalt, Aktion `EXPORT_PROTOKOLL`). Exportdatenbank und Protokoll sind nicht gemeinsam atomar. Scheitert das Speichern des Protokolls, meldet die Oberfläche das getrennt; der Export gilt trotzdem.

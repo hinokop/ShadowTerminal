@@ -122,7 +122,7 @@ function oeffentlich(privatB64) {
     await p.clock.resume();
 
     /* ---- B: Installation ---- */
-    assert.equal(await lauf('ls /'), 'etc\nhome\nintel\n' + (await p.evaluate(() => TERMINAL_DB)) + '\ntmp\nusr\nvar');
+    assert.equal(await lauf('ls /'), 'etc\nexports\nhome\nintel\n' + (await p.evaluate(() => TERMINAL_DB)) + '\ntmp\nusr\nvar');
     assert.equal(await lauf('ls /etc'), 'chatscripts\nhostname\nhosts\nos-release\nppp\nwireguard');
     assert.match(await lauf('ls -l /etc'), /^drwx------ .* wireguard$/m, 'wireguard 0700');
     assert.match(await lauf('cat /etc/os-release'), /^PRETTY_NAME="Ubuntu 24\.04\.1 LTS"$/m);

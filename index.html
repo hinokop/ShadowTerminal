@@ -2799,6 +2799,9 @@ const ACTIONS = {
     meldung('Arbeitsstand wiederhergestellt' + (r.uebersprungen.length ? ' · übersprungen: ' + r.uebersprungen.join(', ') : ''));
     return { modul: 'Profil', aktion: 'Arbeitsstand wiederhergestellt', detail: 'Ansicht ' + STATE.ui.modul + (r.uebersprungen.length ? '; übersprungen: ' + r.uebersprungen.length : '') };
   },
+  EXPORT_PROTOKOLL: function (a) {    /* Paket 4 M4: verwaltete Exporte (Art und Kennung, kein Inhalt) */
+    return { modul: 'Karte', aktion: String(a.aktion), detail: String(a.detail || ''), leicht: true };
+  },
   SICHTUNG_KENNUNG: function (a) {      /* Altbestand ohne Kennung: einmalig vergeben, damit ein Export einer konkreten Sichtung zugeordnet werden kann */
     const d = STATE.dossiers.entitaeten[a.id], si = d && (d.sichtungen || []).find(function (x) { return x.id === a.sid; });
     if (!si || si.uid) return null;
@@ -4703,6 +4706,7 @@ else window.addEventListener('load', function () { Zugang.start(init); });   /* 
 <script src="terminal-vfs.js"></script>
 <script src="terminal-dateibefehle.js"></script>
 <script src="terminal-intel.js"></script>
+<script src="terminal-exporte.js"></script>
 <script src="terminal-sys.js"></script>
 <script src="profil-modul.js"></script>
 <script src="fall-modul.js"></script>

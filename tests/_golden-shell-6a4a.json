@@ -37,43 +37,43 @@
   },
   {
     "befehl": "ls",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
+    "ausgabe": "etc\nexports\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -a",
-    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
+    "ausgabe": ".\n..\netc\nexports\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -l",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
+    "ausgabe": "etc\nexports\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -la",
-    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
+    "ausgabe": ".\n..\netc\nexports\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -al",
-    "ausgabe": ".\n..\netc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
+    "ausgabe": ".\n..\netc\nexports\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -1",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
+    "ausgabe": "etc\nexports\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
   {
     "befehl": "ls -lh",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
+    "ausgabe": "etc\nexports\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -85,7 +85,7 @@
   },
   {
     "befehl": "ls -F",
-    "ausgabe": "etc/\nhome/\nintel/\npgcl-eu3.arch07/\ntmp/\nusr/\nvar/",
+    "ausgabe": "etc/\nexports/\nhome/\nintel/\npgcl-eu3.arch07/\ntmp/\nusr/\nvar/",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
@@ -109,7 +109,7 @@
   },
   {
     "befehl": "ls /",
-    "ausgabe": "etc\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
+    "ausgabe": "etc\nexports\nhome\nintel\npgcl-eu3.arch07\ntmp\nusr\nvar",
     "status": "0",
     "promptDanach": "raizo@terminal:/$"
   },
