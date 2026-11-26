@@ -450,6 +450,29 @@ function karteFensterLage() {
   const L = karteFenster();
   return { liste: L, aktiv: L.filter(function (w) { return w.zustand === 'aktiv'; }), kommend: L.filter(function (w) { return w.zustand === 'ausstehend'; }).sort(function (a, b) { return a.von - b.von; }) };
 }
+/* K1b-1: rendererinterne Identität getrennt von gespeicherten Kennungen.
+   Sichtungsnummern können im importierten Bestand je Dossier wiederkehren. JSON-Tupel
+   verhindern Trennzeichenkollisionen und ändern keine Produkt-ID. */
+function karteRenderSchluessel(art, id, entId) {
+  return JSON.stringify(art === 'sichtung' ? [art, entId, id] : [art, id]);
+}
+function karteRenderModell() {
+  const K = VIEW.karte;
+  /* Vorhandene Zugangs-/Ebenenfilter bleiben die einzige Quelle. Keine Persistenz, kein Cache. */
+  const marker = karteMarker().map(function (m) {
+    return Object.assign({}, m, { renderKey: karteRenderSchluessel(m.kat === 'sichtung' ? 'sichtung' : m.entitaet ? 'dossier' : m.kat, m.id, m.entId), ll: m.ll.slice() });
+  });
+  const zonen = karteZonen().map(function (z) {
+    return Object.assign({}, z, { renderKey: karteRenderSchluessel('zone', z.id), ll: z.ll && z.ll.slice() });
+  });
+  const sichtbar = new Set(marker.filter(function (m) { return m.entitaet; }).map(function (m) { return m.id; }));
+  const kanten = K.ebenen.verbindungen ? dossierRechercheKanten().filter(function (v) {
+    return sichtbar.has(v.von) && sichtbar.has(v.nach);
+  }).map(function (v) {
+    return Object.assign({}, v, { renderKey: karteRenderSchluessel('verbindung', v.id) });
+  }) : [];
+  return { marker: marker, zonen: zonen, kanten: kanten };
+}
 function zeichneKarte(svg) {
   const K = VIEW.karte, P = karteProj(), Z = K.ebenen, zm = K.zoom;
   const vb = { lonMin: P.lon(0), lonMax: P.lon(KW), latMin: P.lat(KH), latMax: P.lat(0) };
@@ -521,7 +544,7 @@ function zeichneKarte(svg) {
     kids.push(s('circle', { cx: cx, cy: cy, r: r, class: 'k-fenster-fl ' + w.zustand }), s('circle', { cx: cx, cy: cy, r: r, class: 'k-fenster ' + w.zustand }, s('title', null, w.id + ' ' + w.titel + ' (' + w.zustand + ')')));
   });
   /* Markierungen und Verbindungen */
-  const marker = karteMarker(), def = karteAuftragsansicht(), pos = {};
+  const modell = karteRenderModell(), marker = modell.marker, def = karteAuftragsansicht(), pos = {};
   const ci = def && STATE.agent.checkin && STATE.agent.checkin.standortId, zielpersonen = def ? zielpersonenListe() : [];
   /* Markierungen, die sich überdecken, werden auf einem kleinen Kreis aufgefächert; ein Leitstrich führt zur wahren Lage */
   { const gruppen = [];
@@ -546,7 +569,7 @@ function zeichneKarte(svg) {
   marker.forEach(function (m) { if (m.llV) { m.llW = m.ll; m.ll = m.llV; } });             /* Zeichenlage; ll bleibt für Popup und Zentrieren die wahre Lage */
   marker.forEach(function (m) { if (m.entitaet) pos[m.id] = m; });
   if (Z.verbindungen) {
-    dossierRechercheKanten().forEach(function (v) {
+    modell.kanten.forEach(function (v) {
       const a = pos[v.von], b = pos[v.nach];
       if (!a || !b) return;
       const x1 = P.px(a.ll[1]), y1 = P.py(a.ll[0]), x2 = P.px(b.ll[1]), y2 = P.py(b.ll[0]);
@@ -555,7 +578,7 @@ function zeichneKarte(svg) {
       const g = String(v.bewertung || 'F').charAt(0), st = g === 'A' || g === 'B' ? 'stark' : g === 'C' ? 'mittel' : 'schwach';
       const an = K.auswahl === v.id || K.auswahl === v.von || K.auswahl === v.nach;
       const titel = v.typ + ' · ' + bewertungText(bewertungEff(v).code) + ' · ' + anzeige(entitaet(v.von)) + (v.richtung === 'beidseitig' ? ' ↔ ' : ' → ') + anzeige(entitaet(v.nach));
-      const gv = s('g', { class: 'k-verbg', 'data-vid': v.id, 'data-von': v.von, 'data-nach': v.nach }, s('title', null, titel),
+      const gv = s('g', { class: 'k-verbg', 'data-vid': v.id, 'data-render-key': v.renderKey, 'data-von': v.von, 'data-nach': v.nach }, s('title', null, titel),
         s('line', { x1: x1, y1: y1, x2: x2, y2: y2, class: 'k-verb ' + st + (an ? ' an' : '') + (K.auswahl === v.id ? ' sel' : '') }),
         s('line', { x1: x1, y1: y1, x2: x2, y2: y2, class: 'k-verb-hit', 'data-vid': v.id }));
       kids.push(gv);
@@ -565,11 +588,11 @@ function zeichneKarte(svg) {
   /* Lagezonen: je Standort eine Zone, dazu eigene; Radius in Metern, bewegen sich mit der Karte */
   if (Z.zonen !== false && zm >= 8) {
     const mpx = 40075017 * Math.cos(K.lat * DEG) / P.Wd;
-    karteZonen().forEach(function (zn) {
+    modell.zonen.forEach(function (zn) {
       const x = P.px(zn.ll[1]), y = P.py(zn.ll[0]), r = Math.max(zn.art === 'zugriff' ? 7 : 9, zn.r / mpx);
       if (x < -r || x > KW + r || y < -r || y > KH + r) return;
       const zg = zn.art === 'zugriff', lg = zg || zn.profil ? null : zoneLage(zn), kl = zg ? 'zugriff' : zn.profil ? 'profil' : zoneKlasse(zn, lg), sel = K.auswahl === zn.id, mehr = (K.mehr || []).indexOf(zn.id) >= 0;
-      const g = s('g', { class: 'k-zone ' + kl + (zn.auto ? ' auto' : ' eigen') + (sel ? ' sel' : '') + (mehr ? ' mehr' : ''), 'data-id': zn.id },
+      const g = s('g', { class: 'k-zone ' + kl + (zn.auto ? ' auto' : ' eigen') + (sel ? ' sel' : '') + (mehr ? ' mehr' : ''), 'data-id': zn.id, 'data-render-key': zn.renderKey },
         s('title', null, zn.profil ? 'Zone ' + zn.name + ' · Radius ' + zn.r + ' m · Stand ' + fmtZ(zn.stand || zn.t) : (zg ? 'Möglicher Zugriffspunkt ' + zn.id : zn.auto ? 'Lagezone ' + zn.standort : 'Zone ' + zn.id + ' ' + zn.name) + ': ' + zoneKurz(zn, lg) + ' · Radius ' + zn.r + ' m'),
         s('circle', { cx: x, cy: y, r: r, class: 'k-zone-fl' }), s('circle', { cx: x, cy: y, r: r, class: 'k-zone-ring' }), s('circle', { cx: x, cy: y, r: r, class: 'k-zone-hit' }));
       if (zg) { g.appendChild(s('line', { x1: x - 5, y1: y, x2: x + 5, y2: y, class: 'k-zone-kreuz' })); g.appendChild(s('line', { x1: x, y1: y - 5, x2: x, y2: y + 5, class: 'k-zone-kreuz' })); }
@@ -590,7 +613,7 @@ function zeichneKarte(svg) {
     if (x < -20 || x > KW + 20 || y < -20 || y > KH + 20) return;
     const sel = K.auswahl === m.id;
     if (m.kat === 'sichtung') {
-      const gs = s('g', { class: 'k-marker' + (m.guete === 'veraltet' ? ' alt' : ''), 'data-id': m.id, tabindex: '0', role: 'button', 'aria-label': 'Sichtung ' + m.name + ', ' + (SCENARIO.guete[m.guete] || {}).label });
+      const gs = s('g', { class: 'k-marker' + (m.guete === 'veraltet' ? ' alt' : ''), 'data-id': m.id, 'data-render-key': m.renderKey, tabindex: '0', role: 'button', 'aria-label': 'Sichtung ' + m.name + ', ' + (SCENARIO.guete[m.guete] || {}).label });
       gs.appendChild(s('title', null, 'Sichtung ' + m.id + ' (' + (SCENARIO.guete[m.guete] || {}).label + '): ' + m.name + ' · Lage nach ' + m.genau + ', Position ungefähr'));
       { const mProPx = 40075016.69 * Math.cos(m.ll[0] * DEG) / P.Wd, rpx = Math.max(m.genau === 'Ortschaft' || m.genau === 'Richtung' ? 14 : 9, Math.min(420, m.unM.m / mProPx));
         gs.appendChild(s('circle', { cx: x, cy: y, r: rpx.toFixed(1), class: 'k-unsicher' + (m.guete === 'unbestaetigt' || m.guete === 'widerspruechlich' ? ' stark' : ''), style: 'opacity:' + Math.max(0.4, 1 - Math.min(m.unM.alter.verhaeltnis, 2) * 0.3).toFixed(2) })); }
@@ -601,7 +624,7 @@ function zeichneKarte(svg) {
       gez[m.id] = gs;
       return;
     }
-    const g = s('g', { class: 'k-marker', 'data-id': m.id, tabindex: '0', role: 'button', 'aria-label': m.id + ' ' + m.name + (m.entitaet ? ', Kurzinfo' : '') });
+    const g = s('g', { class: 'k-marker', 'data-id': m.id, 'data-render-key': m.renderKey, tabindex: '0', role: 'button', 'aria-label': m.id + ' ' + m.name + (m.entitaet ? ', Kurzinfo' : '') });
     g.appendChild(s('title', null, m.id + ' ' + m.name));
     if (m.id === ci && Z.ausgang !== false) { g.appendChild(s('circle', { cx: x, cy: y, r: 10, class: 'k-checkin' })); g.appendChild(s('circle', { cx: x, cy: y, r: 16, class: 'k-checkin aussen' })); }
     if (m.kat === 'zugriff' && m.r) g.appendChild(s('circle', { cx: x, cy: y, r: Math.max(9, m.r / (40075016.69 * Math.cos(m.ll[0] * DEG) / P.Wd)).toFixed(1), class: 'k-zp-ring' }));
@@ -1278,8 +1301,9 @@ function karteFokus(svg, id) {
    die Kamera der 3D-Ansicht wird gemerkt, damit ein Neuaufbau des Moduls sie nicht zurücksetzt. */
 function karte3dDaten() {
   const K = VIEW.karte;
-  const marker = karteMarker().filter(function (m) { return m.ll; }).map(function (m) { return { id: m.id, kat: m.kat, typ: m.typ, stufe: m.stufe || 0, name: typeof sperreText === 'function' ? sperreText(m.name) : m.name, ll: m.ll }; });
-  const zonen = karteZonen().filter(function (z) { return z.ll; }).map(function (z) { return { id: z.id, name: typeof sperreText === 'function' ? sperreText(z.name) : z.name, ll: z.ll, r: z.r }; });
+  const modell = karteRenderModell();
+  const marker = modell.marker.filter(function (m) { return m.ll; }).map(function (m) { return { id: m.id, renderKey: m.renderKey, kat: m.kat, typ: m.typ, stufe: m.stufe || 0, name: typeof sperreText === 'function' ? sperreText(m.name) : m.name, ll: m.ll }; });
+  const zonen = modell.zonen.filter(function (z) { return z.ll; }).map(function (z) { return { id: z.id, renderKey: z.renderKey, name: typeof sperreText === 'function' ? sperreText(z.name) : z.name, ll: z.ll, r: z.r }; });
   /* Ohne gemerkte Kamera: bei weiter Ausgangsansicht auf den ersten Standort (sonst erste Markierung) gehen, sonst die aktuelle Mitte nehmen */
   const ziel = K.zoom < 9 ? (marker.find(function (m) { return m.kat === 'standort'; }) || marker[0]) : null;
   const kamera = K.kamera3d || (ziel

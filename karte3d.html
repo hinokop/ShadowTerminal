@@ -89,8 +89,8 @@ body.emb #bar{left:auto;right:56px}
   function setze(d){ /* d: {zonen, marker, auswahl, fadenkreuz, mess} */
     offen=d; if(!bereit) return;
     fadenkreuz=!!d.fadenkreuz; map.getCanvas().style.cursor=fadenkreuz?'crosshair':'';
-    var fz=(d.zonen||[]).map(function(z){return {type:'Feature',properties:{id:z.id,name:z.name||z.id},geometry:{type:'Polygon',coordinates:kreis(z.ll[0],z.ll[1],z.r||250)}};});
-    var fp=(d.marker||[]).map(function(m){return {type:'Feature',properties:{id:m.id,ico:symbolName(m),kat:m.kat||'figur',name:m.name||m.id,prio:m.stufe||0},geometry:{type:'Point',coordinates:[m.ll[1],m.ll[0]]}};});
+    var fz=(d.zonen||[]).map(function(z){return {type:'Feature',id:z.renderKey||z.id,properties:{id:z.id,name:z.name||z.id},geometry:{type:'Polygon',coordinates:kreis(z.ll[0],z.ll[1],z.r||250)}};});
+    var fp=(d.marker||[]).map(function(m){return {type:'Feature',id:m.renderKey||m.id,properties:{id:m.id,ico:symbolName(m),kat:m.kat||'figur',name:m.name||m.id,prio:m.stufe||0},geometry:{type:'Point',coordinates:[m.ll[1],m.ll[0]]}};});
     map.getSource('zonen').setData({type:'FeatureCollection',features:fz});
     map.getSource('punkte').setData({type:'FeatureCollection',features:fp});
     var mp=d.mess||[], mf=[];
