@@ -75,6 +75,10 @@
   ];
   function adapter(map,optionen){
     const o=optionen||{};let aktiv=true, snapshot=daten(null), auswahl=null, installiert=false;
+    /* MapLibre BoxZoom unterdrückt auch einen stationären Shift-Klick (mouseupWindow).
+       Shift ist im K1-Klickvertrag reserviert; die übrigen Kameragesten bleiben unverändert. */
+    const boxZoomWarAktiv=!!map.boxZoom?.isEnabled();
+    if(boxZoomWarAktiv)map.boxZoom.disable();
     const fehler=()=>{installiert=false;if(typeof o.onError==='function')o.onError('Eigene Kartenlayer konnten nicht aufgebaut werden.');};
     function markieren(){
       if(!installiert)return;
@@ -125,7 +129,7 @@
       resize:()=>{if(aktiv)map.resize();},
       flyTo:opts=>{if(aktiv)map.flyTo(opts);},
       ready:()=>aktiv&&installiert,
-      unmount:()=>{if(!aktiv)return;aktiv=false;map.off('style.load',installieren);map.off('click',click);if(installiert){for(const l of layer.slice().reverse())if(map.getLayer(l.id))map.removeLayer(l.id);for(const id of Object.values(ids))if(map.getSource(id))map.removeSource(id);}snapshot=daten(null);auswahl=null;installiert=false;}
+      unmount:()=>{if(!aktiv)return;aktiv=false;map.off('style.load',installieren);map.off('click',click);if(boxZoomWarAktiv)map.boxZoom.enable();if(installiert){for(const l of layer.slice().reverse())if(map.getLayer(l.id))map.removeLayer(l.id);for(const id of Object.values(ids))if(map.getSource(id))map.removeSource(id);}snapshot=daten(null);auswahl=null;installiert=false;}
     };
   }
   const api=Object.freeze({daten,adapter});

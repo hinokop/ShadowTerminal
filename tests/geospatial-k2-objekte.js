@@ -38,6 +38,7 @@ assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).que
   await p.evaluate(model=>{
    const el=document.createElement('div');Object.assign(el.style,{position:'fixed',inset:'0',zIndex:'100'});document.body.appendChild(el);
    window.__map=new maplibregl.Map({container:el,style:KARTE_V2_QUELLEN.leererStil(),center:[13.405,52.52],zoom:14,attributionControl:false});
+   window.__boxZoomVorher=__map.boxZoom.isEnabled();
    window.__clicks=[];window.__adapter=KARTE_V2_RENDERER.adapter(__map,{onClick:e=>__clicks.push(e)});
    __adapter.setData(model);__adapter.setSelection(model.marker[0].renderKey);
   },model);
@@ -48,13 +49,16 @@ assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).que
   assert.equal((await hit(model.marker[1].ll)).renderKey,b);
   assert.equal((await hit(model.zonen[0].ll)).renderKey,zone);
   const pt=await p.evaluate(ll=>{const x=__adapter.project(ll);return{x:x.x,y:x.y};},model.marker[1].ll);
+  assert.deepEqual(await p.evaluate(()=>[__boxZoomVorher,__map.boxZoom.isEnabled(),__map.dragPan.isEnabled(),__map.scrollZoom.isEnabled(),__map.dragRotate.isEnabled()]),[true,false,true,true,true]);
   await p.mouse.click(pt.x,pt.y);
   assert.equal(await p.evaluate(()=>__clicks.at(-1).treffer.renderKey),b);
   assert.equal(await p.evaluate(()=>__clicks.at(-1).mehr),false);
   for(const taste of ['Shift','Control','Meta']){
+    const vorher=await p.evaluate(()=>__clicks.length);
     await p.keyboard.down(taste);
     try{await p.mouse.click(pt.x,pt.y);}finally{await p.keyboard.up(taste);}
-    assert.equal(await p.evaluate(()=>__clicks.at(-1).mehr),true,taste+' wird weitergereicht');
+    assert.equal(await p.evaluate(()=>__clicks.length),vorher+1,taste+' erzeugt genau einen neuen Klick');
+    assert.deepEqual(await p.evaluate(()=>[__clicks.at(-1).treffer.renderKey,__clicks.at(-1).mehr]),[b,true],taste+' wird weitergereicht');
   }
   // Ein eigener Bereich über der Verbindung: Marker > Verbindung > Zone.
   await p.evaluate(model=>__adapter.setData({...model,zonen:[...model.zonen,{id:'ZO-2',renderKey:'zone-overlap',ll:[52.516,13.405],r:400}]}),model);
@@ -77,6 +81,7 @@ assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).que
   assert.equal((await hit(model.marker[1].ll)).renderKey,b);
   await p.evaluate(()=>{__adapter.unmount();__adapter.setData({});});
   assert.equal(await p.evaluate(()=>!!__map.getSource('shadow-v2-punkte')),false);
+  assert.equal(await p.evaluate(()=>__map.boxZoom.isEnabled()),true,'vorherige BoxZoom-Einstellung nach unmount wiederhergestellt');
   assert.equal(await hit(model.marker[1].ll),null);
   await p.evaluate(()=>__map.remove());
   assert.deepEqual(net,[]);assert.deepEqual(errors,[]);
