@@ -1,10 +1,53 @@
 /* K2b-2b: explizite lokale Vergleichsansicht, kein Standardrendererwechsel.
    Aktiv nur in index.html?geospatial-v2=1; kein persistenter Schalter.
-   Die Basiskarte ist absichtlich leer. Kein Anbieter und kein Schlüssel. */
+   K2c-1: explizite Vektorstile, lokaler Schlüssel, leerer bedienbarer Rückfall. */
 (function(root){
   'use strict';
   const dev=new URLSearchParams(location.search).get('geospatial-v2')==='1';
   let kontext=null, laden=null;
+  /* Nur Opt-in, vor allen MapLibre-Netzanfragen. Die Standardansicht bleibt unverändert. */
+  if(dev){
+    const meta=document.createElement('meta');meta.name='referrer';meta.content='no-referrer';document.head.appendChild(meta);
+  }
+  const lokalKey=()=>typeof root.KARTEN_SCHLUESSEL?.carto==='string'?root.KARTEN_SCHLUESSEL.carto.trim():'';
+  const namen={leer:'Lokal',voyager:'Voyager',dunkel:'Dark Matter'};
+  /* Absichtlich keine Persistenz; ein Modul-Neuaufbau beginnt wieder lokal.
+     K4 übernimmt den gemeinsamen Ansichts-/Kamerazustand. */
+  function knoepfe(c){
+    if(!aktiv(c))return;
+    for(const n of Object.keys(namen)){
+      const el=$('k-v2-'+n);if(el){el.disabled=!c.a;el.setAttribute('aria-pressed',String(c.modus===n));}
+    }
+  }
+  function stop(c){
+    if(c.abort)c.abort.abort();c.abort=null;
+    clearTimeout(c.timer);c.timer=null;
+  }
+  function rueckfall(c,grund){
+    if(!aktiv(c)||!c.a)return;
+    ++c.generation;stop(c);c.modus='leer';c.phase='lokal';c.key='';
+    try{c.a.setStyle(KARTE_V2_QUELLEN.leererStil());sync();}catch(e){}
+    knoepfe(c);hinweis(c,grund+' · Lokale Objektlayer bleiben verfügbar.');
+  }
+  async function wechseln(c,n){
+    if(!aktiv(c)||!c.a||!Object.hasOwn(namen,n))return;
+    if(n==='leer'){rueckfall(c,'Lokaler Stil');return;}
+    const key=lokalKey();
+    if(!key){rueckfall(c,'Kein lokaler CARTO-Schlüssel');return;}
+    const Q=KARTE_V2_QUELLEN, g=++c.generation;stop(c);
+    c.modus=n;c.phase='abruf';c.key=key;knopfhilfe();
+    function knopfhilfe(){knoepfe(c);hinweis(c,namen[n]+' wird geladen.');}
+    const ac=new AbortController();c.abort=ac;
+    c.timer=setTimeout(()=>{if(aktiv(c)&&c.generation===g)rueckfall(c,'CARTO-Zeitlimit erreicht');},25000);
+    try{
+      const antwort=await fetch(Q.cartoRequest(Q.stil(n),key).url,{signal:ac.signal,referrerPolicy:'no-referrer',redirect:'error',credentials:'omit'});
+      if(!antwort.ok)throw Error('Stilabruf');
+      const s=await antwort.json();
+      if(!aktiv(c)||c.generation!==g)return;
+      if(!Q.vektorStil(s))throw Error('Vektorstil');
+      c.phase='kacheln';c.a.setStyle(s);sync();
+    }catch(e){if(aktiv(c)&&c.generation===g)rueckfall(c,'CARTO-Stil nicht verfügbar');}
+  }
   function aktiv(c){
     return c&&kontext===c&&c.el.isConnected&&!document.body.classList.contains('locked')&&STATE.ui.modul==='karte'&&VIEW.karte.reiter!=='protokoll';
   }
@@ -27,7 +70,10 @@
     if(!dev)return null;
     return h('section',{class:'panel',id:'k-v2-panel'},
       h('div',{class:'pad'},h('strong',null,'MapLibre – lokale Entwicklungsansicht'),
-        h('p',{class:'note',id:'k-v2-status',role:'status'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.')),
+        h('div',{style:'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;'},
+          ...Object.keys(namen).map(n=>h('button',{type:'button',id:'k-v2-'+n,disabled:true,'aria-pressed':String(n==='leer'),onclick:()=>wechseln(kontext,n)},namen[n]))),
+        h('p',{class:'note',id:'k-v2-status',role:'status'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.'),
+        h('small',null,'Bei CARTO-Auswahl sieht der Anbieter Kartenausschnitt, IP und Schlüssel. © OpenStreetMap-Mitwirkende, © CARTO.')),
       h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:420px;min-height:240px;background:#101820;border:1px solid var(--border);'}));
   }
   function auswahl(modell){
@@ -58,6 +104,7 @@
   function unmount(){
     const c=kontext;kontext=null;
     if(!c)return;
+    ++c.generation;stop(c);c.key='';
     /* Ein Fehler beim Aufräumen darf die bestehende Anwendung nicht blockieren. */
     try{if(c.a)c.a.unmount();}catch(e){}
     try{if(c.map)c.map.remove();}catch(e){}
@@ -67,16 +114,25 @@
     const el=$('k-v2-map'),status=$('k-v2-status');
     if(!el||!status||document.body.classList.contains('locked'))return;
     unmount();
-    const c={el,status,map:null,a:null};kontext=c;
+    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',key:'',generation:0,abort:null,timer:null};kontext=c;
     bibliothek().then(()=>{
       if(!aktiv(c))return;
       const K=VIEW.karte;
       c.map=new maplibregl.Map({container:el,style:KARTE_V2_QUELLEN.leererStil(),
-        center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5)),attributionControl:false});
+        center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5)),attributionControl:true,
+        transformRequest:url=>KARTE_V2_QUELLEN.cartoRequest(url,c.key)});
       c.map.addControl(new maplibregl.NavigationControl(),'top-right');
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
-      c.map.on('error',()=>hinweis(c,'Lokale Entwicklungsansicht: Kartenfehler. Bestehende Karte bleibt verfügbar.'));
-      c.map.once('idle',()=>{if(aktiv(c)&&c.a.ready())hinweis(c,'Lokale Objektlayer bereit · keine Basiskarte · Kamera vorläufig unabhängig.');});
+      c.map.on('error',()=>{
+        if(!aktiv(c))return;
+        if(c.phase==='kacheln'||c.phase==='online')rueckfall(c,'CARTO-Ressource nicht verfügbar');
+      });
+      c.map.on('idle',()=>{
+        if(!aktiv(c)||!c.a.ready())return;
+        if(c.phase==='kacheln'){stop(c);c.phase='online';hinweis(c,namen[c.modus]+' bereit · lokale Objektlayer aktiv.');}
+        else if(c.phase==='lokal'&&!c.status.textContent.includes('bleiben verfügbar'))hinweis(c,'Lokale Objektlayer bereit · keine Basiskarte · Kamera vorläufig unabhängig.');
+      });
+      knoepfe(c);
       sync();
     }).catch(()=>{
       if(!aktiv(c))return;

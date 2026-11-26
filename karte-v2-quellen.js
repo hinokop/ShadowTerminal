@@ -23,7 +23,14 @@
   function stil(name) {
     return Object.prototype.hasOwnProperty.call(STILE, name) ? STILE[name] : null;
   }
-  const api = Object.freeze({ cartoRequest, leererStil, stil });
+  /* V2 akzeptiert nur die aktuelle Anbieterdefinition, keine eingebauten Versionspfade.
+     Keine Mutation des geladenen Stils und kein Schlüssel im Style-Objekt. */
+  function vektorStil(s) {
+    if (!s || s.version !== 8 || !s.sources || !Array.isArray(s.layers)) return false;
+    return Object.entries(s.sources).some(([id,src])=>src && src.type==='vector' &&
+      s.layers.some(l=>l.source===id && l['source-layer']==='buildings'));
+  }
+  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil });
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KARTE_V2_QUELLEN = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

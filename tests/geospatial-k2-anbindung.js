@@ -6,7 +6,30 @@ const {APP}=require('./_pfad');
  const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
   const p=await b.newPage({viewport:{width:1500,height:1100},reducedMotion:'reduce'});p.setDefaultTimeout(25000);
-  const errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route(/^https?:/,r=>r.abort());
+  const errors=[],anfragen=[];let netz='ok';p.on('pageerror',e=>errors.push(e.message));
+  const Q=require('../karte-v2-quellen');
+  const tile='https://tiles.basemaps.cartocdn.com/v/fixture/vectortiles/test/{z}/{x}/{y}.mvt';
+  // Leere, aber gültige MVT-Layer (Name buildings, Version 2, Extent 4096).
+  const layer=Buffer.concat([Buffer.from([10,9]),Buffer.from('buildings'),Buffer.from([120,2,40,128,32])]);
+  const mvt=Buffer.concat([Buffer.from([26,layer.length]),layer]);
+  const stil={version:8,sources:{protomaps:{type:'vector',tiles:[tile],maxzoom:15,attribution:'© CARTO'}},layers:[
+    {id:'bg',type:'background',paint:{'background-color':'#304050'}},
+    {id:'buildings',source:'protomaps','source-layer':'buildings',type:'fill',paint:{'fill-color':'#888'}}
+  ]};
+  await p.route(/^https?:/,async r=>{
+    const u=new URL(r.request().url()),bare=u.origin+u.pathname;
+    if(bare===Q.stil('voyager')||bare===Q.stil('dunkel')){
+      anfragen.push({art:'stil',key:u.searchParams.get('key'),referer:r.request().headers().referer||''});
+      if(netz==='stilfehler')return r.abort();
+      return r.fulfill({json:stil,headers:{'access-control-allow-origin':'*'}});
+    }
+    if(u.hostname==='tiles.basemaps.cartocdn.com'&&u.pathname.startsWith('/v/fixture/')){
+      anfragen.push({art:'tile',key:u.searchParams.get('key'),referer:r.request().headers().referer||''});
+      if(netz==='kachelfehler')return r.abort();
+      return r.fulfill({body:mvt,contentType:'application/vnd.mapbox-vector-tile',headers:{'access-control-allow-origin':'*'}});
+    }
+    return r.abort();
+  });
   await p.goto(APP+'?geospatial-v2=1');
   await p.fill('#gate-pw','pw-test-123');if(await p.isVisible('#gate-pw2'))await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
   await p.waitForFunction(()=>!document.body.classList.contains('locked'));
@@ -39,6 +62,31 @@ const {APP}=require('./_pfad');
   };
   await click([52.51,13.41]);assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
   assert.match(await p.locator('#k-auswahl').innerText(),/K2 Sued/);
+  const status=text=>p.waitForFunction(text=>$('k-v2-status')?.textContent.includes(text),text);
+  const fixtureKey='K2C_FIXTURE+/k';
+  // Der bestehende Raster-Schlüssel ist nicht die V2-Quelle.
+  await p.evaluate(()=>{window.KARTEN_SCHLUESSEL={carto:''};});
+  const ohne=anfragen.length;await p.click('#k-v2-voyager');await status('Kein lokaler CARTO-Schlüssel');
+  assert.equal(anfragen.length,ohne);
+  await p.evaluate(key=>{window.KARTEN_SCHLUESSEL={carto:key};VIEW.karte.messen=true;VIEW.karte.messPts=[[52.51,13.41]];karteRendererDatenAktualisieren();},fixtureKey);
+  const cam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
+  await p.click('#k-v2-voyager');await status('Voyager bereit');
+  assert.ok(anfragen.some(x=>x.art==='tile'),'echter Vektorabruf über Fixture');
+  assert.equal((await hit([52.51,13.41])).renderKey,kb);
+  assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
+  assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]]);
+  await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
+  assert.deepEqual(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
+  assert.equal((await hit([52.51,13.41])).renderKey,kb);
+  assert.ok(anfragen.every(x=>x.key===fixtureKey&&!x.referer),'Schlüssel und Referrer');
+  assert.ok(!(await p.locator('body').innerText()).includes(fixtureKey));
+  assert.equal(await p.evaluate(k=>Object.values(localStorage).some(v=>v.includes(k)),fixtureKey),false);
+  netz='stilfehler';await p.click('#k-v2-voyager');await status('CARTO-Stil nicht verfügbar');
+  await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
+  assert.equal((await hit([52.51,13.41])).renderKey,kb);
+  netz='kachelfehler';await p.click('#k-v2-dunkel');await status('CARTO-Ressource nicht verfügbar');
+  await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
+  netz='ok';await p.evaluate(()=>{VIEW.karte.messen=false;VIEW.karte.messPts=[];karteRendererDatenAktualisieren();});
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();});
   await p.evaluate(id=>dispatch({type:'DOSSIER_SPERREN',id}),f.a);
   assert.equal(await p.evaluate(()=>__alt.ready()),false,'alter Renderer freigegeben');
