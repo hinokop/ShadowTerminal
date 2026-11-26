@@ -737,9 +737,10 @@ function kartenTxtExport(art, id, entId, zielVorgabe) {
   };
   if (zielVorgabe === 'download') { herunterladen(x); return; }
   const bruecke = !!terminalBrueckenAdresse();
+  /* §9.6: Archiv (nur mit Brücke) und Download sind beide ausdrückliche Alternativen (Review 3 zu #140) */
   const ordner = h('select', { id: 'k-txt-ordner' }, h('option', { value: 'exporte' }, 'Exportspeicher /exports'),
-    bruecke ? [h('option', { value: 'dokumente' }, 'Archiv dokumente'), h('option', { value: 'ops' }, 'Archiv ops')] : h('option', { value: 'download' }, 'Download'));
-  const bereinigen = h('button', { type: 'button', class: 'link', id: 'k-export-verwaist', hidden: true });
+    bruecke ? [h('option', { value: 'dokumente' }, 'Archiv dokumente'), h('option', { value: 'ops' }, 'Archiv ops')] : null, h('option', { value: 'download' }, 'Download'));
+  const bereinigen = kartenExportVerwaistKnopf('k-export-verwaist');
   bestaetigen('Als TXT exportieren', [h('p', { class: 'note' }, dateiname),
     h('div', { class: 'row' }, h('label', { for: 'k-txt-ordner' }, 'Ziel'), ordner),
     h('p', { class: 'note' }, 'Der Exportspeicher wird nicht gesichert (nicht in Profilexport, Fallpaket und home-backup) und bleibt im Browserprofil dieses Rechners.'),
@@ -758,25 +759,32 @@ function kartenTxtExport(art, id, entId, zielVorgabe) {
       meldung(antwort.mode === 'ersetzt' ? 'TXT ersetzt · ' + ziel : antwort.mode === 'unveraendert' ? 'TXT unverändert, keine neue Datei · ' + ziel
         : antwort.mode === 'version' ? 'Vorhandene Datei wurde nicht ersetzt, da sie verändert wurde. Neue Version gespeichert · ' + ziel : 'TXT gespeichert · ' + ziel);
     });
-  /* D1: verwaiste Exporte (Objekt gelöscht oder Identität gewechselt, nicht gesperrt) gesammelt entfernen; Meldung nur mit der Anzahl */
+}
+/* D1: verwaiste Exporte (Objekt gelöscht oder Identität gewechselt, nicht gesperrt) gesammelt entfernen; Meldung nur mit der Anzahl. Derselbe
+   Knopf steht im Exportdialog und dauerhaft in der Kartenleiste (Review 3 zu #140), sichtbar nur bei vorhandenen verwaisten Exporten. */
+function kartenExportVerwaistKnopf(kennung) {
+  const knopf = h('button', { type: 'button', class: 'link', id: kennung, hidden: true });
   EXPORTE.verwaiste().then(function (r) {
-    if (r.fehler || !r.anzahl || !bereinigen.isConnected) return;
-    bereinigen.textContent = 'Verwaiste Exporte entfernen (' + r.anzahl + ')'; bereinigen.hidden = false;
-    bereinigen.onclick = async function () {
-      if (!bereinigen.dataset.bestaetigt) { bereinigen.dataset.bestaetigt = '1'; bereinigen.textContent = 'Verwaiste Exporte wirklich entfernen?'; return; }
-      bereinigen.hidden = true;
+    if (r.fehler || !r.anzahl || !knopf.isConnected) return;
+    knopf.textContent = 'Verwaiste Exporte entfernen (' + r.anzahl + ')'; knopf.hidden = false;
+    knopf.onclick = async function () {
+      if (!knopf.dataset.bestaetigt) { knopf.dataset.bestaetigt = '1'; knopf.textContent = 'Verwaiste Exporte wirklich entfernen?'; return; }
+      knopf.hidden = true;
       const e = await EXPORTE.bereinigen();
       if (e.fehler) { meldung('Verwaiste Exporte nicht entfernt. Exportspeicher nicht verfügbar.'); return; }
       const proto = exportProtokoll('Verwaiste Exporte entfernt', String(e.geloescht));
       meldung('Verwaiste Exporte entfernt: ' + e.geloescht + '.' + (proto ? '' : ' Protokolleintrag nicht gespeichert.'));
     };
   });
+  return knopf;
 }
-const KARTEN_EXPORT_FEHLER = { grenze: 'Speichergrenze erreicht.', gross: 'Export zu groß (maximal 64 KiB).', speicher: 'Browserspeicher voll.', herkunft: 'Herkunft des Objekts nicht eindeutig.',
+const KARTEN_EXPORT_FEHLER = { grenze: 'Speichergrenze erreicht.', gross: 'Export zu groß (maximal 64 KiB).', speicher: 'Browserspeicher voll.', herkunft: 'Herkunft des Objekts nicht eindeutig oder während des Speicherns geändert.',
   eio: 'Exportspeicher nicht verfügbar.', kollision: 'Name bereits vergeben; bitte erneut exportieren.', leer: 'Kein Inhalt.' };
 /* Momentaufnahme im Exportspeicher (§9.6): Erfolg erst nach dem Abschluss der Transaktion; das Protokoll wird getrennt gemeldet */
 async function kartenExportSpeichern(art, id, entId, text) {
   const r = await EXPORTE.anlegen(art, id, art === 'sichtung' ? entId : null, text);
+  /* gespeichert, aber das Objekt wurde währenddessen geändert oder gesperrt: kein Pfad, keine Behauptung eines Rückbaus */
+  if (r.fehler === 'nachher') { meldung('Export nicht bereitgestellt. Das Objekt wurde während des Speicherns geändert oder gesperrt.'); return r; }
   if (r.fehler) { meldung('Export nicht gespeichert. ' + (KARTEN_EXPORT_FEHLER[r.fehler] || 'Exportspeicher nicht verfügbar.')); return r; }
   const proto = r.modus === 'neu' ? exportProtokoll('Export gespeichert', (art === 'sichtung' ? entId + ', ' : '') + id) : true;
   meldung((r.modus === 'unveraendert' ? 'Export unverändert, keine neue Datei · ' : 'Export gespeichert · ') + r.rec.pfad + (proto ? '' : ' Protokolleintrag nicht gespeichert.'));
@@ -1668,7 +1676,8 @@ function renderKarte(m) {
     def ? h('button', { type: 'button', id: 'k-zugriff-neu', class: K.zugriffSetzen ? 'aktiv' : '', 'aria-pressed': K.zugriffSetzen ? 'true' : 'false', title: 'Wiederholt auf die Karte klicken: markiert mögliche Zugriffspunkte. Ende mit Esc oder erneutem Klick', onclick: function () { K.zugriffSetzen = !K.zugriffSetzen; K.zoneSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zugriffSetzen ? 'Zugriffspunkte: klicken, Ende mit Esc' : 'Zugriffspunkte markieren') : null,
     def ? h('button', { type: 'button', id: 'k-mehr', class: K.mehrModus ? 'aktiv' : '', 'aria-pressed': K.mehrModus ? 'true' : 'false', title: 'Zonen nacheinander anklicken, um mehrere gemeinsam zu bearbeiten (auch mit Umschalt- oder Strg-Klick)', onclick: function () { K.mehrModus = !K.mehrModus; if (!K.mehrModus) { K.mehr = []; } K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; renderModule(); } }, K.mehrModus ? 'Mehrfach: Zonen anklicken' : 'Mehrfach') : null,
     h('button', { type: 'button', id: 'k-messen', class: K.messen ? 'aktiv' : '', 'aria-pressed': K.messen ? 'true' : 'false', title: 'Zwei Punkte oder Markierungen anklicken: Entfernung und Fahrzeit', onclick: function () { if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; } else { K.messen = true; K.auswahl = null; } renderModule(); } }, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen'),
-    h('button', { type: 'button', id: 'k-3d', class: K.ansicht3d ? 'aktiv' : '', 'aria-pressed': K.ansicht3d ? 'true' : 'false', title: 'Wechselt zwischen der flachen Karte und der geneigten Ansicht mit Gebäuden (benötigt Internetverbindung)', onclick: karte3dUmschalten }, K.ansicht3d ? '2D' : '3D')];
+    h('button', { type: 'button', id: 'k-3d', class: K.ansicht3d ? 'aktiv' : '', 'aria-pressed': K.ansicht3d ? 'true' : 'false', title: 'Wechselt zwischen der flachen Karte und der geneigten Ansicht mit Gebäuden (benötigt Internetverbindung)', onclick: karte3dUmschalten }, K.ansicht3d ? '2D' : '3D'),
+    kartenExportVerwaistKnopf('k-export-verwaist-leiste')];
   const preset = function (name, sets) {
     const aktiv = Object.keys(sets).every(function (k) { return !!K.ebenen[k] === sets[k]; });
     return h('button', { type: 'button', class: aktiv ? 'aktiv' : '', 'aria-pressed': aktiv ? 'true' : 'false', id: 'k-p-' + name.toLowerCase(), onclick: function () { Object.keys(sets).forEach(function (k) { K.ebenen[k] = sets[k]; }); karteWahlSichern(); renderModule(); } }, name);

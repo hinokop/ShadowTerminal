@@ -4109,7 +4109,8 @@ async function terminalTabPfad(lauf, kopfB, arg, nurDir, fertig, opt) {
     if (lauf.nurVorschlag ? !terminalVorschlagGueltig(lauf) : !terminalTabGueltig(lauf)) return;
     if (r.fehler) return;
     if (lauf.nurVorschlag) lauf.fertigLs = true;
-    const dateien = r.eintraege.filter(function (x) { return (prefix.startsWith('.') || !x.name.startsWith('.')) && (x.dir || !nurDir); })
+    /* /exports (Review 3 zu #140): Herkunft jedes Kandidaten unmittelbar vor der Übernahme erneut prüfen (VFS-Einträge tragen keine deps) */
+    const dateien = r.eintraege.filter(function (x) { return (prefix.startsWith('.') || !x.name.startsWith('.')) && (x.dir || !nurDir) && !(x.deps || []).concat(r.deps || []).some(INTEL.gesperrt); })
       .map(function (x) { return basis + x.name + (x.dir ? '/' : ''); });
     fertig(kopfB + anfang, pfad, dateien, function (x) {
       const quote = anfang || (/\s|^'/.test(x) ? '"' : '');

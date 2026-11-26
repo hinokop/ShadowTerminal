@@ -85,6 +85,12 @@ const EXPORTE = (function () {
     return z + '-' + hex(crypto.getRandomValues(new Uint8Array(3))) + '.txt';
   }
   function anzeige(r) { return { id: r.id, pfad: '/exports/' + r.pfad, name: r.name, art: r.art, qid: r.qid, dossier: r.dossier, erstellt: r.erstellt, bytes: r.bytes }; }
+  /* Gemeinsamer Löschkern (GUI, rm, Sammelbereinigung): Zustand innerhalb der Löschtransaktion erneut; nur der erwartete Zustand wird gelöscht */
+  async function entfernen(E, T, rec, erwartet) {
+    if (!rec || zustand(rec) !== erwartet) return false;
+    await anf(E.delete(rec.id)); await anf(T.delete(rec.id));
+    return true;
+  }
   async function liste() {
     const r = await tx('readonly', function (E) { return anf(E.getAll()).then(function (alle) { return { alle: alle }; }); });
     return r.fehler ? r : { alle: r.alle.filter(function (x) { return zustand(x) === 'zugaenglich'; }) };
@@ -93,29 +99,41 @@ const EXPORTE = (function () {
     zustand: zustand,
     /* Momentaufnahme anlegen (GUI). Duplikatprüfung vor der Grenzprüfung: ein unveränderter zugänglicher Export wird auch am Limit
        wiederverwendet; verborgene Versionen sieht die Prüfung nicht. Rechte unmittelbar vor dem Schreiben erneut geprüft. */
+    /* Review 3 zu #140: Die Herkunft wird synchron mit dem Text erfasst (der Aufrufer rendert den Text im selben Takt unmittelbar davor) und
+       danach nie durch eine spätere ersetzt. Bei der Duplikatprüfung und unmittelbar vor dem Schreiben muss die aktuelle Herkunft dieselbe
+       sein (Objekt, Identität, Dossierzuordnung) und zugänglich bleiben; sonst Abbruch ohne Änderung. Nach dem Abschluss der Transaktion
+       wird der gespeicherte Datensatz erneut geprüft: ist er inzwischen nicht mehr zugänglich, meldet anlegen 'nachher' (gespeichert, aber
+       nicht bereitgestellt), nie einen Rückbau, der nicht stattgefunden hat. */
     anlegen: async function (art, qid, dossier, text) {
-      if (!herkunft(art, qid, dossier)) return { fehler: 'herkunft' };
+      const h0 = herkunft(art, qid, dossier);
+      if (!h0 || h0.deps.some(INTEL.gesperrt)) return { fehler: 'herkunft' };
+      const kennung = JSON.stringify([h0.deps, h0.bindung]);
+      const unveraendert = function () { const h = herkunft(art, qid, dossier); return !!h && JSON.stringify([h.deps, h.bindung]) === kennung && !h.deps.some(INTEL.gesperrt); };
       const bytes = new TextEncoder().encode(text).length;
       if (!bytes) return { fehler: 'leer' };
       if (bytes > EXPORTE_GRENZE.datei) return { fehler: 'gross' };
       const sha = await sha256(text), erstellt = Date.now(), q = quelle(art, qid, dossier);
-      return tx('readwrite', async function (E, T) {
+      let gespeichert = null;
+      const r = await tx('readwrite', async function (E, T) {
         const alle = await anf(E.getAll());
-        const gleich = alle.find(function (r) { return r.quelle === q && r.sha256 === sha && zustand(r) === 'zugaenglich'; });
-        if (gleich) return { modus: 'unveraendert', rec: anzeige(gleich) };
+        if (!unveraendert()) return { fehler: 'herkunft' };
+        const gleich = alle.find(function (r) { return r.quelle === q && r.sha256 === sha && JSON.stringify([r.deps, r.bindung]) === kennung && zustand(r) === 'zugaenglich'; });
+        if (gleich) { gespeichert = gleich; return { modus: 'unveraendert', rec: anzeige(gleich) }; }
         const summe = alle.reduce(function (a, r) { return a + (Number(r.bytes) || 0); }, 0);
         if (alle.length + 1 > EXPORTE_GRENZE.anzahl || summe + bytes > EXPORTE_GRENZE.gesamt) return { fehler: 'grenze' };
-        const h = herkunft(art, qid, dossier);
-        if (!h) return { fehler: 'herkunft' };
         const n = name(erstellt), pfad = basis(art, qid, dossier).concat(n).join('/');
         const id = hex(crypto.getRandomValues(new Uint8Array(8)));
         if (alle.some(function (r) { return r.pfad === pfad || r.id === id; })) return { fehler: 'kollision' };
-        const rec = { id: id, pfad: pfad, name: n, quelle: q, art: art, qid: qid, dossier: art === 'sichtung' ? dossier : null, deps: h.deps, bindung: h.bindung,
+        const rec = { id: id, pfad: pfad, name: n, quelle: q, art: art, qid: qid, dossier: art === 'sichtung' ? dossier : null, deps: h0.deps, bindung: h0.bindung,
           sprache: 'de', erstellt: erstellt, bytes: bytes, sha256: sha };
+        if (!unveraendert()) return { fehler: 'herkunft' };   /* unmittelbar vor dem Schreiben */
         await anf(E.add(rec));   /* eindeutiger Pfadindex: atomare Kollisionserkennung */
         await anf(T.add({ id: id, text: text }));
+        gespeichert = rec;
         return { modus: 'neu', rec: anzeige(rec) };
       });
+      if (r && !r.fehler && gespeichert && zustand(gespeichert) !== 'zugaenglich') return { fehler: 'nachher', modus: r.modus };
+      return r;
     },
     /* Lesen eines zugänglichen Exports über den relativen Pfad (ohne "exports"); Prüfsumme geprüft */
     lesen: async function (rel) {
@@ -137,11 +155,7 @@ const EXPORTE = (function () {
     loeschen: function (ids) {
       return tx('readwrite', async function (E, T) {
         let n = 0;
-        for (const id of ids) {
-          const rec = await anf(E.get(id));
-          if (!rec || zustand(rec) !== 'zugaenglich') continue;
-          await anf(E.delete(id)); await anf(T.delete(id)); n++;
-        }
+        for (const id of ids) if (await entfernen(E, T, await anf(E.get(id)), 'zugaenglich')) n++;
         return { geloescht: n };
       });
     },
@@ -149,8 +163,7 @@ const EXPORTE = (function () {
       const pfad = rel.join('/');
       return tx('readwrite', async function (E, T) {
         const rec = await anf(E.index('pfad').get(pfad));
-        if (!rec || zustand(rec) !== 'zugaenglich') return { fehler: 'ENOENT' };
-        await anf(E.delete(rec.id)); await anf(T.delete(rec.id));
+        if (!await entfernen(E, T, rec, 'zugaenglich')) return { fehler: 'ENOENT' };
         return { geloescht: 1, rec: anzeige(rec) };
       });
     },
@@ -158,12 +171,13 @@ const EXPORTE = (function () {
     verwaiste: function () { return tx('readonly', function (E) { return anf(E.getAll()).then(function (a) { return { anzahl: a.filter(function (r) { return zustand(r) === 'verwaist'; }).length }; }); }); },
     bereinigen: function () {
       return tx('readwrite', async function (E, T) {
-        const alle = await anf(E.getAll());
         let n = 0;
-        for (const rec of alle) if (zustand(rec) === 'verwaist') { await anf(E.delete(rec.id)); await anf(T.delete(rec.id)); n++; }
+        for (const rec of await anf(E.getAll())) if (await entfernen(E, T, rec, 'verwaist')) n++;
         return { geloescht: n };
       });
     },
+    /* Schutzabhängigkeit eines Exports für Scrollback und Tab (INTEL.gesperrt, Art 'herkunft') */
+    herkunftDep: function (rec) { return { art: 'herkunft', id: rec.id, deps: rec.deps, bindung: rec.bindung }; },
     /* zugängliche Exporte eines Objekts (Knopf "Exporte löschen") */
     vonObjekt: async function (art, qid, dossier) {
       const l = await liste();
@@ -183,34 +197,35 @@ const EXPORTE_ANBIETER = {
     const l = await EXPORTE.liste();
     return l.fehler ? null : l.alle;
   },
-  /* Abhängigkeiten eines virtuellen Verzeichnisses oder einer Datei für den Schutz des Scrollbacks */
-  deps: function (rel, rec) {
-    if (rec) return rec.deps;
-    if (rel[0] === 'pins' && rel[1]) return [{ art: 'pin', id: rel[1] }];
-    if (rel[0] === 'zones' && rel[1]) return [{ art: 'zone', id: rel[1] }];
-    if (rel[0] === 'sightings' && rel[2]) return [{ art: 'sichtung', dossier: rel[1], id: rel[2] }];
-    if (rel[0] === 'sightings' && rel[1]) return [{ art: 'dossier', id: rel[1] }];
-    return [];
+  /* Schutzabhängigkeiten einer Ausgabezeile (Review 3 zu #140): eine Datei trägt ihre vollständige Herkunft (ursprüngliche Abhängigkeiten
+     und Bindung); ein virtuelles Verzeichnis besteht nur über zugänglichen Exporten und trägt deshalb die Herkunft aller Nachfahren. Wird
+     einer davon unzugänglich, verschwindet die Zeile konservativ aus dem Scrollback und aus Tab-Vorschlägen. /exports selbst verrät nichts. */
+  deps: function (rel, recs) {
+    if (!rel.length) return [];
+    return (recs || []).map(EXPORTE.herkunftDep);
   },
   knoten: async function (rel) {
     const alle = await EXPORTE_ANBIETER.baum();
-    if (!alle) return rel.length ? { fehler: 'EIO' } : { typ: 'dir', kinder: [] };
+    if (!alle) return rel.length ? { fehler: 'EIO' } : { typ: 'dir', kinder: [], recs: [] };
     const p = rel.join('/'), datei = alle.find(function (r) { return r.pfad === p; });
-    if (datei) return { typ: 'file', rec: datei };
+    if (datei) return { typ: 'file', rec: datei, recs: [datei] };
     const unter = alle.filter(function (r) { return !p || r.pfad.startsWith(p + '/'); });
     if (rel.length && !unter.length) return { fehler: 'ENOENT' };
     const kinder = new Map();
     unter.forEach(function (r) {
       const rest = r.pfad.split('/').slice(rel.length), n = rest[0], dir = rest.length > 1;
-      const alt = kinder.get(n);
-      if (!alt || r.erstellt > alt.mtime) kinder.set(n, { name: n, dir: dir, rec: dir ? null : r, mtime: Math.max(r.erstellt, alt ? alt.mtime : 0) });
+      const alt = kinder.get(n) || { name: n, dir: dir, rec: null, mtime: 0, recs: [] };
+      alt.recs.push(r);
+      if (!dir) alt.rec = r;
+      alt.mtime = Math.max(alt.mtime, r.erstellt);
+      kinder.set(n, alt);
     });
-    return { typ: 'dir', kinder: Array.from(kinder.values()), mtime: unter.reduce(function (m, r) { return Math.max(m, r.erstellt); }, 0) };
+    return { typ: 'dir', kinder: Array.from(kinder.values()), recs: unter, mtime: unter.reduce(function (m, r) { return Math.max(m, r.erstellt); }, 0) };
   },
   eintrag: function (rel, k) {
     const dir = !k.rec;
     return { name: rel[rel.length - 1] || 'exports', dir: dir, bytes: dir ? 4096 : k.rec.bytes, mtime: Math.floor((k.mtime || (k.rec && k.rec.erstellt) || Date.now()) / 1000), modus: dir ? 0o555 : 0o444, uid: 0,
-      deps: EXPORTE_ANBIETER.deps(rel, k.rec) };
+      deps: EXPORTE_ANBIETER.deps(rel, k.recs) };
   },
   stat: async function (seg) {
     const rel = seg.slice(1), k = await EXPORTE_ANBIETER.knoten(rel);
@@ -222,7 +237,9 @@ const EXPORTE_ANBIETER = {
     const rel = seg.slice(1), k = await EXPORTE_ANBIETER.knoten(rel);
     if (k.fehler) return k;
     if (k.typ !== 'dir') return { fehler: 'ENOTDIR' };
-    return { eintraege: k.kinder.map(function (c) { return EXPORTE_ANBIETER.eintrag(rel.concat(c.name), c); }), deps: EXPORTE_ANBIETER.deps(rel, null) };
+    /* Das Verzeichnis selbst ist über den getippten Pfad benannt (vereinbarte Ausnahme); jede Kindzeile trägt ihre eigene Herkunft, damit andere
+       sichtbare Exporte bei einer Sperre stehen bleiben */
+    return { eintraege: k.kinder.map(function (c) { return EXPORTE_ANBIETER.eintrag(rel.concat(c.name), c); }), deps: [] };
   },
   readFile: async function (seg) {
     const rel = seg.slice(1);
@@ -230,7 +247,7 @@ const EXPORTE_ANBIETER = {
     const r = await EXPORTE.lesen(rel);
     if (r.fehler === 'ENOENT') { const k = await EXPORTE_ANBIETER.knoten(rel); return { fehler: k.typ === 'dir' ? 'EISDIR' : 'ENOENT' }; }
     if (r.fehler) return r;
-    return { text: r.text, deps: r.rec.deps, rec: r.rec };
+    return { text: r.text, deps: [EXPORTE.herkunftDep(r.rec)], rec: r.rec };
   },
   /* rm einer einzelnen Exportdatei über die gemeinsame Löschaktion; Verzeichnisse und -r: Read-only file system (unabhängig vom Bestand) */
   entfernen: async function (seg, opt) {

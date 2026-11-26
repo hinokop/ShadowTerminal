@@ -59,6 +59,9 @@ const INTEL = (function () {
     if (dep.art === 'sichtung') return dossierGesperrtId(dep.dossier);
     if (dep.art === 'pin') { const p = (PROFIL.pins || []).find(function (x) { return x.id === dep.id; }); return !!p && pinGesperrt(p); }
     if (dep.art === 'zone') { const z = (PROFIL.zonen || []).find(function (x) { return x.id === dep.id; }); return !!z && zoneGesperrt(z); }
+    /* Herkunft eines verwalteten Exports (Paket 4, M4): ursprüngliche Abhängigkeiten UND Bindung; fehlende oder ungültige Herkunft gilt als gesperrt
+       (fail closed), damit auch ein früher ausgegebener Name nach Sperre, Identitätswechsel oder Löschung aus dem Scrollback verschwindet */
+    if (dep.art === 'herkunft') return !Array.isArray(dep.deps) || !dep.deps.length || !Array.isArray(dep.bindung) || !dep.bindung.length || dep.deps.some(gesperrt) || !dep.bindung.every(bindungGueltig);
     return false;
   }
   const dep = { dossier: function (id) { return { art: 'dossier', id: id }; }, pin: function (id) { return { art: 'pin', id: id }; },
