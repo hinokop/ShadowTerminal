@@ -12,7 +12,7 @@ function ausschnitt(von, bis) {
 }
 const fabrik = new Function('VIEW', 'dispatch', 'renderModule', 'entitaet', 'sichtungsPinName', 'xPinSetzen',
   'karteZoneFinden', 'karteWaehlen', 'karteMarker', 'karteAuswahlAnzeige', '$', 'karte3dSenden',
-  'karteProj', 'requestAnimationFrame', 'KW', 'KH', 'svg', 'karteRendererDatenAktualisieren',
+  'karteProj', 'requestAnimationFrame', 'KW', 'KH', 'svg', 'karteRendererDatenAktualisieren', 'KARTE_3D_ADAPTER',
   ausschnitt('function karteRenderSchluessel(', 'function karteRenderModell(') +
   ausschnitt('function karteKlickVerarbeiten(', '/* =====================================================================\n   KARTENPROTOKOLL:') +
   ausschnitt('function karte3dKlick(', 'let KARTE_ST = null;') +
@@ -28,7 +28,7 @@ function umgebung(patch) {
     id => id === 'ZO-001' ? { id, profil: true } : /^ZN-[12]$/.test(id) ? { id, profil: false } : null,
     id => { K.auswahl = id; }, () => marker, () => {}, () => svg,
     msg => nachrichten.push(msg), () => ({ lat: y => 50 + y / 1000, lon: x => 10 + x / 1000 }),
-    () => {}, 960, 540, svg, () => {});
+    () => {}, 960, 540, svg, () => {}, {setSelection: msg => nachrichten.push(msg)});
   return { K, VIEW, aktionen, nachrichten, listeners, ...a };
 }
 const ll = [50.2, 10.1];

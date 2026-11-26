@@ -28,7 +28,7 @@ body.emb #bar{left:auto;right:56px}
 (function(){
   var emb = /eingebettet=1/.test(location.search) && window.parent !== window;
   if(emb) document.body.className='emb';
-  var aktiv=!emb, sitzung=null;
+  var aktiv=!emb, sitzung=null, resizeLaeuft=false;
   function senden(d){if(emb&&aktiv){d.sitzung=sitzung;parent.postMessage(d,'*');}}
   var fe=document.getElementById('fehler');
   function fehler(kurz,lang){ fe.hidden=false; fe.innerHTML=''; var a=document.createElement('p'),b=document.createElement('p'); a.style.fontWeight='600'; a.textContent=kurz; b.textContent=lang; fe.appendChild(a); fe.appendChild(b);
@@ -160,9 +160,13 @@ body.emb #bar{left:auto;right:56px}
       if(d.typ==='karte3d-daten'){ if(d.kamera&&!map._kameraGesetzt){map._kameraGesetzt=1;map.jumpTo(d.kamera);} setze(d); }
       else if(d.typ==='karte3d-auswahl'){ auswahl(d.id,d.renderKey); }
       else if(d.typ==='karte3d-flug'){ map.flyTo({center:d.center,zoom:Math.max(map.getZoom(),d.zoom||16),duration:900}); }
+      else if(d.typ==='karte3d-resize' && bereit && d.sitzung===sitzung){
+        /* Layoutänderung ist keine Benutzer-Kamerafahrt. */
+        resizeLaeuft=true; try{map.resize();}finally{resizeLaeuft=false;}
+      }
     });
     map.on('dragstart',function(){senden({typ:'karte3d-nutzer-bewegt'});});   /* nur eigenes Ziehen; flyTo löst dragstart nicht aus, moveend dagegen auch nach Animationen */
-    map.on('moveend',function(){var c=map.getCenter();senden({typ:'karte3d-kamera',kamera:{center:[c.lng,c.lat],zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()}});});
+    map.on('moveend',function(){if(resizeLaeuft)return;var c=map.getCenter();senden({typ:'karte3d-kamera',kamera:{center:[c.lng,c.lat],zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()}});});
   } else {
     var sc=document.createElement('script'); sc.src='szenario.js';
     sc.onload=function(){var K=(window.SCENARIO&&SCENARIO.karte&&SCENARIO.karte.koord)||{},Z=(SCENARIO&&SCENARIO.zonen)||{};

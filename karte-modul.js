@@ -1296,7 +1296,7 @@ function karteWaehlen(id, zentrieren, renderKey) {
   if (zentrieren && m) { karteFlug(m.ll[0], m.ll[1], Math.max(K.zoom, 11), karteAuswahlAnzeige, id); }
   else if (svg) zeichneKarte(svg);
   karteAuswahlAnzeige();
-  if (K.ansicht3d) karte3dSenden(karteAuswahlNachricht());
+  if (K.ansicht3d) KARTE_3D_ADAPTER.setSelection(karteAuswahlNachricht());
 }
 /* Gezielter Sprung aus anderen Modulen: erst Berechtigung und tatsächlichen Eintrag prüfen,
    dann die Ansicht öffnen. Bei gleicher SI-Nummer niemals ein anderes Dossier wählen. */
@@ -1320,7 +1320,7 @@ function karteSichtungZeigen(entId, sid, zoom) {
 /* Weiche Kamerafahrt (550 ms); ohne Bewegungsreduktion */
 function karteFlug(lat, lon, zoom, fertig, bezugId) {
   karteBezugSetzen(bezugId);                      /* gezielter Sprung setzt den Objektkontext der Lage-Box; Region, Europa und Welt löschen ihn */
-  if (VIEW.karte.ansicht3d) { karte3dSenden({ typ: 'karte3d-flug', center: [lon, lat], zoom: Math.max(15, zoom || 15) }); if (fertig) fertig(); return; }
+  if (VIEW.karte.ansicht3d) { KARTE_3D_ADAPTER.flyTo([lon, lat], Math.max(15, zoom || 15)); if (fertig) fertig(); return; }
   const K = VIEW.karte, a = { lat: K.lat, lon: K.lon, zoom: K.zoom }, t0 = performance.now();
   if (K.flug) cancelAnimationFrame(K.flug);
   const reduziert = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1402,17 +1402,37 @@ function karte3dKlick(d) {
   const lon = d.lon >= -180 && d.lon <= 180 ? d.lon : ((d.lon % 360 + 540) % 360) - 180;
   st.klickGeo({ ll: [d.lat, lon], markerId: d.id || null, markerKey: d.renderKey || null, kanteId: null,
     zoneId: d.id ? null : d.zid || null, mehr: !!d.umschalt }, function () { karteRendererDatenAktualisieren(); });
-  karte3dSenden(karteAuswahlNachricht());
+  KARTE_3D_ADAPTER.setSelection(karteAuswahlNachricht());
 }
 let KARTE_ST = null;
-const KARTE3D = { host: null, frame: null, platz: null, bereit: false, aktiv: false, sitzung: 0, folge: null };
+const KARTE3D = { host: null, frame: null, platz: null, bereit: false, aktiv: false, sitzung: 0, folge: null, groesse: null };
 /* Derselbe Datenvertrag wie beim SVG-Adapter; der Frame bezieht beim Bereit-Signal
    stets einen frischen Snapshot, statt Daten aus einer früheren Sitzung zu puffern. */
 const KARTE_3D_ADAPTER = {
   art: 'maplibre-iframe',
   aktiv: function () { return KARTE3D.aktiv; },
+  camera: function () {
+    const k = VIEW.karte.kamera3d;
+    return k ? { center: k.center.slice(), zoom: k.zoom, pitch: k.pitch, bearing: k.bearing } : null;
+  },
   setData: function (modell) {
     if (KARTE3D.aktiv && KARTE3D.bereit) karte3dSenden(karte3dDaten(modell));
+  },
+  setSelection: function (nachricht) {
+    if (KARTE3D.aktiv) karte3dSenden(nachricht);
+  },
+  flyTo: function (center, zoom) {
+    if (KARTE3D.aktiv) karte3dSenden({ typ: 'karte3d-flug', center: center, zoom: zoom });
+  },
+  /* Keine Stilbehauptung: der alte Frame hat ausschließlich Liberty.
+     Style-/Projektionsparität folgt im neuen MapLibre-Renderer (K2/K4). */
+  resize: function (breite, hoehe) {
+    if (!KARTE3D.aktiv || !KARTE3D.bereit || !Number.isFinite(breite) || !Number.isFinite(hoehe) || breite <= 0 || hoehe <= 0) return false;
+    const g = KARTE3D.groesse;
+    if (g && g[0] === breite && g[1] === hoehe) return false;
+    KARTE3D.groesse = [breite, hoehe];
+    karte3dSenden({ typ: 'karte3d-resize', sitzung: KARTE3D.sitzung });
+    return true;
   }
 };
 /* K1c: SVG-Adapter wird vor jedem Modul-Neuaufbau freigegeben; der 3D-Frame
@@ -1425,7 +1445,7 @@ function karte3dNachrichtZulaessig(d) {
 }
 function karte3dAktivSetzen(aktiv) {
   if (KARTE3D.aktiv === aktiv) return;
-  KARTE3D.aktiv = aktiv; KARTE3D.sitzung++;
+  KARTE3D.aktiv = aktiv; KARTE3D.sitzung++; KARTE3D.groesse = null;
   karte3dSenden({ typ: 'karte3d-aktiv', aktiv: aktiv, sitzung: KARTE3D.sitzung });
   if (!aktiv) {
     if (KARTE3D.folge !== null) cancelAnimationFrame(KARTE3D.folge);
@@ -1440,6 +1460,7 @@ function karte3dFolgen() {
   const r = pl.getBoundingClientRect();
   host.hidden = false;
   host.style.left = r.left + 'px'; host.style.top = r.top + 'px'; host.style.width = r.width + 'px'; host.style.height = r.height + 'px';
+  KARTE_3D_ADAPTER.resize(r.width, r.height);
   KARTE3D.folge = requestAnimationFrame(karte3dFolgen);
 }
 function karteRendererVorRender(modul) {
@@ -1489,7 +1510,7 @@ if (typeof window !== 'undefined' && !window.__karte3dHoerer) {
 function karte3dEingang(d, fr) {
   {
     if (d.typ === 'karte3d-bereit') {
-      KARTE3D.bereit = true;
+      KARTE3D.bereit = true; KARTE3D.groesse = null;
       try {
         fr.contentWindow.postMessage({ typ: 'karte3d-aktiv', aktiv: KARTE3D.aktiv, sitzung: KARTE3D.sitzung }, '*');
         if (KARTE3D.aktiv) fr.contentWindow.postMessage(karte3dDaten(), '*');
@@ -1681,6 +1702,8 @@ function karteSteuerung(svg) {
   });
   return { art: 'svg', aktiv: aktiv, unmount: unmount,
     setData: function (modell) { if (aktiv()) zeichneKarte(svg, modell); },
+    /* SVG-Stil wird aus VIEW.karte gelesen, kein zweiter Konfigurationsbestand. */
+    setStyle: neu,
     camera: function () { return { center: [K.lon, K.lat], zoom: K.zoom, pitch: 0, bearing: 0 }; },
     project: function (ll) { const P = karteProj(); return [P.px(ll[1]), P.py(ll[0])]; },
     unproject: function (xy) { const P = karteProj(); return [P.lat(xy[1]), P.lon(xy[0])]; },
@@ -1892,14 +1915,14 @@ function renderKarte(m) {
       def ? ebene('strecke', 'Vermutete Transportroute', IKON.strecke) : null,
       h('details', { class: 'k-eb-det', open: !!K.keyHinweis }, h('summary', null, 'Darstellung'),
         ebene('gelaende', 'Gewässer und Siedlungen'), ebene('strassen', 'Fernstraßen'), ebene('namen', 'Ortsnamen'), ebene('kacheln', 'Online-Kacheln'),
-        h('select', { id: 'k-anbieter', 'aria-label': 'Anbieter der Kacheln', onchange: function (ev) { K.anbieter = ev.target.value; karteWahlSichern(); st.neu(); renderModule(); } },
+        h('select', { id: 'k-anbieter', 'aria-label': 'Anbieter der Kacheln', onchange: function (ev) { K.anbieter = ev.target.value; karteWahlSichern(); st.setStyle(); renderModule(); } },
           h('option', { value: 'carto', selected: K.anbieter === 'carto' }, 'CARTO dunkel'), h('option', { value: 'luftbild', selected: K.anbieter === 'luftbild' }, 'Luftbild Berlin'), h('option', { value: 'hybrid', selected: K.anbieter === 'hybrid' }, 'Luftbild mit Namen'), h('option', { value: 'osm', selected: K.anbieter === 'osm' }, 'OpenStreetMap'), h('option', { value: 'eigen', selected: K.anbieter === 'eigen' }, 'Eigene Kachel-URL')),
-        h('label', { class: 'k-ebene' }, h('input', { type: 'checkbox', id: 'k-dunkel', checked: K.dunkel, onchange: function (ev) { K.dunkel = ev.target.checked; karteWahlSichern(); st.neu(); } }), h('span', { class: 'k-ik leer' }), h('span', null, 'Kacheln abdunkeln')),
-        K.anbieter === 'carto' ? h('select', { id: 'k-carto-stil', 'aria-label': 'Stil der CARTO-Karte', onchange: function (ev) { K.cartoStil = ev.target.value; karteWahlSichern(); st.neu(); } }, h('option', { value: 'dark_all', selected: K.cartoStil !== 'dark_nolabels' }, 'Dunkel mit Namen'), h('option', { value: 'dark_nolabels', selected: K.cartoStil === 'dark_nolabels' }, 'Dunkel ohne Namen (ruhiger)')) : null,
+        h('label', { class: 'k-ebene' }, h('input', { type: 'checkbox', id: 'k-dunkel', checked: K.dunkel, onchange: function (ev) { K.dunkel = ev.target.checked; karteWahlSichern(); st.setStyle(); } }), h('span', { class: 'k-ik leer' }), h('span', null, 'Kacheln abdunkeln')),
+        K.anbieter === 'carto' ? h('select', { id: 'k-carto-stil', 'aria-label': 'Stil der CARTO-Karte', onchange: function (ev) { K.cartoStil = ev.target.value; karteWahlSichern(); st.setStyle(); } }, h('option', { value: 'dark_all', selected: K.cartoStil !== 'dark_nolabels' }, 'Dunkel mit Namen'), h('option', { value: 'dark_nolabels', selected: K.cartoStil === 'dark_nolabels' }, 'Dunkel ohne Namen (ruhiger)')) : null,
         (K.anbieter === 'carto' || K.anbieter === 'hybrid' || K.anbieter === 'luftbild') ? h('input', { type: 'password', id: 'k-carto-key', class: 'k-url', value: K.cartoKey || '', placeholder: 'CARTO-Schlüssel (Groß-/Kleinschreibung beachten)', 'aria-label': 'CARTO-Schlüssel', autocomplete: 'off', spellcheck: 'false',
           onchange: function (ev) { K.cartoKey = ev.target.value.trim(); K.keyHinweis = false; if (K.cartoKey) K.ebenen.kacheln = true; karteWahlSichern(); renderModule(); } }) : null,
         K.anbieter === 'eigen' ? h('input', { type: 'text', id: 'k-url', class: 'k-url', value: K.url, placeholder: 'https://…/{z}/{x}/{y}.png', 'aria-label': 'Kachel-URL', autocomplete: 'off', spellcheck: 'false',
-          onchange: function (ev) { K.url = ev.target.value; karteWahlSichern(); st.neu(); } }) : null,
+          onchange: function (ev) { K.url = ev.target.value; karteWahlSichern(); st.setStyle(); } }) : null,
         h('p', { class: 'k-eb-note' }, 'Online-Kacheln sind standardmäßig aus. Eingeschaltet lädt der Browser Kacheln vom Anbieter; dieser sieht Ausschnitt, IP-Adresse und bei CARTO den Schlüssel. URL und Schlüssel bleiben nur in diesem Browser und werden nie exportiert.')),
       h('p', { class: 'k-eb-note' }, (def ? 'Roter Ring: Stufe 4 oder 5. ' : '') + 'Der gestrichelte Ring um eine Sichtung zeigt ihre räumliche Unschärfe und wächst mit ihrem Alter.')) : null);
   const res = [

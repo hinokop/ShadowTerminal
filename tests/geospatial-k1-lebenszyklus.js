@@ -83,6 +83,33 @@ const { APP } = require('./_pfad');
       } finally { KARTE3D.aktiv=false; KARTE3D.bereit=warBereit; karte3dSenden=senden; }
     });
     for (const [k,v] of Object.entries(sync)) assert.equal(v,true,k);
+    const vertrag = await p.evaluate(() => {
+      const K=VIEW.karte, A=KARTE_3D_ADAPTER, nachrichten=[], senden=karte3dSenden;
+      const vorher={aktiv:KARTE3D.aktiv,bereit:KARTE3D.bereit,groesse:KARTE3D.groesse,kamera:K.kamera3d};
+      karte3dSenden=d=>nachrichten.push(d);
+      try {
+        KARTE3D.aktiv=true; KARTE3D.bereit=true; KARTE3D.groesse=null;
+        const erste=A.resize(800,600), gleich=A.resize(800,600), zweite=A.resize(960,600), ungueltig=A.resize(0,600);
+        const resize=erste && !gleich && zweite && !ungueltig && nachrichten.length===2 &&
+          nachrichten.every(n=>n.typ==='karte3d-resize' && n.sitzung===KARTE3D.sitzung);
+        K.kamera3d={center:[13.4,52.5],zoom:15,pitch:55,bearing:12};
+        const kopie=A.camera(); kopie.center[0]=0;
+        const kamera=K.kamera3d.center[0]===13.4 && kopie.zoom===15;
+        A.flyTo([11,51],16); A.setSelection({typ:'karte3d-auswahl',id:null,renderKey:null});
+        const befehle=nachrichten.at(-2).typ==='karte3d-flug' && nachrichten.at(-2).center[0]===11 &&
+          nachrichten.at(-1).typ==='karte3d-auswahl';
+        KARTE3D.aktiv=false; nachrichten.length=0;
+        A.resize(1200,600); A.flyTo([1,2],15); A.setSelection({typ:'karte3d-auswahl'});
+        const inaktiv=nachrichten.length===0;
+        KARTE3D.aktiv=true; KARTE3D.bereit=false;
+        const nichtBereit=!A.resize(1200,600) && nachrichten.length===0;
+        return {resize,kamera,befehle,inaktiv,nichtBereit};
+      } finally {
+        KARTE3D.aktiv=vorher.aktiv; KARTE3D.bereit=vorher.bereit; KARTE3D.groesse=vorher.groesse;
+        K.kamera3d=vorher.kamera; karte3dSenden=senden;
+      }
+    });
+    for (const [k,v] of Object.entries(vertrag)) assert.equal(v,true,k);
     await p.waitForTimeout(100);
     assert.deepEqual(errors,[]);
     console.log('OK: SVG mount/unmount, Projektion, Modulwechsel und 3D-Ereignisgeneration');
