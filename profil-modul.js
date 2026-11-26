@@ -4454,7 +4454,7 @@ function terminalEinfaerben(zeile) {
     if (c === "'" || c === '"') { quote = c; wortDazu(c, 'zeichenkette', ''); continue; }
     if (/\s/.test(c)) { wortEnde(); dazu(c, 'leer'); continue; }
     if (c === '\\') { wortDazu(n === undefined ? c : c + n, 'wort', n ?? ''); i++; continue; }
-    const op = (c === '&' && n === '&') || (c === '|' && n === '|') ? c + n : c === ';' ? ';' : '';
+    const op = (c === '&' && n === '&') || (c === '|' && n === '|') ? c + n : c === ';' ? ';' : c === '|' && n !== '&' ? '|' : '';   /* Pipe seit Paket 5 */
     if (op) {
       const ohneBefehl = befehlsPos && !wort;
       wortEnde();
@@ -4462,7 +4462,7 @@ function terminalEinfaerben(zeile) {
       befehlsPos = true; i += op.length - 1;
       continue;
     }
-    if ('&<>`'.includes(c) || (c === '$' && n === '(')) { wortEnde(); dazu(c === '$' ? '$(' : c, 'fehler'); if (c === '$') i++; continue; }
+    if ('|&<>`'.includes(c) || (c === '$' && n === '(')) { wortEnde(); dazu(c === '$' ? '$(' : c, 'fehler'); if (c === '$') i++; continue; }
     if (c === '$' && n === '?') { wortDazu('$?', 'variable', '$?'); i++; continue; }
     wortDazu(c, 'wort', c);
   }
