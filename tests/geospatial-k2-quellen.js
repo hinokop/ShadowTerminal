@@ -3,7 +3,23 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const Q = require('../karte-v2-quellen.js');
 const { bereitstellen, VERSION, DATEIEN } = require('../tools/maplibre-bereitstellen.js');
+const D=require('../karte-v2-diagnose');
 const key = 'fixture +/&?';
+const ds={sources:{protomaps:{type:'vector',maxzoom:15}},layers:[{source:'protomaps','source-layer':'buildings'}]};
+const sample=[{properties:{height:12,min_height:'0',name:'A','name:de':'A',secret:'NICHT-IM-BERICHT'}},{properties:{height:'unbekannt','building:levels':'3',name:'B'}},{properties:{height:'',min_height:null,'name:de':''}}];
+const stats=D.statistik(sample);
+assert.equal(stats.fragmente,3);
+assert.deepEqual(stats.hoehen.height,{vorhanden:3,numerisch:1});
+assert.deepEqual(stats.hoehen.min_height,{vorhanden:2,numerisch:1});
+assert.equal(stats.namen['name:de'],1);
+assert.equal(stats.hoehen['building:levels'].numerisch,1);
+assert.equal(D.quelle(ds),'protomaps');
+assert.equal(D.quelle({sources:{},layers:[]}),null);
+const probe=D.stichprobe({getStyle:()=>ds,querySourceFeatures:(id,opt)=>{assert.equal(id,'protomaps');return opt.sourceLayer==='buildings'?sample:[];}});
+assert.equal(probe.nativeMaxzoom,15);
+assert.ok(D.text('Fixture',16,probe).includes('Gebäudefragmente: 3'));
+assert.ok(!D.text('Fixture',16,probe).includes('NICHT-IM-BERICHT'));
+assert.equal(D.ORTE.length,3);
 for (const url of [
   Q.stil('voyager'), Q.stil('dunkel'),
   'https://tiles.basemaps.cartocdn.com/vector/carto.streets/v2/tiles.json?lang=de',

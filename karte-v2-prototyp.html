@@ -12,12 +12,14 @@ header strong{margin-right:12px} button,input{font:inherit;background:#182530;co
 <body><header><strong>SHADOW / K2a – Quellenprototyp</strong>
 <input id="key" type="password" placeholder="Lokaler CARTO-Schlüssel" aria-label="CARTO-Schlüssel" autocomplete="off" spellcheck="false">
 <button id="voyager" disabled>Voyager</button><button id="dunkel" disabled>Dark Matter (Referenz)</button><button id="leer" disabled>Leeren</button>
-<button id="demo" disabled>Testobjekte</button><button id="flach" disabled>2D</button><button id="geneigt" disabled>Geneigt</button></header>
+<button id="diagnose" disabled>Vektordaten prüfen (9 Stichproben)</button><button id="demo" disabled>Testobjekte</button><button id="flach" disabled>2D</button><button id="geneigt" disabled>Geneigt</button></header>
 <div id="m" aria-label="Kartenprototyp"></div>
+<section id="diagnose-panel" hidden style="padding:8px 14px"><label for="diagnose-bericht">Vektordaten-Diagnose (Text markieren und kopieren)</label><textarea id="diagnose-bericht" readonly rows="9" style="box-sizing:border-box;width:100%;margin-top:5px;background:#182530;color:#d9e3ed;font:12px monospace"></textarea></section>
 <footer><span id="meldung" role="status">Lokale Bibliothek wird geprüft.</span> · Keine Profil- oder Terminaldaten · © OpenStreetMap contributors, © CARTO</footer>
 <script src="vendor/maplibre-gl/maplibre-gl.js"></script>
 <script src="karte-v2-quellen.js"></script>
 <script src="karte-v2-renderer.js"></script>
+<script src="karte-v2-diagnose.js"></script>
 <script>
 (function () {
   'use strict';
@@ -56,9 +58,50 @@ header strong{margin-right:12px} button,input{font:inherit;background:#182530;co
   $('voyager').onclick = () => wechseln('voyager');
   $('dunkel').onclick = () => wechseln('dunkel');
   $('leer').onclick = () => { modus = 'leer'; key = ''; $('key').value = ''; A.setStyle(Q.leererStil()); };
+  /* Erst nach bewusst geladenem CARTO-Stil. Keine Abfrage bei Start oder ohne Schlüssel.
+     Neun Ansichten, je nach Verbindung/Tilegröße begrenzt; Fehler/Timeout nie als Nullbestand ausgeben. */
+  $('diagnose').onclick=async()=>{
+    const D=KARTE_V2_DIAGNOSE, panel=$('diagnose-panel'), bericht=$('diagnose-bericht');
+    panel.hidden=false;
+    const head='SHADOW / CARTO-Vektordaten – Stichprobe\\nKachelfragmente aus geladenen Quellkacheln; mögliche Duplikate und Randbereiche. Keine eindeutige Gebäudezählung, keine Flächenstatistik. Numerisch bedeutet nicht validierte Höhe.\\n';
+    if(modus==='leer'||!key||!D.quelle(map.getStyle())){bericht.value=head+'Kein geeigneter CARTO-Vektorstil geladen. Voyager mit lokalem Schlüssel wählen.';return;}
+    const knoepfe=['voyager','dunkel','leer','flach','geneigt','demo','diagnose','key'];
+    knoepfe.forEach(id=>$(id).disabled=true);
+    const alt={center:map.getCenter(),zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()};
+    const result=[head+'Stil: '+modus];
+    function warten(ort,z){
+      return new Promise(resolve=>{
+        let timer, fertig=false, fehler=false;
+        function ende(ok){
+          if(fertig)return;fertig=true;clearTimeout(timer);map.off('idle',idle);map.off('error',error);resolve(ok);
+        }
+        function error(){fehler=true;}
+        function idle(){
+          const c=map.getCenter();
+          if(fehler||Math.abs(c.lng-ort.center[0])>0.00001||Math.abs(c.lat-ort.center[1])>0.00001||Math.abs(map.getZoom()-z)>0.001||!map.areTilesLoaded())ende(false);
+          else ende(true);
+        }
+        map.on('error',error);map.on('idle',idle);
+        timer=setTimeout(()=>ende(false),18000);
+        try{map.jumpTo({center:ort.center,zoom:z,pitch:0,bearing:0});map.triggerRepaint();}catch(e){ende(false);}
+      });
+    }
+    try{
+      map.resize();
+      for(const ort of D.ORTE)for(const z of [14,15,16]){
+        melden('Diagnose: '+ort.name+' · Zoom '+z+' – bitte Karte nicht bewegen.');
+        bericht.value=result.join('\\n\\n')+'\\n\\nLade nächste Stichprobe …';
+        if(!await warten(ort,z)){result.push(ort.name+' | Zoom '+z+': NICHT AUSWERTBAR (Ladefehler, Zeitlimit oder Kartenbewegung).');continue;}
+        try{result.push(D.text(ort.name,z,D.stichprobe(map)));}catch(e){result.push(ort.name+' | Zoom '+z+': NICHT AUSWERTBAR (Quellenabfrage fehlgeschlagen).');}
+      }
+    }finally{
+      bericht.value=result.join('\\n\\n');knoepfe.forEach(id=>$(id).disabled=false);
+      map.jumpTo(alt);melden('Diagnose beendet. Bericht kopieren; nicht auswertbare Stichproben ggf. wiederholen.');
+    }
+  };
   $('flach').onclick = () => map.easeTo({pitch:0,bearing:0});
   $('geneigt').onclick = () => map.easeTo({pitch:60});
-  ['voyager','dunkel','leer','flach','geneigt','demo'].forEach(id => { $(id).disabled = false; });
+  ['voyager','dunkel','leer','flach','geneigt','demo','diagnose'].forEach(id => { $(id).disabled = false; });
   melden('MapLibre lokal bereit. CARTO-Abruf erst nach Stilwahl.');
 })();
 </script></body></html>
