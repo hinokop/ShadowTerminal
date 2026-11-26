@@ -4,15 +4,16 @@
 (function(root){
   'use strict';
   const dev=new URLSearchParams(location.search).get('geospatial-v2')==='1';
-  let kontext=null, laden=null;
+  let kontext=null, laden=null, sitzung=null;
   /* Nur Opt-in, vor allen MapLibre-Netzanfragen. Die Standardansicht bleibt unverändert. */
   if(dev){
     const meta=document.createElement('meta');meta.name='referrer';meta.content='no-referrer';document.head.appendChild(meta);
   }
-  const lokalKey=()=>typeof root.KARTEN_SCHLUESSEL?.carto==='string'?root.KARTEN_SCHLUESSEL.carto.trim():'';
-  const namen={leer:'Lokal',voyager:'Voyager',dunkel:'Dark Matter'};
-  /* Absichtlich keine Persistenz; ein Modul-Neuaufbau beginnt wieder lokal.
-     K4 übernimmt den gemeinsamen Ansichts-/Kamerazustand. */
+  // Die Lagekarte hat Datei- und Browserquelle bereits aufgelöst (Browser hat Vorrang).
+  const lokalKey=()=>typeof VIEW.karte.cartoKey==='string'?VIEW.karte.cartoKey.trim():'';
+  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter'};
+  /* Nur Sitzungs-RAM: Kamera, explizite Stilwahl, Gebäudewunsch; kein Schlüssel,
+     keine Objekte, keine persistente Speicherung. Gemeinsame Kamera folgt in K4. */
   function knoepfe(c){
     if(!aktiv(c))return;
     for(const n of Object.keys(namen)){
@@ -40,18 +41,38 @@
     if(c.abort)c.abort.abort();c.abort=null;
     clearTimeout(c.timer);c.timer=null;
   }
+  function kachelReset(c){
+    c.quellen=new Set();c.kachelFehler=new Map();c.kachelGeladen=false;c.kachelErfolg=false;c.kachelWarnung=false;c.ressourcenWarnung=false;c.objektWarnung=false;
+  }
+  function kachelFehlerEintragen(c,e){
+    // MapLibre 4.7.1 SourceCache liefert tile und sourceId im Fehlerereignis.
+    // Nur Anbieter-Tiles; eigene GeoJSON-Quellen sind kein CARTO-Ausfall.
+    if(!e?.tile||!c.quellen.has(e.sourceId))return false;
+    const jetzt=Date.now();
+    for(const [id,t] of c.kachelFehler)if(jetzt-t>10000)c.kachelFehler.delete(id);
+    const id=e.tile.tileID?.key;
+    if(id!==undefined)c.kachelFehler.set(e.sourceId+':'+id,jetzt);
+    c.kachelWarnung=true;
+    hinweis(c,namen[c.modus]+' · einzelne Kacheln nicht verfügbar.');
+    return true;
+  }
+  function onlineHinweis(c){
+    hinweis(c,namen[c.modus]+' bereit · '+(c.objektWarnung?'Fehler in lokalen Objektlayern.':'lokale Objektlayer aktiv.')+
+      (c.kachelWarnung?' Einzelne Kacheln nicht verfügbar.':'')+
+      (c.ressourcenWarnung?' Kartenressource nicht verfügbar.':''));
+  }
   function rueckfall(c,grund){
     if(!aktiv(c)||!c.a)return;
-    ++c.generation;stop(c);c.modus='leer';c.phase='lokal';c.key='';
+    ++c.generation;stop(c);c.modus='leer';c.phase='lokal';c.key='';kachelReset(c);
     try{c.a.setStyle(KARTE_V2_QUELLEN.leererStil());sync();}catch(e){}
     knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,grund+' · Lokale Objektlayer bleiben verfügbar.');
   }
   async function wechseln(c,n){
     if(!aktiv(c)||!c.a||!Object.hasOwn(namen,n))return;
-    if(n==='leer'){rueckfall(c,'Lokaler Stil');return;}
+    if(n==='leer'){rueckfall(c,'Ohne Basiskarte');return;}
     const key=lokalKey();
     if(!key){rueckfall(c,'Kein lokaler CARTO-Schlüssel');return;}
-    const Q=KARTE_V2_QUELLEN, g=++c.generation;stop(c);
+    const Q=KARTE_V2_QUELLEN, g=++c.generation;stop(c);kachelReset(c);
     c.modus=n;c.phase='abruf';c.key=key;knopfhilfe();
     function knopfhilfe(){knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,namen[n]+' wird geladen.');}
     const ac=new AbortController();c.abort=ac;
@@ -62,7 +83,9 @@
       const s=await antwort.json();
       if(!aktiv(c)||c.generation!==g)return;
       if(!Q.vektorStil(s))throw Error('Vektorstil');
-      c.phase='kacheln';c.a.setStyle(Q.gebaeudeStil(s,n==='dunkel',c.gebaeude));sync();
+      const stil=Q.gebaeudeStil(s,n==='dunkel',c.gebaeude);
+      c.quellen=new Set(Object.entries(stil.sources).filter(([,q])=>q.type==='vector').map(([id])=>id));
+      c.phase='kacheln';c.a.setStyle(stil);sync();
     }catch(e){if(aktiv(c)&&c.generation===g)rueckfall(c,'CARTO-Stil nicht verfügbar');}
   }
   function aktiv(c){
@@ -91,8 +114,9 @@
           ...Object.keys(namen).map(n=>h('button',{type:'button',id:'k-v2-'+n,disabled:true,'aria-pressed':String(n==='leer'),onclick:()=>wechseln(kontext,n)},namen[n]))),
         h('div',{style:'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;'},
           h('button',{type:'button',id:'k-v2-flach',disabled:true,'aria-pressed':'true',onclick:()=>neigung(kontext,0)},'2D'),
-          h('button',{type:'button',id:'k-v2-geneigt',disabled:true,'aria-pressed':'false',onclick:()=>neigung(kontext,60)},'3D'),
+          h('button',{type:'button',id:'k-v2-geneigt',disabled:true,'aria-pressed':'false',onclick:()=>neigung(kontext,60)},'3D-Neigung'),
           h('button',{type:'button',id:'k-v2-gebaeude',disabled:true,'aria-pressed':'false',onclick:()=>gebaeudeUmschalten(kontext)},'Gebäude')),
+        h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die Lagekarte. Die gemeinsame Kamera folgt später.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('p',{class:'note',id:'k-v2-status',role:'status'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.'),
         h('small',null,'Bei CARTO-Auswahl sieht der Anbieter Kartenausschnitt, IP und Schlüssel. © OpenStreetMap-Mitwirkende, © CARTO.')),
@@ -123,8 +147,16 @@
       zoneId:t&&t.art==='zone'?t.id:null,kanteId:t&&t.art==='verbindung'?t.id:null,mehr:!!e.mehr},karteRendererDatenAktualisieren);
     sync();
   }
-  function unmount(){
+  function unmount(erhalten=false){
     const c=kontext;kontext=null;
+    if(!erhalten||document.body.classList.contains('locked'))sitzung=null;
+    else if(c?.a&&c.map){
+      // Auch bei fehlerhafter/entfernter Map muss der Abbau weiterlaufen.
+      try{
+        const kamera=c.a.camera();
+        if(kamera)sitzung={kamera,modus:c.modus,gebaeude:c.gebaeude};
+      }catch(e){sitzung=null;}
+    }
     if(!c)return;
     ++c.generation;stop(c);c.key='';
     /* Ein Fehler beim Aufräumen darf die bestehende Anwendung nicht blockieren. */
@@ -135,28 +167,59 @@
     if(!dev)return;
     const el=$('k-v2-map'),status=$('k-v2-status');
     if(!el||!status||document.body.classList.contains('locked'))return;
-    unmount();
-    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:false,key:'',generation:0,abort:null,timer:null};kontext=c;
+    if(kontext)unmount(true);
+    const alt=sitzung;
+    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,key:'',generation:0,abort:null,timer:null};
+    kachelReset(c);kontext=c;
     bibliothek().then(()=>{
       if(!aktiv(c))return;
       const K=VIEW.karte;
       c.map=new maplibregl.Map({container:el,style:KARTE_V2_QUELLEN.leererStil(),
-        center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5)),attributionControl:true,
+        ...(alt?.kamera||{center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5))}),attributionControl:true,
         transformRequest:url=>KARTE_V2_QUELLEN.cartoRequest(url,c.key)});
       c.map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
       c.map.on('moveend',()=>gebaeudeKnoepfe(c));
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
-      c.map.on('error',()=>{
-        if(!aktiv(c))return;
-        if(c.phase==='kacheln'||c.phase==='online')rueckfall(c,'CARTO-Ressource nicht verfügbar');
+      c.map.on('sourcedata',e=>{
+        if(!aktiv(c)||!['kacheln','online'].includes(c.phase)||!c.quellen.has(e.sourceId)||e.tile?.state!=='loaded')return;
+        c.kachelGeladen=true;c.kachelErfolg=true;
+      });
+      c.map.on('error',e=>{
+        if(!aktiv(c)||!['kacheln','online'].includes(c.phase))return;
+        if(kachelFehlerEintragen(c,e))return;
+        if(e?.sourceId?.startsWith('shadow-v2-')){
+          c.objektWarnung=true;hinweis(c,'Eigene Kartenlayer konnten nicht aufgebaut werden.');return;
+        }
+        if(c.phase==='kacheln')rueckfall(c,'CARTO-Ressource nicht verfügbar');
+        else {c.ressourcenWarnung=true;hinweis(c,namen[c.modus]+' · Kartenressource nicht verfügbar.');}
       });
       c.map.on('idle',()=>{
         if(!aktiv(c)||!c.a.ready())return;
-        if(c.phase==='kacheln'){stop(c);c.phase='online';gebaeudeKnoepfe(c);hinweis(c,namen[c.modus]+' bereit · lokale Objektlayer aktiv.');}
-        else if(c.phase==='lokal'&&!c.status.textContent.includes('bleiben verfügbar'))hinweis(c,'Lokale Objektlayer bereit · keine Basiskarte · Kamera vorläufig unabhängig.');
+        if(c.phase==='kacheln'||c.phase==='online'){
+          if(!c.map.areTilesLoaded())return;
+          const jetzt=Date.now();
+          for(const [id,t] of c.kachelFehler)if(jetzt-t>10000)c.kachelFehler.delete(id);
+          if(c.phase==='kacheln'){
+            // Einzelne fehlende Tiles sind tolerierbar; ohne irgendeine geladene
+            // Anbieter-Kachel darf der Stil nicht als online gemeldet werden.
+            if(!c.kachelGeladen){
+              if(c.kachelWarnung)rueckfall(c,'CARTO-Ressource nicht verfügbar');
+              return; // ansonsten greift das bestehende Zeitlimit
+            }
+            stop(c);c.phase='online';gebaeudeKnoepfe(c);
+          }else if(!c.kachelErfolg&&c.kachelFehler.size>=3){
+            rueckfall(c,'CARTO-Ressource nicht verfügbar');return;
+          }
+          if(c.kachelErfolg){
+            if(!c.kachelFehler.size)c.kachelWarnung=false;
+            c.kachelFehler.clear();
+          }
+          c.kachelErfolg=false;onlineHinweis(c);
+        }else if(c.phase==='lokal'&&!c.status.textContent.includes('bleiben verfügbar'))hinweis(c,'Lokale Objektlayer bereit · keine Basiskarte · Kamera vorläufig unabhängig.');
       });
       knoepfe(c);gebaeudeKnoepfe(c);
       sync();
+      if(alt&&alt.modus!=='leer')wechseln(c,alt.modus);
     }).catch(()=>{
       if(!aktiv(c))return;
       hinweis(c,'Lokale MapLibre-Ansicht nicht verfügbar. Bestehende Karte bleibt verfügbar.');

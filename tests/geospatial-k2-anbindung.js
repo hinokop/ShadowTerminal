@@ -19,7 +19,7 @@ function assertCamera(actual,expected){
  const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
   const p=await b.newPage({viewport:{width:1500,height:1100},reducedMotion:'reduce'});p.setDefaultTimeout(25000);
-  const errors=[],anfragen=[];let netz='ok';p.on('pageerror',e=>errors.push(e.message));
+  const errors=[],anfragen=[];let netz='ok',einzelFehler=0;p.on('pageerror',e=>errors.push(e.message));
   const Q=require('../karte-v2-quellen');
   const tile='https://tiles.basemaps.cartocdn.com/v/fixture/vectortiles/test/{z}/{x}/{y}.mvt';
   // Leere, aber gültige MVT-Layer (Name buildings, Version 2, Extent 4096).
@@ -29,7 +29,7 @@ function assertCamera(actual,expected){
     {id:'bg',type:'background',paint:{'background-color':'#304050'}},
     {id:'buildings',source:'protomaps','source-layer':'buildings',type:'fill',paint:{'fill-color':'#888'}}
   ]};
-  await p.route(/^https?:/,async r=>{
+  const route=async r=>{
     const u=new URL(r.request().url()),bare=u.origin+u.pathname;
     if(bare===Q.stil('voyager')||bare===Q.stil('dunkel')){
       anfragen.push({art:'stil',key:u.searchParams.get('key'),referer:r.request().headers().referer||''});
@@ -39,10 +39,12 @@ function assertCamera(actual,expected){
     if(u.hostname==='tiles.basemaps.cartocdn.com'&&u.pathname.startsWith('/v/fixture/')){
       anfragen.push({art:'tile',key:u.searchParams.get('key'),referer:r.request().headers().referer||''});
       if(netz==='kachelfehler')return r.abort();
+      if(netz==='einzelfehler'&&einzelFehler===0){einzelFehler++;return r.fulfill({status:500,body:'fixture',headers:{'access-control-allow-origin':'*'}});}
       return r.fulfill({body:mvt,contentType:'application/vnd.mapbox-vector-tile',headers:{'access-control-allow-origin':'*'}});
     }
     return r.abort();
-  });
+  };
+  await p.route(/^https?:/,route);
   await p.goto(APP+'?geospatial-v2=1');
   await p.fill('#gate-pw','pw-test-123');if(await p.isVisible('#gate-pw2'))await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
   await p.waitForFunction(()=>!document.body.classList.contains('locked'));
@@ -77,11 +79,30 @@ function assertCamera(actual,expected){
   assert.match(await p.locator('#k-auswahl').innerText(),/K2 Sued/);
   const status=text=>p.waitForFunction(text=>$('k-v2-status')?.textContent.includes(text),text);
   const fixtureKey='K2C_FIXTURE+/k';
-  // Der bestehende Raster-Schlüssel ist nicht die V2-Quelle.
-  await p.evaluate(()=>{window.KARTEN_SCHLUESSEL={carto:''};});
+  // Frisches Browserprofil: die echte Datei-Quelle wird schon beim Appstart aufgelöst.
+  const dateiKey=await p.evaluate(()=>window.KARTEN_SCHLUESSEL?.carto?.trim()||'');
+  if(process.env.CI)assert.ok(dateiKey,'CI-Datei-Fixture fehlt');
+  if(dateiKey){
+    assert.ok(await p.evaluate(()=>VIEW.karte.cartoKey===window.KARTEN_SCHLUESSEL.carto.trim()));
+    assert.ok(await p.evaluate(()=>!JSON.parse(localStorage.getItem(STORAGE_KEY+'.kartenwahl')||'{}').cartoKey));
+    await p.click('#k-v2-voyager');await status('Voyager bereit');
+    assert.ok(anfragen.length>0&&anfragen.every(x=>x.key===dateiKey&&!x.referer),'Dateiquelle und Referrer');
+    await p.click('#k-v2-leer');await status('Ohne Basiskarte');
+    anfragen.length=0;
+  }
+  await p.evaluate(()=>{window.KARTEN_SCHLUESSEL={carto:''};VIEW.karte.cartoKey='';VIEW.karte.anbieter='carto';renderModule();});
+  await ready();
   const ohne=anfragen.length;await p.click('#k-v2-voyager');await status('Kein lokaler CARTO-Schlüssel');
   assert.equal(anfragen.length,ohne);
-  await p.evaluate(key=>{window.KARTEN_SCHLUESSEL={carto:key};VIEW.karte.messen=true;VIEW.karte.messPts=[[52.51,13.41]];karteRendererDatenAktualisieren();},fixtureKey);
+  // Tatsächliches bestehendes Eingabefeld, Datei leer, keine neue V2-Persistenz.
+  await p.locator('#k-carto-key').evaluate(el=>{el.closest('details').open=true;});
+  await p.fill('#k-carto-key',fixtureKey);await p.locator('#k-carto-key').blur();
+  await p.evaluate(()=>{VIEW.karte.ebenen.kacheln=false;VIEW.karte.messen=true;VIEW.karte.messPts=[[52.51,13.41]];karteRendererDatenAktualisieren();});
+  await ready();
+  assert.ok(await p.evaluate(k=>VIEW.karte.cartoKey===k&&!window.KARTEN_SCHLUESSEL.carto,fixtureKey));
+  assert.ok(await p.evaluate(k=>JSON.parse(localStorage.getItem(STORAGE_KEY+'.kartenwahl')).cartoKey===k,fixtureKey));
+  // Eine widersprechende Datei darf den bereits aufgelösten Browser-Key nicht übersteuern.
+  await p.evaluate(()=>{window.KARTEN_SCHLUESSEL={carto:'K2C_OTHER_FILE'};});
   const cam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
   await p.click('#k-v2-voyager');await status('Voyager bereit');
   assert.ok(anfragen.some(x=>x.art==='tile'),'echter Vektorabruf über Fixture');
@@ -106,7 +127,7 @@ function assertCamera(actual,expected){
   assert.equal((await hit([52.51,13.41])).renderKey,kb);
   assert.ok(anfragen.every(x=>x.key===fixtureKey&&!x.referer),'Schlüssel und Referrer');
   assert.ok(!(await p.locator('body').innerText()).includes(fixtureKey));
-  assert.equal(await p.evaluate(k=>Object.values(localStorage).some(v=>v.includes(k)),fixtureKey),false);
+  assert.equal(await p.evaluate(k=>Object.keys(localStorage).some(n=>n!==STORAGE_KEY+'.kartenwahl'&&localStorage.getItem(n).includes(k)),fixtureKey),false,'keine zusätzliche Schlüsselpersistenz');
   // ready() bedeutet Layer installiert, nicht GeoJSON-Worker fertig.
   // Auf einen tatsächlich gerenderten Treffer warten, nicht nur auf Registrierung.
   const rueckfallTreffer=async()=>{
@@ -121,7 +142,13 @@ function assertCamera(actual,expected){
     assert.equal(await p.locator('#k-v2-leer').getAttribute('aria-pressed'),'true');
     assert.equal(await p.locator('#k-v2-gebaeude').isDisabled(),true);
   };
-  netz='stilfehler';await p.click('#k-v2-voyager');await status('CARTO-Stil nicht verfügbar');
+  // Teilstörung beim Stilstart: eine echte HTTP-500-Kachel, übrige gültig.
+  netz='einzelfehler';await p.click('#k-v2-voyager');await status('Voyager bereit');
+  await status('Einzelne Kacheln nicht verfügbar');
+  assert.equal(einzelFehler,1);assert.equal(await p.locator('#k-v2-voyager').getAttribute('aria-pressed'),'true');
+  await p.waitForFunction(k=>{const a=KARTE_V2_DEV.adapter();return a?.ready()&&a.hitTest(a.project([52.51,13.41]))?.renderKey===k;},kb);
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
+  netz='stilfehler';await p.click('#k-v2-dunkel');await status('CARTO-Stil nicht verfügbar');
   await rueckfallTreffer();
   netz='kachelfehler';await p.click('#k-v2-dunkel');await status('CARTO-Ressource nicht verfügbar');
   await rueckfallTreffer();
@@ -130,6 +157,7 @@ function assertCamera(actual,expected){
   await p.evaluate(id=>dispatch({type:'DOSSIER_SPERREN',id}),f.a);
   assert.equal(await p.evaluate(()=>__alt.ready()),false,'alter Renderer freigegeben');
   await ready();
+  await p.waitForFunction(k=>{const a=KARTE_V2_DEV.adapter();return a?.ready()&&a.hitTest(a.project([52.51,13.41]))?.renderKey===k;},kb);
   assert.equal(await hit([52.5,13.4]),null);assert.equal(await hit([52.505,13.395]),null);assert.equal(await hit([52.505,13.415]),null);
   assert.equal((await hit([52.51,13.41])).renderKey,kb);
   await p.evaluate(()=>{VIEW.karte.sichtungFokus=null;VIEW.karte.ebenen.sichtungen=false;karteRendererDatenAktualisieren();});
@@ -138,23 +166,70 @@ function assertCamera(actual,expected){
   await p.waitForFunction(()=>{const a=KARTE_V2_DEV.adapter();return !!a.hitTest(a.project([52.51,13.41]));});
   await p.evaluate(()=>{VIEW.karte.messen=true;VIEW.karte.messPts=[];});
   await click([52.51,13.41]);assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]],'Messpunkt rastet an realer Sichtung ein');
-  await p.evaluate(()=>{VIEW.karte.messen=false;VIEW.karte.messPts=[];VIEW.karte.pinSetzen=true;});
-  const n=await p.evaluate(()=>PROFIL.pins.length);
-  await click([52.503,13.407]);assert.equal(await p.evaluate(()=>PROFIL.pins.length),n+1,'gemeinsame Pin-Aktion');
-  await ready();
+  await p.evaluate(()=>{VIEW.karte.messen=false;VIEW.karte.messPts=[];karteRendererDatenAktualisieren();});
+  // Echter Neuaufbau mit unabhängiger Kamera, Stil und Gebäudewunsch; neuer Key
+  // wird aus VIEW aufgelöst, nicht aus dem alten Kontext übernommen.
+  await p.click('#k-v2-voyager');await status('Voyager bereit');
+  await p.click('#k-v2-gebaeude');
+  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[13.406,52.506],zoom:14.25,pitch:45,bearing:22,duration:0}));
+  await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.camera()?.pitch===45);
+  const neuCam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
+  const neuKey='K2C_SECOND+/k', vorher=anfragen.length;
+  await p.evaluate(k=>{window.__alt=KARTE_V2_DEV.adapter();VIEW.karte.cartoKey=k;renderModule();},neuKey);
+  await status('Voyager bereit');
+  assert.equal(await p.evaluate(()=>__alt.ready()),false);
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),neuCam);
+  assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
+  assert.ok(anfragen.length>vorher&&anfragen.slice(vorher).every(x=>x.key===neuKey&&!x.referer),'neuer Schlüssel bei Wiederaufbau');
+  assert.equal(await p.evaluate(k=>Object.values(localStorage).some(v=>v.includes(k)),neuKey),false);
+  await p.click('#k-v2-flach');await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===0&&KARTE_V2_DEV.adapter().camera().bearing===0);
+  const pinCam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
+  for(const [stil,bezeichnung,ll] of [['voyager','Voyager',[52.503,13.407]],['dunkel','Dark Matter',[52.504,13.408]]]){
+    if(stil==='dunkel'){await p.click('#k-v2-dunkel');await status('Dark Matter bereit');}
+    await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();VIEW.karte.pinSetzen=true;});
+    const n=await p.evaluate(()=>PROFIL.pins.length);
+    await click(ll);assert.equal(await p.evaluate(()=>PROFIL.pins.length),n+1,'gemeinsame Pin-Aktion '+stil);
+    await status(bezeichnung+' bereit');
+    assert.equal(await p.evaluate(()=>__alt.ready()),false,'Renderer erneuert '+stil);
+    assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),pinCam);
+    assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
+    assert.equal(await p.locator('#k-v2-'+stil).getAttribute('aria-pressed'),'true');
+  }
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();dispatch({type:'NAVIGATION',modul:'dossier'});});
   assert.equal(await p.locator('#k-v2-map').count(),0);
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
-  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await ready();
+  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await status('Dark Matter bereit');
   assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),pinCam);
+  assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
   /* Reale Zugangssperre und erneute Freigabe, ohne Navigation oder Neuladen. */
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();Zugang.sperren('K2-Test');});
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
   assert.equal(await p.locator('#k-v2-map canvas').count(),0);
+  const gesperrt=anfragen.length;
   await p.fill('#gate-pw','pw-test-123');await p.click('#gate-go');
   await p.waitForFunction(()=>!document.body.classList.contains('locked'));
   await ready();
   assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
+  assert.equal(await p.locator('#k-v2-leer').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'false');
+  assert.equal(anfragen.length,gesperrt,'kein automatischer erneuter CARTO-Abruf nach Sperre');
+  // Echtes Laden des alten Browserprofils mit abweichender Schlüsseldatei.
+  // Nur der in .kartenwahl bereits vorhandene Key darf verwendet werden.
+  const browserKey='K2C_BROWSER_STORED+/k', stored=await b.newPage({reducedMotion:'reduce'});
+  await stored.addInitScript(k=>{try{localStorage.setItem('fieldterminal.v1.kartenwahl',JSON.stringify({ebenen:{},cartoKey:k,anbieter:'osm'}));}catch(e){}},browserKey);
+  await stored.route(/^https?:/,route);
+  await stored.goto(APP+'?geospatial-v2=1');
+  await stored.fill('#gate-pw','pw-test-123');if(await stored.isVisible('#gate-pw2'))await stored.fill('#gate-pw2','pw-test-123');await stored.click('#gate-go');
+  await stored.waitForFunction(()=>!document.body.classList.contains('locked'));
+  assert.ok(await stored.evaluate(k=>VIEW.karte.cartoKey===k,browserKey));
+  await stored.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
+  await stored.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
+  const gespeichertVorher=anfragen.length;
+  await stored.click('#k-v2-voyager');
+  await stored.waitForFunction(()=>$('k-v2-status')?.textContent.includes('Voyager bereit'));
+  assert.ok(anfragen.length>gespeichertVorher&&anfragen.slice(gespeichertVorher).every(x=>x.key===browserKey&&!x.referer),'Browserquelle hat Vorrang beim Start');
+  await stored.close();
   const standard=await b.newPage({reducedMotion:'reduce'});await standard.route(/^https?:/,r=>r.abort());await standard.goto(APP);
   await standard.fill('#gate-pw','pw-test-123');if(await standard.isVisible('#gate-pw2'))await standard.fill('#gate-pw2','pw-test-123');await standard.click('#gate-go');
   await standard.waitForFunction(()=>!document.body.classList.contains('locked'));

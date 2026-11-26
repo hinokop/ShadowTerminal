@@ -1471,7 +1471,7 @@ function karte3dFolgen() {
   KARTE3D.folge = requestAnimationFrame(karte3dFolgen);
 }
 function karteRendererVorRender(modul) {
-  if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.unmount();
+  if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.unmount(true);
   if (KARTE_ST) { KARTE_ST.unmount(); KARTE_ST = null; }
   const K = VIEW.karte;
   const karteOffen = modul === 'karte' && K.reiter !== 'protokoll';
