@@ -103,3 +103,37 @@ Gezielte Tests pro funktionalem Block, getrennte Code-/Test-/Doku-Commits, ein z
 ## 8. Arbeitsauftrag
 
 Nach Abschluss #140: Konzeptbranch aktualisieren, Claude prüft Machbarkeit/Optionen gegen tatsächlichen Code, meldet begrenzte Abweichungen und konkrete Teststrategie; keine neue umfassende Architekturrunde. Umsetzung des vereinbarten Umfangs erst auf dieser Grundlage. Bei Konflikt zwischen GNU-Detailtreue und Schutz/Persistenz/A0 hat der bestehende Projektvertrag Vorrang; Abweichung dokumentieren. Unabhängiges Review und ausdrückliche Eigentümerfreigabe vor Merge.
+
+## 9. Abgleich mit dem Code und Umsetzung (Claude, 26.11.2026, nach #140)
+
+### 9.1 Matrix der Anbieter
+
+| Anbieter | readdir | stat | readFile | readlink | Schutzmetadaten | Bemerkung |
+|---|---|---|---|---|---|---|
+| `wurzel` (`/`, `/var`) | ja | ja | virtuelle Dateien; `/var/log/syslog` ENOSYS | nein | keine | |
+| `vfs` (`/home`, `/tmp`, `/etc`) | ja | ja | ja (Rechte des Benutzers) | nein | keine | 1 MiB je Datei |
+| `paket` (`/usr`) | ja | ja | ja | nein | keine | schreibgeschützt |
+| `intel` | ja, ohne gesperrte Einträge | ja (folgt Links) | ja, `deps` und `zeilenDeps` | ja | je Eintrag, Datei und Zeile | Links nur hier |
+| `exporte` (`/exports`) | ja, nur zugängliche | ja | ja, Herkunft | nein | `herkunft` je Datei, Verzeichnisse über Nachfahren | Bestand je Operation einmal (`opt.cache`) |
+| `archiv` | über die Brücke, ohne gesperrte Namen | Art nur mit `pruefen` | Text über die Brücke, nie Exportobjekte | nein | Namen der Exportobjekte (`archivname`) | 64 KiB je Datei, kein Binärtext |
+
+Keine neue Shell- oder Dateisystemarchitektur: die neuen Befehle lesen über `TERMINAL_FS` mit derselben Herkunftsaufzeichnung wie die Umleitung (`terminalFsMitHerkunft`) und nutzen für `ls`, `cat`, `head`, `tail` die bestehenden Befehlsfunktionen.
+
+### 9.2 Abweichungen vom Konzept (begrenzt)
+
+1. **Mustermaschine statt JS-RegExp oder Worker:** eigener Thompson-Automat (linear je Zeile, gibt bei langen Zeilen die Ereignisschleife frei). Ein Worker wäre unter `file://` unsicher verfügbar. Folge: keine Rückverweise, keine Wortgrenzen `\b \< \>`, keine Sammelklassen; klar abgewiesen.
+2. **Stdin der ersten Stufe ist leer** (wie `</dev/null`); keine interaktive Standardeingabe.
+3. **Umleitung einer Pipeline mit Archivlistung:** ganz abgewiesen, sobald ein Exportname durchlaufen wurde (Einzelbefehl `ls … > datei` filtert dagegen weiterhin nur diese Namen heraus). Strenger, weil Namen nach Filterstufen nicht mehr sicher erkennbar sind.
+4. **Umleitung einer Pipeline nach `/intel`:** keine Notizanhänge über Pipelines (Notizen weiter über den Einzelbefehl, E7); Schreibversuch ergibt den Fehler des Anbieters.
+5. **`sha256sum` im Archiv:** abgewiesen (dekodierter Text statt Bytes); sonst M4 umgesetzt.
+6. **Binärdateien im Archiv:** die Brücke liefert sie nicht als Text; `grep` gibt deren Meldung weiter statt `binary file matches`. `binary file matches` gilt für Text mit NUL aus dem VFS.
+7. **Tab** nach `|`, nicht nach `&&`/`;` (keine Änderung der bestehenden Ergänzung der Kommunikationskette).
+8. **`/exports` beim Durchlauf:** Dateien erben die Sammelherkunft ihrer Verzeichnisse nicht (nur die eigene vollständige Herkunft). Die konservative Bindung der Verzeichniszeile selbst aus Review 3 bleibt.
+9. **Kollation:** `sort` folgt der Locale-Tabelle (Bindestrich und Schrägstrich erst auf Stufe 4), wie `ls`.
+10. **Randfall aus dem Abschlussreview zu #140:** umgesetzt; Kandidaten einer Auswahlliste tragen ihre Abhängigkeiten.
+
+### 9.3 Teststrategie und Stand
+
+- `tests/terminal-paket5-recherche.js` (echter Browser, echte Brücke): Beispielbefehle mit Daten, Status und Meldungen; Vergleich mit GNU grep 3.11, coreutils 9.4 und findutils 4.9, soweit vorhanden (lokal und in der CI vorhanden; sort -n nur ohne Tausendertrennzeichen, weil `en_US.UTF-8` dort nicht sicher installiert ist); Schutz bei Umleitung (vorhandenes und fehlendes Ziel, Inhalt und mtime), Scrollback, Sperre während der Suche und zwischen Stufen, verwaiste Exporte; Archiv; Grenzen; teures Muster auf langer Zeile; Strg+C; Sitzungswechsel; Tab und Auswahllisten-Randfall (Gegenprobe ohne Korrektur rot).
+- `tests/terminal-paket5-last.js`: synthetische Bestände mit Zeit- und Blockademessung.
+- A0: bestehende Regressionen der Kommunikationskette unverändert in der Standardauswahl; keine eigene Messung bei laufendem PPP/WireGuard/Profanity mit kontrollierter Uhr (die neuen Befehle laufen nur über die Shellkette und berühren keine Zeitgeber).
