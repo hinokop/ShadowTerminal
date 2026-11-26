@@ -98,6 +98,20 @@ const { APP } = require('./_pfad');
     await p.locator('#btn-dk-sichtung').click();
     assert.equal(await p.evaluate(() => karte3dDaten().auswahlRenderKey), schluessel);
     assert.match(await p.locator('#k-auswahl').innerText(), /K1b Nord/);
+    /* Zwei gleiche SI-Nummern innerhalb desselben Dossiers sind nicht eindeutig.
+       Der echte Dossierknopf muss sichtbar scheitern, statt ein anderes Objekt auszuwählen. */
+    await p.evaluate(f => {
+      const l = STATE.dossiers.entitaeten[f.a].sichtungen;
+      l.push(Object.assign({}, l.at(-1), { ort: '52.6000, 13.5000' }));
+      dispatch({type:'NAVIGATION',modul:'dossier'}); STATE.dossiers.auswahl=f.a; renderModule();
+      meldung('');
+    }, f);
+    await p.locator('#btn-dk-sichtung').click();
+    assert.match(await p.locator('#sys-msg').innerText(), /Sichtung kann nicht eindeutig oder nicht zugänglich/);
+    assert.equal(await p.evaluate(() => STATE.ui.modul), 'dossier');
+    await p.evaluate(f => { STATE.dossiers.entitaeten[f.a].sichtungen.pop(); }, f);
+    await p.locator('#btn-dk-sichtung').click();
+    assert.equal(await p.evaluate(() => karte3dDaten().auswahlRenderKey), schluessel);
     const fallTerminal = await p.evaluate(f => {
       const px = PROFIL.pins.find(x => x.id === f.pin), si = STATE.dossiers.entitaeten[f.a].sichtungen.at(-1);
       si.pin = px.id; px.sichtung = si.id;

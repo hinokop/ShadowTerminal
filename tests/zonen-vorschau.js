@@ -18,10 +18,30 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   const w1 = await breite();
   ok.vorschau2D = w0 > 0 && w1 > w0 * 3 && await p.evaluate(() => PROFIL.zonen[0].r === 1000);
   /* Vorschau 3D: Nachricht mit dem neuen Radius geht an die 3D-Ansicht */
-  await p.evaluate(() => { window.__gesendet = []; const o = karte3dSenden; window.karte3dSenden = function (m) { window.__gesendet.push(m); return o(m); }; VIEW.karte.ansicht3d = true; });
+  await p.evaluate(() => {
+    /* Realer Modul-/Aktivierungsvertrag mit lokalem Frame-Double statt WebGL.
+       Nur Browser-/Transportabhängigkeit ersetzen, keine aktiv/bereit-Flags setzen. */
+    window.__gesendet = [];
+    const o = karte3dSenden;
+    window.karte3dSenden = function (m) { window.__gesendet.push(m); return o(m); };
+    window.webglVorhanden = function () { return true; };
+    window.karte3dHost = function () {
+      if (!KARTE3D.host) {
+        const fr = h('iframe', { id: 'k-3d-frame', class: 'k-3d-frame', src: 'about:blank' });
+        const host = h('div', { class: 'k-3d-host', hidden: true }, fr);
+        document.body.appendChild(host); KARTE3D.host = host; KARTE3D.frame = fr;
+      }
+      return KARTE3D.host;
+    };
+    karte3dUmschalten();
+    const fr = KARTE3D.frame;
+    window.dispatchEvent(new MessageEvent('message', { source: fr.contentWindow, data: { typ: 'karte3d-bereit' } }));
+    window.__gesendet = [];
+  });
+  ok.aktivierung3D = await p.evaluate(() => KARTE3D.aktiv && KARTE3D.bereit && KARTE3D.platz.isConnected);
   await p.selectOption('#oz-r', '300'); await p.waitForTimeout(300);
   ok.vorschau3D = await p.evaluate(() => window.__gesendet.some(m => (m.zonen || []).some(zn => zn.id === 'ZO-001' && zn.r === 300)));
-  await p.evaluate(() => { VIEW.karte.ansicht3d = false; renderModule(); }); await p.waitForTimeout(400);
+  await p.evaluate(() => karte3dUmschalten()); await p.waitForTimeout(400);
   /* Farben 2D und 3D stimmen überein */
   const f2 = await p.evaluate(() => getComputedStyle(document.querySelector('.k-zone.profil[data-id="ZO-001"]')).getPropertyValue('--zc').trim().toLowerCase());
   const f3 = fs.readFileSync(PF.ROOT + '/karte3d.html', 'utf8');
@@ -57,9 +77,10 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright'); co
   await p.click('#rch-orte [data-ort="ZO-001"]'); await p.waitForTimeout(500);
   ok.zeigenSpringtZurKarte = await p.evaluate(() => STATE.ui.modul === 'karte' && VIEW.karte.auswahl === 'ZO-001' && !!document.querySelector('.k-zone.profil[data-id="ZO-001"]'));
   /* Rücksprung bei aktiver 3D-Ansicht: Kamerafahrt zum Ziel */
-  await p.evaluate(() => { VIEW.karte.ansicht3d = true; VIEW.karte.auswahl = null; window.__gesendet = []; kartenObjektZeigen('ZO-001'); });
+  await p.evaluate(() => { karte3dUmschalten(); VIEW.karte.auswahl = null; window.__gesendet = []; kartenObjektZeigen('ZO-001'); });
   ok.rueckbezug3DKamera = await p.evaluate(() => { const z = PROFIL.zonen[0]; return window.__gesendet.some(m => m.typ === 'karte3d-flug' && Math.abs(m.center[0] - z.ll[1]) < 1e-9 && Math.abs(m.center[1] - z.ll[0]) < 1e-9); });
-  await p.evaluate(() => { VIEW.karte.ansicht3d = false; renderModule(); });
+  await p.evaluate(() => karte3dUmschalten());
+  ok.deaktivierung3D = await p.evaluate(() => !KARTE3D.aktiv && KARTE3D.host.hidden);
   ok.keineFehler = err.length === 0;
   console.log(JSON.stringify(ok, null, 1)); if (err.length) console.log(err.slice(0, 5));
   await b.close(); process.exit(Object.values(ok).every(Boolean) ? 0 : 1);
