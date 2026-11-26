@@ -103,7 +103,7 @@
     }
     function hitTest(p){
       if(!aktiv||!installiert)return null;
-      const groups=[P+'punkt',P+'zone-fill',P+'kante'];
+      const groups=[P+'punkt',P+'kante',P+'zone-fill'];
       for(const id of groups){
         const hits=map.queryRenderedFeatures(p,{layers:[id]});
         for(const f of hits){const h=snapshot.treffer.get(f.properties.renderKey);if(h)return Object.assign({},h,h.ll?{ll:h.ll.slice()}:{});}
@@ -112,7 +112,8 @@
     }
     function click(e){
       if(!aktiv||!installiert||typeof o.onClick!=='function')return;
-      o.onClick({ll:[e.lngLat.lat,e.lngLat.lng],treffer:hitTest(e.point)});
+      const ev=e.originalEvent;
+      o.onClick({ll:[e.lngLat.lat,e.lngLat.lng],treffer:hitTest(e.point),mehr:!!(ev&&(ev.shiftKey||ev.ctrlKey||ev.metaKey))});
     }
     function stilwechsel(stil){if(!aktiv)return;installiert=false;map.setStyle(stil,{diff:false});}
     map.on('style.load',installieren);map.on('click',click);

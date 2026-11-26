@@ -50,6 +50,19 @@ assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).que
   const pt=await p.evaluate(ll=>{const x=__adapter.project(ll);return{x:x.x,y:x.y};},model.marker[1].ll);
   await p.mouse.click(pt.x,pt.y);
   assert.equal(await p.evaluate(()=>__clicks.at(-1).treffer.renderKey),b);
+  assert.equal(await p.evaluate(()=>__clicks.at(-1).mehr),false);
+  for(const taste of ['Shift','Control','Meta']){
+    await p.keyboard.down(taste);
+    try{await p.mouse.click(pt.x,pt.y);}finally{await p.keyboard.up(taste);}
+    assert.equal(await p.evaluate(()=>__clicks.at(-1).mehr),true,taste+' wird weitergereicht');
+  }
+  // Ein eigener Bereich über der Verbindung: Marker > Verbindung > Zone.
+  await p.evaluate(model=>__adapter.setData({...model,zonen:[...model.zonen,{id:'ZO-2',renderKey:'zone-overlap',ll:[52.516,13.405],r:400}]}),model);
+  await warten();
+  assert.equal((await hit([52.516,13.405])).renderKey,edge,'Verbindung innerhalb einer Zone');
+  assert.equal((await hit(model.marker[3].ll)).renderKey,p1,'Marker vor Verbindung und Zone');
+  assert.equal((await hit([52.517,13.405])).renderKey,'zone-overlap','Zone außerhalb der Verbindung');
+  await p.evaluate(model=>__adapter.setData(model),model);await warten();
   assert.deepEqual(await p.evaluate(()=>__map.getFilter('shadow-v2-auswahl')),['==',['get','renderKey'],a]);
   const round=await p.evaluate(ll=>__adapter.unproject(__adapter.project(ll)),model.marker[0].ll);
   assert.ok(Math.abs(round[0]-52.52)<1e-6&&Math.abs(round[1]-13.4)<1e-6);
