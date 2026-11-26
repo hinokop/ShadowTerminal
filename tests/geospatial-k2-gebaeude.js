@@ -47,6 +47,9 @@ const tile=bytes(3,layer);
 const bitmap=Buffer.alloc(14*14);for(let y=3;y<11;y++)for(let x=3;x<11;x++)bitmap[y*14+x]=(y<5||x===10-(y-3))?255:64;
 const glyph=cat(field(1,55),bytes(2,bitmap),field(3,8),field(4,8),field(5,zz(0)),field(6,zz(8)),field(7,9));
 const glyphPbf=bytes(1,cat(str(1,'Fixture Regular'),str(2,'0-255'),bytes(3,glyph)));
+/* Gültige, verlustfrei kodierte 256x256-PNG-Kachel (RGB 63,124,91).
+   Vor Rastertest mit Chromium dekodieren; Fixture-Defekte sofort melden. */
+const rasterPNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAABlBMVEU/fFsAAABwZYnaAAAAH0lEQVR42u3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAvg0hAAABYOSdlwAAAABJRU5ErkJggg==','base64');
 const source={type:'vector',tiles:['https://example.invalid/fixture/{z}/{x}/{y}.mvt'],maxzoom:15};
 const basis={version:8,sources:{protomaps:source},layers:[
  {id:'bg',type:'background',paint:{'background-color':'#e0e0e0'}},
@@ -61,7 +64,7 @@ const basis={version:8,sources:{protomaps:source},layers:[
     const u=new URL(r.request().url());
     if(u.hostname==='gdi.berlin.de'){
       bildAnfragen.push({url:u.href,referer:r.request().headers().referer||''});
-      return r.fulfill({body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0uUAAAAASUVORK5CYII=','base64'),contentType:'image/png',headers:{'access-control-allow-origin':'*','cache-control':'no-store'}});
+      return r.fulfill({body:rasterPNG,contentType:'image/png',headers:{'access-control-allow-origin':'*','cache-control':'no-store'}});
     }
     if(u.hostname==='example.invalid'&&u.pathname.startsWith('/fonts/')){glyphRequests++;return r.fulfill({body:glyphPbf,contentType:'application/x-protobuf',headers:{'access-control-allow-origin':'*'}});}
     if(u.hostname==='example.invalid'){requests++;return r.fulfill({body:tile,contentType:'application/vnd.mapbox-vector-tile',headers:{'access-control-allow-origin':'*'}});}
@@ -70,8 +73,16 @@ const basis={version:8,sources:{protomaps:source},layers:[
   await p.goto(pathToFileURL(path.join(ROOT,'karte-v2-prototyp.html')).href);
   await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Keine Kachelquelle aktiv'));
   assert.equal(bildAnfragen.length,0,'kein Bildabruf beim Start');
+  const pixel=await p.evaluate(async bytes=>{
+    const bm=await createImageBitmap(new Blob([new Uint8Array(bytes)],{type:'image/png'}));
+    const canvas=document.createElement('canvas');canvas.width=bm.width;canvas.height=bm.height;
+    const ctx=canvas.getContext('2d');ctx.drawImage(bm,0,0);
+    const out=[bm.width,bm.height,...ctx.getImageData(0,0,1,1).data];bm.close();return out;
+  },Array.from(rasterPNG));
+  assert.deepEqual(pixel,[256,256,63,124,91,255],'Raster-Fixture muss im Browser dekodierbar sein');
   await p.fill('#key','NICHT-AN-BILDDIENST');await p.click('#berlin2024');
-  await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Bildkacheln geladen'));
+  try{await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Bildkacheln geladen'));}
+  catch(e){throw Error('Raster-Bereitschaft: '+await p.locator('#meldung').innerText()+'; WMS-Anfragen: '+bildAnfragen.length+'; Seitenfehler: '+errors.length,{cause:e});}
   assert.ok(bildAnfragen.length>0);
   for(const a of bildAnfragen){const u=new URL(a.url),bbox=u.searchParams.get('bbox').split(',').map(Number);
     assert.equal(u.pathname,'/services/wms/truedop_2024');assert.equal(u.searchParams.get('crs'),'EPSG:3857');
