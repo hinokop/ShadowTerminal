@@ -1,6 +1,6 @@
-/* Eigene Zonen (ZO-nnn): ohne Auftrag anlegen, ändern, Stand aktualisieren, nach Neuladen sichtbar in 2D und in der 3D-Brücke,
-   Objektfilter im Kartenprotokoll, keine Handler-Nachricht und kein Planeintrag; Gegenproben: Auftragszone bleibt unverändert,
-   wiederholter Profilimport, Profil leeren. Exit-Code 1 bei Fehlschlag. */
+/* Eigene Zonen (ZO-nnn): anlegen, ändern, Stand aktualisieren, nach Neuladen sichtbar in 2D und in der 3D-Brücke,
+   Objektfilter im Kartenprotokoll, wiederholter Profilimport, Profil leeren. Kein Wiederaufbau des stillgelegten Missionsbestands.
+   Gegenprobe: alte Missionsaktionen erzeugen keine Auftragszone. Exit-Code 1 bei Fehlschlag. */
 const PF = require('./_pfad.js'); const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 1500, height: 1100 } }); const p = await ctx.newPage(); const err = [];
@@ -12,8 +12,8 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   };
   await anmelden();
   const ok = {};
-  ok.ohneAuftrag = await p.evaluate(() => !!STATE.vorlauf && !zDef());
-  const vorher = await p.evaluate(() => JSON.stringify([STATE.seq.nachricht, STATE.plan.length, STATE.log.filter(e => e.modul === 'Mission').length]));
+  ok.ohneAuftrag = await p.evaluate(() => !zDef() && !('altbestand' in STATE));
+  const vorher = await p.evaluate(() => JSON.stringify([STATE.log.filter(e => e.modul === 'Mission').length, ALT()]));
   /* Anlegen über die Oberfläche */
   await p.evaluate(() => { dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; VIEW.karte.lat = 52.5; VIEW.karte.lon = 13.4; VIEW.karte.zoom = 14; renderModule(); });
   await p.waitForTimeout(500);
@@ -21,7 +21,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.click('#k-ozone-neu');
   const mitte = await p.evaluate(() => { const r = $('k-svg').getBoundingClientRect(); return [r.left + r.width * 0.5, r.top + r.height * 0.5]; });
   await p.mouse.click(mitte[0], mitte[1]); await p.waitForTimeout(500);
-  ok.angelegt = await p.evaluate(() => PROFIL.zonen.length === 1 && PROFIL.zonen[0].id === 'ZO-001' && PROFIL.zonen[0].name === 'Zone 1' && !(STATE.vorlauf === false));
+  ok.angelegt = await p.evaluate(() => PROFIL.zonen.length === 1 && PROFIL.zonen[0].id === 'ZO-001' && PROFIL.zonen[0].name === 'Zone 1' && !zDef());
   ok.popupOffen = await p.evaluate(() => !$('k-auswahl').hidden && !!$('oz-stand') && !!$('oz-protokoll') && !!$('oz-weg'));
   /* Bearbeiten */
   await p.fill('#oz-name', 'Hafenzufahrt'); await p.dispatchEvent('#oz-name', 'change'); await p.waitForTimeout(200);
@@ -43,7 +43,7 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   await p.selectOption('#oz-unt', 'B-001');
   await p.click('#oz-unt-ja'); await p.waitForTimeout(300);
   ok.unterlageVerknuepft = await p.evaluate(() => (PROFIL.zonen[0].unterlagen || []).join() === 'B-001');
-  const dos = await p.evaluate(() => pool()[0].id);
+  const dos = 'P-0003';  /* vorhandenes Standarddossier, unabhängig vom früheren Missions-Wissensstand */
   await p.selectOption('#oz-dossier', dos); await p.waitForTimeout(300);
   ok.dossierVerknuepft = await p.evaluate(d => PROFIL.zonen[0].dossier === d, dos);
   /* Stand aktualisieren: eigene Prüfung mit Zeitstempel, keine Antwort, keine Sichtung */
@@ -71,10 +71,9 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   const prot = await p.evaluate(() => ({ filter: $('kp-objekt').value, zeilen: [...document.querySelectorAll('table tbody tr')].map(r => r.innerText) }));
   ok.protokollFilter = prot.filter === 'ZO-001' && prot.zeilen.length === 7 && prot.zeilen.every(t => /Hafenzufahrt/.test(t));
   ok.protokollArten = /Zone angelegt/.test(prot.zeilen.join('\n')) && /Stand der Zone aktualisiert/.test(prot.zeilen.join('\n'));
-  /* kein Handler, kein Plan */
-  await p.waitForTimeout(2500);
-  const nachher = await p.evaluate(() => JSON.stringify([STATE.seq.nachricht, STATE.plan.length, STATE.log.filter(e => e.modul === 'Mission').length]));
-  ok.keinHandlerKeinPlan = vorher === nachher;
+  /* Keine Missionsereignisse und kein künstlicher Altbestand durch Zonenbedienung. */
+  const nachher = await p.evaluate(() => JSON.stringify([STATE.log.filter(e => e.modul === 'Mission').length, ALT()]));
+  ok.keinMissionsbestand = vorher === nachher && await p.evaluate(() => !('altbestand' in STATE));
   /* Import: identisch = keine Kopie; geänderter Inhalt = neue Kennung, zweiter Import keine weitere; fehlende Bezüge werden weggelassen */
   const q = await p.evaluate(() => { const o = {}; Object.keys(PROFIL).forEach(k => { if (k !== 'leer') o[k] = PROFIL[k]; }); return JSON.parse(JSON.stringify(o)); });
   const anz = () => p.evaluate(() => PROFIL.zonen.map(z => z.id + ':' + z.name).join('|'));
@@ -114,15 +113,17 @@ const PF = require('./_pfad.js'); const { chromium } = require('playwright');
   ok.leerenZonenWeg = await p.evaluate(() => PROFIL.zonen.length === 0 && PROFIL.seq.zone >= 120);
   await p.evaluate(() => dispatch({ type: 'OZONE_ANGELEGT', ll: [52.5, 13.4] }));
   ok.zaehlerBleibt = await p.evaluate(() => PROFIL.zonen[0].id === 'ZO-121');
-  /* Gegenprobe: mit Auftrag bleibt die Auftragszone auf ihrem Pfad */
-  await p.evaluate(() => { dispatch({ type: 'KENNWORT_SCHALTER', an: false }); dispatch({ type: 'STATUS_GESETZT', status: 'Standby' }); dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' }); dispatch({ type: 'MISSION_BEGINN_JETZT' }); dispatch({ type: 'NAVIGATION', modul: 'karte' }); VIEW.karte.reiter = 'karte'; renderModule(); });
-  await p.waitForTimeout(800);
-  await p.evaluate(() => dispatch({ type: 'ZONE_ANGELEGT', ll: [52.4738, 13.4515] }));
-  ok.auftragszoneBleibt = await p.evaluate(() => { const z = karteZonen(); const a = z.find(x => /^ZN-/.test(x.id)), o = z.find(x => x.id === 'ZO-121'); return !!a && !a.profil && a.wertung === 'ruhig' && !!o && o.profil === true && !!zonenEigene(zDef()).find(x => x.id === a.id) && !PROFIL.zonen.some(x => x.id === a.id); });
-  await p.evaluate(() => { VIEW.karte.auswahl = 'ZN-001'; renderModule(); }); await p.waitForTimeout(400);
-  ok.auftragPopup = await p.evaluate(() => !!$('zn-melden') && !!$('zn-frage') && !$('oz-stand'));
-  await p.evaluate(() => { VIEW.karte.auswahl = 'ZO-121'; renderModule(); }); await p.waitForTimeout(400);
-  ok.eigenPopupMitAuftrag = await p.evaluate(() => !$('zn-melden') && !!$('oz-stand'));
+  /* Gegenprobe: die alten Aktionen dürfen keine Missionszone mehr erzeugen. */
+  await p.evaluate(() => {
+    dispatch({ type: 'MISSION_ZUGEWIESEN', id: 'M1' }); dispatch({ type: 'MISSION_ANGENOMMEN', id: 'M1' });
+    dispatch({ type: 'MISSION_BEGINN_JETZT' }); dispatch({ type: 'NAVIGATION', modul: 'karte' });
+    VIEW.karte.reiter = 'karte'; VIEW.karte.ebenen.zonen = true;
+    dispatch({ type: 'ZONE_ANGELEGT', ll: [52.4738, 13.4515] }); renderModule();
+  });
+  ok.keineAuftragszone = await p.evaluate(() => !zDef() && !('altbestand' in STATE) &&
+    karteZonen().length === 1 && karteZonen()[0].id === 'ZO-121' && karteZonen()[0].profil === true);
+  await p.evaluate(() => karteWaehlen('ZO-121', false));
+  ok.eigenPopup = await p.evaluate(() => !$('zn-melden') && !!$('oz-stand'));
   ok.keineFehler = err.length === 0;
   console.log(JSON.stringify(ok, null, 1)); if (err.length) console.log(err.slice(0, 5));
   await b.close(); process.exit(Object.values(ok).every(Boolean) ? 0 : 1);
