@@ -1,0 +1,94 @@
+# Shadow Geospatial V2 – Entwicklungsplan
+
+Stand: 26.11.2026. Konzept-Draft, separater Kartenentwicklungsstrang.
+Basis: main `bc4b23e7b516b6a28bd7fe765f7086fe5db13b3d` (Paket 4 #140 gemergt; Paket 5 #141 noch Draft).
+Geltung: Produktentscheidungen aus der Abstimmung mit Shadow am 26.11.; technische Details sind Entwurf bis zur jeweiligen Abnahme.
+
+## 1. Ziel und Grenzen
+
+Die Karte wird eine eigenständige, detailreiche geografische Rechercheoberfläche innerhalb von Shadow Terminal. Option B: MapLibre schrittweise zum gemeinsamen primären Online-Renderer für flache und geneigte Ansichten entwickeln; vorhandenen SVG-Renderer zunächst als Referenz und einfache Rückfallebene behalten. Kein Big-Bang-Umbau. Die Libelle, die visuelle Identität, die deutschsprachige GUI und die bestehende englische Terminalsemantik bleiben erhalten. Keine Rückkehr zum Missionsbetrieb.
+
+Verbindlicher Umfang K1–K5; K6 als begrenzter Optionskatalog, einzeln nach Bedarf freigeben. Kein automatischer Beginn weiterer Pakete. Keine fotorealistischen 3D-Stadtmodelle, kein aufwendiger Offline-Ausbau, kein verpflichtender 10.000-Objekte-Stresstest. Bestehende Offline-Funktion nicht absichtlich entfernen; bei fehlender Online-Quelle mindestens verständliche Meldung, lokale Objekte weiter zugänglich. Kein neues Backend oder Build-Zwang ohne Entscheidung; lokale Windows-Startpfade und Dateibrücke erhalten.
+
+## 2. Ist-Stand und verbindlicher Bestandsschutz
+
+- `karte-modul.js`: SVG mit 960×540 logischem ViewBox, 2D-Zoom 1,6–19, Rasterkacheln, lokaler Geodatenbestand, eigene Kamerasteuerung, Popups, Messung, Protokoll und Objektlogik. `karte.js`/`karte2.js`: Natural-Earth-Daten.
+- `karte3d.html`: MapLibre 4.7.1 per CDN, OpenFreeMap Liberty, persistentes iframe, postMessage; Marker, Kreiszonen und Messpunkte werden übertragen. Kein vollständiger Gleichstand bei Kanten, Unsicherheitsringen, Beschriftungen, Luftbild, Lagebox, Ebenenfiltern.
+- CARTO aktuell Raster dark_all/dark_nolabels/dark_only_labels. Amtliches Berlin/Brandenburg-Luftbild, Sentinel-2, OSM, eigene URL. Rasterlabels sind keine einzeln steuerbaren Daten.
+- Sichtungen standardmäßig letzte drei je Dossier, Ausnahmen für verknüpfte Ursprungspins und gezielten Fokus. Suche nur sichtbare Marker (bis sechs, ohne Sichtungen/Zonen); eigene Zonen sieben feste Radien. Messung Haversine, Straße/Fahrzeit nur Schätzwerte.
+- #140 hat `kartenTxtExport`, Exportdialoge, Exportverwaltung und Popup-Aktionen an /exports angebunden. Diese Änderungen sind Bestandteil der Ausgangsbasis, nicht zurückbauen.
+- Referenzen: `docs/karte-optimierungen.md`, `docs/datenvertrag.md`, `docs/terminal.md`, `CLAUDE.md`, `docs/terminal-entwicklungsplan-2026-11.md`. `docs/AKTUELL.md` bleibt zentrale Statusdatei, beim späteren Merge gemeinsam aktualisieren.
+
+Bestandsschutz als Schnittstellenvertrag: `kartenObjektZeigen`, `kartenSprung`, `karteWaehlen`, `karteFlug`, `karteNeuZeichnen`, `karte3dDaten` bzw. kompatible Adapter; bestehende Dispatch-Aktionen, Profilobjekte und IDs, Dossier-/Fall-/Unterlagenbezüge, Zugangsprüfungen `zielZugang`, `pinGesperrt`, `zoneGesperrt`, `dossierGesperrt`. `map PIN/ZO` öffnet Karte, `open PIN/ZO` verknüpftes Dossier. `/intel`, `/exports`, TXT-Export, Download, Archiv und Löschen verwalteter Exporte bleiben funktional. Sichtungs-ID ist je Dossier nicht global eindeutig: interne Renderer-Schlüssel typisiert und bei Sichtungen zusammengesetzt aus Dossier und Sichtungs-ID; persistente Kennungen nicht ändern. Keine zweite autoritative Kopie der Rechercheobjekte. Filter und Dossiersperren vor Renderer, Objektlisten, Suche, Export und Caches anwenden; bei Sperrstandwechsel Auswahl und veraltete Darstellungen bereinigen. Keine personenbezogenen Rechercheobjekte an Kachelanbieter senden.
+
+## 3. Vier Basiskarten, gemeinsame Kamera
+
+| Stil | Ziel |
+| --- | --- |
+| Imagery (Luftbild) | Hochauflösende regionale Orthophotos plus globale Bildquelle; möglichst gute echte Detailauflösung. |
+| Hybrid | Dieselbe Bildquelle mit kontrastreichen Straßen, Ortsnamen, Hausnummern und POIs, soweit tatsächlich in Quelldaten vorhanden. |
+| Voyager | CARTO-Vektorkarte mit hoher Informationsdichte, Google-Maps-artiger Orientierung; Gebäude, Straßenhierarchien, Verkehr und POIs soweit verfügbar. |
+| Shadow | Eigener CARTO-kompatibler Vektorstil nach Libelle/Terminal, hohe Informationsdichte und kontrastreiche Lesbarkeit; keine rein dekorative Reduktion. |
+
+2D/3D orthogonal zur Basiskarte; Auswahl, Mittelpunkt, Zoom, Filter und Objektzustand bleiben beim Wechsel erhalten. 2D flach/nordorientiert oder bewusst gedreht; 3D Neigung/Drehung, Gebäude separat schaltbar, insbesondere Hybrid mit angemessener Transparenz, damit das Luftbild erkennbar bleibt. Echte Grundrisse, Höhen und Gebäudeteile soweit Daten liefern; fehlende Höhen als geschätzte/standardisierte Darstellung behandeln. Dachformen optional nur bei geeigneten Daten und Renderer; keine Behauptung fotorealistischer Geometrie. Kein Terrain- oder Photogrammetrie-Projekt. HiDPI, stufenloses Zoomverhalten, Quell-maxzoom und Overzoom getrennt; keine künstlich behauptete neue Bildinformation.
+
+## 4. Datenquellen und Kosten
+
+Shadow berichtet 52.000 CARTO-Kachelanfragen in 16 Tagen bei intensiven, aber nicht exzessiven Tests: rechnerisch 97.500/30 Tage = 1,95 % des angegebenen Kontingents von 5 Mio./Monat. Das ist eine Ausgangsgröße, keine Prognose für neue Renderer oder andere Anbieter. Zusätzlicher API-Key mit vernünftigem Kostenmodell akzeptiert; keine kostenpflichtige Buchung ohne Entscheidung.
+
+K2 prüft CARTO-Basemaps-Vektorzugang mit vorhandenem Key und aktueller Stil-/Tileset-Spezifikation. Globale Bildquellen-Kandidaten: Mapbox Satellite und MapTiler Satellite. Regionale Kandidaten: vorhandene Berliner/Brandenburger Dienste und amtliche offene Orthophotos weiterer Regionen (z.B. Rheinland-Pfalz); Sentinel-2 für Übersicht. Vor produktiver Auswahl offizielle aktuelle Konditionen, Fremdrenderer-Erlaubnis, Attribution, Zugriff aus file://, CORS, zulässige Cache-Dauer, Abdeckung, nominale Bodenauflösung, Aufnahmezeit und tatsächliche Details prüfen; keine feste Zusicherung von Freikontingenten, Hausnummern oder Bildauflösung. BKG-DOP nicht ohne Lizenz/Freigabe. Kein Scraping, kein Umgehen von Zugangsbeschränkungen, kein unzulässiger Offline-Cache.
+
+Source Manager: konfigurierbare Quelle mit Abdeckung, Zoom, Bildauflösung, Datum (soweit bekannt), Lizenz, Attribution, Fehlermeldung. Automatik bevorzugt geeignete amtliche Aufnahmen vor globaler Quelle vor niedrig aufgelöster Übersicht; tatsächliche Deckung und Bilddatum berücksichtigen, nicht blind Bounding Box. Manuelle Übersteuerung und sichtbarer Quellenstatus. Keine Mehrfachabrufe aller Quellen zur selben Ansicht ohne Bedarf. Fallbacks begrenzt, kein Retry-Sturm. Keine Anbieteranfragen für interne Namen/IDs; Adresssuche separat und ausdrücklich extern. Schlüssel in lokaler ignorierter `kartenschluessel.js` bzw. geschützter lokaler Konfiguration, keine Secrets in Git, ZIP, Logs, Screenshots oder Exporten; nur geeignete clientseitige Tokens, keine Admin-Keys. Anbieter sehen notwendigerweise angefragte Kachelausschnitte und IP. Separate Nutzungsmessung je Anbieter (Client-Zähler nur Schätzung; Dashboard ist maßgeblich).
+
+K2 Abnahme: gleicher Ausschnitt mehrerer repräsentativer Stadt-/Landregionen und Zoomstufen mit Luftbild, Hybrid, Voyager, Shadow-Prototyp; visuelle Gegenüberstellung von Schärfe, Straßen-/Hausnummernabdeckung, Gebäuden, Übergängen, Ladedauer und Anfrageverbrauch. Vor Auswahl realer Anbieter und Limits Nutzerentscheidung; Tests ohne private Daten.
+
+## 5. Arbeitsoberfläche
+
+Fünf Funktionsbereiche: (1) Basiskarte und 2D/3D-Umschaltung, (2) Ebenenmanager/Legende, (3) Objektinspektor, (4) Werkzeugleiste, (5) Statusleiste. Mehr Kartenfläche, einklappbare Seitenleisten, Vollbild innerhalb der Anwendung (klarer Ausstieg/ESC; keine Modusverwechslung). Dynamische Größe und Resize bei Layoutwechsel; Auswahl und Kamera bleiben stabil. Kein permanentes Überdecken wichtiger Kartenelemente. Status: Koordinaten, Maßstab, Zoom, Quelle, Datenstand/Fehler; Wetter/Licht/Objektprotokoll erhalten.
+
+Legende aus zentraler Symboldefinition für beide Ansichten; Form repräsentiert Typ, zusätzliche Zeichen Qualität/Alter/Auswahl. Personen, Organisationen, Orte, Pins, eigene Zonen, Sichtungen, Verbindungen und Ausgangsorte separat schaltbar. Sichtbare Objektzahlen nur falls sinnvoll und ohne gesperrte Daten; keine spielartigen Statistiken. Ebenenmanager trennt Basiskartenlayer von Rechercheobjekten, keine wirkungslosen Schalter. Objektinspektor übernimmt aktuelle Popup-Aktionen einschließlich Export, Terminal, Dossier, Bearbeitung, Protokoll, Löschen mit Bestätigung. Gestaltung zuerst als überprüfbarer Prototyp, Farben/Positionierung nicht als endgültig festgelegt.
+
+## 6. Umsetzung in sechs Stufen
+
+### K1 – Bestand und Controller
+Baseline am aktuellen main; vorhandene Karten-/Terminaltests und Windows-Bedienung erfassen. Gemeinsames normalisiertes, zugangsgefiltertes Render-Modell (GeoJSON oder Adapter) und Renderer-Vertrag: mount/unmount, camera, project/unproject, select, hit-test, setData/setStyle/setVisibility, resize; Ereignisse in gemeinsame bestehende Aktionsebene übersetzen. Nicht gleichzeitig Datenmodell ändern. Echte Koordinaten von Darstellungsverschiebungen trennen; Mess-Snap auf tatsächliche Position. SVG bleibt unverändert nutzbar. Tests für Priorität von Klickmodi, Dossier-/Fallpositionswahl, Pin-/Zonen-/Sichtungserstellung, Tastatur, Abbruch, Auswahl und Sperren. Kein Wechsel des Standardrenderers vor Parität.
+
+### K2 – Renderer und Quellen
+MapLibre lokal versioniert mit Lizenz, keine unkontrollierte CDN-Abhängigkeit, file:// und Edge verifizieren. Parallelrenderer hinter explizitem Entwicklungs-/Testschalter, keine Änderung der Standardkarte auf main. CARTO-Vektor und Source Manager-Prototyp, globale/regionale Kandidaten vergleichen. Stilwechsel muss eigene GeoJSON-Quellen, Symbole, Handler und Auswahl zuverlässig erneut registrieren. Keine unnötigen Remounts und Netzabfragen. Ausfälle kontrolliert anzeigen.
+
+### K3 – Oberfläche und Stile
+Vier Basiskarten, fünf Bedienbereiche, gemeinsame Symbolik, Layer-/Legendenlogik, Vollbild und einklappbare Paneele. Darstellung auch bei kleinen Fenstern und HiDPI. Alle alten Aktionen im neuen Layout auffindbar. Nutzertest/Windows-Paket des zusammenhängenden visuellen Meilensteins.
+
+### K4 – Kamera und 3D-Parität
+Gemeinsame Kamera, sanfte Zoom-/Pan-/Dreh-/Neigungssteuerung; Abgleich Maßstab und tatsächlicher Zoomgrenzen. Gemeinsame Klick- und Hit-Test-Semantik; Linien/Kanten, Unsicherheitsflächen, Zonen, Messbeschriftung, Markerüberlagerung, Lagebox und Filter in allen vier Stilen/2D/3D. Gebäudegrundrisse/-höhen nach Datenquelle, zuschaltbar und im Hybrid lesbar. Keine toten Missionsfeatures reaktivieren. Standardrenderer erst nach nachgewiesener Parität umstellen; SVG als einfache Rückfallmöglichkeit.
+
+### K5 – Geometrie und Messung
+Bestehende ZO-Kreisobjekte unverändert lesbar. Freier validierter Radius, Rechtecke, Polygone, Linien; Eckpunkte editierbar, Vorschau, Abbruch und expliziter Speichervorgang. Geometrievertrag vor Implementierung spezifizieren: WGS84, Reihenfolge [lon,lat] im GeoJSON vs. bisher [lat,lon], Validierung, geschlossene Ringe, Selbstschnitt/Antimeridian, Anker für Kartensprung, Flächen-/Längenberechnung, Speicherung, Altdaten, Fallpakete und TXT-/Terminalausgabe. Keine neue ID-Art ohne Entscheidung; Linien nicht als flächige Zone ausgeben. Geometrische Erweiterungen erst nach Datenvertragsprüfung und Freigabe. Messung: zwei Punkte weiterhin wie bisher, Mehrpunktlinie, Fläche, Radius, Peilwinkel und Koordinateninspektor; kurze Distanzen sinnvoll in Metern, keine scheinbare Genauigkeit. Routing nur mit separater freigegebener Quelle; bis dahin Schätzungen klar kennzeichnen. In 2D und 3D gleiche Geometrie.
+
+### K6 – optionaler Rechercheausbau
+Lokale Suche über zugängliche IDs/Namen einschließlich Zonen/Sichtungen, Koordinaten, optional externes Geocoding für bewusst eingegebene öffentliche Adressen; Zeitfilter und Sichtungsverlauf (zeitliche Reihenfolge nicht beobachteter Weg), Fallfilter, Objektgruppen, gespeicherte Ansichten. Einzelne Features erst nach praktischer Nutzungsphase und Freigabe, nicht automatisch implementieren. Keine zusätzlichen Kartenexport-/Importformate oder Topografiephase ohne Auftrag.
+
+## 7. Abnahme und Testmatrix
+
+Vorgeschlagene sieben Pflichtkriterien (die UI-Checkbox-Auswahl im Chat war nicht auslesbar; diese sieben sind aus ausdrücklichen Aussagen abgeleitet und bei Bedarf zu korrigieren):
+1. Terminal-Kartenbefehle einschließlich map/open und /intel, /exports funktionieren unverändert.
+2. Pins, Sichtungen, Zonen, Dossiers, Unterlagen und Fälle bleiben verknüpft; Erstellung, Bearbeitung, TXT-Export, Protokoll erhalten.
+3. 2D/3D und Stilwechsel verwenden dieselben zugänglichen Objektidentitäten und Aktionen.
+4. Zugriffssperren sind in allen Renderern, Suche, Legende, Objektinspektor und Export wirksam.
+5. Alte Profile und Export-/Importformate bleiben lesbar; neue Geometrien nur mit dokumentiertem Vertrag, keine verlustbehaftete Migration.
+6. Kamera, Auswahl, Filter und Bearbeitungszustand bleiben bei Stil-/Ansichts-/Layoutwechsel sinnvoll erhalten.
+7. Reale Windows-Abnahme aller vier Stile, Hybridgebäude, Zoom, Vollbild, Datenquellen, lokaler Brücke und zentraler Interaktionskette.
+
+Zurückpriorisiert: umfangreiche Offline-Parität, aufwendige Anbieterausfallsicherheit, verpflichtender 10.000-Objekte-Test. Kleine Basis-Fehlerbehandlung, kein Datenverlust und moderate Leistungstests bleiben sinnvoll: z.B. 100 und 1.000 synthetische Objekte, 5.000 nur diagnostisch bei Bedarf. Messung von Ladezeit, Framezeiten/Interaktionsverzögerung, Speicher und Requests auf dokumentierter Hardware; keine erfundenen Grenzwerte vor Baseline.
+
+Regressionen: `karten-messen`, `karte-sperre-pins`, `eigene-zonen`, `zonen-vorschau`, `k3dzoom`, `kperf`, `kartensprung`, `karten-txt-export`, `kartenprotokoll`, `sichtung-export`, `terminal-objektnavigation`, `terminal-intel`, Paket-4-Export-/Schutztests und vollständige Standardauswahl `node tests/runall.js`. Historische Missionsfälle getrennt bewerten. Neue Tests mit deterministischen Kacheln/GeoJSON und separaten realen Windows-Netztests. Teststatus und SHA dokumentieren; keine erfundenen grünen Ergebnisse. Windows-Pakete an GUI-/Integrationsmeilensteinen, getrennte Testprofile und Kopien echter Daten; Schlüssel und produktive Daten nicht bündeln.
+
+## 8. Branch- und Integrationsregeln
+
+Temporärer Integrationsbranch `feature/geospatial-v2` als ausdrücklich gewünschter separater Arbeitsstrang. Dieser Draft ist Plan und Integrationsrahmen, keine Freigabe für Merge. Kleine nachvollziehbare Stufen-Commits bzw. bei Bedarf separate Review-PRs gegen Integrationsbranch; zentrale CI läuft vor endgültiger Integration gegen main, keine zweite dauerhafte CI einführen. Abweichung vom sonstigen Ein-Branch-pro-Arbeitsrunde-Prinzip nur für diese getrennte Kartenphase.
+
+Claude arbeitet an Paket 5 (#141); ChatGPT Kartenkonzept/Implementierung nach abgestimmter Aufgabenteilung, unabhängige Gegenprüfung durch jeweils anderen Reviewer, keine parallelen Änderungen derselben Dateien ohne Abstimmung. Konzept-Draft jetzt erlaubt; produktiver Karten-Code nur separat, nicht in #141. Gemeinsame Dateien `index.html`, `tests/runall.js`, Datenvertrag und /intel-/exports-Schnittstellen besonders beachten. Änderungen in neue Kartenmodule verlagern soweit sinnvoll. Vor K1 und vor Integration tatsächlichen main-Stand und #141-Diff prüfen, Konflikte kontrolliert zusammenführen ohne Force-Push. Dokumentierte Reihenfolge: Paket 5 abschließen; praktische Nutzungsphase; Kartenintegration erst danach und nach ausdrücklicher Freigabe. Separater Branch darf vorher entwickelt/testet werden, sofern die Arbeit getrennt bleibt; keine Änderung am laufenden Arbeitsstand des Nutzers. Kein automatischer Merge, keine Branch-Löschung ohne Freigabe. Nach Integration Statusdokumentation pflegen; temporären Branch erst nach Erlaubnis entfernen.
+
+## 9. Status dieses Drafts
+
+Nur Konzept, kein Anwendungscode, keine Paket-5-Änderung, keine Tests ausgeführt; Konzeptdiff prüfen. Offene technische Entscheidungen: Anbieter/Vertragsbedingungen und Bildvergleich, tatsächliche Vector-/Gebäudedaten, konkrete UI-Gestaltung, Geometrievertrag, optionaler K6-Umfang. Nächster Arbeitsschritt K1: Baseline und Schutzvertrag prüfen, keine vorgezogene Datenmigration oder Standardrenderer-Umstellung.
