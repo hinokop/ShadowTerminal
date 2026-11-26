@@ -11,7 +11,7 @@
   }
   // Die Lagekarte hat Datei- und Browserquelle bereits aufgelöst (Browser hat Vorrang).
   const lokalKey=()=>typeof VIEW.karte.cartoKey==='string'?VIEW.karte.cartoKey.trim():'';
-  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter'};
+  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter',berlin2024:'Berlin Luftbild 2024'};
   const STIL_RAM_MS=10*60*1000; // begrenzte Wiederverwendung, nur beim Neuaufbau
   /* Nur Sitzungs-RAM: Kamera, explizite Stilwahl, Gebäudewunsch; kein Schlüssel,
      keine Objekte, keine persistente Speicherung. Gemeinsame Kamera folgt in K4. */
@@ -47,7 +47,7 @@
   }
   function kachelFehlerEintragen(c,e){
     // MapLibre 4.7.1 SourceCache liefert tile und sourceId im Fehlerereignis.
-    // Nur Anbieter-Tiles; eigene GeoJSON-Quellen sind kein CARTO-Ausfall.
+    // Nur Anbieter-Tiles; eigene GeoJSON-Quellen sind kein Basiskartenausfall.
     if(!e?.tile||!c.quellen.has(e.sourceId))return false;
     const jetzt=Date.now();
     for(const [id,t] of c.kachelFehler)if(jetzt-t>10000)c.kachelFehler.delete(id);
@@ -68,9 +68,41 @@
     try{c.a.setStyle(KARTE_V2_QUELLEN.leererStil());sync();}catch(e){}
     knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,grund+' · Lokale Objektlayer bleiben verfügbar.');
   }
+  /* K2d-2a: ein explizit gewählter amtlicher Rasterdienst, ohne CARTO-Key.
+     Außerhalb des groben Anfragebereichs bleibt die Auswahl aktiv; tatsächliche
+     Abdeckung (auch transparente Kacheln) ist nur visuell nachweisbar. */
+  function bildStatus(c){
+    if(!aktiv(c)||c.phase!=='bild')return;
+    const Q=KARTE_V2_QUELLEN, info=Q.bildInfo(c.modus);
+    const bereich=Q.bildBereich(c.modus,c.map.getCenter().toArray(),c.map.getZoom());
+    const over=c.map.getZoom()>info.maxzoom-Math.log2(512/info.tileSize);
+    if(bereich!=='kandidat'||c.kachelGeladen){
+      clearTimeout(c.timer);c.timer=null;
+    }else if(c.timer===null){
+      const g=c.generation;
+      c.timer=setTimeout(()=>{
+        if(aktiv(c)&&c.generation===g&&c.phase==='bild'&&!c.kachelGeladen)rueckfall(c,'Luftbild-Zeitlimit erreicht');
+      },25000);
+    }
+    const stand=bereich==='ausserhalb'?'Mittelpunkt außerhalb des Anfragebereichs.':
+      bereich==='uebersicht'?'Weiter hineinzoomen.':
+      c.kachelGeladen?'Bildkacheln geladen (seit Auswahl); tatsächliche Abdeckung visuell prüfen.':'Noch keine Bildkachel bestätigt.';
+    hinweis(c,info.name+' · nominal '+Math.round(info.gsd*100)+' cm · '+stand+
+      (c.kachelWarnung||c.ressourcenWarnung?' Teil-/Ladefehler.':'')+
+      (c.objektWarnung?' Fehler in lokalen Objektlayern.':'')+
+      (over?' Overzoom, keine zusätzliche Bildinformation.':''));
+  }
+  function bildWechseln(c,n){
+    ++c.generation;stop(c);kachelReset(c);c.key='';c.stilCache=null;c.stilKandidat=null;
+    c.modus=n;c.phase='bild';c.quellen=new Set([KARTE_V2_QUELLEN.BILD_ID]);
+    knoepfe(c);gebaeudeKnoepfe(c);
+    try{c.a.setStyle(KARTE_V2_QUELLEN.bildStil(n));sync();bildStatus(c);}
+    catch(e){rueckfall(c,'Luftbild nicht verfügbar');}
+  }
   async function wechseln(c,n,cache=null){
     if(!aktiv(c)||!c.a||!Object.hasOwn(namen,n))return;
     if(n==='leer'){rueckfall(c,'Ohne Basiskarte');return;}
+    if(KARTE_V2_QUELLEN.bildInfo(n)){bildWechseln(c,n);return;}
     const key=lokalKey();
     if(!key){rueckfall(c,'Kein lokaler CARTO-Schlüssel');return;}
     const Q=KARTE_V2_QUELLEN, g=++c.generation;stop(c);kachelReset(c);
@@ -129,7 +161,7 @@
         h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die Lagekarte. Die gemeinsame Kamera folgt später.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('p',{class:'note',id:'k-v2-status',role:'status'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.'),
-        h('small',null,'Bei CARTO-Auswahl sieht der Anbieter Kartenausschnitt, IP und Schlüssel. © OpenStreetMap-Mitwirkende, © CARTO.')),
+        h('small',null,'Bei Online-Auswahl sieht der jeweilige Anbieter Kartenausschnitt und IP, CARTO zusätzlich den Schlüssel. Luftbild Berlin: Geoportal Berlin, TrueDOP 2024, dl-de-zero-2.0. © OpenStreetMap-Mitwirkende, © CARTO.')),
       h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:420px;min-height:240px;background:#101820;border:1px solid var(--border);'}));
   }
   function auswahl(modell){
@@ -189,23 +221,48 @@
         ...(alt?.kamera||{center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5))}),attributionControl:true,
         transformRequest:url=>KARTE_V2_QUELLEN.cartoRequest(url,c.key)});
       c.map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
-      c.map.on('moveend',()=>gebaeudeKnoepfe(c));
+      c.map.on('moveend',()=>{gebaeudeKnoepfe(c);bildStatus(c);});
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
       c.map.on('sourcedata',e=>{
-        if(!aktiv(c)||!['kacheln','online'].includes(c.phase)||!c.quellen.has(e.sourceId)||e.tile?.state!=='loaded')return;
+        if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase)||!c.quellen.has(e.sourceId)||e.tile?.state!=='loaded')return;
         c.kachelGeladen=true;c.kachelErfolg=true;
+        if(c.phase==='bild')bildStatus(c);
       });
       c.map.on('error',e=>{
-        if(!aktiv(c)||!['kacheln','online'].includes(c.phase))return;
-        if(kachelFehlerEintragen(c,e))return;
+        if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase))return;
+        if(kachelFehlerEintragen(c,e)){if(c.phase==='bild')bildStatus(c);return;}
         if(e?.sourceId?.startsWith('shadow-v2-')){
           c.objektWarnung=true;hinweis(c,'Eigene Kartenlayer konnten nicht aufgebaut werden.');return;
+        }
+        if(c.phase==='bild'){
+          if(e?.sourceId===KARTE_V2_QUELLEN.BILD_ID||!e?.sourceId){c.ressourcenWarnung=true;bildStatus(c);}
+          return;
         }
         if(c.phase==='kacheln')rueckfall(c,'CARTO-Ressource nicht verfügbar');
         else {c.ressourcenWarnung=true;hinweis(c,namen[c.modus]+' · Kartenressource nicht verfügbar.');}
       });
       c.map.on('idle',()=>{
         if(!aktiv(c)||!c.a.ready())return;
+        if(c.phase==='bild'){
+          if(!c.map.areTilesLoaded())return;
+          if(!c.kachelGeladen&&(c.kachelWarnung||c.ressourcenWarnung)&&
+             KARTE_V2_QUELLEN.bildBereich(c.modus,c.map.getCenter().toArray(),c.map.getZoom())==='kandidat'){
+            rueckfall(c,'Luftbild nicht verfügbar');return;
+          }
+          // Wie beim Vektorstil einzelne Ausfälle tolerieren; nach erfolgreichem
+          // Start erst bei einer Häufung ohne neuen Erfolg im Anfragebereich zurückfallen.
+          const jetzt=Date.now();
+          for(const [id,t] of c.kachelFehler)if(jetzt-t>10000)c.kachelFehler.delete(id);
+          if(c.kachelGeladen&&!c.kachelErfolg&&c.kachelFehler.size>=3&&
+             KARTE_V2_QUELLEN.bildBereich(c.modus,c.map.getCenter().toArray(),c.map.getZoom())==='kandidat'){
+            rueckfall(c,'Luftbild nicht verfügbar');return;
+          }
+          if(c.kachelErfolg){
+            if(!c.kachelFehler.size)c.kachelWarnung=false;
+            c.kachelFehler.clear();
+          }
+          c.kachelErfolg=false;bildStatus(c);return;
+        }
         if(c.phase==='kacheln'||c.phase==='online'){
           if(!c.map.areTilesLoaded())return;
           const jetzt=Date.now();
