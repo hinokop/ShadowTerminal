@@ -7,12 +7,29 @@ const {APP}=require('./_pfad');
 // Zoom, Neigung, Drehung und beide Mittelpunktkoordinaten bleiben geprüft.
 function assertCamera(actual,expected){
  const {center:a,...restA}=actual,{center:e,...restE}=expected;
- assert.deepEqual(restA,restE,'Kamerazoom, Neigung und Drehung');
+ // Numerische Gleichheit statt Object.is: +0 und -0 sind dieselbe Kamera.
+ // Alle drei Parameter bleiben exakt und müssen endlich sein.
+ assert.deepEqual(Object.keys(restA).sort(),Object.keys(restE).sort(),'Kameraeigenschaften');
+ for(const k of ['zoom','pitch','bearing']){
+  assert.ok(Number.isFinite(restA[k])&&Number.isFinite(restE[k])&&restA[k]===restE[k],
+   'Kamera '+k+': '+restA[k]+' statt '+restE[k]);
+ }
  assert.equal(a.length,2);assert.equal(e.length,2);
  for(let i=0;i<2;i++){
   assert.ok(Number.isFinite(a[i])&&Number.isFinite(e[i])&&Math.abs(a[i]-e[i])<=1e-9,
    'Kameramittelpunkt Achse '+i+': '+a[i]+' statt '+e[i]);
  }
+}
+
+// Selbstprüfung der Vergleichsfunktion: nur numerisch identische Nullwerte akzeptieren.
+{
+ const cam={center:[13.4,52.5],zoom:14.25,pitch:0,bearing:0};
+ assertCamera({...cam,bearing:-0},cam);
+ for(const k of ['zoom','pitch','bearing']){
+  assert.throws(()=>assertCamera({...cam,[k]:cam[k]+0.001},cam),assert.AssertionError);
+  assert.throws(()=>assertCamera({...cam,[k]:NaN},cam),assert.AssertionError);
+ }
+ assert.throws(()=>assertCamera({...cam,center:[13.4000001,52.5]},cam),assert.AssertionError);
 }
 
 (async()=>{
