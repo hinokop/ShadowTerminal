@@ -116,6 +116,20 @@
       attribution:'© GeoBasis-DE/LGB, dl-de/by-2-0; © Geoportal Berlin, dl-de/by-2-0',
       bounds:Object.freeze([11.2,51.35,14.8,53.6]),minzoom:10,maxzoom:19,tileSize:256,
       url:'https://isk.geobasis-bb.de/mapproxy/dop20c/service/wms?service=WMS&version=1.3.0&request=GetMap&layers=bebb_dop20c&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/jpeg'
+    }),
+    rheinlandPfalz:Object.freeze({
+      name:'Rheinland-Pfalz DOP20',anbieter:'LVermGeo Rheinland-Pfalz',art:'Orthophoto',
+      aufnahme:'Aufnahmezeit je Kachel unbekannt',gsd:0.20,lizenz:'dl-de/by-2-0',
+      attribution:'©GeoBasis-DE / LVermGeoRP ('+new Date().getFullYear()+'), dl-de/by-2-0, <a href="https://www.lvermgeo.rlp.de">lvermgeo.rlp.de</a> [Daten bearbeitet]',
+      bounds:Object.freeze([6.037773,48.897996,8.617703,51.000893]),minzoom:10,maxzoom:19,tileSize:256,
+      url:'https://geo4.service24.rlp.de/wms/rp_dop20.fcgi?service=WMS&version=1.1.1&request=GetMap&layers=rp_dop20&styles=&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true'
+    }),
+    sentinel2016:Object.freeze({
+      name:'Sentinel-2 Übersicht (EOX)',anbieter:'EOX IT Services GmbH',art:'Satellitenübersicht',
+      aufnahme:'2016/2017 (historisches Mosaik)',gsd:10,lizenz:'CC BY 4.0',
+      attribution:'<a href="https://cloudless.eox.at">EOxCloudless</a> by <a href="https://eox.at">EOX IT Services GmbH</a> (Contains modified Copernicus Sentinel data 2016 &amp; 2017) · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>',
+      bounds:Object.freeze([-180,-85.05112878,180,85.05112878]),minzoom:0,maxzoom:14,tileSize:256,
+      url:'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg'
     })
   });
   const BILD_ID='shadow-v2-bild', BILD_LAYER='shadow-v2-bild-raster';

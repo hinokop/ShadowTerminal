@@ -105,7 +105,9 @@
     const stand=bereich==='ausserhalb'?'Mittelpunkt außerhalb des Anfragebereichs.':
       bereich==='uebersicht'?'Weiter hineinzoomen.':
       c.kachelGeladen?'Bildkacheln geladen (seit Auswahl); tatsächliche Abdeckung visuell prüfen.':'Noch keine Bildkachel bestätigt.';
-    hinweis(c,info.name+' · '+info.aufnahme+' · nominal '+Math.round(info.gsd*100)+' cm · '+stand+
+    const aufloesung=info.gsd>=1?info.gsd+' m':Math.round(info.gsd*100)+' cm';
+    hinweis(c,info.name+' · '+info.aufnahme+' · nominal '+aufloesung+' · '+stand+
+      (info.art==='Satellitenübersicht'?' Historische Übersicht, keine Gebäudedetailauflösung.':'')+
       (c.bildAusgefallen.length?' Automatischer Quellenrückfall.':'')+
       (c.kachelWarnung||c.ressourcenWarnung?' Teil-/Ladefehler.':'')+
       (c.objektWarnung?' Fehler in lokalen Objektlayern.':'')+

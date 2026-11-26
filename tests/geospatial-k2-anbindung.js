@@ -48,7 +48,7 @@ function assertCamera(actual,expected){
   ]};
   const route=async r=>{
     const u=new URL(r.request().url()),bare=u.origin+u.pathname;
-    if(['gdi.berlin.de','isk.geobasis-bb.de'].includes(u.hostname)){
+    if(['gdi.berlin.de','isk.geobasis-bb.de','geo4.service24.rlp.de','tiles.maps.eox.at'].includes(u.hostname)){
       bildAnfragen.push({url:u.href,referer:r.request().headers().referer||''});
       if(bildFehler||(berlinFehler&&u.hostname==='gdi.berlin.de'))return r.fulfill({status:500,body:'fixture',headers:{'access-control-allow-origin':'*'}});
       return r.fulfill({body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAABlBMVEU/fFsAAABwZYnaAAAAH0lEQVR42u3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAvg0hAAABYOSdlwAAAABJRU5ErkJggg==','base64'),contentType:'image/png',headers:{'access-control-allow-origin':'*','cache-control':'no-store'}});
@@ -203,8 +203,15 @@ function assertCamera(actual,expected){
   await p.evaluate(()=>renderModule());await status('Mittelpunkt außerhalb des Anfragebereichs');
   assert.equal(await p.locator('#k-v2-bildwahl').inputValue(),'berlin2024');
   await p.selectOption('#k-v2-bildwahl','auto');await status('Brandenburg / Berlin DOP20');await status('Bildkacheln geladen');
-  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[8.138,49.350],zoom:14,duration:0}));
-  await status('Mittelpunkt außerhalb des Anfragebereichs');
+  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[8.27,50.0],zoom:14,duration:0}));
+  await status('Rheinland-Pfalz DOP20');await status('Bildkacheln geladen');
+  assert.ok(bildAnfragen.some(a=>new URL(a.url).hostname==='geo4.service24.rlp.de'));
+  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[151.21,-33.87],zoom:16,duration:0}));
+  await status('Sentinel-2 Übersicht (EOX)');await status('Bildkacheln geladen');
+  await status('nominal 10 m');await status('keine Gebäudedetailauflösung');await status('Overzoom');
+  assert.ok(bildAnfragen.some(a=>new URL(a.url).hostname==='tiles.maps.eox.at'));
+  await p.selectOption('#k-v2-bildwahl','rheinlandPfalz');await status('Mittelpunkt außerhalb des Anfragebereichs');
+  await p.selectOption('#k-v2-bildwahl','auto');await status('Bildkacheln geladen');
   assert.equal(await p.locator('#k-v2-luftbild').getAttribute('aria-pressed'),'true');
   await p.evaluate(cam=>KARTE_V2_DEV.adapter().flyTo({...cam,duration:0}),cam);
   await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().center[0]>13);
@@ -217,11 +224,28 @@ function assertCamera(actual,expected){
   await p.selectOption('#k-v2-bildwahl','berlin2024');await status('Luftbild nicht verfügbar');
   berlinFehler=false;
   await rueckfallTreffer();
+  // Automatik: alle drei Kandidaten am Berliner Mittelpunkt fallen aus.
+  // Keine Schleife, kein CARTO-Wechsel; Luftbild bleibt als Modus erhalten.
+  await p.click('#k-v2-luftbild');await p.selectOption('#k-v2-bildwahl','auto');
+  await status('Keine geeignete Bildquelle verfügbar');
+  assert.equal(await p.locator('#k-v2-luftbild').getAttribute('aria-pressed'),'true');
+  await p.waitForFunction(k=>{const a=KARTE_V2_DEV.adapter();return a?.ready()&&a.hitTest(a.project([52.51,13.41]))?.renderKey===k;},kb);
+  await p.click('#k-v2-leer');await status('Ohne Basiskarte');
   bildFehler=false;
   for(const a of bildAnfragen){
-    const u=new URL(a.url),bb=u.searchParams.get('bbox').split(',').map(Number);
-    assert.ok(bb.length===4&&bb.every(Number.isFinite)&&bb[0]<bb[2]&&bb[1]<bb[3]);
-    assert.equal(u.pathname,u.hostname==='gdi.berlin.de'?'/services/wms/truedop_2024':'/mapproxy/dop20c/service/wms');assert.ok(!u.searchParams.has('key')&&!a.referer);
+    const u=new URL(a.url);
+    if(u.hostname==='tiles.maps.eox.at'){
+      const m=u.pathname.match(/^\/wmts\/1\.0\.0\/s2cloudless_3857\/default\/g\/(\d+)\/(\d+)\/(\d+)\.jpg$/);
+      assert.ok(m,'WMTS-Matrixpfad');const [z,y,x]=m.slice(1).map(Number);
+      assert.ok(z<=14&&x>=0&&y>=0&&x<2**z&&y<2**z);
+    }else{
+      const bb=u.searchParams.get('bbox').split(',').map(Number);
+      assert.ok(bb.length===4&&bb.every(Number.isFinite)&&bb[0]<bb[2]&&bb[1]<bb[3]);
+      const pfade={'gdi.berlin.de':'/services/wms/truedop_2024','isk.geobasis-bb.de':'/mapproxy/dop20c/service/wms','geo4.service24.rlp.de':'/wms/rp_dop20.fcgi'};
+      assert.equal(u.pathname,pfade[u.hostname]);
+      if(u.hostname==='geo4.service24.rlp.de'){assert.equal(u.searchParams.get('srs'),'EPSG:3857');assert.equal(u.searchParams.get('layers'),'rp_dop20');}
+    }
+    assert.ok(!u.searchParams.has('key')&&!a.referer);
   }
   assert.equal(anfragen.length,vorBild,'kein automatischer CARTO-Rückfall');
   await p.evaluate(()=>{VIEW.karte.messen=false;VIEW.karte.messPts=[];karteRendererDatenAktualisieren();});
