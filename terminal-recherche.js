@@ -20,7 +20,40 @@ function rDeps() {
     liste: function () { return Array.from(m.values()); }
   };
 }
-function rVereinigung() { const u = rDeps(); for (const l of arguments) u.add(l); const x = u.liste(); return x.length ? x : null; }
+function rVereinigung() { return rVereinigungAus(arguments); }
+/* Vereinigung beliebig vieler Listen ohne Argument-Spread (große Eingaben, Review zu #141) */
+function rVereinigungAus(listen) { const u = rDeps(); for (const l of listen) u.add(l); const x = u.liste(); return x.length ? x : null; }
+/* UTF-8-Länge ohne Kopie */
+function rUtf8(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); n += c < 0x80 ? 1 : c < 0x800 ? 2 : c >= 0xd800 && c <= 0xdbff ? (i++, 4) : 3; }
+  return n;
+}
+/* Ursprüngliche Bindung (wie #140): Abhängigkeiten auf Dossier, Pin, Zone und Sichtung tragen zusätzlich Identität und ursprüngliche
+   Dossierzuordnung; Exportnamen im Archiv die Bindung ihres Objekts. Ohne auflösbare Identität (Altobjekt ohne Anlegezeit oder Kennung)
+   bleibt die aktuelle Abhängigkeit allein. Je Operation zwischengespeichert. */
+function rBinden(op, deps) {
+  if (!deps || !deps.length) return deps && deps.length ? deps : null;
+  const aus = [];
+  for (const d of deps) {
+    if (!d) continue;
+    const k = JSON.stringify(d);
+    let b = op.bindungen.get(k);
+    if (b === undefined) {
+      b = [d];
+      if (d.art === 'dossier' || d.art === 'pin' || d.art === 'zone' || d.art === 'sichtung') {
+        const x = INTEL.bindung(d);
+        if (x.da) b = [d, { art: 'herkunft', deps: [d], bindung: [x] }];
+      } else if (d.art === 'archivname') {
+        const z = terminalArchivNameZiel(d.name), dd = z ? terminalArchivSendDeps([z]) : [];
+        if (dd.length) b = [d, { art: 'herkunft', deps: dd, bindung: dd.map(INTEL.bindung) }];
+      }
+      op.bindungen.set(k, b);
+    }
+    for (const x of b) aus.push(x);
+  }
+  return aus;
+}
 function rGesperrt(d) { return !!d && d.some(INTEL.gesperrt); }
 function rZeilen(text) {
   const z = String(text).split('\n'), offen = !String(text).endsWith('\n');
@@ -30,7 +63,17 @@ function rZeilen(text) {
 /* Ausgabeliste mit fortlaufender Nummer je Eintrag: stdout und stderr der letzten Stufe erscheinen in der Reihenfolge ihrer Entstehung */
 function rListe(op) {
   const a = [];
-  a.push = function () { for (const x of arguments) if (x) { x.n = ++op.nr; x.stufe = op.stufe; } return Array.prototype.push.apply(a, arguments); };
+  let bytes = 0;
+  a.push = function () {
+    for (const x of arguments) {
+      if (!x) continue;
+      x.n = ++op.nr; x.stufe = op.stufe;
+      bytes += rUtf8(x.t) + 1;
+      if (bytes > RECHERCHE_GRENZE.puffer) throw new RechercheAbbruch('output limit reached (4 MiB); no result');
+      Array.prototype.push.call(a, x);
+    }
+    return a.length;
+  };
   return a;
 }
 function rStrom(zeilen, offen) { return { zeilen: zeilen || [], offen: !!offen }; }
@@ -52,7 +95,7 @@ function rFehlerText(f) {
 function rOperation(umleitZiel, umleitArt) {
   const t = TERMINAL_ZUSTAND, herkunft = new Set(), gelesenPfade = [];
   const op = { version: t.version, kette: t.kette, herkunft: herkunft, archivSchutz: false, eintraege: 0, gelesen: 0, schritte: 0, letzt: Date.now(),
-    nr: 0, cache: {}, alles: rDeps(), zielSeg: umleitZiel, zielArt: umleitArt, gelesenPfade: gelesenPfade };
+    nr: 0, takte: 0, cache: {}, bindungen: new Map(), alles: rDeps(), zielSeg: umleitZiel, zielArt: umleitArt, gelesenPfade: gelesenPfade };
   const basis = terminalFsMitHerkunft(herkunft, { gelesen: gelesenPfade });
   /* Bei ">" ist das Ziel für die Befehle leer wie nach dem Kürzen durch bash; ">>" liest den bisherigen Inhalt */
   op.fs = Object.assign({}, basis, {
@@ -68,8 +111,10 @@ function rPruefen(op) {
   if (t.version !== op.version || (op.kette && (op.kette.abgebrochen || t.kette !== op.kette))) throw new RechercheAbbruch(null);
 }
 /* Rückgabe an die Ereignisschleife (UI, Funk- und LOS-Zeitgeber), höchstens alle 8 ms; danach Sitzung und Abbruch prüfen */
+/* Zeit ODER Anzahl der Takte: unter einer angehaltenen Uhr (A0-Tests, Hintergrundfenster) steht Date.now() still */
 async function rTakt(op) {
-  if (Date.now() - op.letzt < 8) return;
+  if (Date.now() - op.letzt < 8 && ++op.takte < 64) return;
+  op.takte = 0;
   await new Promise(function (ok) { const c = new MessageChannel(); c.port1.onmessage = function () { c.port1.close(); ok(); }; c.port2.postMessage(0); });
   op.letzt = Date.now();
   rPruefen(op);
@@ -78,10 +123,10 @@ function rEintrag(op) { if (++op.eintraege > RECHERCHE_GRENZE.eintraege) throw n
 function rGelesen(op, n) { op.gelesen += n; if (op.gelesen > RECHERCHE_GRENZE.gelesen) throw new RechercheAbbruch('read limit reached (16 MiB); no result'); }
 function rPuffer(strom) {
   let n = 0;
-  for (const z of strom.zeilen) { n += z.t.length + 1; if (n > RECHERCHE_GRENZE.puffer) throw new RechercheAbbruch('output limit reached (4 MiB); no result'); }
+  for (const z of strom.zeilen) { n += rUtf8(z.t) + 1; if (n > RECHERCHE_GRENZE.puffer) throw new RechercheAbbruch('output limit reached (4 MiB); no result'); }
 }
 /* Datei lesen mit den Regeln der bestehenden Leser (terminalLeser): Exportobjekte im Archiv nie, Sichtbarkeit vor und nach dem Lesen */
-async function rDatei(op, seg) {
+async function rDatei(op, seg, pfadDeps) {
   let r;
   if (seg[0] === TERMINAL_DB && terminalArchivNameZiel(seg.at(-1))) r = { fehler: 'EACCES' };
   else {
@@ -91,37 +136,86 @@ async function rDatei(op, seg) {
   }
   if (r.fehler) return { fehler: r.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : r.fehler };
   rGelesen(op, rBytes(r.text));
-  const basis = r.deps || [];
+  const basis = rBinden(op, rVereinigung(pfadDeps, r.deps)) || [];
   op.alles.add(basis);
-  (r.zeilenDeps || []).forEach(function (d) { op.alles.add(d); });
-  const z = rZeilen(r.text);
-  return { text: r.text, strom: rStrom(z.zeilen.map(function (t, j) { return { t: t, d: rVereinigung(basis, r.zeilenDeps && r.zeilenDeps[j]) }; }), z.offen), deps: basis.length ? basis : null };
+  const zd = (r.zeilenDeps || []).map(function (d) { const b = rBinden(op, d); op.alles.add(b); return b; });
+  const z = rZeilen(r.text), zeilen = [];
+  for (let j = 0; j < z.zeilen.length; j++) zeilen.push({ t: z.zeilen[j], d: zd[j] && zd[j].length ? rVereinigung(basis, zd[j]) : basis.length ? basis : null });
+  return { text: r.text, strom: rStrom(zeilen, z.offen), deps: basis.length ? basis : null };
+}
+/* Pfad eines Operanden wie terminalSendPfad (Paket 4): in /intel komponentenweise physisch (Links auf ihr Ziel, ".." danach), sonst
+   lexikalisch; Verzeichnisse, die ".." überspringt, müssen bestehen und Verzeichnisse sein; "datei/" ist ENOTDIR. Die Abhängigkeiten aller
+   durchlaufenen Einträge bleiben erhalten (gebunden). opt.lstat (find -P): eine letzte Komponente, die ein Link ist, wird nicht gefolgt.
+   Ergebnis { seg, deps, link } oder { fehler }. Durchlaufenes /intel zählt für E6 auch dann, wenn der Pfad es wieder verlässt. */
+async function rAufloesen(op, pfad, opt) {
+  opt = opt || {};
+  const roh = terminalShellPfad(pfad);
+  if (!roh) return { fehler: 'ENOENT' };
+  const heim = pfad === '~' || pfad.startsWith('~/'), absolut = heim || pfad.startsWith('/');
+  let seg = heim ? TERMINAL_HEIM.slice() : absolut ? [] : terminalShellPfad('').slice(), fest = seg.length, datei = false;
+  const zwischen = [], deps = [];
+  const teile = (heim ? pfad.slice(1) : pfad).split('/').filter(function (n) { return n && n !== '.'; });
+  for (let i = 0; i < teile.length; i++) {
+    const name = teile[i];
+    if (datei) return { fehler: 'ENOTDIR' };
+    if (name === '..') { if (seg.length > fest && seg[0] !== 'intel') zwischen.push(seg.slice()); seg.pop(); fest = Math.min(fest, seg.length); continue; }
+    seg.push(name);
+    if (seg[0] === 'intel') op.herkunft.add('intel');
+    if (seg[0] === 'intel' && seg.length > 1) {
+      if (i === teile.length - 1 && opt.lstat && !roh.endeVerzeichnis) {
+        const l = await op.fs.readlink(seg);
+        rPruefen(op);
+        if (l && l.ziel) { for (const d of l.deps || []) deps.push(d); return { seg: seg, deps: rBinden(op, deps), link: true }; }
+      }
+      const st = INTEL.stat(seg.slice(1));
+      if (st.fehler) return { fehler: st.fehler };
+      for (const d of st.pfadDeps || []) deps.push(d);
+      seg = st.kanonisch.slice(); fest = Math.min(fest, seg.length);
+      datei = st.typ === 'file';
+    }
+  }
+  for (const z of zwischen) {
+    const st = await op.fs.stat(z, { pruefen: true, cache: op.cache });
+    rPruefen(op);
+    if (st.fehler) return { fehler: st.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : st.fehler };
+    if (st.typ === 'file') return { fehler: 'ENOTDIR' };
+  }
+  if (roh.endeVerzeichnis && seg.length) {
+    const st = await op.fs.stat(seg, { pruefen: true, cache: op.cache });
+    rPruefen(op);
+    if (!st.fehler && st.typ === 'file') return { fehler: 'ENOTDIR' };
+  }
+  const b = rBinden(op, deps);
+  op.alles.add(b);
+  return { seg: seg, deps: b };
 }
 /* Physische Art eines Startpfads ohne Folgen eines Links (lstat): Links kennt nur /intel */
 async function rLstat(op, seg, endeVerzeichnis) {
   if (!endeVerzeichnis && seg.length && terminalAnbieter(seg).name === 'intel') {
     const l = await op.fs.readlink(seg);
     rPruefen(op);
-    if (l && l.ziel) return { typ: 'link', deps: l.deps || null };
+    if (l && l.ziel) return { typ: 'link', deps: rBinden(op, l.deps) };
   }
   const st = await op.fs.stat(seg, { pruefen: true, cache: op.cache });
   rPruefen(op);
   if (st.fehler) return { fehler: st.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : st.fehler };
-  return { typ: st.typ === 'dir' ? 'dir' : 'file', deps: st.deps || null };
+  return { typ: st.typ === 'dir' ? 'dir' : 'file', deps: rBinden(op, st.deps) };
 }
 /* Verzeichnis lesen: Einträge mit Art und Abhängigkeiten (Eintrag und Verzeichnis); versteckte Einträge eingeschlossen */
 async function rVerzeichnis(op, seg) {
   const r = await op.fs.readdir(seg, { versteckt: true, cache: op.cache });
   rPruefen(op);
   if (r.fehler) return { fehler: r.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : r.fehler };
-  const dd = r.deps || [];
+  const dd = rBinden(op, r.deps) || [];
   op.alles.add(dd);
   return { eintraege: r.eintraege.filter(function (e) { return e.name !== '.' && e.name !== '..'; }).map(function (e) {
-    op.alles.add(e.deps);
-    /* Archiv: Namen der Exportobjekte sind geschützt (Sichtbarkeitsregel des Archivs); jede Zeile mit einem Archivnamen trägt ihn */
+    /* Archiv: Namen der Exportobjekte sind geschützt (Sichtbarkeitsregel des Archivs); jede Zeile mit einem Archivnamen trägt ihn. Auch in
+       op.alles, damit Zahlen über später ausgefilterte Namen gebunden bleiben. */
     let ad = null;
     if (seg[0] === TERMINAL_DB && terminalArchivNameZiel(e.name)) { ad = [{ art: 'archivname', name: e.name }]; op.archivSchutz = true; }
-    return { name: e.name, typ: e.link ? 'link' : e.dir ? 'dir' : 'file', deps: rVereinigung(dd, e.deps, ad) };
+    const ed = rBinden(op, rVereinigung(e.deps, ad));
+    op.alles.add(ed);
+    return { name: e.name, typ: e.link ? 'link' : e.dir ? 'dir' : 'file', deps: rVereinigung(dd, ed) };
   }) };
 }
 /* Optionen im Stil von getopt: Kurzoptionen (Buchstabe -> 'flag' oder 'wert'), Langoptionen; erster Nicht-Optionswert bleibt Operand,
@@ -396,16 +490,19 @@ function rPruefer(muster, opt) {
   const falt = function (x) { return opt.i ? x.toLowerCase() : x; };
   if (opt.F) {
     const fest = muster.map(falt);
-    return async function (zeile) {
+    return async function (zeile, op) {
       const z = falt(zeile);
       for (const m of fest) {
         if (opt.x) { if (z === m) return true; continue; }
         if (!opt.w) { if (z.includes(m)) return true; continue; }
-        const cps = Array.from(z), mc = Array.from(m);
-        for (let p = 0; p + mc.length <= cps.length; p++) {
-          let gleich = true;
-          for (let k = 0; k < mc.length && gleich; k++) gleich = cps[p + k] === mc[k];
-          if (gleich && !rWortZeichen(cps[p - 1]) && !rWortZeichen(cps[p + mc.length]) && (mc.length === 0 || rWortZeichen(mc[0]) || true)) return true;
+        /* -F -w: Vorkommen über indexOf, Wortgrenzen je Vorkommen; Schritte begrenzt die Freigabe der Ereignisschleife */
+        let p = z.indexOf(m);
+        while (p >= 0) {
+          const vor = Array.from(z.slice(Math.max(0, p - 2), p)).pop(), nach = Array.from(z.slice(p + m.length, p + m.length + 2))[0];
+          if (!rWortZeichen(vor) && !rWortZeichen(nach)) return true;
+          op.schritte += m.length + 1;
+          if (op.schritte > 200000) { op.schritte = 0; await rTakt(op); }
+          p = z.indexOf(m, p + 1);
         }
       }
       return false;
@@ -447,26 +544,30 @@ async function rGrep(op, args, stdin, ctx) {
   const meldung = function (t, d) { fehler = true; if (!o.s) err.push({ t: 'grep: ' + t, d: d || null }); };
   const durchsuchen = async function (name, strom, deps, binaer) {
     let n = 0, erste = null;
-    const zeilen = [];
     for (let j = 0; j < strom.zeilen.length; j++) {
+      if (j % 256 === 255) await rTakt(op);   /* auch ohne Treffer */
       const z = strom.zeilen[j];
       const pass = (await pruefer(z.t, op)) !== !!o.v;
       if (!pass) continue;
       n++;
       if (o.q) { treffer = true; return 'stopp'; }
       if (o.l) { erste = z; break; }
-      if (!o.c && !binaer) zeilen.push({ t: (mitName > 0 ? name + ':' : '') + (o.n ? (j + 1) + ':' : '') + z.t, d: rVereinigung(z.d, deps) });
-      if (zeilen.length % 256 === 0) await rTakt(op);
+      if (!o.c && !binaer) aus.push({ t: (mitName > 0 ? name + ':' : '') + (o.n ? (j + 1) + ':' : '') + z.t, d: rVereinigung(z.d, deps) });
     }
     if (n) treffer = true;
     if (o.l) { if (erste) aus.push({ t: name, d: rVereinigung(erste.d, deps) }); return; }
-    if (o.c) { aus.push({ t: (mitName > 0 ? name + ':' : '') + n, d: rVereinigung(deps, ...strom.zeilen.map(function (z) { return z.d; })) }); return; }
-    if (binaer && n) { err.push({ t: 'grep: ' + name + ': binary file matches', d: deps }); return; }
-    aus.push.apply(aus, zeilen);
+    if (o.c) {
+      /* Anzahl (auch 0): Vereinigung aller Eingabezeilen und alles in der Operation Gelesenen, auch vorher ausgefilterter Zeilen */
+      const l = [deps, op.alles.liste()];
+      for (const z of strom.zeilen) l.push(z.d);
+      aus.push({ t: (mitName > 0 ? name + ':' : '') + n, d: rVereinigungAus(l) });
+      return;
+    }
+    if (binaer && n) err.push({ t: 'grep: ' + name + ': binary file matches', d: deps });
   };
   const datei = async function (name, seg, deps) {
     rEintrag(op);
-    const r = await rDatei(op, seg);
+    const r = await rDatei(op, seg, deps);
     if (r.fehler) { meldung(name + ': ' + (r.fehler === 'EISDIR' ? 'Is a directory' : rFehlerText(r.fehler)), deps); return; }
     if (op.zielSeg && op.zielArt === '>>' && seg.join('/') === op.zielSeg.join('/') && !o.l && !o.c && !o.q) { meldung(name + ': input file is also the output', deps); return; }
     return durchsuchen(name, r.strom, rVereinigung(deps, r.deps), r.text.includes('\u0000'));
@@ -492,16 +593,18 @@ async function rGrep(op, args, stdin, ctx) {
     const liste = ohneOperand ? [null] : ops;   /* grep -r ohne Operand: Arbeitsverzeichnis, Namen ohne "./" */
     for (const name of liste) {
       if (name === '-') { if ((await durchsuchen('(standard input)', stdin, null, false)) === 'stopp') break; continue; }
-      const seg = await op.fs.resolve(name === null ? '.' : name, { cwd: ctx.cwd });
-      if (!seg) { meldung(name + ': Permission denied'); continue; }
+      const pf = await rAufloesen(op, name === null ? '.' : name);
+      if (pf.fehler) { meldung((name === null ? '.' : name) + ': ' + rFehlerText(pf.fehler)); continue; }
+      const seg = pf.seg;
       const st = await op.fs.stat(seg, { pruefen: true, cache: op.cache });
       rPruefen(op);
       if (st.fehler) { meldung((name === null ? '.' : name) + ': ' + rFehlerText(st.fehler)); continue; }
+      const sd = rVereinigung(pf.deps, rBinden(op, st.deps));
       let s;
       if (st.typ === 'dir') {
         if (!rekursiv) { meldung(name + ': Is a directory'); continue; }
-        s = await baum(name === null ? '' : name, seg, st.deps || null);
-      } else s = await datei(name, seg, st.deps || null);
+        s = await baum(name === null ? '' : name, seg, sd);
+      } else s = await datei(name, seg, sd);
       if (s === 'stopp') break;
     }
   }
@@ -606,12 +709,12 @@ async function rFind(op, args, stdin, ctx) {
     }
   };
   for (const s of start) {
-    const seg = await op.fs.resolve(s, { cwd: ctx.cwd });
-    if (!seg) { err.push({ t: 'find: ' + rQ(s) + ': Permission denied', d: null }); code = 1; continue; }
-    const st = await rLstat(op, seg, /\/$/.test(s));
+    const pf = await rAufloesen(op, s, { lstat: true });
+    if (pf.fehler) { err.push({ t: 'find: ' + rQ(s) + ': ' + rFehlerText(pf.fehler), d: null }); code = 1; continue; }
+    const st = pf.link ? { typ: 'link', deps: null } : await rLstat(op, pf.seg, true);
     if (st.fehler) { err.push({ t: 'find: ' + rQ(s) + ': ' + rFehlerText(st.fehler), d: null }); code = 1; continue; }
     const basis = s.replace(/\/+$/, '').split('/').pop() || s;
-    await besuchen(s, seg, basis, st.typ, 0, st.deps);
+    await besuchen(s, pf.seg, basis, st.typ, 0, rVereinigung(pf.deps, st.deps));
   }
   return { code: code, aus: rStrom(aus), err: err };
 }
@@ -623,16 +726,15 @@ async function rEingaben(op, befehl, ops, stdin, ctx) {
   ops = ops.length ? ops.map(rName) : ['-'];
   for (const name of ops) {
     if (name === '-') { ein.push({ name: '-', strom: stdin, text: rText(stdin), regulaer: false, deps: null }); continue; }
-    const seg = await op.fs.resolve(name, { cwd: ctx.cwd });
-    if (!seg) { err.push({ t: befehl + ': ' + name + ': Permission denied', d: null }); code = 1; continue; }
     rEintrag(op);
-    const r = await rDatei(op, seg);
+    const pf = await rAufloesen(op, name);
+    const r = pf.fehler ? { fehler: pf.fehler } : await rDatei(op, pf.seg, pf.deps);
     if (r.fehler) { err.push({ t: befehl + ': ' + name + ': ' + (r.fehler === 'EISDIR' ? 'Is a directory' : rFehlerText(r.fehler)), d: null }); code = 1; ein.push({ name: name, fehlt: r.fehler }); continue; }
     ein.push({ name: name, strom: r.strom, text: r.text, regulaer: true, deps: r.deps });
   }
   return { ein: ein, err: err, code: code };
 }
-function rAlleDeps(op, e) { return rVereinigung(e.deps, op.alles.liste(), ...e.strom.zeilen.map(function (z) { return z.d; })); }
+function rAlleDeps(op, e) { const l = [e.deps, op.alles.liste()]; for (const z of e.strom.zeilen) l.push(z.d); return rVereinigungAus(l); }
 
 /* ---------- wc ---------- */
 const R_WC_LEER = new RegExp('[ \\t\\n\\v\\f\\r\\u0085\\u1680\\u2000-\\u2006\\u2008-\\u200a\\u2028\\u2029\\u205f\\u3000]');
@@ -663,7 +765,7 @@ async function rWc(op, args, stdin, ctx) {
   if (zahlen.length > 1) {
     const s = { l: 0, w: 0, m: 0, c: 0 };
     zahlen.forEach(function (z) { ['l', 'w', 'm', 'c'].forEach(function (k) { s[k] += z.w[k]; }); });
-    aus.push({ t: zeile(s, 'total'), d: rVereinigung(...zahlen.map(function (z) { return z.deps; })) });
+    aus.push({ t: zeile(s, 'total'), d: rVereinigungAus(zahlen.map(function (z) { return z.deps; })) });
   }
   return { code: e.code, aus: rStrom(aus), err: e.err };
 }
@@ -680,12 +782,17 @@ function rLocaleVergleich(ka, kb, a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 /* -n: führende Leerzeichen, Vorzeichen, Ziffern mit Tausendertrennzeichen ',' (en_US), Dezimalpunkt; sonst 0 */
+/* Exakt als Zeichenketten (keine Rundung großer Zahlen): Vorzeichen, Ganzteil ohne führende Nullen, Bruchteil ohne folgende Nullen */
 function rZahl(s) {
   const m = /^[ \t]*(-?)((?:[0-9]+(?:,[0-9]+)*)?)(?:\.([0-9]*))?/.exec(s);
-  const ganz = (m[2] || '').replace(/,/g, ''), bruch = m[3] || '';
-  if (!ganz && !bruch) return 0;
-  const v = Number((ganz || '0') + '.' + (bruch || '0'));
-  return m[1] && v ? -v : v;
+  const ganz = (m[2] || '').replace(/,/g, '').replace(/^0+/, ''), bruch = (m[3] || '').replace(/0+$/, '');
+  return { neg: !!m[1] && !!(ganz || bruch), ganz: ganz, bruch: bruch };
+}
+function rZahlVergleich(a, b) {
+  if (a.neg !== b.neg) return a.neg ? -1 : 1;
+  let v = a.ganz.length !== b.ganz.length ? (a.ganz.length < b.ganz.length ? -1 : 1) : a.ganz < b.ganz ? -1 : a.ganz > b.ganz ? 1 : 0;
+  if (!v) v = a.bruch < b.bruch ? -1 : a.bruch > b.bruch ? 1 : 0;
+  return a.neg ? -v : v;
 }
 async function rSort(op, args, stdin, ctx) {
   const p = rOptionen('sort', args, { r: 'flag', n: 'flag', u: 'flag', f: 'nicht', k: 'nicht', t: 'nicht', o: 'nicht', b: 'nicht', d: 'nicht', g: 'nicht', h: 'nicht', M: 'nicht', V: 'nicht', s: 'nicht', c: 'nicht', m: 'nicht', z: 'nicht' },
@@ -693,11 +800,12 @@ async function rSort(op, args, stdin, ctx) {
   if (p.fehler) { p.fehler.aus = rStrom([]); return p.fehler; }
   const e = await rEingaben(op, 'sort', p.operanden, stdin, ctx);
   if (e.code) return { code: 2, aus: rStrom([]), err: e.err.map(function (x) { return { t: x.t.replace(/^sort: ([^:]+): /, 'sort: cannot read: $1: '), d: x.d }; }) };
-  const zeilen = [].concat.apply([], e.ein.map(function (x) { return x.strom.zeilen; }));
+  const zeilen = [];
+  for (const x of e.ein) for (const z of x.strom.zeilen) zeilen.push(z);
   const r = p.hat('r'), n = p.hat('n'), u = p.hat('u');
-  const k = zeilen.map(function (z, i) { return { z: z, i: i, s: rLocaleSchluessel(z.t), n: n ? rZahl(z.t) : 0 }; });
+  const k = zeilen.map(function (z, i) { return { z: z, i: i, s: rLocaleSchluessel(z.t), n: n ? rZahl(z.t) : null }; });
   await rTakt(op);
-  const schluessel = function (a, b) { return n ? (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) : rLocaleVergleich(a.s, b.s, a.z.t, b.z.t); };
+  const schluessel = function (a, b) { return n ? rZahlVergleich(a.n, b.n) : rLocaleVergleich(a.s, b.s, a.z.t, b.z.t); };
   k.sort(function (a, b) {
     let v = schluessel(a, b);
     if (!v && n && !u) v = rLocaleVergleich(a.s, b.s, a.z.t, b.z.t);   /* letzte Stufe: ganze Zeile */
@@ -731,8 +839,10 @@ async function rUniq(op, args, stdin, ctx) {
     const g = gruppen[gruppen.length - 1];
     if (g && gleich(g.t, z.t)) { g.n++; g.d = rVereinigung(g.d, z.d); } else gruppen.push({ t: z.t, n: 1, d: z.d });
   }
+  /* -c, -d, -u hängen von Anzahlen ab: gebunden an alles in der Operation Gelesene (auch ausgefilterte Zeilen) */
+  const zaehlt = p.hat('c') || p.hat('d') || p.hat('u'), alles = zaehlt ? op.alles.liste() : null;
   const aus = gruppen.filter(function (g) { return (!p.hat('d') || g.n > 1) && (!p.hat('u') || g.n === 1); })
-    .map(function (g) { return { t: (p.hat('c') ? String(g.n).padStart(7) + ' ' : '') + g.t, d: g.d }; });
+    .map(function (g) { return { t: (p.hat('c') ? String(g.n).padStart(7) + ' ' : '') + g.t, d: zaehlt ? rVereinigung(g.d, alles, e.ein[0].deps) : g.d }; });
   return { code: 0, aus: rStrom(aus, e.ein[0].strom.offen && aus.length && gruppen.length && aus[aus.length - 1].t.endsWith(gruppen[gruppen.length - 1].t)), err: [] };
 }
 
@@ -744,10 +854,11 @@ async function rSha256(op, args, stdin, ctx) {
   const archiv = [];
   const ops = [];
   for (const name of p.operanden) {
-    const seg = name === '-' ? null : await op.fs.resolve(name, { cwd: ctx.cwd });
-    if (seg && seg[0] === TERMINAL_DB) archiv.push(name); else ops.push(name);
+    const pf = name === '-' ? null : await rAufloesen(op, rName(name));
+    if (pf && pf.seg && pf.seg[0] === TERMINAL_DB) archiv.push(rName(name)); else ops.push(name);
   }
-  const e = await rEingaben(op, 'sha256sum', ops.length || !archiv.length ? ops : [], stdin, ctx);
+  /* nur Archivoperanden: keine Prüfsumme der Standardeingabe (Review zu #141) */
+  const e = ops.length || !archiv.length ? await rEingaben(op, 'sha256sum', ops, stdin, ctx) : { ein: [], err: [], code: 0 };
   const aus = [];
   for (const x of e.ein) {
     if (x.fehlt) continue;
@@ -790,7 +901,7 @@ async function rAltStufe(op, befehl, args, stdin, ctx) {
     rPruefen(op);
     const aus = rAusAlt(r);
     if (r.archivListe && aus.some(function (z) { return terminalArchivNameZiel(terminalListenName(z.t)); })) op.archivSchutz = true;
-    aus.forEach(function (z) { op.alles.add(z.d); });
+    aus.forEach(function (z) { z.d = rBinden(op, z.d); op.alles.add(z.d); });
     return { code: r.code, aus: rStrom(aus.filter(function (z) { return z.t !== '' || !r.stdout.length; })), err: (r.stderr || []).map(function (t) { return { t: t, d: null }; }) };
   }
   /* cat, head, tail */
@@ -800,15 +911,26 @@ async function rAltStufe(op, befehl, args, stdin, ctx) {
     let z = stdin.zeilen;
     if (befehl === 'head') z = z.slice(0, pa.n);
     if (befehl === 'tail') z = pa.n === 0 ? [] : z.slice(-pa.n);
-    return { code: 0, aus: rStrom(z, befehl === 'tail' || befehl === 'cat' ? stdin.offen && z.length > 0 : false), err: [] };
+    return { code: 0, aus: rStrom(z, stdin.offen && z.length > 0 && (befehl !== 'head' || z.length === stdin.zeilen.length)), err: [] };
   }
-  for (const n of pa.namen) { const s = await op.fs.resolve(n, { cwd: ctx.cwd }); if (s) rEintrag(op); }
-  const r = await terminalLeser(befehl)(rCtx(op, args));
-  rPruefen(op);
-  if (typeof r.text === 'string') rGelesen(op, rBytes(r.text));
-  const aus = (r.stdout || []).map(function (t, i) { const d = r.schutzZeilen && r.schutzZeilen[i]; return { t: t, d: d && d.length ? d : null }; });
-  aus.forEach(function (z) { op.alles.add(z.d); });
-  return { code: r.code, aus: rStrom(aus, typeof r.text === 'string' && r.text !== '' && !r.text.endsWith('\n')), err: (r.stderr || []).map(function (t) { return { t: t, d: null }; }) };
+  /* Mit Dateioperanden: dieselben Eingaben wie wc/sort (Resolver mit Zwischenordnern, Links in /intel, Bindung, gezählte Lesebytes) */
+  const e = await rEingaben(op, befehl, pa.namen, stdin, ctx);
+  const gut = e.ein.filter(function (x) { return !x.fehlt; }), mehrere = pa.namen.length > 1;
+  const aus = [];
+  let offen = false;
+  gut.forEach(function (x, i) {
+    let z = x.strom.zeilen;
+    if (befehl === 'head') z = z.slice(0, pa.n);
+    if (befehl === 'tail') z = pa.n === 0 ? [] : z.slice(-pa.n);
+    if (befehl !== 'cat' && mehrere) { if (i) aus.push({ t: '', d: null }); aus.push({ t: '==> ' + x.name + ' <==', d: null }); offen = false; }
+    z.forEach(function (zeile, j) {
+      if (j === 0 && offen && aus.length) { const v = aus[aus.length - 1]; aus[aus.length - 1] = { t: v.t + zeile.t, d: rVereinigung(v.d, zeile.d) }; }
+      else aus.push(zeile);
+    });
+    const letzteGewaehlt = befehl !== 'head' || z.length === x.strom.zeilen.length;
+    offen = z.length ? x.strom.offen && letzteGewaehlt : offen;
+  });
+  return { code: e.code, aus: rStrom(aus, offen), err: e.err };
 }
 const R_STUFEN = { grep: rGrep, find: rFind, wc: rWc, sort: rSort, uniq: rUniq, sha256sum: rSha256 };
 
@@ -842,7 +964,7 @@ async function terminalRechercheAusfuehren(stufen, um) {
       rPruefen(op);
       const letzte = w === stufen[stufen.length - 1];
       r.err.forEach(function (z) { z.letzte = letzte; });
-      fehler.push.apply(fehler, r.err);
+      for (const z of r.err) fehler.push(z);
       code = r.code;
       /* Übergabe an die nächste Stufe: inzwischen gesperrte Zeilen fallen weg; Größe begrenzt */
       strom = rStrom(r.aus.zeilen.filter(function (z) { return !rGesperrt(z.d); }), r.aus.offen);
