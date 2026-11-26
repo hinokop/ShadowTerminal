@@ -20,6 +20,7 @@ if not exist "%~dp0terminal-locale.js" goto fehlt
 if not exist "%~dp0terminal-vfs.js" goto fehlt
 if not exist "%~dp0terminal-intel.js" goto fehlt
 if not exist "%~dp0terminal-exporte.js" goto fehlt
+if not exist "%~dp0terminal-recherche.js" goto fehlt
 if not exist "%~dp0terminal-sys.js" goto fehlt
 if not exist "%~dp0terminal-dateibefehle.js" goto fehlt
 
@@ -41,7 +42,7 @@ start "" "!EDGE!" --app="file:///!URL!index.html!SHADOW_TERMINAL_FRAGMENT!" --us
 exit /b 0
 
 :fehlt
-echo index.html, szenario.js, karte-modul.js, akten-modul.js, recherche-modul.js, fall-modul.js, terminal-locale.js, terminal-vfs.js, terminal-intel.js, terminal-exporte.js, terminal-sys.js oder terminal-dateibefehle.js fehlt neben dieser Datei.
+echo index.html, szenario.js, karte-modul.js, akten-modul.js, recherche-modul.js, fall-modul.js, terminal-locale.js, terminal-vfs.js, terminal-intel.js, terminal-exporte.js, terminal-recherche.js, terminal-sys.js oder terminal-dateibefehle.js fehlt neben dieser Datei.
 pause
 exit /b 1
 

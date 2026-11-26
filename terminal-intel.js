@@ -61,6 +61,8 @@ const INTEL = (function () {
     if (dep.art === 'zone') { const z = (PROFIL.zonen || []).find(function (x) { return x.id === dep.id; }); return !!z && zoneGesperrt(z); }
     /* Herkunft eines verwalteten Exports (Paket 4, M4): ursprüngliche Abhängigkeiten UND Bindung; fehlende oder ungültige Herkunft gilt als gesperrt
        (fail closed), damit auch ein früher ausgegebener Name nach Sperre, Identitätswechsel oder Löschung aus dem Scrollback verschwindet */
+    /* Name aus einer Archivlistung in einer Pipeline (Paket 5): gesperrt, solange der Name nach der Archivregel nicht sichtbar ist */
+    if (dep.art === 'archivname') return typeof terminalArchivNameSichtbar === 'function' && !terminalArchivNameSichtbar(dep.name);
     if (dep.art === 'herkunft') return !Array.isArray(dep.deps) || !dep.deps.length || !Array.isArray(dep.bindung) || !dep.bindung.length || dep.deps.some(gesperrt) || !dep.bindung.every(bindungGueltig);
     return false;
   }
