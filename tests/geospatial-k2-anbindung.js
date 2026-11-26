@@ -36,7 +36,7 @@ function assertCamera(actual,expected){
  const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
   const p=await b.newPage({viewport:{width:1500,height:1100},reducedMotion:'reduce'});p.setDefaultTimeout(25000);
-  const errors=[],anfragen=[],bildAnfragen=[];let netz='ok',einzelFehler=0,bildFehler=false;p.on('pageerror',e=>errors.push(e.message));
+  const errors=[],anfragen=[],bildAnfragen=[];let netz='ok',einzelFehler=0,bildFehler=false,berlinFehler=false;p.on('pageerror',e=>errors.push(e.message));
   const Q=require('../karte-v2-quellen');
   const tile='https://tiles.basemaps.cartocdn.com/v/fixture/vectortiles/test/{z}/{x}/{y}.mvt';
   // Leere, aber gültige MVT-Layer (Name buildings, Version 2, Extent 4096).
@@ -48,9 +48,9 @@ function assertCamera(actual,expected){
   ]};
   const route=async r=>{
     const u=new URL(r.request().url()),bare=u.origin+u.pathname;
-    if(u.hostname==='gdi.berlin.de'){
+    if(['gdi.berlin.de','isk.geobasis-bb.de'].includes(u.hostname)){
       bildAnfragen.push({url:u.href,referer:r.request().headers().referer||''});
-      if(bildFehler)return r.fulfill({status:500,body:'fixture',headers:{'access-control-allow-origin':'*'}});
+      if(bildFehler||(berlinFehler&&u.hostname==='gdi.berlin.de'))return r.fulfill({status:500,body:'fixture',headers:{'access-control-allow-origin':'*'}});
       return r.fulfill({body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAABlBMVEU/fFsAAABwZYnaAAAAH0lEQVR42u3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAvg0hAAABYOSdlwAAAABJRU5ErkJggg==','base64'),contentType:'image/png',headers:{'access-control-allow-origin':'*','cache-control':'no-store'}});
     }
     if(bare===Q.stil('voyager')||bare===Q.stil('dunkel')){
@@ -180,7 +180,10 @@ function assertCamera(actual,expected){
   // lokale Objekte, Kamera und Messung erhalten; kein automatischer Providerwechsel.
   netz='ok';
   const vorBild=anfragen.length, vorherBild=bildAnfragen.length;
-  await p.click('#k-v2-berlin2024');
+  assert.equal(await p.locator('#k-v2-luftbild').innerText(),'Luftbild');
+  assert.equal(await p.locator('#k-v2-berlin2024').count(),0);
+  assert.equal(await p.locator('#k-v2-bildwahl').isVisible(),false);
+  await p.click('#k-v2-luftbild');
   try{await status('Bildkacheln geladen');}
   catch(e){throw Error('Anwendungs-Luftbild: '+await p.locator('#k-v2-status').innerText()+'; WMS-Anfragen: '+bildAnfragen.length,{cause:e});}
   assert.ok(bildAnfragen.length>vorherBild);assert.equal(anfragen.length,vorBild,'kein CARTO-Abruf bei Bildwahl');
@@ -192,22 +195,33 @@ function assertCamera(actual,expected){
   await status('Bildkacheln geladen');
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
-  assert.equal(await p.locator('#k-v2-berlin2024').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.locator('#k-v2-luftbild').getAttribute('aria-pressed'),'true');
+  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[14.33,51.76],zoom:14,duration:0}));
+  await status('Brandenburg / Berlin DOP20');await status('Bildkacheln geladen');
+  assert.equal(await p.locator('#k-v2-bildwahl').inputValue(),'auto');
+  await p.selectOption('#k-v2-bildwahl','berlin2024');await status('Mittelpunkt außerhalb des Anfragebereichs');
+  await p.evaluate(()=>renderModule());await status('Mittelpunkt außerhalb des Anfragebereichs');
+  assert.equal(await p.locator('#k-v2-bildwahl').inputValue(),'berlin2024');
+  await p.selectOption('#k-v2-bildwahl','auto');await status('Brandenburg / Berlin DOP20');await status('Bildkacheln geladen');
   await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[8.138,49.350],zoom:14,duration:0}));
   await status('Mittelpunkt außerhalb des Anfragebereichs');
-  assert.equal(await p.locator('#k-v2-berlin2024').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.locator('#k-v2-luftbild').getAttribute('aria-pressed'),'true');
   await p.evaluate(cam=>KARTE_V2_DEV.adapter().flyTo({...cam,duration:0}),cam);
   await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().center[0]>13);
   await p.click('#k-v2-leer');await status('Ohne Basiskarte');
-  // Komplettausfall eines expliziten Bildabrufs: lokale Objektlayer bleiben.
+  // Automatischer Rückfall auf die zweite zugelassene Quelle.
+  berlinFehler=true;
+  await p.click('#k-v2-luftbild');await status('Brandenburg / Berlin DOP20');
+  await status('Bildkacheln geladen');await status('Automatischer Quellenrückfall');
   bildFehler=true;
-  await p.click('#k-v2-berlin2024');await status('Luftbild nicht verfügbar');
+  await p.selectOption('#k-v2-bildwahl','berlin2024');await status('Luftbild nicht verfügbar');
+  berlinFehler=false;
   await rueckfallTreffer();
   bildFehler=false;
   for(const a of bildAnfragen){
     const u=new URL(a.url),bb=u.searchParams.get('bbox').split(',').map(Number);
     assert.ok(bb.length===4&&bb.every(Number.isFinite)&&bb[0]<bb[2]&&bb[1]<bb[3]);
-    assert.equal(u.pathname,'/services/wms/truedop_2024');assert.ok(!u.searchParams.has('key')&&!a.referer);
+    assert.equal(u.pathname,u.hostname==='gdi.berlin.de'?'/services/wms/truedop_2024':'/mapproxy/dop20c/service/wms');assert.ok(!u.searchParams.has('key')&&!a.referer);
   }
   assert.equal(anfragen.length,vorBild,'kein automatischer CARTO-Rückfall');
   await p.evaluate(()=>{VIEW.karte.messen=false;VIEW.karte.messPts=[];karteRendererDatenAktualisieren();});

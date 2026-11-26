@@ -11,7 +11,7 @@
   }
   // Die Lagekarte hat Datei- und Browserquelle bereits aufgelöst (Browser hat Vorrang).
   const lokalKey=()=>typeof VIEW.karte.cartoKey==='string'?VIEW.karte.cartoKey.trim():'';
-  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter',berlin2024:'Berlin Luftbild 2024'};
+  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter',luftbild:'Luftbild'};
   const STIL_RAM_MS=10*60*1000; // begrenzte Wiederverwendung, nur beim Neuaufbau
   /* Nur Sitzungs-RAM: Kamera, explizite Stilwahl, Gebäudewunsch; kein Schlüssel,
      keine Objekte, keine persistente Speicherung. Gemeinsame Kamera folgt in K4. */
@@ -20,6 +20,9 @@
     for(const n of Object.keys(namen)){
       const el=$('k-v2-'+n);if(el){el.disabled=!c.a;el.setAttribute('aria-pressed',String(c.modus===n));}
     }
+    const row=$('k-v2-bildwahl-zeile'), sel=$('k-v2-bildwahl');
+    if(row)row.hidden=c.modus!=='luftbild';
+    if(sel){sel.disabled=!c.a||c.modus!=='luftbild';sel.value=c.bildWahl;}
   }
   function gebaeudeKnoepfe(c){
     if(!aktiv(c))return;
@@ -64,49 +67,85 @@
   }
   function rueckfall(c,grund){
     if(!aktiv(c)||!c.a)return;
-    ++c.generation;stop(c);c.modus='leer';c.phase='lokal';c.key='';c.stilCache=null;c.stilKandidat=null;kachelReset(c);
+    ++c.generation;stop(c);c.modus='leer';c.phase='lokal';c.bildQuelle=null;c.bildSourceId=null;c.key='';c.stilCache=null;c.stilKandidat=null;kachelReset(c);
     try{c.a.setStyle(KARTE_V2_QUELLEN.leererStil());sync();}catch(e){}
     knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,grund+' · Lokale Objektlayer bleiben verfügbar.');
   }
-  /* K2d-2a: ein explizit gewählter amtlicher Rasterdienst, ohne CARTO-Key.
-     Außerhalb des groben Anfragebereichs bleibt die Auswahl aktiv; tatsächliche
-     Abdeckung (auch transparente Kacheln) ist nur visuell nachweisbar. */
+  /* K2d-2b: Modus unabhängig von der Quelle. Automatik wählt nur aus
+     der freigegebenen Liste anhand Mittelpunkt/Zoom; keine Abdeckungsgarantie.
+     Keine automatische Freischaltung weiterer Dienste oder Kostenquellen. */
+  function bildPosition(c){return c.map.getCenter().wrap().toArray();}
+  function bildKandidaten(c){
+    const Q=KARTE_V2_QUELLEN, center=bildPosition(c), zoom=c.map.getZoom();
+    if(c.bildWahl!=='auto')return Q.bildBereich(c.bildWahl,center,zoom)==='kandidat'?[c.bildWahl]:[];
+    return Q.bildKandidaten(center,zoom,c.bildAusgefallen);
+  }
   function bildStatus(c){
     if(!aktiv(c)||c.phase!=='bild')return;
-    const Q=KARTE_V2_QUELLEN, info=Q.bildInfo(c.modus);
-    const bereich=Q.bildBereich(c.modus,c.map.getCenter().toArray(),c.map.getZoom());
+    const Q=KARTE_V2_QUELLEN;
+    if(!c.bildQuelle){
+      const ids=c.bildWahl==='auto'?Q.bildListe().map(q=>q.id):[c.bildWahl];
+      const bereiche=ids.map(id=>Q.bildBereich(id,bildPosition(c),c.map.getZoom()));
+      const grund=bereiche.includes('kandidat')?'Keine geeignete Bildquelle verfügbar.':
+        bereiche.includes('uebersicht')?'Weiter hineinzoomen.':'Mittelpunkt außerhalb des Anfragebereichs.';
+      hinweis(c,'Luftbild · '+grund+' Lokale Objektlayer bleiben verfügbar.');
+      return;
+    }
+    const info=Q.bildInfo(c.bildQuelle);
+    const bereich=Q.bildBereich(c.bildQuelle,bildPosition(c),c.map.getZoom());
     const over=c.map.getZoom()>info.maxzoom-Math.log2(512/info.tileSize);
     if(bereich!=='kandidat'||c.kachelGeladen){
       clearTimeout(c.timer);c.timer=null;
     }else if(c.timer===null){
       const g=c.generation;
       c.timer=setTimeout(()=>{
-        if(aktiv(c)&&c.generation===g&&c.phase==='bild'&&!c.kachelGeladen)rueckfall(c,'Luftbild-Zeitlimit erreicht');
+        if(aktiv(c)&&c.generation===g&&c.phase==='bild'&&!c.kachelGeladen)bildAusfall(c,'Luftbild-Zeitlimit erreicht');
       },25000);
     }
     const stand=bereich==='ausserhalb'?'Mittelpunkt außerhalb des Anfragebereichs.':
       bereich==='uebersicht'?'Weiter hineinzoomen.':
       c.kachelGeladen?'Bildkacheln geladen (seit Auswahl); tatsächliche Abdeckung visuell prüfen.':'Noch keine Bildkachel bestätigt.';
-    hinweis(c,info.name+' · nominal '+Math.round(info.gsd*100)+' cm · '+stand+
+    hinweis(c,info.name+' · '+info.aufnahme+' · nominal '+Math.round(info.gsd*100)+' cm · '+stand+
+      (c.bildAusgefallen.length?' Automatischer Quellenrückfall.':'')+
       (c.kachelWarnung||c.ressourcenWarnung?' Teil-/Ladefehler.':'')+
       (c.objektWarnung?' Fehler in lokalen Objektlayern.':'')+
       (over?' Overzoom, keine zusätzliche Bildinformation.':''));
   }
-  function bildWechseln(c,n){
-    ++c.generation;stop(c);kachelReset(c);c.key='';c.stilCache=null;c.stilKandidat=null;
-    c.modus=n;c.phase='bild';c.quellen=new Set([KARTE_V2_QUELLEN.BILD_ID]);
-    knoepfe(c);gebaeudeKnoepfe(c);
-    try{c.a.setStyle(KARTE_V2_QUELLEN.bildStil(n));sync();bildStatus(c);}
-    catch(e){rueckfall(c,'Luftbild nicht verfügbar');}
+  function bildAusfall(c,grund){
+    if(!aktiv(c)||c.phase!=='bild')return;
+    if(c.bildWahl==='auto'&&c.bildQuelle){
+      if(!c.bildAusgefallen.includes(c.bildQuelle))c.bildAusgefallen.push(c.bildQuelle);
+      bildAktualisieren(c);
+    }else rueckfall(c,grund);
   }
-  async function wechseln(c,n,cache=null){
+  function bildAktualisieren(c,erzwingen=false){
+    if(!aktiv(c)||c.phase!=='bild')return;
+    const Q=KARTE_V2_QUELLEN, id=bildKandidaten(c)[0]||null;
+    if(!erzwingen&&id===c.bildQuelle){bildStatus(c);return;}
+    ++c.generation;stop(c);kachelReset(c);c.key='';c.stilCache=null;c.stilKandidat=null;
+    c.bildQuelle=id;c.bildSourceId=id?Q.BILD_ID+'-'+c.generation:null;
+    if(id)c.quellen=new Set([c.bildSourceId]);
+    try{c.a.setStyle(id?Q.bildStil(id,c.bildSourceId):Q.leererStil());sync();bildStatus(c);}
+    catch(e){bildAusfall(c,'Luftbild nicht verfügbar');}
+  }
+  function bildWechseln(c,wieder=false){
+    c.modus='luftbild';c.phase='bild';
+    if(!wieder)c.bildAusgefallen=[];
+    knoepfe(c);gebaeudeKnoepfe(c);bildAktualisieren(c,true);
+  }
+  function bildManuell(wahl){
+    const c=kontext;
+    if(!aktiv(c)||c.phase!=='bild'||(wahl!=='auto'&&!KARTE_V2_QUELLEN.bildInfo(wahl)))return;
+    c.bildWahl=wahl;c.bildAusgefallen=[];bildAktualisieren(c,true);
+  }
+  async function wechseln(c,n,cache=null,wieder=false){
     if(!aktiv(c)||!c.a||!Object.hasOwn(namen,n))return;
     if(n==='leer'){rueckfall(c,'Ohne Basiskarte');return;}
-    if(KARTE_V2_QUELLEN.bildInfo(n)){bildWechseln(c,n);return;}
+    if(n==='luftbild'){bildWechseln(c,wieder);return;}
     const key=lokalKey();
     if(!key){rueckfall(c,'Kein lokaler CARTO-Schlüssel');return;}
     const Q=KARTE_V2_QUELLEN, g=++c.generation;stop(c);kachelReset(c);
-    c.modus=n;c.phase='abruf';c.key=key;c.stilCache=null;c.stilKandidat=null;knopfhilfe();
+    c.modus=n;c.phase='abruf';c.bildQuelle=null;c.bildSourceId=null;c.key=key;c.stilCache=null;c.stilKandidat=null;knopfhilfe();
     function knopfhilfe(){knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,namen[n]+' wird geladen.');}
     const ac=new AbortController();c.abort=ac;
     c.timer=setTimeout(()=>{if(aktiv(c)&&c.generation===g)rueckfall(c,'CARTO-Zeitlimit erreicht');},25000);
@@ -154,6 +193,10 @@
       h('div',{class:'pad'},h('strong',null,'MapLibre – lokale Entwicklungsansicht'),
         h('div',{style:'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;'},
           ...Object.keys(namen).map(n=>h('button',{type:'button',id:'k-v2-'+n,disabled:true,'aria-pressed':String(n==='leer'),onclick:()=>wechseln(kontext,n)},namen[n]))),
+        h('div',{id:'k-v2-bildwahl-zeile',hidden:true,style:'margin-top:8px;'},
+          h('label',{for:'k-v2-bildwahl'},'Bildquelle '),
+          h('select',{id:'k-v2-bildwahl',disabled:true,onchange:e=>bildManuell(e.target.value)},
+            h('option',{value:'auto'},'Automatisch'))),
         h('div',{style:'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;'},
           h('button',{type:'button',id:'k-v2-flach',disabled:true,'aria-pressed':'true',onclick:()=>neigung(kontext,0)},'2D'),
           h('button',{type:'button',id:'k-v2-geneigt',disabled:true,'aria-pressed':'false',onclick:()=>neigung(kontext,60)},'3D-Neigung'),
@@ -161,7 +204,7 @@
         h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die Lagekarte. Die gemeinsame Kamera folgt später.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('p',{class:'note',id:'k-v2-status',role:'status'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.'),
-        h('small',null,'Bei Online-Auswahl sieht der jeweilige Anbieter Kartenausschnitt und IP, CARTO zusätzlich den Schlüssel. Luftbild Berlin: Geoportal Berlin, TrueDOP 2024, dl-de-zero-2.0. © OpenStreetMap-Mitwirkende, © CARTO.')),
+        h('small',null,'Bei Online-Auswahl sieht der jeweilige Anbieter Kartenausschnitt und IP, CARTO zusätzlich den Schlüssel. Die Bildquelle und ihre Metadaten werden im Status und in der Kartenattribution ausgewiesen. © OpenStreetMap-Mitwirkende, © CARTO.')),
       h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:420px;min-height:240px;background:#101820;border:1px solid var(--border);'}));
   }
   function auswahl(modell){
@@ -197,7 +240,7 @@
       try{
         const kamera=c.a.camera();
         if(kamera)sitzung={kamera,modus:c.modus,gebaeude:c.gebaeude,
-          stilCache:c.key&&c.key===lokalKey()?c.stilCache:null};
+          stilCache:c.key&&c.key===lokalKey()?c.stilCache:null,bildWahl:c.bildWahl,bildAusgefallen:c.bildAusgefallen.slice()};
       }catch(e){sitzung=null;}
     }
     if(!c)return;
@@ -212,16 +255,17 @@
     if(!el||!status||document.body.classList.contains('locked'))return;
     if(kontext)unmount(true);
     const alt=sitzung;
-    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null};
+    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,bildWahl:alt?.bildWahl||'auto',bildAusgefallen:alt?.bildAusgefallen?.slice()||[],bildQuelle:null,bildSourceId:null,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null};
     kachelReset(c);kontext=c;
     bibliothek().then(()=>{
       if(!aktiv(c))return;
-      const K=VIEW.karte;
+      const K=VIEW.karte, sel=$('k-v2-bildwahl');
+      if(sel)for(const q of KARTE_V2_QUELLEN.bildListe())sel.appendChild(h('option',{value:q.id},q.name));
       c.map=new maplibregl.Map({container:el,style:KARTE_V2_QUELLEN.leererStil(),
         ...(alt?.kamera||{center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5))}),attributionControl:true,
         transformRequest:url=>KARTE_V2_QUELLEN.cartoRequest(url,c.key)});
       c.map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
-      c.map.on('moveend',()=>{gebaeudeKnoepfe(c);bildStatus(c);});
+      c.map.on('moveend',()=>{gebaeudeKnoepfe(c);bildAktualisieren(c);});
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
       c.map.on('sourcedata',e=>{
         if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase)||!c.quellen.has(e.sourceId)||e.tile?.state!=='loaded')return;
@@ -231,11 +275,14 @@
       c.map.on('error',e=>{
         if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase))return;
         if(kachelFehlerEintragen(c,e)){if(c.phase==='bild')bildStatus(c);return;}
+        if(c.phase==='bild'&&e?.sourceId?.startsWith(KARTE_V2_QUELLEN.BILD_ID+'-')){
+          if(e.sourceId===c.bildSourceId){c.ressourcenWarnung=true;bildStatus(c);}return;
+        }
         if(e?.sourceId?.startsWith('shadow-v2-')){
           c.objektWarnung=true;hinweis(c,'Eigene Kartenlayer konnten nicht aufgebaut werden.');return;
         }
         if(c.phase==='bild'){
-          if(e?.sourceId===KARTE_V2_QUELLEN.BILD_ID||!e?.sourceId){c.ressourcenWarnung=true;bildStatus(c);}
+          if(!e?.sourceId&&c.bildQuelle){c.ressourcenWarnung=true;bildStatus(c);}
           return;
         }
         if(c.phase==='kacheln')rueckfall(c,'CARTO-Ressource nicht verfügbar');
@@ -244,18 +291,19 @@
       c.map.on('idle',()=>{
         if(!aktiv(c)||!c.a.ready())return;
         if(c.phase==='bild'){
+          if(!c.bildQuelle){bildStatus(c);return;}
           if(!c.map.areTilesLoaded())return;
           if(!c.kachelGeladen&&(c.kachelWarnung||c.ressourcenWarnung)&&
-             KARTE_V2_QUELLEN.bildBereich(c.modus,c.map.getCenter().toArray(),c.map.getZoom())==='kandidat'){
-            rueckfall(c,'Luftbild nicht verfügbar');return;
+             KARTE_V2_QUELLEN.bildBereich(c.bildQuelle,bildPosition(c),c.map.getZoom())==='kandidat'){
+            bildAusfall(c,'Luftbild nicht verfügbar');return;
           }
           // Wie beim Vektorstil einzelne Ausfälle tolerieren; nach erfolgreichem
           // Start erst bei einer Häufung ohne neuen Erfolg im Anfragebereich zurückfallen.
           const jetzt=Date.now();
           for(const [id,t] of c.kachelFehler)if(jetzt-t>10000)c.kachelFehler.delete(id);
           if(c.kachelGeladen&&!c.kachelErfolg&&c.kachelFehler.size>=3&&
-             KARTE_V2_QUELLEN.bildBereich(c.modus,c.map.getCenter().toArray(),c.map.getZoom())==='kandidat'){
-            rueckfall(c,'Luftbild nicht verfügbar');return;
+             KARTE_V2_QUELLEN.bildBereich(c.bildQuelle,bildPosition(c),c.map.getZoom())==='kandidat'){
+            bildAusfall(c,'Luftbild nicht verfügbar');return;
           }
           if(c.kachelErfolg){
             if(!c.kachelFehler.size)c.kachelWarnung=false;
@@ -287,7 +335,7 @@
       });
       knoepfe(c);gebaeudeKnoepfe(c);
       sync();
-      if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.stilCache);
+      if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.stilCache,true);
     }).catch(()=>{
       if(!aktiv(c))return;
       hinweis(c,'Lokale MapLibre-Ansicht nicht verfügbar. Bestehende Karte bleibt verfügbar.');

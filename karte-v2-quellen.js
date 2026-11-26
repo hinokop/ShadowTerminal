@@ -109,6 +109,13 @@
       attribution:'Geoportal Berlin · TrueDOP 2024 · dl-de-zero-2.0',
       bounds:Object.freeze([13.07,52.33,13.78,52.69]),minzoom:10,maxzoom:19,tileSize:256,
       url:'https://gdi.berlin.de/services/wms/truedop_2024?service=WMS&version=1.3.0&request=GetMap&layers=truedop_2024&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true'
+    }),
+    brandenburg:Object.freeze({
+      name:'Brandenburg / Berlin DOP20',anbieter:'LGB',art:'Orthophoto',
+      aufnahme:'Aufnahmezeit je Kachel unbekannt',gsd:0.20,lizenz:'dl-de/by-2-0',
+      attribution:'© GeoBasis-DE/LGB, dl-de/by-2-0; © Geoportal Berlin, dl-de/by-2-0',
+      bounds:Object.freeze([11.2,51.35,14.8,53.6]),minzoom:10,maxzoom:19,tileSize:256,
+      url:'https://isk.geobasis-bb.de/mapproxy/dop20c/service/wms?service=WMS&version=1.3.0&request=GetMap&layers=bebb_dop20c&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/jpeg'
     })
   });
   const BILD_ID='shadow-v2-bild', BILD_LAYER='shadow-v2-bild-raster';
@@ -124,15 +131,22 @@
     if(zoom<q.minzoom-Math.log2(512/q.tileSize))return 'uebersicht';
     return 'kandidat'; // tatsächliche Abdeckung/Schärfe erst visuell nachweisbar
   }
-  function bildStil(id){
+  function bildListe(){return Object.keys(BILDQUELLEN).map(id=>({id,...bildInfo(id)}));}
+  // Reihenfolge: feinere nominelle GSD, bei Gleichstand die spezifischere
+  // regionale Referenz (Berlin vor BB-BE). Nur freigegebene feste Liste.
+  function bildKandidaten(center,zoom,ausgeschlossen=[]){
+    return bildListe().filter(q=>!ausgeschlossen.includes(q.id)&&bildBereich(q.id,center,zoom)==='kandidat')
+      .sort((a,b)=>a.gsd-b.gsd).map(q=>q.id);
+  }
+  function bildStil(id,sourceId=BILD_ID){
     if(!Object.hasOwn(BILDQUELLEN,id))throw Error('Unbekannte Bildquelle');
     const q=BILDQUELLEN[id],s=leererStil();
-    s.sources[BILD_ID]={type:'raster',tiles:[q.url],tileSize:q.tileSize,bounds:q.bounds.slice(),
+    s.sources[sourceId]={type:'raster',tiles:[q.url],tileSize:q.tileSize,bounds:q.bounds.slice(),
       minzoom:q.minzoom,maxzoom:q.maxzoom,attribution:q.attribution};
-    s.layers.push({id:BILD_LAYER,type:'raster',source:BILD_ID,paint:{'raster-fade-duration':0}});
+    s.layers.push({id:BILD_LAYER,type:'raster',source:sourceId,paint:{'raster-fade-duration':0}});
     return s;
   }
-  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, styleCachebar, GEBAEUDE_ID, HAUSNUMMER_ID, bildInfo, bildBereich, bildStil, BILD_ID, BILD_LAYER });
+  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, styleCachebar, GEBAEUDE_ID, HAUSNUMMER_ID, bildInfo, bildBereich, bildListe, bildKandidaten, bildStil, BILD_ID, BILD_LAYER });
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KARTE_V2_QUELLEN = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -111,6 +111,24 @@ assert.equal(Q.vektorStil(raster),false);
 bild.bounds[0]=0;bq.bounds[0]=0;
 assert.equal(Q.bildInfo('berlin2024').bounds[0],13.07);
 assert.equal(Q.bildStil('berlin2024').sources[Q.BILD_ID].bounds[0],13.07);
+const liste=Q.bildListe();
+assert.deepEqual(liste.map(q=>q.id),['berlin2024','brandenburg']);
+assert.ok(liste.every(q=>!Object.hasOwn(q,'url')));
+liste[0].bounds[0]=0;assert.equal(Q.bildInfo('berlin2024').bounds[0],13.07);
+assert.deepEqual(Q.bildKandidaten([13.405,52.52],14),['berlin2024','brandenburg']);
+assert.deepEqual(Q.bildKandidaten([13.405,52.52],14,['berlin2024']),['brandenburg']);
+assert.deepEqual(Q.bildKandidaten([13.405,52.52],14,['berlin2024','brandenburg']),[]);
+assert.deepEqual(Q.bildKandidaten([14.33,51.76],14),['brandenburg']);
+assert.deepEqual(Q.bildKandidaten([8.138,49.350],14),[]);
+assert.deepEqual(Q.bildKandidaten([13.405,52.52],8),[]);
+assert.deepEqual(Q.bildKandidaten([NaN,52.52],14),[]);
+const bb=Q.bildStil('brandenburg','shadow-v2-bild-42');
+assert.equal(bb.layers.at(-1).source,'shadow-v2-bild-42');
+assert.equal(bb.sources['shadow-v2-bild-42'].type,'raster');
+assert.ok(bb.sources['shadow-v2-bild-42'].attribution.includes('© Geoportal Berlin'));
+assert.ok(bb.sources['shadow-v2-bild-42'].tiles[0].includes('layers=bebb_dop20c'));
+assert.deepEqual(Q.cartoRequest(bb.sources['shadow-v2-bild-42'].tiles[0],key),{url:bb.sources['shadow-v2-bild-42'].tiles[0]});
+
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'shadow-maplibre-'));
 try {
   const pkg=path.join(__dirname,'node_modules','maplibre-gl'), ziel=path.join(tmp,'vendor');
