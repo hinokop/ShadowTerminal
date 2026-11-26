@@ -83,6 +83,31 @@ const { APP } = require('./_pfad');
     assert.deepEqual(gesperrt.zone, []); assert.deepEqual(gesperrt.frameZone, []);
     await p.evaluate(id => dispatch({ type: 'DOSSIER_ENTSPERREN', id }), f.a);
     assert.deepEqual(await snapshot(), vor, 'Identität bleibt nach Entsperrung stabil');
+    /* Gezielter Sprung zeigt nur die richtige Sichtung auch bei deaktivierter Ebene. */
+    const spr = await p.evaluate(f => {
+      VIEW.karte.ebenen.sichtungen = false;
+      const ok = karteSichtungZeigen(f.b, f.si, 14);
+      return {ok, sicht: karteMarker().filter(x => x.kat === 'sichtung').map(x => x.entId), key: karte3dDaten().auswahlRenderKey};
+    }, f);
+    assert.deepEqual(spr, {ok:true, sicht:[f.b], key:zweiter});
+    assert.match(await p.locator('#k-auswahl').innerText(), /K1b Sued/);
+    await p.evaluate(f => {
+      VIEW.karte.ebenen.sichtungen = true;
+      dispatch({type:'NAVIGATION',modul:'dossier'}); STATE.dossiers.auswahl=f.a; renderModule();
+    }, f);
+    await p.locator('#btn-dk-sichtung').click();
+    assert.equal(await p.evaluate(() => karte3dDaten().auswahlRenderKey), schluessel);
+    assert.match(await p.locator('#k-auswahl').innerText(), /K1b Nord/);
+    const fallTerminal = await p.evaluate(f => {
+      const px = PROFIL.pins.find(x => x.id === f.pin), si = STATE.dossiers.entitaeten[f.a].sichtungen.at(-1);
+      si.pin = px.id; px.sichtung = si.id;
+      const t = terminalPinZeigen(px), tk = karte3dDaten().auswahlRenderKey;
+      xSichtungsZiel(si, px); const fk = karte3dDaten().auswahlRenderKey;
+      dispatch({type:'DOSSIER_SPERREN',id:f.a});
+      const block = karteSichtungZeigen(f.a,f.si,14);
+      return {t,tk,fk,block};
+    },f);
+    assert.deepEqual(fallTerminal,{t:true,tk:schluessel,fk:schluessel,block:false});
     assert.deepEqual(errors, []);
     console.log('OK: gemeinsames Kartenmodell, typisierte SI-Identitäten, Koordinatenkopie und Sperrstand');
   } finally { await b.close(); }

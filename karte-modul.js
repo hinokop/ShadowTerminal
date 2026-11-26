@@ -126,12 +126,12 @@ function karteMarker() {
   });
   if (def && Z.route !== false) MS(def.id).zugriff.forEach(function (z) { if (z.ll) out.push({ id: z.id, kat: 'zugriff', name: z.typ + ' ' + z.id, ll: z.ll, r: z.r || 0, zp: z }); });
   if (Z.pins !== false) (PROFIL.pins || []).forEach(function (x) { if (x.ll && !pinGesperrt(x)) out.push({ id: x.id, kat: 'pin', name: x.name, ll: x.ll }); });   /* Pin eines gesperrten Dossiers wie dessen Sichtungen: nicht gezeichnet */
-  const fokus = VIEW.karte.sichtungFokus || null;             /* gezielt angesprungene Sichtung: auch wenn älter als die letzten drei oder die Ebene ausgeblendet ist */
+  const fokus = VIEW.karte.sichtungFokus || null;             /* gezielt angesprungene Sichtung: auch wenn älter als die letzten drei oder die Ebene ausgeblendet ist; Schlüssel enthält Dossierkontext */
   if (Z.sichtungen !== false || fokus) dossierRechercheBestand().forEach(function (e) {
     if (dossierGesperrt(e)) return;
     const d = STATE.dossiers.entitaeten[e.id], alle = (d && d.sichtungen) || [], sicht = Z.sichtungen !== false ? alle.slice(-3) : [];
     if (Z.sichtungen !== false) alle.forEach(function (si) { if (si.pin && sicht.indexOf(si) < 0 && sichtungPin(si, e.id)) sicht.push(si); });          /* Sichtung mit Ursprungspin wird immer gezeichnet, sonst fehlte beides */
-    if (fokus) { const f = alle.find(function (x) { return x.id === fokus; }); if (f && sicht.indexOf(f) < 0) sicht.push(f); }
+    if (fokus) { const f = alle.find(function (x) { return karteRenderSchluessel('sichtung', x.id, e.id) === fokus; }); if (f && sicht.indexOf(f) < 0) sicht.push(f); }
     sicht.forEach(function (si) {
       const k = sichtungKoord(si);
       if (k) out.push({ id: si.id, kat: 'sichtung', typ: 'Sichtung', name: e.id + ' ' + e.name + (si.ort ? ' · ' + si.ort : ''), ll: k.ll, genau: k.genau, bez: k.bez, entId: e.id, si: si, guete: sichtungGuete(si), unM: sichtungRadiusM(si, k.genau) });
@@ -1283,13 +1283,32 @@ function karteWaehlen(id, zentrieren, renderKey) {
   const m = id ? (marker || (karteKoord(id) ? { ll: karteKoord(id) } : null) || (karteZoneFinden(id) ? { ll: karteZoneFinden(id).ll } : null)) : null;
   const neuKey = marker ? karteMarkerSchluessel(marker) : null;
   if (K.auswahl !== id || karteAuswahlSchluessel() !== neuKey) K.popupVersatz = null;
-  if (K.sichtungFokus && K.sichtungFokus !== id) K.sichtungFokus = null;
+  if (K.sichtungFokus && K.sichtungFokus !== neuKey) K.sichtungFokus = null;
   K.auswahl = id; K.auswahlIdentitaet = neuKey ? { id: id, key: neuKey } : null; K.mehr = [];
   const svg = $('k-svg');
   if (zentrieren && m) { karteFlug(m.ll[0], m.ll[1], Math.max(K.zoom, 11), karteAuswahlAnzeige, id); }
   else if (svg) zeichneKarte(svg);
   karteAuswahlAnzeige();
   if (K.ansicht3d) karte3dSenden(karteAuswahlNachricht());
+}
+/* Gezielter Sprung aus anderen Modulen: erst Berechtigung und tatsächlichen Eintrag prüfen,
+   dann die Ansicht öffnen. Bei gleicher SI-Nummer niemals ein anderes Dossier wählen. */
+function karteSichtungZeigen(entId, sid, zoom) {
+  const e = entitaet(entId);
+  if (!e || dossierGesperrt(e)) return false;
+  const d = STATE.dossiers.entitaeten[entId], treffer = ((d && d.sichtungen) || []).filter(function (x) { return x.id === sid; });
+  if (treffer.length !== 1) return false;
+  const ort = sichtungKoord(treffer[0]);
+  if (!ort || !ort.ll) return false;
+  const K = VIEW.karte, key = karteRenderSchluessel('sichtung', sid, entId);
+  K.pick = null; K.reiter = 'karte'; K.sichtungFokus = key;
+  K.init = true; K.lat = ort.ll[0]; K.lon = ort.ll[1]; K.zoom = Math.max(K.zoom, zoom || 14);
+  K.auswahl = sid; K.auswahlIdentitaet = { id: sid, key: key }; K.popupVersatz = null;
+  dispatch({ type: 'NAVIGATION', modul: 'karte' });
+  renderModule();
+  if (!karteMarkerFinden(sid, key)) return false;
+  karteWaehlen(sid, true, key);
+  return true;
 }
 /* Weiche Kamerafahrt (550 ms); ohne Bewegungsreduktion */
 function karteFlug(lat, lon, zoom, fertig, bezugId) {

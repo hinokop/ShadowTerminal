@@ -3345,7 +3345,8 @@ function sichtungLetzteMitOrt(e) {
 function sichtungKnopf(e) {
   const st = sichtungsStart(e), letzte = sichtungLetzteMitOrt(e);
   const zurKarte = function (ll, zoom, wahl) {
-    const K = VIEW.karte; K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, zoom); K.sichtungFokus = wahl && /^SI-/.test(wahl) ? wahl : null;
+    if (wahl && /^SI-/.test(wahl)) { karteSichtungZeigen(e.id, wahl, zoom); return; }
+    const K = VIEW.karte; K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, zoom); K.sichtungFokus = null;
     VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
     if (wahl) setTimeout(function () { if (typeof karteWaehlen === 'function') karteWaehlen(wahl, true); }, 0);
   };
