@@ -188,7 +188,7 @@ const fsAufruf = (p, ausdruck, ...a) => p.evaluate(([x, args]) => new Function('
     assert.equal((await fsAufruf(p, "TERMINAL_FS.schreiben(['home','raizo','a/b'], 'a')")).fehler, 'EINVAL', 'Name mit Schrägstrich');
     assert.equal((await fsAufruf(p, "TERMINAL_FS.schreiben(['home','raizo','x'.repeat(256)], 'a')")).fehler, 'ENAMETOOLONG');
     await s.lauf('touch Datei datei DATEI');
-    assert.match(await s.lauf('ls -1 | cat'), /pipes, redirections and substitutions are not supported/, 'Pipes bleiben ausgeschlossen');
+    assert.match(await s.lauf('ls -1 < x'), /pipes, redirections and substitutions are not supported/, 'Eingabeumleitung bleibt ausgeschlossen');   /* Pipes seit Paket 5 */
     assert.deepEqual((await s.lauf('ls')).split('\n').filter(x => /^datei$/i.test(x)).sort(), ['DATEI', 'Datei', 'datei'], 'Groß-/Kleinschreibung unterscheidet');
     await fsAufruf(p, "TERMINAL_FS.schreiben(['home','raizo','é'], '1')");
     await fsAufruf(p, "TERMINAL_FS.schreiben(['home','raizo','e\\u0301'], '2')");

@@ -34,13 +34,13 @@ const { chatBereit } = require('./_kestrel');
     /* Befehlsnamen: Liste, Entwurf unverändert */
     await inp.fill('w'); await inp.press('Tab');
     await liste.waitFor({ state: 'visible' });
-    assert.deepEqual(await eintraege(), ['wget', 'whoami', 'wg-quick', 'wg']);
+    assert.deepEqual(await eintraege(), ['wc', 'wget', 'whoami', 'wg-quick', 'wg']);   /* Paket 5: wc */
     assert.equal(await inp.inputValue(), 'w', 'kein stilles Einsetzen');
     assert.deepEqual(await aktiv(), []);
     /* Tab vorwärts, Umschalt+Tab rückwärts, Hervorhebung folgt */
-    await inp.press('Tab'); assert.equal(await inp.inputValue(), 'wget '); assert.deepEqual(await aktiv(), ['wget']);
-    await inp.press('Tab'); assert.equal(await inp.inputValue(), 'whoami ');
-    await inp.press('Shift+Tab'); assert.equal(await inp.inputValue(), 'wget ');
+    await inp.press('Tab'); assert.equal(await inp.inputValue(), 'wc '); assert.deepEqual(await aktiv(), ['wc']);
+    await inp.press('Tab'); assert.equal(await inp.inputValue(), 'wget ');
+    await inp.press('Shift+Tab'); assert.equal(await inp.inputValue(), 'wc ');
     await inp.press('Shift+Tab'); assert.equal(await inp.inputValue(), 'wg ', 'rückwärts über den Anfang');
     /* Enter übernimmt, führt nicht aus */
     const vorher = await out.textContent();
