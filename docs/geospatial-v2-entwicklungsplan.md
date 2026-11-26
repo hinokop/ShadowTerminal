@@ -112,3 +112,19 @@ Unabhängiges Review [6074603822](https://github.com/hinokop/ShadowTerminal/pull
 - G2 in K2: Arbeitsstand-Wiederherstellung muss alte Auswahlidentität verwerfen oder kontextgebunden speichern; keine Fehlauflösung auf anderes Dossier. G3 in K2: Frame-Fehler während Inaktivität vormerken und bei Aktivierung anzeigen; echter Listener-/Fehlerpfad testen. Feature-ID-Strategie für MapLibre bewusst festlegen; Fokus-Redraw-Kosten bei größeren Beständen beobachten. Gesperrte Auswahl bleibt intern erhalten, ohne Auflösung/Anzeige, nach Entsperrung kann sie wieder erscheinen.
 - Windows-Sichtprüfung vor oder früh in K2: 3D öffnen, Modulwechsel hin/zurück, Klick/Auswahl, Resize, Dossier- und Terminalsprung zu Sichtung; mit Testprofil und aktuellem Branch. Keine echte 3D-Abnahme durch die automatisierten Tests.
 - K2 erst nach erfolgreicher CI der beiden Korrekturen und gezielter Prüfung. #141 ist inzwischen auf daad884; die Sichtungsknopf-Stelle ist dort noch die alte main-Variante. Vollständigen Integrationsabgleich nach Paket 5 erneut durchführen. Kein Merge.
+
+
+### K2a – lokaler Quellenprototyp (26.11.2026)
+
+K1-Korrektur-Head 7996c73: CI 45827570611 grün, damit K2 begonnen. #141 ist inzwischen gemergt; main 752b5c41d3bd55c87ab0dbeefefd1bc24e565a76 zum Prüfzeitpunkt. Integrationsbranch noch auf alter Basis bc4b23e; kein Merge in dieser Runde, kontrollierter Abgleich nachholen. Windows-Sichtprüfung K1 offen. G2/G3 aus K1-Review bleiben für K2 offen.
+
+K2a isoliert: `karte-v2-prototyp.html` nutzt ausschließlich lokale MapLibre-Distributionsdateien (kein CDN-Skript), startet mit leerem Stil ohne Kachelquelle. Voyager und Dark Matter als Referenz, kein fertiger Shadow-Stil; flach/geneigt, noch keine eigenen Objekt-/Gebäude-Layer. Schlüssel wird manuell nur im lokalen Passwortfeld eingegeben, nur im Arbeitsspeicher gehalten, nicht im Profil gespeichert oder in Meldungen ausgegeben. Kein Netzabruf von CARTO bis Stilwahl. `karte-v2-quellen.js` versieht nur HTTPS-Anfragen an basemaps.cartocdn.com bzw. echte Subdomains mit key, einschließlich Style/TileJSON/Kachel/Sprite/Glyph. Keine Daten aus der Anwendung eingebunden. Offizielle Quellen: https://carto.com/basemaps/apikey/ (Raster und Vector mit demselben Key, Attribution) und https://github.com/CartoDB/basemap-styles (Vektorschema seit 21.10.2026: Protomaps v2). Livezugang, CORS unter file:// und Stil-/Layerdetails noch nicht praktisch geprüft; keine Freigabe weiterer Anbieter.
+
+Bereitstellung im Entwicklercheckout (Node/npm nötig nur für diesen Schritt, nicht für spätere Benutzung der kopierten Bibliothek):
+
+```sh
+npm install --prefix tests --no-save --no-package-lock --ignore-scripts maplibre-gl@4.7.1
+node tools/maplibre-bereitstellen.js
+```
+
+Danach `karte-v2-prototyp.html` im Browser öffnen. Die Version 4.7.1 entspricht dem bisherigen Frame und der CI; keine zusätzliche Versionsmigration in dieser Teilphase. Das Skript kopiert die unveränderten npm-Distributionsdateien JS/CSS/LICENSE.txt samt lokalem SHA-256-Manifest nach vendor/maplibre-gl; abweichende Dateien werden nicht überschrieben. Das Manifest dokumentiert die kopierten Bytes, ersetzt keine unabhängige Herkunftsprüfung. Direkter Registry-Download war in dieser Arbeitsumgebung nicht möglich (DNS), die Bibliotheksdateien selbst wurden noch nicht committed. Standardtest geospatial-k2-quellen prüft die URL-Grenzen, fehlende Schlüssel, den leeren Stil und Bereitstellung aus dem bereits CI-seitig installierten Paket. Kein Browser-/WebGL-Test des Prototyps in dieser Runde. Vor Integration: lokale Assets in Testpaket bzw. Git übernehmen, Lizenz/Herkunft prüfen; K2b echter Browser-Test mit lokalen Assets und deterministischem Stil, danach CARTO-Stilwechsel/Objektlayer. Keine Änderung an bestehender Karte oder Terminalcode in K2a.
