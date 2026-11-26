@@ -58,7 +58,9 @@
   function unmount(){
     const c=kontext;kontext=null;
     if(!c)return;
-    try{if(c.a)c.a.unmount();}finally{if(c.map)c.map.remove();}
+    /* Ein Fehler beim Aufräumen darf die bestehende Anwendung nicht blockieren. */
+    try{if(c.a)c.a.unmount();}catch(e){}
+    try{if(c.map)c.map.remove();}catch(e){}
   }
   function mount(){
     if(!dev)return;
@@ -74,7 +76,7 @@
       c.map.addControl(new maplibregl.NavigationControl(),'top-right');
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
       c.map.on('error',()=>hinweis(c,'Lokale Entwicklungsansicht: Kartenfehler. Bestehende Karte bleibt verfügbar.'));
-      c.map.once('idle',()=>{if(c.a.ready())hinweis(c,'Lokale Objektlayer bereit · keine Basiskarte · Kamera vorläufig unabhängig.');});
+      c.map.once('idle',()=>{if(aktiv(c)&&c.a.ready())hinweis(c,'Lokale Objektlayer bereit · keine Basiskarte · Kamera vorläufig unabhängig.');});
       sync();
     }).catch(()=>{
       if(!aktiv(c))return;

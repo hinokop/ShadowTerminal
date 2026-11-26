@@ -4464,6 +4464,7 @@ const Zugang = (function () {
     ['dlg', 'regie'].forEach(function (id) { const d = $(id); if (d && d.open) d.close(); });
     dispatch({ type: 'AUTH_EREIGNIS', liste: [{ modul: 'System', aktion: 'Sitzung beendet', detail: 'Abmeldung durch Benutzer', t: nowIso() }] });
     document.body.classList.add('locked');
+    if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.unmount();
     $('gate-box').hidden = true; $('gate-boot').hidden = true;
     const end = $('gate-end'), liste = $('gate-end-list'), rm = reduziert();
     end.hidden = false; liste.replaceChildren(); $('gate-end-fertig').hidden = true;
@@ -4500,7 +4501,7 @@ const Zugang = (function () {
     $('gate-pw').value = ''; $('gate-pw2').value = '';
     letzteAktion = Date.now();
     if (initCb) { const cb = initCb; initCb = null; cb(); }
-    else { const b = $('btn-lock'); if (b) b.focus(); }
+    else { if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.mount(); const b = $('btn-lock'); if (b) b.focus(); }
   }
 
   function erfolg() {

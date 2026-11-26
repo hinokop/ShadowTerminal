@@ -60,6 +60,14 @@ const {APP}=require('./_pfad');
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
   await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await ready();
   assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
+  /* Reale Zugangssperre und erneute Freigabe, ohne Navigation oder Neuladen. */
+  await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();Zugang.sperren('K2-Test');});
+  assert.equal(await p.evaluate(()=>__alt.ready()),false);
+  assert.equal(await p.locator('#k-v2-map canvas').count(),0);
+  await p.fill('#gate-pw','pw-test-123');await p.click('#gate-go');
+  await p.waitForFunction(()=>!document.body.classList.contains('locked'));
+  await ready();
+  assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
   const standard=await b.newPage({reducedMotion:'reduce'});await standard.route(/^https?:/,r=>r.abort());await standard.goto(APP);
   await standard.fill('#gate-pw','pw-test-123');if(await standard.isVisible('#gate-pw2'))await standard.fill('#gate-pw2','pw-test-123');await standard.click('#gate-go');
   await standard.waitForFunction(()=>!document.body.classList.contains('locked'));
