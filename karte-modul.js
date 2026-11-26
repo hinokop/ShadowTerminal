@@ -1315,12 +1315,10 @@ function karte3dSenden(nachricht) {
 /* Klick in der 3D-Ansicht: läuft durch denselben Klick-Handler wie in 2D (Auswahl, Pin, Zone, Zugriffspunkt, Messen, Positionswahl) */
 function karte3dKlick(d) {
   const st = KARTE_ST, svg = $('k-svg');
-  if (!st || !st.klick || !svg) return;
-  const P = karteProj(), r = svg.getBoundingClientRect();
-  const ziel = d.id ? { closest: function (q) { return q === '.k-marker' ? { getAttribute: function () { return d.id; } } : null; } }
-    : d.zid ? { closest: function (q) { return q === '.k-zone' ? { getAttribute: function () { return d.zid; } } : null; } }
-    : { closest: function () { return null; } };
-  st.klick({ target: ziel, shiftKey: !!d.umschalt, clientX: r.left + P.px(d.lon) * r.width / KW, clientY: r.top + P.py(d.lat) * r.height / KH });
+  if (!st || !st.klickGeo || !svg || !d || !Number.isFinite(d.lat) || !Number.isFinite(d.lon) || Math.abs(d.lat) > 90) return;
+  /* MapLibre liefert geografische Koordinaten direkt; kein Umweg über ein unsichtbares SVG und künstliche DOM-Treffer. */
+  st.klickGeo({ ll: [d.lat, d.lon], markerId: d.id || null, kanteId: null,
+    zoneId: d.id ? null : d.zid || null, mehr: !!d.umschalt });
   karte3dSenden({ typ: 'karte3d-auswahl', id: VIEW.karte.auswahl || null });
 }
 let KARTE_ST = null;
@@ -1376,6 +1374,86 @@ function karte3dEingang(d, fr) {
     }
   }
 }
+/* Gemeinsame Klicksemantik (K1a): Renderer liefern echte [lat, lon] und Trefferkennungen.
+   Persistente IDs, Dispatch-Aktionen und bisherige Moduspriorität bleiben unverändert.
+   Keine Abhängigkeit von DOM, SVG oder MapLibre; neu ist der Redraw-Callback des aktiven Adapters. */
+function karteKlickVerarbeiten(eingabe, neu) {
+  const K = VIEW.karte, ll = eingabe.ll;
+  if (!Array.isArray(ll) || ll.length !== 2 || !ll.every(Number.isFinite)) return;
+  if (K.pick === 'CI-AUS') {                                          /* Ausweichort für den Check-in */
+    K.pick = null;
+    VIEW.draft['aw-koord'] = ll[0].toFixed(5) + ', ' + ll[1].toFixed(5);
+    dispatch({ type: 'NAVIGATION', modul: 'profil' });
+    renderModule();
+    return;
+  }
+  if (typeof K.pick === 'string' && K.pick.indexOf('SI:') === 0) {      /* Sichtung platzieren: Entwurfs-Pin zum Dossier */
+    const eid = K.pick.slice(3), de = entitaet(eid);
+    K.pick = null;
+    if (de) {
+      dispatch({ type: 'PIN_ANGELEGT', ll: ll, name: sichtungsPinName(), dossier: de.id, notiz: '' });
+    }
+    renderModule();
+    return;
+  }
+  if (typeof K.pick === 'string' && K.pick.startsWith('X:')) {
+    const id = K.pick.slice(2);
+    K.pick = null;
+    xPinSetzen(id, ll);
+    return;
+  }
+  if (K.pick) {                                                      /* Position für ein Dossier festlegen */
+    const id = K.pick;
+    K.pick = null;
+    dispatch({ type: id.indexOf('AO-') === 0 ? 'AUSGANG_ORT' : id.indexOf('ZP-') === 0 ? 'ZUGRIFF_ORT' : 'DOSSIER_ORT', id: id, ll: ll });
+    K.auswahl = id;
+    renderModule();
+    return;
+  }
+  const t = eingabe.markerId, vt = !t && eingabe.kanteId;
+  if (K.zugriffSetzen && !K.messen) {                              /* Zugriffspunkte markieren: bleibt aktiv, bis es beendet wird */
+    dispatch({ type: 'ZONE_ANGELEGT', art: 'zugriff', ll: ll });
+    renderModule();
+    return;
+  }
+  if (K.pinSetzen && !K.messen) {                                  /* Pin setzen: einmalig */
+    K.pinSetzen = false;
+    dispatch({ type: 'PIN_ANGELEGT', ll: ll });
+    renderModule();
+    return;
+  }
+  if (K.zoneSetzen) {                                              /* Zone markieren: einmalig, danach normales Verhalten */
+    const eigen = K.zoneSetzen === 'eigen';
+    K.zoneSetzen = false;
+    dispatch({ type: eigen ? 'OZONE_ANGELEGT' : 'ZONE_ANGELEGT', ll: ll });
+    renderModule();
+    return;
+  }
+  const zt = !t && !vt && eingabe.zoneId;
+  if (zt && !K.messen) {
+    const zid = zt;
+    const zo = karteZoneFinden(zid), vorher = K.auswahl ? karteZoneFinden(K.auswahl) : null;
+    /* Mehrfachbearbeitung gilt nur für Zonen des Auftrags; eigene Zonen werden einzeln bearbeitet */
+    if ((eingabe.mehr || K.mehrModus) && !(zo && zo.profil)) {   /* Mehrfachauswahl: Zone zur Auswahl hinzufügen oder entfernen */
+      K.mehr = K.mehr || [];
+      if (!K.mehr.length && K.auswahl && K.auswahl !== zid && vorher && !vorher.profil) K.mehr.push(K.auswahl);   /* die bisher gewählte Zone zählt mit */
+      const i = K.mehr.indexOf(zid); if (i >= 0) K.mehr.splice(i, 1); else K.mehr.push(zid);
+      K.auswahl = null; delete VIEW.draft['mz-weg'];
+      karteAuswahlAnzeige(); neu();
+      return;
+    }
+    karteWaehlen(zid, false); return;
+  }
+  if (K.messen) {                                                  /* Messwerkzeug: Punkte setzen, an Markierungen einrasten */
+    const mk = t ? karteMarker().find(function (x) { return x.id === t; }) : null;
+    const messLl = mk ? mk.ll : ll;
+    K.messPts = (K.messPts.length >= 2 ? [] : K.messPts).concat([messLl]);
+    if (K.messPts.length >= 2) { K.messen = false; renderModule(); return; }      /* Messung ist einmalig: danach arbeiten Markierungen und Popups wieder normal */
+    neu();
+    return;
+  }
+  karteWaehlen(t || vt || null, false);
+}
 function karteSteuerung(svg) {
   const K = VIEW.karte;
   let ausstehend = false;
@@ -1409,85 +1487,16 @@ function karteSteuerung(svg) {
     K.lon -= dx / Wd * 360; K.lat = Math.max(-80, Math.min(80, mercInv(merc(K.lat) + dy * 2 * Math.PI / Wd)));
     neu();
   });
+  /* SVG-Adapter: DOM-Treffer und Bildschirmkoordinaten in das gemeinsame Klickformat übersetzen. */
+  const klickGeo = function (eingabe) { karteKlickVerarbeiten(eingabe, neu); };
   const klick = function (ev) {
-    if (K.pick === 'CI-AUS') {                                          /* Ausweichort für den Check-in */
-      const c = koordUm(ev), P = karteProj();
-      K.pick = null;
-      VIEW.draft['aw-koord'] = P.lat(c[1]).toFixed(5) + ', ' + P.lon(c[0]).toFixed(5);
-      dispatch({ type: 'NAVIGATION', modul: 'profil' });
-      renderModule();
-      return;
-    }
-    if (typeof K.pick === 'string' && K.pick.indexOf('SI:') === 0) {      /* Sichtung platzieren: Entwurfs-Pin zum Dossier */
-      const c = koordUm(ev), P = karteProj(), eid = K.pick.slice(3), de = entitaet(eid);
-      K.pick = null;
-      if (de) {
-        dispatch({ type: 'PIN_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])], name: sichtungsPinName(), dossier: de.id, notiz: '' });
-      }
-      renderModule();
-      return;
-    }
-    if (typeof K.pick === 'string' && K.pick.startsWith('X:')) {
-      const c = koordUm(ev), P = karteProj(), id = K.pick.slice(2);
-      K.pick = null;
-      xPinSetzen(id, [P.lat(c[1]), P.lon(c[0])]);
-      return;
-    }
-    if (K.pick) {                                                      /* Position für ein Dossier festlegen */
-      const c = koordUm(ev), P = karteProj(), id = K.pick;
-      K.pick = null;
-      dispatch({ type: id.indexOf('AO-') === 0 ? 'AUSGANG_ORT' : id.indexOf('ZP-') === 0 ? 'ZUGRIFF_ORT' : 'DOSSIER_ORT', id: id, ll: [P.lat(c[1]), P.lon(c[0])] });
-      K.auswahl = id;
-      renderModule();
-      return;
-    }
+    const c = koordUm(ev), P = karteProj();
     const t = ev.target && ev.target.closest ? ev.target.closest('.k-marker') : null;
     const vt = !t && ev.target && ev.target.closest ? ev.target.closest('.k-verbg') : null;
-    if (K.zugriffSetzen && !K.messen) {                              /* Zugriffspunkte markieren: bleibt aktiv, bis es beendet wird */
-      const c = koordUm(ev), P = karteProj();
-      dispatch({ type: 'ZONE_ANGELEGT', art: 'zugriff', ll: [P.lat(c[1]), P.lon(c[0])] });
-      renderModule();
-      return;
-    }
-    if (K.pinSetzen && !K.messen) {                                  /* Pin setzen: einmalig */
-      const c = koordUm(ev), P = karteProj();
-      K.pinSetzen = false;
-      dispatch({ type: 'PIN_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])] });
-      renderModule();
-      return;
-    }
-    if (K.zoneSetzen) {                                              /* Zone markieren: einmalig, danach normales Verhalten */
-      const c = koordUm(ev), P = karteProj(), eigen = K.zoneSetzen === 'eigen';
-      K.zoneSetzen = false;
-      dispatch({ type: eigen ? 'OZONE_ANGELEGT' : 'ZONE_ANGELEGT', ll: [P.lat(c[1]), P.lon(c[0])] });
-      renderModule();
-      return;
-    }
     const zt = !t && !vt && ev.target && ev.target.closest ? ev.target.closest('.k-zone') : null;
-    if (zt && !K.messen) {
-      const zid = zt.getAttribute('data-id');
-      const zo = karteZoneFinden(zid), vorher = K.auswahl ? karteZoneFinden(K.auswahl) : null;
-      /* Mehrfachbearbeitung gilt nur für Zonen des Auftrags; eigene Zonen werden einzeln bearbeitet */
-      if ((ev.shiftKey || ev.ctrlKey || ev.metaKey || K.mehrModus) && !(zo && zo.profil)) {   /* Mehrfachauswahl: Zone zur Auswahl hinzufügen oder entfernen */
-        K.mehr = K.mehr || [];
-        if (!K.mehr.length && K.auswahl && K.auswahl !== zid && vorher && !vorher.profil) K.mehr.push(K.auswahl);   /* die bisher gewählte Zone zählt mit */
-        const i = K.mehr.indexOf(zid); if (i >= 0) K.mehr.splice(i, 1); else K.mehr.push(zid);
-        K.auswahl = null; delete VIEW.draft['mz-weg'];
-        karteAuswahlAnzeige(); neu();
-        return;
-      }
-      karteWaehlen(zid, false); return;
-    }
-    if (K.messen) {                                                  /* Messwerkzeug: Punkte setzen, an Markierungen einrasten */
-      const c = koordUm(ev), P = karteProj();
-      const mk = t ? karteMarker().find(function (x) { return x.id === t.getAttribute('data-id'); }) : null;
-      const ll = mk ? mk.ll : [P.lat(c[1]), P.lon(c[0])];
-      K.messPts = (K.messPts.length >= 2 ? [] : K.messPts).concat([ll]);
-      if (K.messPts.length >= 2) { K.messen = false; renderModule(); return; }      /* Messung ist einmalig: danach arbeiten Markierungen und Popups wieder normal */
-      neu();
-      return;
-    }
-    karteWaehlen(t ? t.getAttribute('data-id') : vt ? vt.getAttribute('data-vid') : null, false);
+    klickGeo({ ll: [P.lat(c[1]), P.lon(c[0])], markerId: t ? t.getAttribute('data-id') : null,
+      kanteId: vt ? vt.getAttribute('data-vid') : null, zoneId: zt ? zt.getAttribute('data-id') : null,
+      mehr: !!(ev.shiftKey || ev.ctrlKey || ev.metaKey) });
   };
   const tip = function (ev, id) {
     const box = $('k-tip'); if (!box) return;
@@ -1519,7 +1528,7 @@ function karteSteuerung(svg) {
     const t = ev.target && ev.target.closest ? ev.target.closest('.k-marker') : null;
     if (t && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); klick({ target: t, clientX: 0, clientY: 0 }); }
   });
-  return { zoom: function (dz) { zoomUm(dz, KW / 2, KH / 2); }, neu: neu, klick: klick };
+  return { zoom: function (dz) { zoomUm(dz, KW / 2, KH / 2); }, neu: neu, klick: klick, klickGeo: klickGeo };
 }
 /* =====================================================================
    KARTENPROTOKOLL: Reiter neben der Lagekarte. Erfasst Vorgänge mit Kartenbezug (Sichtungen, Zonen, Pins, Zugriffspunkte, Positionen,
