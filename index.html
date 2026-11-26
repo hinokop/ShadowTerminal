@@ -3346,7 +3346,7 @@ function sichtungKnopf(e) {
   const st = sichtungsStart(e), letzte = sichtungLetzteMitOrt(e);
   const zurKarte = function (ll, zoom, wahl) {
     if (wahl && /^SI-/.test(wahl)) {
-      if (!karteSichtungZeigen(e.id, wahl, zoom)) meldung('Sichtung kann nicht eindeutig oder nicht zugänglich auf der Karte angezeigt werden.');
+      if (!karteSichtungZeigen(e.id, wahl, zoom)) meldung('Sichtung ist nicht eindeutig oder nicht zugänglich und kann nicht auf der Karte angezeigt werden.');
       return;
     }
     const K = VIEW.karte; K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, zoom); K.sichtungFokus = null;

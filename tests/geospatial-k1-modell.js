@@ -107,7 +107,7 @@ const { APP } = require('./_pfad');
       meldung('');
     }, f);
     await p.locator('#btn-dk-sichtung').click();
-    assert.match(await p.locator('#sys-msg').innerText(), /Sichtung kann nicht eindeutig oder nicht zugänglich/);
+    assert.match(await p.locator('#sys-msg').innerText(), /Sichtung ist nicht eindeutig oder nicht zugänglich/);
     assert.equal(await p.evaluate(() => STATE.ui.modul), 'dossier');
     await p.evaluate(f => { STATE.dossiers.entitaeten[f.a].sichtungen.pop(); }, f);
     await p.locator('#btn-dk-sichtung').click();
