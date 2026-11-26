@@ -456,11 +456,33 @@ function karteFensterLage() {
 function karteRenderSchluessel(art, id, entId) {
   return JSON.stringify(art === 'sichtung' ? [art, entId, id] : [art, id]);
 }
+function karteMarkerSchluessel(m) {
+  return karteRenderSchluessel(m.kat === 'sichtung' ? 'sichtung' : m.entitaet ? 'dossier' : m.kat, m.id, m.entId);
+}
+/* Eine alte Produkt-ID darf nur dann ohne Schlüssel aufgelöst werden, wenn sie eindeutig ist. */
+function karteMarkerFinden(id, key, marker) {
+  if (!id) return null;
+  const treffer = (marker || karteMarker()).filter(function (m) {
+    return m.id === id && (!key || karteMarkerSchluessel(m) === key);
+  });
+  return treffer.length === 1 ? treffer[0] : null;
+}
+function karteAuswahlSchluessel() {
+  const K = VIEW.karte, s = K.auswahlIdentitaet;
+  return s && s.id === K.auswahl ? s.key : null;
+}
+function karteMarkerAuswahl(marker) {
+  return karteMarkerFinden(VIEW.karte.auswahl, karteAuswahlSchluessel(), marker);
+}
+function karteAuswahlNachricht() {
+  const m = karteMarkerAuswahl();
+  return { typ: 'karte3d-auswahl', id: VIEW.karte.auswahl || null, renderKey: m ? karteMarkerSchluessel(m) : null };
+}
 function karteRenderModell() {
   const K = VIEW.karte;
   /* Vorhandene Zugangs-/Ebenenfilter bleiben die einzige Quelle. Keine Persistenz, kein Cache. */
   const marker = karteMarker().map(function (m) {
-    return Object.assign({}, m, { renderKey: karteRenderSchluessel(m.kat === 'sichtung' ? 'sichtung' : m.entitaet ? 'dossier' : m.kat, m.id, m.entId), ll: m.ll.slice() });
+    return Object.assign({}, m, { renderKey: karteMarkerSchluessel(m), ll: m.ll.slice() });
   });
   const zonen = karteZonen().map(function (z) {
     return Object.assign({}, z, { renderKey: karteRenderSchluessel('zone', z.id), ll: z.ll && z.ll.slice() });
@@ -607,11 +629,12 @@ function zeichneKarte(svg) {
     if (!erzwingen && belegt.some(function (o) { return b.x1 < o.x2 && b.x2 > o.x1 && b.y1 < o.y2 && b.y2 > o.y1; })) return false;
     belegt.push(b); return true;
   };
-  const reihe = marker.slice().sort(function (a, b2) { return (b2.id === K.auswahl) - (a.id === K.auswahl); });
+  const ausgewaehlt = karteMarkerAuswahl(marker), auswahlKey = ausgewaehlt && ausgewaehlt.renderKey;
+  const reihe = marker.slice().sort(function (a, b2) { return (b2.renderKey === auswahlKey) - (a.renderKey === auswahlKey); });
   reihe.forEach(function (m) {
     const x = P.px(m.ll[1]), y = P.py(m.ll[0]);
     if (x < -20 || x > KW + 20 || y < -20 || y > KH + 20) return;
-    const sel = K.auswahl === m.id;
+    const sel = auswahlKey === m.renderKey;
     if (m.kat === 'sichtung') {
       const gs = s('g', { class: 'k-marker' + (m.guete === 'veraltet' ? ' alt' : ''), 'data-id': m.id, 'data-render-key': m.renderKey, tabindex: '0', role: 'button', 'aria-label': 'Sichtung ' + m.name + ', ' + (SCENARIO.guete[m.guete] || {}).label });
       gs.appendChild(s('title', null, 'Sichtung ' + m.id + ' (' + (SCENARIO.guete[m.guete] || {}).label + '): ' + m.name + ' · Lage nach ' + m.genau + ', Position ungefähr'));
@@ -621,7 +644,7 @@ function zeichneKarte(svg) {
       { const t = m.id + (m.guete !== 'gesichert' ? ' · ' + SCENARIO.guete[m.guete].label : ''); if ((sel || zm >= 8) && platz(x + 9, y + 4, t, sel)) gs.appendChild(s('text', { x: x + 9, y: y + 4, class: 'k-text' }, t)); }
       if (sel) gs.appendChild(s('circle', { cx: x, cy: y, r: 12, class: 'k-sel' }));
       gs.appendChild(s('circle', { cx: x, cy: y, r: 12, class: 'k-treffer' }));
-      gez[m.id] = gs;
+      gez[m.renderKey] = gs;
       return;
     }
     const g = s('g', { class: 'k-marker', 'data-id': m.id, 'data-render-key': m.renderKey, tabindex: '0', role: 'button', 'aria-label': m.id + ' ' + m.name + (m.entitaet ? ', Kurzinfo' : '') });
@@ -634,9 +657,9 @@ function zeichneKarte(svg) {
     karteSymbol(m, x, y).forEach(function (e) { g.appendChild(e); });
     g.appendChild(s('circle', { cx: x, cy: y, r: 12, class: 'k-treffer' }));
     if (sel || zm >= 6.5 || m.kat === 'standort') { const t = zm >= 7.5 || sel ? kuerzen(m.name, 24) : m.id; if (platz(x + 10, y + 4, t, sel)) g.appendChild(s('text', { x: x + 10, y: y + 4, class: 'k-text' }, t)); }
-    gez[m.id] = g;
+    gez[m.renderKey] = g;
   });
-  marker.forEach(function (m) { if (gez[m.id]) kids.push(gez[m.id]); });
+  marker.forEach(function (m) { if (gez[m.renderKey]) kids.push(gez[m.renderKey]); });
   /* Messung */
   if (K.messPts && K.messPts.length) {
     const q = K.messPts.map(function (ll) { return [P.px(ll[1]), P.py(ll[0])]; });
@@ -1003,7 +1026,7 @@ function wetterText(w) {
     + (c.wind_gusts_10m > c.wind_speed_10m + 15 ? ', Böen ' + Math.round(c.wind_gusts_10m) : '') + (c.precipitation > 0 ? ' · Niederschlag ' + String(c.precipitation).replace('.', ',') + ' mm' : '') + sicht + ' · ' + String(c.time || '').slice(11, 16) + 'Z';
 }
 /* Objektkontext der Lage-Box: Kennung des Objekts, auf das gezielt gesprungen wurde (Zone, Pin, Sichtung, Dossierort, Ausgangsort). */
-function karteBezugVon(id) {
+function karteBezugVon(id, key) {
   if (!id) return null;
   const zn = typeof karteZoneFinden === 'function' ? karteZoneFinden(id) : null;
   if (zn) return { id: id, typ: zn.art === 'zugriff' ? 'Zugriffspunkt' : 'Zone', name: zn.profil ? zn.name : (zn.name || zn.id), ll: zn.ll, stand: zn.profil ? (zn.stand || zn.t) : null, filter: !!zn.profil };
@@ -1011,7 +1034,7 @@ function karteBezugVon(id) {
   if (pn) return pn.ll && !pinGesperrt(pn) ? { id: id, typ: 'Pin', name: pn.name, ll: pn.ll, stand: null, filter: true } : null;
   const ao = (PROFIL.ausgang || []).find(function (x) { return x.id === id; });
   if (ao && ao.ll) return { id: id, typ: 'Ausgangsort', name: ao.name, ll: ao.ll, stand: null, filter: false };
-  const m = karteMarker().find(function (x) { return x.id === id; });
+  const m = karteMarkerFinden(id, key);
   if (m && m.ll) return { id: id, typ: m.kat === 'sichtung' ? 'Sichtung' : 'Standort', name: m.name || id, ll: m.ll, stand: null, filter: false };
   const e = entitaet(id), ll = e && !dossierGesperrt(e) ? karteKoord(id) : null;
   if (ll) return { id: id, typ: 'Dossier ' + e.typ, name: e.name, ll: ll, stand: null, filter: false };
@@ -1019,7 +1042,9 @@ function karteBezugVon(id) {
 }
 function karteBezugSetzen(id) {
   const K = VIEW.karte;
-  K.bezug = id && karteBezugVon(id) ? id : null;
+  const key = id && id === K.auswahl ? karteAuswahlSchluessel() : null;
+  K.bezug = id && karteBezugVon(id, key) ? id : null;
+  K.bezugRenderKey = K.bezug ? key : null;
   if (K.bezug) K.statusOffen = true;
   karteStatusAkt();                                   /* Anzeige sofort aktualisieren, auch im 3D-Pfad ohne eigenes Neuzeichnen */
 }
@@ -1027,7 +1052,7 @@ function karteStatusAkt() {
   const box = $('k-status');
   if (!box) return;
   const K = VIEW.karte;
-  const bz = K.bezug ? karteBezugVon(K.bezug) : null;
+  const bz = K.bezug ? karteBezugVon(K.bezug, K.bezugRenderKey) : null;
   if (K.bezug && !bz) K.bezug = null;
   const ref = bz ? bz.ll : [K.lat, K.lon];
   const zeile = function (k, v, id) { return h('div', { class: 'k-st-z' }, h('span', { class: 'k-st-k' }, k), h('span', { class: 'k-st-v', id: id }, v)); };
@@ -1080,7 +1105,7 @@ function kartePopupPos() {
   const ref = K.auswahl || (K.mehr && K.mehr.length ? K.mehr[K.mehr.length - 1] : null);   /* Mehrfachauswahl: Popup an der zuletzt gewählten Zone */
   if (!box || box.hidden || !ref) return;
   let ll = null;
-  const m = karteMarker().find(function (x) { return x.id === ref; });
+  const m = karteMarkerFinden(ref, ref === K.auswahl ? karteAuswahlSchluessel() : null);
   if (m) ll = m.ll;
   else if (karteZoneFinden(ref)) ll = karteZoneFinden(ref).ll;
   else {
@@ -1114,7 +1139,7 @@ function karteAuswahlAnzeige() {
   if (pin) { if (pinGesperrt(pin)) { box.hidden = true; box.replaceChildren(); } else pinPopup(pin, fertig); return; }
   const zn = karteZoneFinden(id);
   if (zn) { zonePopup(zn, fertig); return; }
-  const m = karteMarker().find(function (x) { return x.id === id; });
+  const m = karteMarkerAuswahl();
   if (!m) { box.hidden = true; box.replaceChildren(); return; }
   if (m.kat === 'sichtung') {
     const e0 = entitaet(m.entId), pinX = sichtungPin(m.si, m.entId);
@@ -1250,16 +1275,21 @@ function zonePopup(zn, fertig) {
   /* Phase 5b9: Ohne Auftragsrahmen liefert karteZonen() ausschließlich Profilzonen; die Popups der Missionszonen (ZN-/ZA-) und Zugriffspunkte entfallen. */
   if (zn.profil) return eigeneZonePopup(zn, fertig);
 }
-function karteWaehlen(id, zentrieren) {
-  const K = VIEW.karte, m = id ? (karteMarker().find(function (x) { return x.id === id; }) || (karteKoord(id) ? { ll: karteKoord(id) } : null) || (karteZoneFinden(id) ? { ll: karteZoneFinden(id).ll } : null)) : null;
-  if (K.auswahl !== id) K.popupVersatz = null;       /* neue Auswahl: Popup wieder an der Standardstelle */
+function karteWaehlen(id, zentrieren, renderKey) {
+  const K = VIEW.karte, key = typeof renderKey === 'string' ? renderKey : null;
+  const marker = karteMarkerFinden(id, key);
+  /* Veraltete oder gesperrte Renderer-Treffer niemals auf eine gleichnamige Sichtung umleiten. */
+  if (key && !marker) return;
+  const m = id ? (marker || (karteKoord(id) ? { ll: karteKoord(id) } : null) || (karteZoneFinden(id) ? { ll: karteZoneFinden(id).ll } : null)) : null;
+  const neuKey = marker ? karteMarkerSchluessel(marker) : null;
+  if (K.auswahl !== id || karteAuswahlSchluessel() !== neuKey) K.popupVersatz = null;
   if (K.sichtungFokus && K.sichtungFokus !== id) K.sichtungFokus = null;
-  K.auswahl = id; K.mehr = [];
+  K.auswahl = id; K.auswahlIdentitaet = neuKey ? { id: id, key: neuKey } : null; K.mehr = [];
   const svg = $('k-svg');
   if (zentrieren && m) { karteFlug(m.ll[0], m.ll[1], Math.max(K.zoom, 11), karteAuswahlAnzeige, id); }
   else if (svg) zeichneKarte(svg);
   karteAuswahlAnzeige();
-  if (K.ansicht3d) karte3dSenden({ typ: 'karte3d-auswahl', id: id || null });
+  if (K.ansicht3d) karte3dSenden(karteAuswahlNachricht());
 }
 /* Weiche Kamerafahrt (550 ms); ohne Bewegungsreduktion */
 function karteFlug(lat, lon, zoom, fertig, bezugId) {
@@ -1289,12 +1319,12 @@ function karteMessText(a, b) {
   return km(luft) + ' Luftlinie · Straße ca. ' + km(strasse) + ' · ca. ' + (min >= 90 ? Math.floor(min / 60) + ' h ' + (min % 60) + ' min' : min + ' min');
 }
 /* Fokus beim Überfahren: Nachbarn und Kanten bleiben hell, der Rest tritt zurück */
-function karteFokus(svg, id) {
+function karteFokus(svg, id, key) {
   if (!id) { svg.classList.remove('hat-fokus'); svg.querySelectorAll('.k-nah').forEach(function (n) { n.classList.remove('k-nah'); }); return; }
   const nah = {}; nah[id] = 1;
   dossierRechercheKanten().forEach(function (v) { if (v.von === id) nah[v.nach] = 1; else if (v.nach === id) nah[v.von] = 1; });
   svg.classList.add('hat-fokus');
-  svg.querySelectorAll('.k-marker').forEach(function (g) { g.classList.toggle('k-nah', !!nah[g.getAttribute('data-id')]); });
+  svg.querySelectorAll('.k-marker').forEach(function (g) { const mid = g.getAttribute('data-id'); g.classList.toggle('k-nah', mid === id && key ? g.getAttribute('data-render-key') === key : !!nah[mid]); });
   svg.querySelectorAll('.k-verbg').forEach(function (g) { g.classList.toggle('k-nah', g.getAttribute('data-von') === id || g.getAttribute('data-nach') === id); });
 }
 /* 3D-Ansicht: eingebettete Seite karte3d.html (MapLibre). Das Terminal liefert Markierungen, Zonen und die Kamera per postMessage;
@@ -1309,7 +1339,7 @@ function karte3dDaten() {
   const kamera = K.kamera3d || (ziel
     ? { center: [ziel.ll[1], ziel.ll[0]], zoom: 15.5, pitch: 60, bearing: -20 }
     : { center: [K.lon, K.lat], zoom: Math.max(14, Math.min(17.5, K.zoom - 0.5)), pitch: 60, bearing: -20 });
-  return { typ: 'karte3d-daten', marker: marker, zonen: zonen, kamera: kamera, auswahl: K.auswahl || null, fadenkreuz: !!(K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen || K.messen), mess: K.messPts || [] };
+  return { typ: 'karte3d-daten', marker: marker, zonen: zonen, kamera: kamera, auswahl: K.auswahl || null, auswahlRenderKey: karteAuswahlNachricht().renderKey, fadenkreuz: !!(K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen || K.messen), mess: K.messPts || [] };
 }
 function webglVorhanden() {
   try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; }
@@ -1345,9 +1375,9 @@ function karte3dKlick(d) {
      Weltkopien in MapLibre können Längengrade außerhalb ±180° liefern. Nur diese normalisieren,
      damit gültige Koordinaten ihre Präzision behalten. */
   const lon = d.lon >= -180 && d.lon <= 180 ? d.lon : ((d.lon % 360 + 540) % 360) - 180;
-  st.klickGeo({ ll: [d.lat, lon], markerId: d.id || null, kanteId: null,
+  st.klickGeo({ ll: [d.lat, lon], markerId: d.id || null, markerKey: d.renderKey || null, kanteId: null,
     zoneId: d.id ? null : d.zid || null, mehr: !!d.umschalt });
-  karte3dSenden({ typ: 'karte3d-auswahl', id: VIEW.karte.auswahl || null });
+  karte3dSenden(karteAuswahlNachricht());
 }
 let KARTE_ST = null;
 const KARTE3D = { host: null, frame: null, platz: null, bereit: false };
@@ -1474,14 +1504,15 @@ function karteKlickVerarbeiten(eingabe, neu) {
     karteWaehlen(zid, false); return;
   }
   if (K.messen) {                                                  /* Messwerkzeug: Punkte setzen, an Markierungen einrasten */
-    const mk = t ? karteMarker().find(function (x) { return x.id === t; }) : null;
+    const mk = t ? karteMarkerFinden(t, eingabe.markerKey) : null;
+    if (t && eingabe.markerKey && !mk) return;
     const messLl = mk ? mk.ll : ll;
     K.messPts = (K.messPts.length >= 2 ? [] : K.messPts).concat([messLl]);
     if (K.messPts.length >= 2) { K.messen = false; renderModule(); return; }      /* Messung ist einmalig: danach arbeiten Markierungen und Popups wieder normal */
     neu();
     return;
   }
-  karteWaehlen(t || vt || null, false);
+  karteWaehlen(t || vt || null, false, t ? eingabe.markerKey : null);
 }
 function karteSteuerung(svg) {
   const K = VIEW.karte;
@@ -1523,14 +1554,14 @@ function karteSteuerung(svg) {
     const t = ev.target && ev.target.closest ? ev.target.closest('.k-marker') : null;
     const vt = !t && ev.target && ev.target.closest ? ev.target.closest('.k-verbg') : null;
     const zt = !t && !vt && ev.target && ev.target.closest ? ev.target.closest('.k-zone') : null;
-    klickGeo({ ll: [P.lat(c[1]), P.lon(c[0])], markerId: t ? t.getAttribute('data-id') : null,
+    klickGeo({ ll: [P.lat(c[1]), P.lon(c[0])], markerId: t ? t.getAttribute('data-id') : null, markerKey: t ? t.getAttribute('data-render-key') : null,
       kanteId: vt ? vt.getAttribute('data-vid') : null, zoneId: zt ? zt.getAttribute('data-id') : null,
       mehr: !!(ev.shiftKey || ev.ctrlKey || ev.metaKey) });
   };
-  const tip = function (ev, id) {
+  const tip = function (ev, id, key) {
     const box = $('k-tip'); if (!box) return;
     if (!id) { box.hidden = true; return; }
-    const m = karteMarker().find(function (x) { return x.id === id; });
+    const m = karteMarkerFinden(id, key);
     if (!m) { box.hidden = true; return; }
     const wrap = svg.parentNode.getBoundingClientRect();
     box.textContent = m.name + (m.kat === 'sichtung' ? '' : m.entitaet ? ' · ' + (entitaet(m.id) ? entitaet(m.id).typ : '') : '');
@@ -1539,7 +1570,7 @@ function karteSteuerung(svg) {
   svg.addEventListener('pointerover', function (ev) {
     if (zug) return;
     const t = ev.target && ev.target.closest ? ev.target.closest('.k-marker') : null;
-    if (t) { karteFokus(svg, t.getAttribute('data-id')); tip(ev, t.getAttribute('data-id')); }
+    if (t) { karteFokus(svg, t.getAttribute('data-id'), t.getAttribute('data-render-key')); tip(ev, t.getAttribute('data-id'), t.getAttribute('data-render-key')); }
   });
   svg.addEventListener('pointerout', function (ev) {
     const t = ev.target && ev.target.closest ? ev.target.closest('.k-marker') : null;
@@ -1547,7 +1578,7 @@ function karteSteuerung(svg) {
   });
   svg.addEventListener('pointermove', function (ev) {
     const t = ev.target && ev.target.closest ? ev.target.closest('.k-marker') : null;
-    if (t && !zug) tip(ev, t.getAttribute('data-id'));
+    if (t && !zug) tip(ev, t.getAttribute('data-id'), t.getAttribute('data-render-key'));
   });
   svg.addEventListener('pointerup', function (ev) { const z = zug; zug = null; if (z && !z.bewegt) klick({ target: z.ziel, clientX: ev.clientX, clientY: ev.clientY, shiftKey: ev.shiftKey, ctrlKey: ev.ctrlKey, metaKey: ev.metaKey }); });
   svg.addEventListener('pointercancel', function () { zug = null; });
@@ -1671,6 +1702,7 @@ function kartenProtokollAnsicht() {
 }
 function renderKarte(m) {
   const K = VIEW.karte, def = karteAuftragsansicht();
+  if (K.auswahlIdentitaet && K.auswahlIdentitaet.id !== K.auswahl) K.auswahlIdentitaet = null;
   if (K.reiter === 'protokoll') return [modKopf(m), kartenReiter('protokoll'), kartenProtokollAnsicht()];
   if (!K.init) { karteGrundansicht(); K.init = true; }
   if (K.spiel) { clearInterval(K.spiel); K.spiel = null; }

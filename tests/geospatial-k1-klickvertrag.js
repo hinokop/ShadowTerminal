@@ -13,6 +13,7 @@ function ausschnitt(von, bis) {
 const fabrik = new Function('VIEW', 'dispatch', 'renderModule', 'entitaet', 'sichtungsPinName', 'xPinSetzen',
   'karteZoneFinden', 'karteWaehlen', 'karteMarker', 'karteAuswahlAnzeige', '$', 'karte3dSenden',
   'karteProj', 'requestAnimationFrame', 'KW', 'KH', 'svg',
+  ausschnitt('function karteRenderSchluessel(', 'function karteRenderModell(') +
   ausschnitt('function karteKlickVerarbeiten(', '/* =====================================================================\n   KARTENPROTOKOLL:') +
   ausschnitt('function karte3dKlick(', 'let KARTE_ST = null;') +
   ausschnitt('function karte3dEingang(', '/* Gemeinsame Klicksemantik') +
@@ -39,7 +40,7 @@ function klick(e, renderer, hit, mehr) {
     const typ = { marker: '.k-marker', zone: '.k-zone', kante: '.k-verbg' }[hit];
     const id = { marker: 'PIN-001', zone: 'ZO-001', kante: 'V-001' }[hit];
     e.st.klick({ clientX: 120, clientY: 230, shiftKey: mehr,
-      target: { closest(q) { return q === typ ? { getAttribute() { return id; } } : null; } } });
+      target: { closest(q) { return q === typ ? { getAttribute(attr) { return attr === 'data-render-key' ? null : id; } } : null; } } });
   }
 }
 for (const renderer of ['svg', '3d']) {
@@ -73,7 +74,7 @@ for (const renderer of ['svg', '3d']) {
   /* Nur synthetischer Altzweig: produktiv gibt es keine Auftragszonen mehr. */
   const alt = (x, id, mehr) => renderer === '3d'
     ? x.eingang({ typ: 'karte3d-klick', lat: ll[0], lon: ll[1], zid: id, umschalt: mehr })
-    : x.st.klick({ clientX: 120, clientY: 230, ctrlKey: mehr, target: { closest(q) { return q === '.k-zone' ? { getAttribute() { return id; } } : null; } } });
+    : x.st.klick({ clientX: 120, clientY: 230, ctrlKey: mehr, target: { closest(q) { return q === '.k-zone' ? { getAttribute(attr) { return attr === 'data-render-key' ? null : id; } } : null; } } });
   e = umgebung({ auswahl: 'ZN-1' }); alt(e, 'ZN-2', true);
   assert.deepEqual(e.K.mehr, ['ZN-1', 'ZN-2']); assert.equal(e.K.auswahl, null);
   alt(e, 'ZN-2', true); assert.deepEqual(e.K.mehr, ['ZN-1']);
@@ -95,7 +96,7 @@ for (const [lon, erwartet] of [[181, -179], [-181, 179], [540, -180], [-540, -18
 invalid.klick3d({ lat: 12, lon: Infinity }); assert.deepEqual(invalid.aktionen, []);
 for (const key of ['Enter', ' ']) {
   const e = umgebung(); let prevented = false;
-  e.listeners.keydown[0]({ key, preventDefault() { prevented = true; }, target: { closest(q) { return q === '.k-marker' ? this : null; }, getAttribute() { return 'PIN-001'; } } });
+  e.listeners.keydown[0]({ key, preventDefault() { prevented = true; }, target: { closest(q) { return q === '.k-marker' ? this : null; }, getAttribute(attr) { return attr === 'data-render-key' ? null : 'PIN-001'; } } });
   assert.equal(prevented, true); assert.equal(e.K.auswahl, 'PIN-001');
 }
 console.log('OK: K1a SVG/3D-Klickvertrag, Moduspriorität, Mehrfachauswahl, Tastatur, Mess-Snap und Datumsgrenze');
