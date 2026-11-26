@@ -91,6 +91,26 @@ assert.deepEqual(Q.cartoRequest(Q.stil('voyager'),'  '),{url:Q.stil('voyager')})
 assert.equal(Q.stil('toString'),null); assert.equal(Q.stil('shadow'),null);
 assert.deepEqual(Q.leererStil().sources,{});
 const a=Q.leererStil(); a.layers.length=0; assert.equal(Q.leererStil().layers.length,1);
+// K2d-1: raster sources never imply exact coverage or send a CARTO key.
+const bild=Q.bildInfo('berlin2024'), raster=Q.bildStil('berlin2024');
+assert.equal(bild.gsd,0.20);assert.equal(bild.lizenz,'dl-de-zero-2.0');
+assert.equal(Q.bildInfo('toString'),null);assert.throws(()=>Q.bildStil('mapbox'));
+assert.equal(Q.bildBereich('berlin2024',[13.405,52.52],13),'kandidat');
+assert.equal(Q.bildBereich('berlin2024',[13.405,52.52],8),'uebersicht');
+assert.equal(Q.bildBereich('berlin2024',[8.138,49.350],16),'ausserhalb');
+assert.equal(Q.bildBereich('berlin2024',[13.405,NaN],16),'unbekannt');
+assert.equal(Q.bildBereich('unbekannt',[13.405,52.52],16),'unbekannt');
+const bq=raster.sources[Q.BILD_ID], burl=bq.tiles[0];
+assert.equal(bq.type,'raster');assert.equal(bq.tileSize,256);
+assert.deepEqual(bq.bounds,bild.bounds);assert.equal(bq.maxzoom,19);
+assert.ok(burl.includes('bbox={bbox-epsg-3857}')&&burl.includes('crs=EPSG:3857'));
+assert.ok(burl.includes('format=image/png')&&burl.includes('transparent=true'));
+assert.deepEqual(Q.cartoRequest(burl,key),{url:burl});
+assert.equal(raster.layers.at(-1).id,Q.BILD_LAYER);
+assert.equal(Q.vektorStil(raster),false);
+bild.bounds[0]=0;bq.bounds[0]=0;
+assert.equal(Q.bildInfo('berlin2024').bounds[0],13.07);
+assert.equal(Q.bildStil('berlin2024').sources[Q.BILD_ID].bounds[0],13.07);
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'shadow-maplibre-'));
 try {
   const pkg=path.join(__dirname,'node_modules','maplibre-gl'), ziel=path.join(tmp,'vendor');

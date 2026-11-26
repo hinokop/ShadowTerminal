@@ -99,7 +99,40 @@
     if(nacht)hausnummern(copy,source);
     return copy;
   }
-  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, styleCachebar, GEBAEUDE_ID, HAUSNUMMER_ID });
+  /* K2d-1: isolierter Rasterquellenvertrag. Keine Abfrage beim Laden,
+     kein Key, keine Profilinformationen und keine eigene persistente Kachelablage.
+     bounds ist nur ein Anfragefilter, kein Nachweis echter Bildabdeckung. */
+  const BILDQUELLEN=Object.freeze({
+    berlin2024:Object.freeze({
+      name:'Berlin TrueDOP 2024',anbieter:'Senatsverwaltung Berlin',art:'Orthophoto',
+      aufnahme:'2024 (Datensatzjahr)',gsd:0.20,lizenz:'dl-de-zero-2.0',
+      attribution:'Geoportal Berlin · TrueDOP 2024 · dl-de-zero-2.0',
+      bounds:Object.freeze([13.07,52.33,13.78,52.69]),minzoom:10,maxzoom:19,tileSize:256,
+      url:'https://gdi.berlin.de/services/wms/truedop_2024?service=WMS&version=1.3.0&request=GetMap&layers=truedop_2024&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true'
+    })
+  });
+  const BILD_ID='shadow-v2-bild', BILD_LAYER='shadow-v2-bild-raster';
+  function bildInfo(id){
+    if(!Object.hasOwn(BILDQUELLEN,id))return null;
+    const {url,...info}=BILDQUELLEN[id];return {...info,bounds:info.bounds.slice()};
+  }
+  function bildBereich(id,center,zoom){
+    const q=bildInfo(id);
+    if(!q||!Array.isArray(center)||center.length!==2||!center.every(Number.isFinite)||!Number.isFinite(zoom))return 'unbekannt';
+    const [lon,lat]=center,[w,s,e,n]=q.bounds;
+    if(lon<w||lon>e||lat<s||lat>n)return 'ausserhalb';
+    if(zoom<q.minzoom-Math.log2(512/q.tileSize))return 'uebersicht';
+    return 'kandidat'; // tatsächliche Abdeckung/Schärfe erst visuell nachweisbar
+  }
+  function bildStil(id){
+    if(!Object.hasOwn(BILDQUELLEN,id))throw Error('Unbekannte Bildquelle');
+    const q=BILDQUELLEN[id],s=leererStil();
+    s.sources[BILD_ID]={type:'raster',tiles:[q.url],tileSize:q.tileSize,bounds:q.bounds.slice(),
+      minzoom:q.minzoom,maxzoom:q.maxzoom,attribution:q.attribution};
+    s.layers.push({id:BILD_LAYER,type:'raster',source:BILD_ID,paint:{'raster-fade-duration':0}});
+    return s;
+  }
+  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, styleCachebar, GEBAEUDE_ID, HAUSNUMMER_ID, bildInfo, bildBereich, bildStil, BILD_ID, BILD_LAYER });
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KARTE_V2_QUELLEN = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

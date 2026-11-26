@@ -56,15 +56,29 @@ const basis={version:8,sources:{protomaps:source},layers:[
  const browser=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
   const p=await browser.newPage({viewport:{width:1200,height:900},reducedMotion:'reduce'});p.setDefaultTimeout(25000);
-  const errors=[];let requests=0,glyphRequests=0;p.on('pageerror',e=>errors.push(e.message));
+  const errors=[],bildAnfragen=[];let requests=0,glyphRequests=0;p.on('pageerror',e=>errors.push(e.message));
   await p.route(/^https?:/,r=>{
     const u=new URL(r.request().url());
+    if(u.hostname==='gdi.berlin.de'){
+      bildAnfragen.push({url:u.href,referer:r.request().headers().referer||''});
+      return r.fulfill({body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0uUAAAAASUVORK5CYII=','base64'),contentType:'image/png',headers:{'access-control-allow-origin':'*','cache-control':'no-store'}});
+    }
     if(u.hostname==='example.invalid'&&u.pathname.startsWith('/fonts/')){glyphRequests++;return r.fulfill({body:glyphPbf,contentType:'application/x-protobuf',headers:{'access-control-allow-origin':'*'}});}
     if(u.hostname==='example.invalid'){requests++;return r.fulfill({body:tile,contentType:'application/vnd.mapbox-vector-tile',headers:{'access-control-allow-origin':'*'}});}
     return r.abort();
   });
   await p.goto(pathToFileURL(path.join(ROOT,'karte-v2-prototyp.html')).href);
   await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Keine Kachelquelle aktiv'));
+  assert.equal(bildAnfragen.length,0,'kein Bildabruf beim Start');
+  await p.fill('#key','NICHT-AN-BILDDIENST');await p.click('#berlin2024');
+  await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Bildkacheln geladen'));
+  assert.ok(bildAnfragen.length>0);
+  for(const a of bildAnfragen){const u=new URL(a.url),bbox=u.searchParams.get('bbox').split(',').map(Number);
+    assert.equal(u.pathname,'/services/wms/truedop_2024');assert.equal(u.searchParams.get('crs'),'EPSG:3857');
+    assert.ok(bbox.length===4&&bbox.every(Number.isFinite)&&bbox[0]<bbox[2]&&bbox[1]<bbox[3]);
+    assert.ok(!u.searchParams.has('key')&&!a.url.includes('NICHT-AN-BILDDIENST')&&!a.referer);
+  }
+  await p.click('#leer');await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Keine Kachelquelle aktiv'));
   await p.evaluate(style=>{
     const el=document.createElement('div');Object.assign(el.style,{position:'fixed',inset:'0',zIndex:'100'});document.body.appendChild(el);
     const n=2**15,x=17604.5,y=10747.5;
