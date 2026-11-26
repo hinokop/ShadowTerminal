@@ -3954,6 +3954,7 @@ function render(leicht) {
     document.querySelectorAll('[data-geaendert]').forEach(function (e) { e.textContent = fmtZ(STATE.agent[e.getAttribute('data-geaendert') + 'Geaendert']); });
     aktualisiereSchreibt();
     document.querySelectorAll('[data-nstatus]').forEach(function (e) { const n = nachricht(e.getAttribute('data-nstatus')); if (n) e.textContent = 'Status: ' + n.msg.status; });
+    if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.sync();
   } else renderModule();
   renderLog(); renderSysbar();
 }
@@ -4362,6 +4363,7 @@ const Zugang = (function () {
     if (!APP_BEREIT || document.body.classList.contains('locked')) return;
     ['dlg', 'regie'].forEach(function (id) { const d = $(id); if (d && d.open) d.close(); });
     document.body.classList.add('locked');
+    if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.unmount();
     Leiste.relais(0);
     wieder = true;
     $('gate-pw').value = ''; $('gate-pw2').value = '';
@@ -4705,6 +4707,7 @@ if (typeof SCENARIO === 'undefined' || !SCENARIO || !Array.isArray(SCENARIO.miss
 else window.addEventListener('load', function () { Zugang.start(init); });   /* nach allen Skripten, auch karte-modul.js */
 </script>
 <script src="karte-modul.js"></script>
+<script src="karte-v2-anbindung.js"></script>
 <script src="akten-modul.js"></script>
 <script src="recherche-modul.js"></script>
 <script src="satellite.min.js"></script>

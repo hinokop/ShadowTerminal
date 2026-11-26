@@ -1205,6 +1205,7 @@ function karteRendererDatenAktualisieren() {
   const modell = karteRenderModell();
   KARTE_ST.setData(modell);
   KARTE_3D_ADAPTER.setData(modell);
+  if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.sync(modell);
 }
 function karteNeuZeichnen() {
   karteRendererDatenAktualisieren();
@@ -1297,6 +1298,7 @@ function karteWaehlen(id, zentrieren, renderKey) {
   else if (svg) zeichneKarte(svg);
   karteAuswahlAnzeige();
   if (K.ansicht3d) KARTE_3D_ADAPTER.setSelection(karteAuswahlNachricht());
+  if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.sync();
 }
 /* Gezielter Sprung aus anderen Modulen: erst Berechtigung und tatsächlichen Eintrag prüfen,
    dann die Ansicht öffnen. Bei gleicher SI-Nummer niemals ein anderes Dossier wählen. */
@@ -1464,6 +1466,7 @@ function karte3dFolgen() {
   KARTE3D.folge = requestAnimationFrame(karte3dFolgen);
 }
 function karteRendererVorRender(modul) {
+  if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.unmount();
   if (KARTE_ST) { KARTE_ST.unmount(); KARTE_ST = null; }
   const K = VIEW.karte;
   const karteOffen = modul === 'karte' && K.reiter !== 'protokoll';
@@ -1478,6 +1481,7 @@ function karteRendererNachRender() {
     if (KARTE3D.folge === null) karte3dFolgen();
     KARTE_3D_ADAPTER.setData();
   }
+  if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.mount();
 }
 /* Die 3D-Seite lebt dauerhaft außerhalb des Moduls (fest am Seitenende) und wird über den Platzhalter in der Karte positioniert.
    Ein Neuaufbau des Moduls (Pin setzen, Messen, Ebenen) lädt sie so nicht neu; kein Weißblitz, die Kamera bleibt erhalten. */
@@ -1954,6 +1958,7 @@ function renderKarte(m) {
       h('div', { id: 'k-fenster' }),
       h('p', { class: 'note pad' }, 'Der Schieber verschiebt den betrachteten Zeitpunkt von 12 Stunden zurück bis 96 Stunden voraus. Ringe auf der Karte: durchgezogen = aktiv, gestrichelt = ausstehend, schwach = abgelaufen. Ist kein Fenster aktiv, wird die Karte leicht abgedunkelt.')) : null
   ];
+  if (typeof KARTE_V2_DEV !== 'undefined') res.push(KARTE_V2_DEV.ansicht());
   const rt = karteStrecke();
   if (rt) res.push(panel(rt.titel, null,
     h('p', { class: 'note pad' }, rt.hinweis),
