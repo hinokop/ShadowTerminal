@@ -43,7 +43,7 @@ body.emb #bar{left:auto;right:56px}
   window.karte3d = map;
   var cv=map.getCanvas();
   cv.addEventListener('webglcontextlost',function(ev){ ev.preventDefault(); fehler('Grafikkontext verloren','Die Grafikkarte hat der Karte den Kontext entzogen. Die Ansicht wird wiederhergestellt, sobald das System ihn zurückgibt.'); });
-  cv.addEventListener('webglcontextrestored',function(){ fe.hidden=true; try{map.triggerRepaint();}catch(e){} });
+  cv.addEventListener('webglcontextrestored',function(){ fe.hidden=true; if(emb) parent.postMessage({typ:'karte3d-erholt'},'*'); try{map.triggerRepaint();}catch(e){} });
   var pruefen=0;
   map.on('error',function(){ if(bereit||pruefen) return; pruefen=setTimeout(function(){ if(!bereit) fehler('Kartenstil nicht geladen','Der Kartenstil ist nicht erreichbar (offline oder gesperrt). Die 2D-Karte bleibt nutzbar.'); },4000); });   /* Fehler vor dem Laden; läuft das Laden doch noch durch, verschwindet der Hinweis */
   setTimeout(function(){ if(!bereit && fe.hidden) fehler('Karte lädt nicht','Der Kartenstil antwortet nicht. Bitte die Internetverbindung prüfen; die 2D-Karte bleibt nutzbar.'); },20000);

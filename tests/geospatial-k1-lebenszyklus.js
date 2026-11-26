@@ -110,6 +110,27 @@ const { APP } = require('./_pfad');
       }
     });
     for (const [k,v] of Object.entries(vertrag)) assert.equal(v,true,k);
+    /* Echter Nachrichtenlistener mit richtiger/falscher Frame-Quelle, keine WebGL-Abhängigkeit. */
+    const fehlerpfad = await p.evaluate(() => {
+      const fr=h('iframe',{id:'k-3d-frame',src:'about:blank'});document.body.appendChild(fr);
+      const event=(typ,grund,source=fr.contentWindow)=>window.dispatchEvent(new MessageEvent('message',{source,data:{typ,grund}}));
+      try {
+        karte3dAktivSetzen(false); meldung('');
+        event('karte3d-fehler','fremd',window);
+        const fremd=KARTE3D.fehlerOffen===null;
+        event('karte3d-fehler','Test-Ladefehler');
+        const wartet=KARTE3D.fehlerOffen==='Test-Ladefehler'&&!$('sys-msg').textContent;
+        karte3dAktivSetzen(true);
+        const angezeigt=$('sys-msg').textContent.includes('Test-Ladefehler');
+        meldung('');event('karte3d-fehler','Test-Ladefehler');
+        const einmal=!$('sys-msg').textContent;
+        karte3dAktivSetzen(false);event('karte3d-fehler','Zweiter Fehler');event('karte3d-erholt');
+        karte3dAktivSetzen(true);
+        const erholt=KARTE3D.fehlerOffen===null&&!$('sys-msg').textContent;
+        return {fremd,wartet,angezeigt,einmal,erholt};
+      } finally {karte3dAktivSetzen(false);fr.remove();}
+    });
+    for(const [k,v] of Object.entries(fehlerpfad))assert.equal(v,true,k);
     await p.waitForTimeout(100);
     assert.deepEqual(errors,[]);
     console.log('OK: SVG mount/unmount, Projektion, Modulwechsel und 3D-Ereignisgeneration');

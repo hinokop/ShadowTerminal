@@ -1407,7 +1407,7 @@ function karte3dKlick(d) {
   KARTE_3D_ADAPTER.setSelection(karteAuswahlNachricht());
 }
 let KARTE_ST = null;
-const KARTE3D = { host: null, frame: null, platz: null, bereit: false, aktiv: false, sitzung: 0, folge: null, groesse: null };
+const KARTE3D = { host: null, frame: null, platz: null, bereit: false, aktiv: false, sitzung: 0, folge: null, groesse: null, fehlerOffen: null, fehlerGemeldet: false };
 /* Derselbe Datenvertrag wie beim SVG-Adapter; der Frame bezieht beim Bereit-Signal
    stets einen frischen Snapshot, statt Daten aus einer früheren Sitzung zu puffern. */
 const KARTE_3D_ADAPTER = {
@@ -1442,7 +1442,7 @@ const KARTE_3D_ADAPTER = {
 function karte3dNachrichtZulaessig(d) {
   if (!d || typeof d.typ !== 'string') return false;
   if (d.typ === 'karte3d-bereit') return true;
-  if (d.typ === 'karte3d-fehler') return KARTE3D.aktiv;
+  if (d.typ === 'karte3d-fehler' || d.typ === 'karte3d-erholt') return true;  /* Frame-Status unabhängig von der Sitzung; Quelle prüft der Listener */
   return KARTE3D.aktiv && d.sitzung === KARTE3D.sitzung;
 }
 function karte3dAktivSetzen(aktiv) {
@@ -1454,7 +1454,12 @@ function karte3dAktivSetzen(aktiv) {
     KARTE3D.folge = null;
     if (KARTE3D.host) KARTE3D.host.hidden = true;
     KARTE3D.platz = null;
-  } else karte3dFolgen();
+  } else { karte3dFolgen(); karte3dFehlerAnzeigen(); }
+}
+function karte3dFehlerAnzeigen() {
+  if (!KARTE3D.aktiv || !KARTE3D.fehlerOffen || KARTE3D.fehlerGemeldet) return;
+  KARTE3D.fehlerGemeldet = true;
+  meldung('3D-Ansicht: ' + KARTE3D.fehlerOffen + '. Die 2D-Karte bleibt nutzbar.');
 }
 function karte3dFolgen() {
   const pl = KARTE3D.platz, host = KARTE3D.host;
@@ -1515,13 +1520,21 @@ function karte3dEingang(d, fr) {
   {
     if (d.typ === 'karte3d-bereit') {
       KARTE3D.bereit = true; KARTE3D.groesse = null;
+      KARTE3D.fehlerOffen = null; KARTE3D.fehlerGemeldet = false;
       try {
         fr.contentWindow.postMessage({ typ: 'karte3d-aktiv', aktiv: KARTE3D.aktiv, sitzung: KARTE3D.sitzung }, '*');
         if (KARTE3D.aktiv) fr.contentWindow.postMessage(karte3dDaten(), '*');
       } catch (e) { /* ohne 3D */ }
     }
     else if (d.typ === 'karte3d-klick') karte3dKlick(d);
-    else if (d.typ === 'karte3d-fehler') { if (!KARTE3D.fehlerGemeldet) { KARTE3D.fehlerGemeldet = true; meldung('3D-Ansicht: ' + d.grund + '. Die 2D-Karte bleibt nutzbar.'); } }
+    else if (d.typ === 'karte3d-fehler') {
+      if (typeof d.grund !== 'string' || !d.grund.trim()) return;
+      const grund = d.grund.trim().slice(0, 200);
+      if (KARTE3D.fehlerOffen !== grund) KARTE3D.fehlerGemeldet = false;
+      KARTE3D.fehlerOffen = grund;
+      karte3dFehlerAnzeigen();
+    }
+    else if (d.typ === 'karte3d-erholt') { KARTE3D.fehlerOffen = null; KARTE3D.fehlerGemeldet = false; }
     else if (d.typ === 'karte3d-nutzer-bewegt') { if (VIEW.karte.bezug) { VIEW.karte.bezug = null; karteStatusAkt(); } }   /* eigenes Ziehen in 3D: Rückfall auf die Kartenmitte */
     else if (d.typ === 'karte3d-kamera' && d.kamera) {
       karteKameraUebernehmen(d.kamera);

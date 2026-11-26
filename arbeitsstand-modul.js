@@ -16,9 +16,21 @@ function asErfassen() {
 }
 function asAuswahlGueltig(id) {
   if (typeof id !== 'string' || !id) return false;
-  if ((PROFIL.pins || []).some(function (p) { return p.id === id; })) return true;
+  const pin = (PROFIL.pins || []).find(function (p) { return p.id === id; });
+  if (pin) return !pinGesperrt(pin);
   if (typeof karteZoneFinden === 'function' && karteZoneFinden(id)) return true;
-  try { return karteMarker().some(function (m) { return m.id === id; }); } catch (e) { return false; }
+  try {
+    /* Alte Arbeitsstände enthalten nur die SI-Nummer. Auch ausgeblendete
+       oder gesperrte Doppelgänger zählen bei der Eindeutigkeitsprüfung. */
+    if (/^SI-/.test(id)) {
+      let n = 0;
+      Object.values(STATE.dossiers.entitaeten).forEach(function (d) {
+        (d.sichtungen || []).forEach(function (si) { if (si.id === id) n++; });
+      });
+      if (n !== 1) return false;
+    }
+    return karteMarkerFinden(id, null) !== null;
+  } catch (e) { return false; }
 }
 /* Wendet einen gespeicherten Stand an und nennt, was übersprungen wurde. Verändert nur Ansichtsdaten. */
 function asAnwenden(s) {
@@ -46,6 +58,9 @@ function asAnwenden(s) {
     if (typeof karteWahlSichern === 'function') karteWahlSichern();
     K.pick = null; K.messen = false; K.messPts = [];
     K.pinSetzen = false; K.zoneSetzen = false; K.zugriffSetzen = false;   /* kein Platziermodus aus der vorherigen Ansicht */
+    /* Laufzeitidentität und Fokus gehören nicht zum gespeicherten Arbeitsstand. */
+    K.auswahlIdentitaet = null; K.sichtungFokus = null; K.bezug = null; K.bezugRenderKey = null; K.popupVersatz = null;
+    K.mehr = []; K.mehrModus = false;
     if (k.auswahl) { if (asAuswahlGueltig(k.auswahl)) K.auswahl = k.auswahl; else { K.auswahl = null; uebersprungen.push('Kartenobjekt ' + k.auswahl); } } else K.auswahl = null;
   }
   const ziel = ARBEITSMODULE.some(function (m) { return m.id === s.modul; }) ? s.modul : 'profil';
