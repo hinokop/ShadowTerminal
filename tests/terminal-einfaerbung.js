@@ -30,7 +30,8 @@ const { chatBereit } = require('./_kestrel');
       ['"echo', [['"echo', 'zeichenkette']]],
       ['"echo" x', [['"echo"', 'befehl'], [' ', 'leer'], ['x', 'argument']]],
       ['ec"ho', [['ec', 'unbekannt'], ['"ho', 'zeichenkette']]],
-      ['ls | cat', [['ls', 'befehl'], [' ', 'leer'], ['|', 'fehler'], [' ', 'leer'], ['cat', 'argument']]],
+      ['ls | cat', [['ls', 'befehl'], [' ', 'leer'], ['|', 'operator'], [' ', 'leer'], ['cat', 'befehl']]],   /* Pipe seit Paket 5 */
+      ['ls |& cat', [['ls', 'befehl'], [' ', 'leer'], ['|&', 'fehler'], [' ', 'leer'], ['cat', 'argument']]],
       ['&& ls', [['&&', 'fehler'], [' ', 'leer'], ['ls', 'befehl']]],
       ['e\\cho x', [['e\\cho', 'befehl'], [' ', 'leer'], ['x', 'argument']]],
       ['tmux \\; ls', [['tmux', 'befehl'], [' ', 'leer'], ['\\;', 'argument'], [' ', 'leer'], ['ls', 'argument']]],

@@ -319,7 +319,7 @@ const TERMINAL_ARCHIV_NAME_SUCHE = /(?:lageblatt-PIN-\d{3,15}(?:-v\d{1,2})?|zone
 function terminalZeileMitGesperrtemName(zeile, sicht) {
   sicht = sicht || terminalArchivSichtbarkeit();
   const roh = String(zeile), texte = [roh], z = terminalZerlegen(roh);
-  if (!z.fehler) z.folge.forEach(function (f) { f.woerter.forEach(function (w) { texte.push(w); }); if (f.umleit && f.umleit.ziel) texte.push(f.umleit.ziel); });
+  if (!z.fehler) z.folge.forEach(function (f) { (f.stufen ? [].concat.apply([], f.stufen) : f.woerter).forEach(function (w) { texte.push(w); }); if (f.umleit && f.umleit.ziel) texte.push(f.umleit.ziel); });
   return texte.some(function (text) { return (text.match(TERMINAL_ARCHIV_NAME_SUCHE) || []).some(function (m) { return !sicht(m); }); });
 }
 /* Sperrstand als Zeichenkette; ändert er sich (Sperren, Entsperren, Verknüpfung von Pin oder Zone), verfallen alle abgeleiteten Zustände
@@ -437,7 +437,7 @@ function terminalSchutzFiltern(zeile, meta, sicht) {
   return { zeile: rein.join('\n'), meta: neu };
 }
 /* Nach jeder Zustandsänderung (index.html, dispatch) */
-function terminalSchutzPruefen() { terminalSperrstandPruefen(); terminalPppSchutzBereinigen(); if (terminalSchutzBereinigen()) terminalAusgabe([]); }
+function terminalSchutzPruefen() { terminalSperrstandPruefen(); terminalPppSchutzBereinigen(); terminalTabSchutzPruefen(); if (terminalSchutzBereinigen()) terminalAusgabe([]); }
 /* Name am Zeilenende einer ls-Ausgabe (kurz: ganze Zeile; lang: letztes Feld nach zwei oder mehr Leerzeichen), ohne Ordnerzeichen und
    ohne Pfad: Dateioperanden erscheinen so, wie sie eingegeben wurden (absolut, relativ, mit ./ oder ../), geprüft wird der Basisname.
    Fehlerzeilen (ls: cannot access '<Pfad>': ...) enthalten keinen Basisnamen am Ende und werden nicht als Listeneintrag gewertet;
@@ -2864,14 +2864,21 @@ function terminalNmapEnde(code) {
 
 /* Shell-Kern: zerlegt eine Zeile in Befehle (Anführungszeichen, \-Escape, $?), verkettet mit &&, || und ;
    und führt nacheinander aus. Jeder Befehl liefert einen Rückgabewert; die Befehle selbst kennen keine Verkettung.
-   Pipes, Umleitungen und Befehlsersetzung sind nicht vorhanden. */
+   Einfache Pipes "|" und eine abschließende Umleitung (Paket 5, terminal-recherche.js); Befehlsersetzung, "<", "2>" und "|&" sind nicht vorhanden. */
 const TERMINAL_STATUS_MARKE = '\u0001';
 function terminalZerlegen(zeile) {
   const folge = [];
-  let woerter = [], wort = null, quote = null, umleit = null, offen = null, syntax = null;
+  let woerter = [], wort = null, quote = null, umleit = null, offen = null, syntax = null, stufen = [];
   /* Umleitung ">" und ">>" (Paket 1): das nächste Wort ist das Ziel und gehört nicht zu den Argumenten */
   const wortEnde = function () { if (wort !== null) { if (offen) { offen.ziel = wort; offen = null; } else woerter.push(wort); wort = null; } };
-  const befehlEnde = function (op) { wortEnde(); if (offen && !syntax) syntax = op || 'newline'; offen = null; folge.push({ woerter, op, umleit }); woerter = []; umleit = null; };
+  /* Pipeline (Paket 5): stufen sammelt die Wortlisten vor jedem "|"; woerter bleibt die erste Stufe (bisherige Verwender) */
+  const befehlEnde = function (op) {
+    wortEnde(); if (offen && !syntax) syntax = op || 'newline';
+    if (stufen.length && !woerter.length && !syntax) syntax = op || 'newline';
+    offen = null;
+    folge.push(stufen.length ? { woerter: stufen[0], op, umleit, stufen: stufen.concat([woerter]) } : { woerter, op, umleit });
+    woerter = []; umleit = null; stufen = [];
+  };
   for (let i = 0; i < zeile.length; i++) {
     const c = zeile[i], n = zeile[i + 1];
     if (quote === "'") { if (c === "'") quote = null; else wort += c; continue; }
@@ -2888,6 +2895,14 @@ function terminalZerlegen(zeile) {
     if (c === '&' && n === '&') { befehlEnde('&&'); i++; continue; }
     if (c === '|' && n === '|') { befehlEnde('||'); i++; continue; }
     if (c === ';') { befehlEnde(';'); continue; }
+    if (c === '|') {
+      if (n === '&') return { fehler: 'terminal: |&: pipes of standard error are not supported' };
+      wortEnde();
+      if (offen || !woerter.length) return { fehler: "terminal: syntax error near unexpected token `|'" };
+      if (umleit) return { fehler: 'terminal: redirections are only supported at the end of a pipeline' };
+      stufen.push(woerter); woerter = [];
+      continue;
+    }
     if (c === '>') {
       if (wort !== null && /^\d+$/.test(wort)) return { fehler: 'terminal: file descriptor redirections are not supported' };
       wortEnde();
@@ -2899,7 +2914,7 @@ function terminalZerlegen(zeile) {
       umleit = { art: art, ziel: null }; offen = umleit;
       continue;
     }
-    if ('|&<>`'.includes(c) || (c === '$' && n === '(')) return { fehler: 'terminal: ' + (c === '$' ? '$(' : c) + ': pipes, redirections and substitutions are not supported' };
+    if ('&<>`'.includes(c) || (c === '$' && n === '(')) return { fehler: 'terminal: ' + (c === '$' ? '$(' : c) + ': pipes, redirections and substitutions are not supported' };
     if (c === '$' && n === '?') { wort = (wort ?? '') + TERMINAL_STATUS_MARKE; i++; continue; }
     wort = (wort ?? '') + c;
   }
@@ -3759,7 +3774,7 @@ function terminalHilfe() {
   const zeilen = [[], [], []];
   TERMINAL_TABELLE.forEach(function (e) { (e.hilfe || []).forEach(function (h) { zeilen[h[0]].push(h); }); });
   return zeilen.map(function (z) { return z.sort(function (a, b) { return a[1] - b[1]; }).map(function (h) { return h[2]; }).join(' · '); })
-    .concat('cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?');
+    .concat('cmd1 | cmd2 [> file] · cmd1 && cmd2 · cmd1 || cmd2 · cmd1 ; cmd2 · exit status: echo $?');
 }
 /* Befehlstabelle: Name, Hilfe (Zeile, Position, Text), Ausführung und Art der Tab-Ergänzung an einer Stelle.
    Tab-Arten: pfad (Dateien und Ordner), fest (feste Argumentfolgen), optionen (Optionen ohne Leerzeichen danach),
@@ -3775,6 +3790,12 @@ const TERMINAL_TABELLE = [
     const ppp = await terminalPppShell('tail', arg, args);
     return ppp !== null ? ppp : terminalDateiAusfuehren('tail', arg, args);
   } },
+  { name: 'grep', hilfe: [[0, 5.1, 'grep [-inrlvcFEwx] PATTERN [FILE]...']], tab: { art: 'grep', optionen: ['-i', '-n', '-r', '-l', '-v', '-c', '-F', '-E', '-e', '-h', '-H', '-s', '-q', '-w', '-x'] }, aus: function (args) { return terminalRechercheAusfuehren([['grep'].concat(args)], null); } },
+  { name: 'find', hilfe: [[0, 5.2, 'find [PATH]... [-name|-iname|-type|-maxdepth|-mindepth ...]']], tab: { art: 'find' }, aus: function (args) { return terminalRechercheAusfuehren([['find'].concat(args)], null); } },
+  { name: 'wc', hilfe: [[0, 5.3, 'wc [-lwmc] [FILE]...']], tab: { art: 'pfad', optionen: ['-l', '-w', '-m', '-c'] }, aus: function (args) { return terminalRechercheAusfuehren([['wc'].concat(args)], null); } },
+  { name: 'sort', hilfe: [[0, 5.4, 'sort [-rnu] [FILE]...']], tab: { art: 'pfad', optionen: ['-r', '-n', '-u'] }, aus: function (args) { return terminalRechercheAusfuehren([['sort'].concat(args)], null); } },
+  { name: 'uniq', hilfe: [[0, 5.5, 'uniq [-cdui] [FILE]']], tab: { art: 'pfad', optionen: ['-c', '-d', '-u', '-i'] }, aus: function (args) { return terminalRechercheAusfuehren([['uniq'].concat(args)], null); } },
+  { name: 'sha256sum', hilfe: [[0, 5.6, 'sha256sum [FILE]...']], tab: { art: 'pfad' }, aus: function (args) { return terminalRechercheAusfuehren([['sha256sum'].concat(args)], null); } },
   { name: 'wget', hilfe: [[0, 6, 'wget <datei>']], tab: { art: 'pfad' }, aus: TERMINAL_DATEI('wget') },
   { name: 'help', aus: function (args, arg) { if (arg) return terminalUsage('help'); terminalAusgabe(terminalHilfe()); return 0; } },
   { name: 'pwd', hilfe: [[0, 2, 'pwd']], aus: function (args, arg) { return terminalBefehlLauf(terminalBefehlPwd, args, arg, TERMINAL_ZUSTAND.version); } },
@@ -3889,11 +3910,14 @@ async function terminalKetteAusfuehren(folge) {
       op = teil.op;
       if (ueberspringen) continue;
       if (t.satLink) terminalSatLinkAktiv(t.satLink);
-      const woerter = teil.woerter.map(function (w) { return w.split(TERMINAL_STATUS_MARKE).join(String(t.status)); });
+      const status = function (w) { return w.split(TERMINAL_STATUS_MARKE).join(String(t.status)); };
+      const woerter = teil.woerter.map(status);
       let code;
       try {
-        const um = teil.umleit ? { art: teil.umleit.art, ziel: teil.umleit.ziel.split(TERMINAL_STATUS_MARKE).join(String(t.status)) } : null;
-        code = um ? await terminalUmgeleitet(woerter, um) : await terminalEinzelbefehl(woerter);
+        const um = teil.umleit ? { art: teil.umleit.art, ziel: status(teil.umleit.ziel) } : null;
+        /* Pipelines und die Recherchewerkzeuge (Paket 5) laufen über terminal-recherche.js, alles Übrige unverändert */
+        if (teil.stufen || RECHERCHE_EIGEN.has(woerter[0])) code = await terminalRechercheAusfuehren((teil.stufen || [teil.woerter]).map(function (s) { return s.map(status); }), um);
+        else code = um ? await terminalUmgeleitet(woerter, um) : await terminalEinzelbefehl(woerter);
       } catch (e) { code = 1; }
       if (t.kette !== kette) return;
       t.status = kette.abgebrochen ? kette.code : typeof code === 'number' ? code : 0;
@@ -3979,7 +4003,7 @@ function terminalTabGueltig(lauf) {
   return terminalTabLauf === lauf && terminalTabKontext(lauf) && input.isConnected &&
     document.activeElement === input && input.value === lauf.wert && input.selectionStart === n && input.selectionEnd === n;
 }
-function terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format) {
+function terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format, deps) {
   if (!terminalTabGueltig(lauf)) return;
   const input = lauf.input;
   const treffer = [...new Set(kandidaten)].filter(x => x.toLowerCase().startsWith(prefix.toLowerCase()));
@@ -3990,25 +4014,95 @@ function terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format) {
   if (gemeinsam.length > prefix.length) terminalEingabeSetzen(input, kopf + gemeinsam);
   else {
     // Nur anzeigen; der Entwurf bleibt, bis ein weiterer Tab ausdrücklich einen Eintrag wählt.
-    terminalTabAuswahl = { ...lauf, werte: treffer.map(x => kopf + format(x)), anzeige: treffer.map(terminalTabAnzeigename), index: -1, original: input.value };
+    terminalTabAuswahl = { ...lauf, werte: treffer.map(x => kopf + format(x)), anzeige: treffer.map(terminalTabAnzeigename), index: -1, original: input.value,
+      deps: deps ? treffer.map(function (x) { return deps.get(x) || null; }) : null };
     terminalTabListe();
   }
+}
+/* Wörter eines Arguments für Tab (Anführungszeichen beachtet); start: Beginn des letzten Wortes. Ohne letztes Wort (Leerzeichen am Ende) ein leeres. */
+function terminalTabWorte(arg) {
+  const worte = [];
+  let start = 0, q = null, wort = null;
+  for (let i = 0; i < arg.length; i++) {
+    const c = arg[i];
+    if (q) { if (c === q) q = null; wort += c; continue; }
+    if (/\s/.test(c)) { if (wort !== null) { worte.push(wort); wort = null; } continue; }
+    if (wort === null) { wort = ''; start = i; }
+    if (c === '"' || c === "'") q = c;
+    wort += c;
+  }
+  if (q) return null;
+  if (wort === null) { worte.push(''); start = arg.length; } else worte.push(wort);
+  return { worte: worte, start: start };
+}
+/* Letzte Pipe einer Eingabe (ohne Anführungszeichen, nicht "||"): kopf bis einschließlich der Leerzeichen danach, rest für die Ergänzung */
+function terminalTabPipe(text) {
+  let q = null, pos = -1;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === q) q = null; continue; }
+    if (c === '"' || c === "'") { q = c; continue; }
+    if (c === '\\') { i++; continue; }
+    if (c === '|') { if (text[i + 1] === '|') { i++; pos = -1; continue; } pos = i; }
+    if (c === '&' || c === ';') pos = -1;
+  }
+  if (pos < 0) return null;
+  const nach = /^\s*/.exec(text.slice(pos + 1))[0];
+  return { kopf: text.slice(0, pos + 1 + nach.length), rest: text.slice(pos + 1 + nach.length) };
+}
+/* Offene Auswahlliste und Ergänzungsvorschlag gegen die Schutzabhängigkeiten ihrer Kandidaten prüfen (nach jeder Zustandsänderung) */
+function terminalTabSchutzPruefen() {
+  const a = terminalTabAuswahl;
+  if (a && a.deps && a.deps.some(function (d) { return d && d.some(INTEL.gesperrt); })) {
+    if (a.input?.isConnected && a.werte.includes(a.input.value)) terminalEingabeSetzen(a.input, a.original);
+    terminalTabReset();
+  }
+  const k = TERMINAL_ZUSTAND.vorschlagErgaenzung;
+  if (k && k.deps && k.deps.some(INTEL.gesperrt)) { k.rest = ''; k.deps = null; terminalVorschlagAnzeige(); }
 }
 async function terminalTab(lauf, m) {
   const bisher = lauf.wert;
   const befehl = m[1];
   let arg = m[2], kopfB = befehl + ' ';
   // lauf.nurVorschlag: nur die Treffer festhalten (grauer Vorschlag), nichts an der Eingabe ändern.
-  const fertig = function (kopf, prefix, kandidaten, format) {
-    if (lauf.nurVorschlag) { lauf.ergebnis = { kopf, prefix, kandidaten, format }; return; }
-    terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format);
+  /* lauf.pipeKopf: Text bis zur letzten Pipe (Paket 5); deps: Schutzabhängigkeiten je Kandidat (Map), damit eine offene Auswahlliste bei
+     Sperre, Identitätswechsel oder Löschung verfällt (Abschlussreview zu #140) */
+  const fertig = function (kopf, prefix, kandidaten, format, deps) {
+    kopf = (lauf.pipeKopf || '') + kopf;
+    if (lauf.nurVorschlag) { lauf.ergebnis = { kopf, prefix, kandidaten, format, deps }; return; }
+    terminalTabKandidaten(lauf, kopf, prefix, kandidaten, format, deps);
   };
   if (arg === undefined) {
-    fertig('', befehl, TERMINAL_BEFEHLE, function (x) { return x + ' '; });
+    fertig('', befehl, lauf.pipeKopf ? TERMINAL_BEFEHLE.filter(function (x) { return RECHERCHE_PIPE.has(x); }) : TERMINAL_BEFEHLE, function (x) { return x + ' '; });
     return;
   }
   const tab = terminalBefehlEintrag(befehl)?.tab;
   if (!tab) return;
+  if (tab.art === 'grep' || tab.art === 'find') {
+    /* Pfadpositionen: grep nach dem Muster (ohne -e), find vor dem ersten Ausdruck; Optionen und Ausdrücke als feste Liste */
+    const w = terminalTabWorte(arg);
+    if (!w) return;
+    const letzt = w.worte[w.worte.length - 1], vor = w.worte.slice(0, -1), kopf = befehl + ' ' + arg.slice(0, w.start);
+    if (tab.art === 'grep') {
+      let muster = false, i = 0;
+      for (; i < vor.length; i++) { if (vor[i] === '-e') { muster = true; i++; continue; } if (vor[i].startsWith('-') && vor[i] !== '-') continue; break; }
+      const nachOpt = vor.slice(i).filter(function (x) { return x !== '--'; });
+      const pfadPos = muster || nachOpt.length >= 1;
+      if (letzt.startsWith('-') && !nachOpt.length) { fertig(kopf, letzt, tab.optionen, function (x) { return x + ' '; }); return; }
+      if (!pfadPos || /['"]/.test(letzt)) return;
+    } else {
+      const ausdruck = vor.findIndex(function (x) { return x.startsWith('-'); });
+      if (ausdruck >= 0) {
+        const vorher = vor[vor.length - 1];
+        if (vorher === '-type') fertig(kopf, letzt, ['f', 'd', 'l'], function (x) { return x + ' '; });
+        else if (letzt.startsWith('-') && !['-name', '-iname', '-maxdepth', '-mindepth'].includes(vorher)) fertig(kopf, letzt, ['-name', '-iname', '-type', '-maxdepth', '-mindepth', '-print'], function (x) { return x + ' '; });
+        return;
+      }
+      if (letzt.startsWith('-')) { fertig(kopf, letzt, ['-name', '-iname', '-type', '-maxdepth', '-mindepth', '-print'], function (x) { return x + ' '; }); return; }
+      if (/['"]/.test(letzt)) return;
+    }
+    return terminalTabPfad(lauf, kopf, letzt, false, fertig);
+  }
   /* ls: führende Optionswörter bleiben stehen, ergänzt wird der Pfad dahinter (ls -l /etc/p) */
   const vorOpt = befehl === 'ls' ? /^((?:-\S*\s+)+)(.*)$/.exec(arg) : null;
   if (vorOpt) { kopfB = befehl + ' ' + vorOpt[1]; arg = vorOpt[2]; }
@@ -4057,7 +4151,7 @@ async function terminalTab(lauf, m) {
     return;
   }
   /* Befehle mit mehreren Operanden: ergänzt wird das letzte Wort (cp a.txt b<Tab>) */
-  if (['cp', 'mv', 'rm', 'touch', 'mkdir', 'rmdir', 'cat', 'head', 'tail', 'nano', 'readlink'].includes(befehl) && !/['"]/.test(arg)) {
+  if (['cp', 'mv', 'rm', 'touch', 'mkdir', 'rmdir', 'cat', 'head', 'tail', 'nano', 'readlink', 'wc', 'sort', 'uniq', 'sha256sum'].includes(befehl) && !/['"]/.test(arg)) {
     const mm = /^(.*\s)?(\S*)$/.exec(arg);
     kopfB += mm[1] || ''; arg = mm[2];
   }
@@ -4098,9 +4192,10 @@ async function terminalTabPfad(lauf, kopfB, arg, nurDir, fertig, opt) {
     if (lauf.nurVorschlag) lauf.fertigLs = true;
     const ordner = function (x) { return x.dir || (x.link && x.zielDir); };
     /* Entnahme: Abhängigkeiten jedes Eintrags unmittelbar vor der Übernahme erneut gegen die Sperren prüfen */
+    const deps = new Map();
     const dateien = r.eintraege.filter(function (x) { return (ordner(x) || !nurDir) && !(x.deps || []).concat(r.deps || []).some(INTEL.gesperrt); })
-      .map(function (x) { return basis + x.name + (ordner(x) ? '/' : ''); });
-    fertig(kopfB + anfang, pfad, dateien, function (x) { return x + anfang; });
+      .map(function (x) { const k = basis + x.name + (ordner(x) ? '/' : ''); deps.set(k, (x.deps || []).concat(r.deps || [])); return k; });
+    fertig(kopfB + anfang, pfad, dateien, function (x) { return x + anfang; }, deps);
     return;
   }
   if (TERMINAL_VFS.zugehoerig(teile) || teile[0] === 'usr' || teile[0] === 'exports') {
@@ -4110,12 +4205,13 @@ async function terminalTabPfad(lauf, kopfB, arg, nurDir, fertig, opt) {
     if (r.fehler) return;
     if (lauf.nurVorschlag) lauf.fertigLs = true;
     /* /exports (Review 3 zu #140): Herkunft jedes Kandidaten unmittelbar vor der Übernahme erneut prüfen (VFS-Einträge tragen keine deps) */
+    const deps = new Map();
     const dateien = r.eintraege.filter(function (x) { return (prefix.startsWith('.') || !x.name.startsWith('.')) && (x.dir || !nurDir) && !(x.deps || []).concat(r.deps || []).some(INTEL.gesperrt); })
-      .map(function (x) { return basis + x.name + (x.dir ? '/' : ''); });
+      .map(function (x) { const k = basis + x.name + (x.dir ? '/' : ''); if ((x.deps || []).length) deps.set(k, x.deps); return k; });
     fertig(kopfB + anfang, pfad, dateien, function (x) {
       const quote = anfang || (/\s|^'/.test(x) ? '"' : '');
       return (quote && !anfang ? quote : '') + x + quote;
-    });
+    }, deps);
     return;
   }
   if (teile[0] !== TERMINAL_DB) return;
@@ -4235,7 +4331,8 @@ function terminalTabTaste(ev) {
   }
   if (ev.shiftKey) return;
   const t = TERMINAL_ZUSTAND;
-  const m = /^(\S+)(?:\s+(.*))?$/.exec(bisher);
+  const pipe = t.kanal ? null : terminalTabPipe(bisher);
+  const m = /^(\S+)(?:\s+(.*))?$/.exec(pipe ? pipe.rest : bisher);
   if (t.orbitLive || terminalPppWaehltVorne()) return;
   if (t.kanal ? t.kanal.phase !== 'eingabe' ||
       !(/^\/(?:sendfile|msg|omemo)\s/.test(bisher) || (bisher.startsWith('/') && !/\s/.test(bisher))) :
@@ -4244,7 +4341,7 @@ function terminalTabTaste(ev) {
   ev.preventDefault();
   if (terminalTabLauf?.wert === bisher && terminalTabGueltig(terminalTabLauf)) return;
   terminalTabAuswahl = null;
-  const lauf = { input, wert: bisher, version: t.version, kanal: t.kanal, ort: terminalArbeitsverzeichnis(), sperrGen: terminalSperrGeneration };
+  const lauf = { input, wert: bisher, version: t.version, kanal: t.kanal, ort: terminalArbeitsverzeichnis(), sperrGen: terminalSperrGeneration, pipeKopf: pipe ? pipe.kopf : '' };
   terminalTabLauf = lauf;
   (t.kanal ? terminalKanalTab(lauf) : terminalTab(lauf, m)).catch(function () {}).finally(function () {
     if (terminalTabLauf === lauf) terminalTabLauf = null;
@@ -4278,7 +4375,7 @@ function terminalVorschlag() {
   // Zweite Quelle wie ZSH_AUTOSUGGEST_STRATEGY=(history completion): der erste Treffer der Tab-Ergänzung.
   const k = t.vorschlagErgaenzung;
   if (k && k.wert === input.value && k.version === t.version && k.sperrGen === terminalSperrGeneration && k.ort === terminalArbeitsverzeichnis())
-    return terminalZeileMitGesperrtemName(k.wert + k.rest) ? '' : k.rest;
+    return terminalZeileMitGesperrtemName(k.wert + k.rest) || (k.deps && k.deps.some(INTEL.gesperrt)) ? '' : k.rest;
   if (!k || k.wert !== input.value) terminalVorschlagErgaenzen(input);
   return '';
 }
@@ -4286,16 +4383,16 @@ function terminalVorschlag() {
    compstate[insert]=1 fügt den ersten Treffer ein (Treffer sortiert), matcher-list '' verlangt, dass er die Eingabe
    genau fortsetzt. Asynchron wie ZSH_AUTOSUGGEST_USE_ASYNC: das Ergebnis gilt nur, solange die Eingabe gleich bleibt. */
 function terminalVorschlagErgaenzen(input) {
-  const t = TERMINAL_ZUSTAND, wert = input.value, m = /^(\S+)(?:\s+(.*))?$/.exec(wert);
+  const t = TERMINAL_ZUSTAND, wert = input.value, pipe = terminalTabPipe(wert), m = /^(\S+)(?:\s+(.*))?$/.exec(pipe ? pipe.rest : wert);
   t.vorschlagErgaenzung = { wert, rest: '', version: t.version, ort: terminalArbeitsverzeichnis(), sperrGen: terminalSperrGeneration };
   if (!m || t.dateiLaeuft || (m[2] !== undefined && !terminalBefehlEintrag(m[1])?.tab)) return;
-  const lauf = { input, wert, version: t.version, kanal: null, ort: terminalArbeitsverzeichnis(), nurVorschlag: true, sperrGen: terminalSperrGeneration };
+  const lauf = { input, wert, version: t.version, kanal: null, ort: terminalArbeitsverzeichnis(), nurVorschlag: true, sperrGen: terminalSperrGeneration, pipeKopf: pipe ? pipe.kopf : '' };
   terminalTab(lauf, m).then(function () {
     const e = lauf.ergebnis, eintrag = t.vorschlagErgaenzung;
     if (!e || eintrag?.wert !== wert || !terminalVorschlagGueltig(lauf)) return;
     const erster = [...new Set(e.kandidaten)].filter(function (x) { return x.startsWith(e.prefix); }).sort()[0];
     const voll = erster === undefined ? '' : e.kopf + e.format(erster);
-    if (voll.length > wert.length && voll.startsWith(wert)) { eintrag.rest = voll.slice(wert.length); terminalVorschlagAnzeige(); }
+    if (voll.length > wert.length && voll.startsWith(wert)) { eintrag.rest = voll.slice(wert.length); eintrag.deps = e.deps ? e.deps.get(erster) || null : null; terminalVorschlagAnzeige(); }
   }).catch(function () {});
 }
 function terminalVorschlagGueltig(lauf) {
@@ -4357,7 +4454,7 @@ function terminalEinfaerben(zeile) {
     if (c === "'" || c === '"') { quote = c; wortDazu(c, 'zeichenkette', ''); continue; }
     if (/\s/.test(c)) { wortEnde(); dazu(c, 'leer'); continue; }
     if (c === '\\') { wortDazu(n === undefined ? c : c + n, 'wort', n ?? ''); i++; continue; }
-    const op = (c === '&' && n === '&') || (c === '|' && n === '|') ? c + n : c === ';' ? ';' : '';
+    const op = (c === '&' && n === '&') || (c === '|' && n === '|') ? c + n : c === ';' ? ';' : c === '|' && n !== '&' ? '|' : '';   /* Pipe seit Paket 5 */
     if (op) {
       const ohneBefehl = befehlsPos && !wort;
       wortEnde();
