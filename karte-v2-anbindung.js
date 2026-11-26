@@ -19,6 +19,23 @@
       const el=$('k-v2-'+n);if(el){el.disabled=!c.a;el.setAttribute('aria-pressed',String(c.modus===n));}
     }
   }
+  function gebaeudeKnoepfe(c){
+    if(!aktiv(c))return;
+    const g=$('k-v2-gebaeude'), f=$('k-v2-flach'), n=$('k-v2-geneigt');
+    if(g){g.disabled=!(c.phase==='online'&&c.map?.getLayer(KARTE_V2_QUELLEN.GEBAEUDE_ID));g.setAttribute('aria-pressed',String(c.gebaeude));}
+    if(f){f.disabled=!c.map;f.setAttribute('aria-pressed',String(!!c.map&&c.map.getPitch()<1));}
+    if(n){n.disabled=!c.map;n.setAttribute('aria-pressed',String(!!c.map&&c.map.getPitch()>=1));}
+  }
+  function neigung(c,grad){
+    if(!aktiv(c)||!c.map)return;
+    c.map.easeTo(grad===0?{pitch:0,bearing:0}:{pitch:60},{});
+  }
+  function gebaeudeUmschalten(c){
+    if(!aktiv(c)||c.phase!=='online'||!c.map.getLayer(KARTE_V2_QUELLEN.GEBAEUDE_ID))return;
+    c.gebaeude=!c.gebaeude;
+    c.map.setLayoutProperty(KARTE_V2_QUELLEN.GEBAEUDE_ID,'visibility',c.gebaeude?'visible':'none');
+    gebaeudeKnoepfe(c);
+  }
   function stop(c){
     if(c.abort)c.abort.abort();c.abort=null;
     clearTimeout(c.timer);c.timer=null;
@@ -27,7 +44,7 @@
     if(!aktiv(c)||!c.a)return;
     ++c.generation;stop(c);c.modus='leer';c.phase='lokal';c.key='';
     try{c.a.setStyle(KARTE_V2_QUELLEN.leererStil());sync();}catch(e){}
-    knoepfe(c);hinweis(c,grund+' · Lokale Objektlayer bleiben verfügbar.');
+    knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,grund+' · Lokale Objektlayer bleiben verfügbar.');
   }
   async function wechseln(c,n){
     if(!aktiv(c)||!c.a||!Object.hasOwn(namen,n))return;
@@ -36,7 +53,7 @@
     if(!key){rueckfall(c,'Kein lokaler CARTO-Schlüssel');return;}
     const Q=KARTE_V2_QUELLEN, g=++c.generation;stop(c);
     c.modus=n;c.phase='abruf';c.key=key;knopfhilfe();
-    function knopfhilfe(){knoepfe(c);hinweis(c,namen[n]+' wird geladen.');}
+    function knopfhilfe(){knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,namen[n]+' wird geladen.');}
     const ac=new AbortController();c.abort=ac;
     c.timer=setTimeout(()=>{if(aktiv(c)&&c.generation===g)rueckfall(c,'CARTO-Zeitlimit erreicht');},25000);
     try{
@@ -45,7 +62,7 @@
       const s=await antwort.json();
       if(!aktiv(c)||c.generation!==g)return;
       if(!Q.vektorStil(s))throw Error('Vektorstil');
-      c.phase='kacheln';c.a.setStyle(s);sync();
+      c.phase='kacheln';c.a.setStyle(Q.gebaeudeStil(s,n==='dunkel',c.gebaeude));sync();
     }catch(e){if(aktiv(c)&&c.generation===g)rueckfall(c,'CARTO-Stil nicht verfügbar');}
   }
   function aktiv(c){
@@ -72,6 +89,11 @@
       h('div',{class:'pad'},h('strong',null,'MapLibre – lokale Entwicklungsansicht'),
         h('div',{style:'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;'},
           ...Object.keys(namen).map(n=>h('button',{type:'button',id:'k-v2-'+n,disabled:true,'aria-pressed':String(n==='leer'),onclick:()=>wechseln(kontext,n)},namen[n]))),
+        h('div',{style:'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;'},
+          h('button',{type:'button',id:'k-v2-flach',disabled:true,'aria-pressed':'true',onclick:()=>neigung(kontext,0)},'2D'),
+          h('button',{type:'button',id:'k-v2-geneigt',disabled:true,'aria-pressed':'false',onclick:()=>neigung(kontext,60)},'3D'),
+          h('button',{type:'button',id:'k-v2-gebaeude',disabled:true,'aria-pressed':'false',onclick:()=>gebaeudeUmschalten(kontext)},'Gebäude')),
+        h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('p',{class:'note',id:'k-v2-status',role:'status'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.'),
         h('small',null,'Bei CARTO-Auswahl sieht der Anbieter Kartenausschnitt, IP und Schlüssel. © OpenStreetMap-Mitwirkende, © CARTO.')),
       h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:420px;min-height:240px;background:#101820;border:1px solid var(--border);'}));
@@ -114,14 +136,15 @@
     const el=$('k-v2-map'),status=$('k-v2-status');
     if(!el||!status||document.body.classList.contains('locked'))return;
     unmount();
-    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',key:'',generation:0,abort:null,timer:null};kontext=c;
+    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:false,key:'',generation:0,abort:null,timer:null};kontext=c;
     bibliothek().then(()=>{
       if(!aktiv(c))return;
       const K=VIEW.karte;
       c.map=new maplibregl.Map({container:el,style:KARTE_V2_QUELLEN.leererStil(),
         center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5)),attributionControl:true,
         transformRequest:url=>KARTE_V2_QUELLEN.cartoRequest(url,c.key)});
-      c.map.addControl(new maplibregl.NavigationControl(),'top-right');
+      c.map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
+      c.map.on('moveend',()=>gebaeudeKnoepfe(c));
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
       c.map.on('error',()=>{
         if(!aktiv(c))return;
@@ -129,10 +152,10 @@
       });
       c.map.on('idle',()=>{
         if(!aktiv(c)||!c.a.ready())return;
-        if(c.phase==='kacheln'){stop(c);c.phase='online';hinweis(c,namen[c.modus]+' bereit · lokale Objektlayer aktiv.');}
+        if(c.phase==='kacheln'){stop(c);c.phase='online';gebaeudeKnoepfe(c);hinweis(c,namen[c.modus]+' bereit · lokale Objektlayer aktiv.');}
         else if(c.phase==='lokal'&&!c.status.textContent.includes('bleiben verfügbar'))hinweis(c,'Lokale Objektlayer bereit · keine Basiskarte · Kamera vorläufig unabhängig.');
       });
-      knoepfe(c);
+      knoepfe(c);gebaeudeKnoepfe(c);
       sync();
     }).catch(()=>{
       if(!aktiv(c))return;

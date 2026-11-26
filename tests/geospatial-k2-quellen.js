@@ -8,6 +8,20 @@ const key = 'fixture +/&?';
 assert.equal(Q.vektorStil({version:8,sources:{protomaps:{type:'vector'}},layers:[{source:'protomaps','source-layer':'buildings'}]}),true);
 assert.equal(Q.vektorStil(Q.leererStil()),false);
 assert.equal(Q.vektorStil(null),false);
+const basis={version:8,sources:{protomaps:{type:'vector',tiles:['https://example.invalid/{z}/{x}/{y}']}},layers:[
+  {id:'f',type:'fill',source:'protomaps','source-layer':'buildings'},
+  {id:'label',type:'symbol',source:'protomaps','source-layer':'buildings'}]};
+const unveraendert=JSON.stringify(basis), mit=Q.gebaeudeStil(basis,false,true);
+assert.equal(JSON.stringify(basis),unveraendert);
+assert.deepEqual(mit.sources,basis.sources);
+assert.deepEqual(mit.layers.map(l=>l.id),['f',Q.GEBAEUDE_ID,'label']);
+const g=mit.layers[1];
+assert.equal(g.type,'fill-extrusion');assert.equal(g.minzoom,15);
+assert.equal(g.layout.visibility,'visible');
+assert.equal(Q.gebaeudeStil(basis,true,false).layers[1].layout.visibility,'none');
+assert.notEqual(Q.gebaeudeStil(basis,true,false).layers[1].paint['fill-extrusion-color'],g.paint['fill-extrusion-color']);
+assert.throws(()=>Q.gebaeudeStil(mit,false,true));
+assert.throws(()=>Q.gebaeudeStil(Q.leererStil(),false,true));
 const ds={sources:{protomaps:{type:'vector',maxzoom:15}},layers:[{source:'protomaps','source-layer':'buildings'}]};
 const sample=[{properties:{height:12,min_height:'0',name:'A','name:de':'A',secret:'NICHT-IM-BERICHT'}},{properties:{height:'unbekannt','building:levels':'3',name:'B'}},{properties:{height:'',min_height:null,'name:de':''}}];
 const stats=D.statistik(sample);

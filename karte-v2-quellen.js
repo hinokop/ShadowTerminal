@@ -30,7 +30,30 @@
     return Object.entries(s.sources).some(([id,src])=>src && src.type==='vector' &&
       s.layers.some(l=>l.source===id && l['source-layer']==='buildings'));
   }
-  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil });
+  /* K2c-3: Protomaps buildings, Meterkonvention; keine eigene Höhenschätzung.
+     Nur Polygon-Gebäude/-teile, ab z15 (darunter zusammengefasste Geometrien).
+     1500 m ist eine konservative Plausibilitätsgrenze, kein Messnachweis. */
+  const GEBAEUDE_ID='shadow-v2-gebaeude-3d';
+  function gebaeudeStil(s,nacht,an){
+    if(!vektorStil(s))throw Error('Keine Vektorquelle');
+    const copy=JSON.parse(JSON.stringify(s));
+    const quellen=Object.keys(copy.sources).filter(id=>copy.sources[id]?.type==='vector'&&copy.layers.some(l=>l.source===id&&l['source-layer']==='buildings'));
+    if(quellen.length!==1||copy.layers.some(l=>l.id===GEBAEUDE_ID))throw Error('Gebäudequelle nicht eindeutig');
+    const source=quellen[0], h=['number',['get','height'],0], base=['number',['get','min_height'],-1];
+    const validBase=['any',['!',['has','min_height']],['all',['>=',base,0],['<',base,h]]];
+    const layer={id:GEBAEUDE_ID,type:'fill-extrusion',source,'source-layer':'buildings',minzoom:15,
+      filter:['all',['==',['geometry-type'],'Polygon'],['in',['get','kind'],['literal',['building','building_part']]],['>',h,0],['<=',h,1500],validBase],
+      layout:{visibility:an?'visible':'none'},
+      paint:{'fill-extrusion-color':nacht?'#637783':'#b0a69a','fill-extrusion-height':h,
+        'fill-extrusion-base':['case',['has','min_height'],base,0],'fill-extrusion-opacity':0.82}};
+    // Nach den Gebäudegrundrissen, vor späteren Labels und eigenen Objektlayern.
+    let at=-1;
+    copy.layers.forEach((l,i)=>{if(l.source===source&&l['source-layer']==='buildings'&&(l.type==='fill'||l.type==='line'))at=i;});
+    if(at<0)throw Error('Keine Gebäudegrundrisse');
+    copy.layers.splice(at+1,0,layer);
+    return copy;
+  }
+  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, GEBAEUDE_ID });
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KARTE_V2_QUELLEN = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
