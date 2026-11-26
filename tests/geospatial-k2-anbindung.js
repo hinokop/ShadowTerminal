@@ -81,11 +81,23 @@ const {APP}=require('./_pfad');
   assert.ok(anfragen.every(x=>x.key===fixtureKey&&!x.referer),'Schlüssel und Referrer');
   assert.ok(!(await p.locator('body').innerText()).includes(fixtureKey));
   assert.equal(await p.evaluate(k=>Object.values(localStorage).some(v=>v.includes(k)),fixtureKey),false);
+  // ready() bedeutet Layer installiert, nicht GeoJSON-Worker fertig.
+  // Auf einen tatsächlich gerenderten Treffer warten, nicht nur auf Registrierung.
+  const rueckfallTreffer=async()=>{
+    await p.waitForFunction(({ll,k})=>{
+      const a=KARTE_V2_DEV.adapter();
+      return a?.ready()&&a.hitTest(a.project(ll))?.renderKey===k;
+    },{ll:[52.51,13.41],k:kb});
+    assert.equal((await hit([52.51,13.41]))?.renderKey,kb);
+    assert.deepEqual(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
+    assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
+    assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]]);
+    assert.equal(await p.locator('#k-v2-leer').getAttribute('aria-pressed'),'true');
+  };
   netz='stilfehler';await p.click('#k-v2-voyager');await status('CARTO-Stil nicht verfügbar');
-  await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
-  assert.equal((await hit([52.51,13.41])).renderKey,kb);
+  await rueckfallTreffer();
   netz='kachelfehler';await p.click('#k-v2-dunkel');await status('CARTO-Ressource nicht verfügbar');
-  await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
+  await rueckfallTreffer();
   netz='ok';await p.evaluate(()=>{VIEW.karte.messen=false;VIEW.karte.messPts=[];karteRendererDatenAktualisieren();});
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();});
   await p.evaluate(id=>dispatch({type:'DOSSIER_SPERREN',id}),f.a);
