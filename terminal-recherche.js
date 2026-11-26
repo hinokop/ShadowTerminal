@@ -30,7 +30,7 @@ function rZeilen(text) {
 /* Ausgabeliste mit fortlaufender Nummer je Eintrag: stdout und stderr der letzten Stufe erscheinen in der Reihenfolge ihrer Entstehung */
 function rListe(op) {
   const a = [];
-  a.push = function () { for (const x of arguments) if (x) x.n = ++op.nr; return Array.prototype.push.apply(a, arguments); };
+  a.push = function () { for (const x of arguments) if (x) { x.n = ++op.nr; x.stufe = op.stufe; } return Array.prototype.push.apply(a, arguments); };
   return a;
 }
 function rStrom(zeilen, offen) { return { zeilen: zeilen || [], offen: !!offen }; }
@@ -39,6 +39,9 @@ function rBytes(s) { return new TextEncoder().encode(s).length; }
 function rQ(name) { return '‘' + name + '’'; }   /* find in en_US.UTF-8: ‘name’ */
 /* Tilde wie von bash vor dem Befehl erweitert: Ausgaben und Meldungen nennen /home/raizo/... */
 function rName(name) { return name === '~' || (typeof name === 'string' && name.startsWith('~/')) ? '/' + TERMINAL_HEIM.join('/') + name.slice(1) : name; }
+/* Abhängigkeiten eines Kindes beim Durchlauf: Pfadabhängigkeiten der Eltern gelten weiter. Ausnahme /exports: ein virtuelles Verzeichnis trägt die
+   Herkunft aller Exporte darunter (nur für seine eigene Zeile, Review 3 zu #140); jede Datei trägt ihre eigene vollständige Herkunft. */
+function rErben(seg, eltern, kind) { return terminalAnbieter(seg).name === 'exporte' ? (kind && kind.length ? kind : null) : rVereinigung(eltern, kind); }
 function rPfadJoin(basis, name) { return basis === '' ? name : basis.endsWith('/') ? basis + name : basis + '/' + name; }
 function rFehlerText(f) {
   if (f === 'ENOENT' || f === 'Datei oder Ordner nicht gefunden') return 'No such file or directory';
@@ -49,7 +52,7 @@ function rFehlerText(f) {
 function rOperation(umleitZiel, umleitArt) {
   const t = TERMINAL_ZUSTAND, herkunft = new Set(), gelesenPfade = [];
   const op = { version: t.version, kette: t.kette, herkunft: herkunft, archivSchutz: false, eintraege: 0, gelesen: 0, schritte: 0, letzt: Date.now(),
-    nr: 0, alles: rDeps(), zielSeg: umleitZiel, zielArt: umleitArt, gelesenPfade: gelesenPfade };
+    nr: 0, cache: {}, alles: rDeps(), zielSeg: umleitZiel, zielArt: umleitArt, gelesenPfade: gelesenPfade };
   const basis = terminalFsMitHerkunft(herkunft, { gelesen: gelesenPfade });
   /* Bei ">" ist das Ziel für die Befehle leer wie nach dem Kürzen durch bash; ">>" liest den bisherigen Inhalt */
   op.fs = Object.assign({}, basis, {
@@ -101,21 +104,24 @@ async function rLstat(op, seg, endeVerzeichnis) {
     rPruefen(op);
     if (l && l.ziel) return { typ: 'link', deps: l.deps || null };
   }
-  const st = await op.fs.stat(seg, { pruefen: true });
+  const st = await op.fs.stat(seg, { pruefen: true, cache: op.cache });
   rPruefen(op);
   if (st.fehler) return { fehler: st.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : st.fehler };
   return { typ: st.typ === 'dir' ? 'dir' : 'file', deps: st.deps || null };
 }
 /* Verzeichnis lesen: Einträge mit Art und Abhängigkeiten (Eintrag und Verzeichnis); versteckte Einträge eingeschlossen */
 async function rVerzeichnis(op, seg) {
-  const r = await op.fs.readdir(seg, { versteckt: true });
+  const r = await op.fs.readdir(seg, { versteckt: true, cache: op.cache });
   rPruefen(op);
   if (r.fehler) return { fehler: r.fehler === 'Datei oder Ordner nicht gefunden' ? 'ENOENT' : r.fehler };
   const dd = r.deps || [];
   op.alles.add(dd);
   return { eintraege: r.eintraege.filter(function (e) { return e.name !== '.' && e.name !== '..'; }).map(function (e) {
     op.alles.add(e.deps);
-    return { name: e.name, typ: e.link ? 'link' : e.dir ? 'dir' : 'file', deps: rVereinigung(dd, e.deps) };
+    /* Archiv: Namen der Exportobjekte sind geschützt (Sichtbarkeitsregel des Archivs); jede Zeile mit einem Archivnamen trägt ihn */
+    let ad = null;
+    if (seg[0] === TERMINAL_DB && terminalArchivNameZiel(e.name)) { ad = [{ art: 'archivname', name: e.name }]; op.archivSchutz = true; }
+    return { name: e.name, typ: e.link ? 'link' : e.dir ? 'dir' : 'file', deps: rVereinigung(dd, e.deps, ad) };
   }) };
 }
 /* Optionen im Stil von getopt: Kurzoptionen (Buchstabe -> 'flag' oder 'wert'), Langoptionen; erster Nicht-Optionswert bleibt Operand,
@@ -473,7 +479,7 @@ async function rGrep(op, args, stdin, ctx) {
     for (const e of v.eintraege) {
       await rTakt(op);
       if (rGesperrt(e.deps)) continue;
-      const kind = rPfadJoin(name, e.name), kseg = seg.concat(e.name), kd = rVereinigung(deps, e.deps);
+      const kind = rPfadJoin(name, e.name), kseg = seg.concat(e.name), kd = rErben(seg, deps, e.deps);
       if (e.typ === 'link') continue;   /* -r folgt Links nur auf der Befehlszeile */
       const s = e.typ === 'dir' ? await baum(kind, kseg, kd) : await datei(kind, kseg, kd);
       if (s === 'stopp') return s;
@@ -488,7 +494,7 @@ async function rGrep(op, args, stdin, ctx) {
       if (name === '-') { if ((await durchsuchen('(standard input)', stdin, null, false)) === 'stopp') break; continue; }
       const seg = await op.fs.resolve(name === null ? '.' : name, { cwd: ctx.cwd });
       if (!seg) { meldung(name + ': Permission denied'); continue; }
-      const st = await op.fs.stat(seg, { pruefen: true });
+      const st = await op.fs.stat(seg, { pruefen: true, cache: op.cache });
       rPruefen(op);
       if (st.fehler) { meldung((name === null ? '.' : name) + ': ' + rFehlerText(st.fehler)); continue; }
       let s;
@@ -596,7 +602,7 @@ async function rFind(op, args, stdin, ctx) {
     if (v.fehler) { err.push({ t: 'find: ' + rQ(pfad) + ': ' + rFehlerText(v.fehler), d: deps }); code = 1; return; }
     for (const k of v.eintraege) {
       if (rGesperrt(k.deps)) continue;
-      await besuchen(rPfadJoin(pfad, k.name), seg.concat(k.name), k.name, k.typ, tiefe + 1, rVereinigung(deps, k.deps));
+      await besuchen(rPfadJoin(pfad, k.name), seg.concat(k.name), k.name, k.typ, tiefe + 1, rErben(seg, deps, k.deps));
     }
   };
   for (const s of start) {
@@ -769,7 +775,7 @@ function rAusAlt(res) {
       let d = b && b.intelZeilen ? b.intelZeilen[j] || null : res.schutzZeilen && res.schutzZeilen[i] ? res.schutzZeilen[i] : null;
       if (res.archivListe) {
         const name = terminalListenName(z);
-        if (name) d = rVereinigung(d, [{ art: 'archivname', name: name }]);
+        if (name && terminalArchivNameZiel(name)) d = rVereinigung(d, [{ art: 'archivname', name: name }]);
       }
       aus.push({ t: z, d: d && d.length ? d : null });
     });
@@ -830,6 +836,7 @@ async function terminalRechercheAusfuehren(stufen, um) {
   const fehler = [];
   try {
     for (const w of stufen) {
+      op.stufe = (op.stufe || 0) + 1;
       const befehl = w[0], args = w.slice(1), ctx = { cwd: terminalArbeitsverzeichnis() };
       const r = R_STUFEN[befehl] ? await R_STUFEN[befehl](op, args, strom, ctx) : await rAltStufe(op, befehl, args, strom, ctx);
       rPruefen(op);
@@ -860,7 +867,7 @@ async function terminalRechercheAusfuehren(stufen, um) {
   if (!um) {
     /* Meldungen früherer Stufen zuerst; die der letzten Stufe mit ihrer Ausgabe in Entstehungsreihenfolge, soweit nummeriert */
     const letzte = err.filter(function (z) { return z.letzte; }), vorher = err.filter(function (z) { return !z.letzte; });
-    const nummeriert = letzte.concat(aus).every(function (z) { return z.n; });
+    const nummeriert = letzte.concat(aus).every(function (z) { return z.n && z.stufe === op.stufe; });   /* nur selbst erzeugte Zeilen der letzten Stufe */
     zeigen(vorher.concat(nummeriert ? letzte.concat(aus).sort(function (a, b) { return a.n - b.n; }) : letzte.concat(aus)));
     return code;
   }
