@@ -31,7 +31,7 @@ const PF = require('./_pfad');
     const ausgabe = async wert => p.waitForFunction(wert => $('profil-terminal-chat').textContent.includes(wert), wert);
     await chatBereit(p);
     const prefix = '/sendfile /pgcl-eu3.arch07/';
-    await taste('/sendfile pg', 'Tab');
+    await taste('/sendfile /pg', 'Tab');   /* Paket 4: Pfadergänzung wie in der Shell (ab dem Arbeitsverzeichnis, Archiv über die Wurzel) */
     await erwartet(prefix);
     assert.deepEqual(antworten, []);
     await taste(prefix + 'doc', 'Tab');

@@ -185,7 +185,7 @@ const FAELLE = [
     assert.equal(await rc(), '2');
     assert.equal(await aus('ls "it\'s"'), "ls: cannot access 'it'\\''s': No such file or directory", 'Apostroph in der Meldung wie bei ls maskiert');
     assert.equal(await aus('ls -d /'), '/');
-    assert.equal(await aus('ls -F /'), 'etc/\nhome/\nintel/\n' + db + '/\ntmp/\nusr/\nvar/', 'Wurzel sortiert (en_US.UTF-8): etc, home, intel, pgcl-..., tmp, usr, var');
+    assert.equal(await aus('ls -F /'), 'etc/\nexports/\nhome/\nintel/\n' + db + '/\ntmp/\nusr/\nvar/', 'Wurzel sortiert (en_US.UTF-8): etc, exports, home, intel, pgcl-..., tmp, usr, var');
     assert.equal(await aus('ls /' + db + '/dossiers/eins.txt'), '/' + db + '/dossiers/eins.txt');
     assert.equal(await aus('ls /' + db + '/DOSSIERS'), "ls: cannot access '/" + db + "/DOSSIERS': No such file or directory", 'Groß-/Kleinschreibung im Archiv streng');
 

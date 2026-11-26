@@ -166,7 +166,7 @@ async function terminalBefehlCp(ctx) {
     if (!seg) { fehler.push('cp: cannot stat ' + terminalLsQuote(name) + ': ' + terminalDateiFehlerText(ctx.segFehler)); continue; }
     const basis = terminalBasisname(name) || '';
     /* E6: Inhalte aus /intel werden vorerst nicht ins VFS übernommen (späteres Export-/Herkunftsmodell) */
-    if (seg[0] === 'intel') { fehler.push('cp: cannot copy ' + terminalLsQuote(name) + ': Operation not permitted'); continue; }
+    if (seg[0] === 'intel' || seg[0] === 'exports') { fehler.push('cp: cannot copy ' + terminalLsQuote(name) + ': Operation not permitted'); continue; }   /* /exports wie /intel (Paket 4, §9.5) */
     /* Schutz (Architektur 11): Exportobjekte der Anwendung werden nie kopiert; die Prüfung steht vor jedem Lesen */
     if (seg[0] === TERMINAL_DB && terminalArchivNameZiel(seg.at(-1))) { fehler.push('cp: cannot open ' + terminalLsQuote(name) + ' for reading: Permission denied'); continue; }
     const st = await terminalDateiStat(ctx, seg);
@@ -333,7 +333,7 @@ function terminalLiestIntel(befehl, args) {
   if (befehl === 'ls') { const z = terminalLsOptionen(args); if (z.fehler || z.hilfe) return false; ops = z.operanden.length ? z.operanden : ['.']; }
   else if (befehl === 'cat' || befehl === 'head' || befehl === 'tail') { const z = terminalLeserArgs(befehl, args); if (z.fehler) return false; ops = z.namen; }
   else return false;
-  return ops.some(function (o) { const seg = terminalShellPfad(o); return !!seg && seg[0] === 'intel'; });
+  return ops.some(function (o) { const seg = terminalShellPfad(o); return !!seg && (seg[0] === 'intel' || seg[0] === 'exports'); });
 }
 /* Dateischnittstelle mit Herkunftsaufzeichnung: merkt sich die Anbieter aller gelesenen Pfade (stat, readdir, readFile, readlink) und in
    opt.gelesen die mit readFile gelesenen Pfade. opt.intelSperren (Umleitung, E6): jeder Zugriff auf /intel wird aufgezeichnet und sofort
@@ -343,7 +343,7 @@ function terminalFsMitHerkunft(herkunft, opt) {
   const verweigert = { fehler: 'Operation not permitted' };
   const zugriff = function (seg, weiter) {
     if (seg) herkunft.add(terminalAnbieter(seg).name);
-    if (seg && opt.intelSperren && terminalAnbieter(seg).name === 'intel') return Promise.resolve(verweigert);
+    if (seg && opt.intelSperren && (terminalAnbieter(seg).name === 'intel' || terminalAnbieter(seg).name === 'exporte')) return Promise.resolve(verweigert);
     return weiter();
   };
   return Object.assign({}, TERMINAL_FS, {
@@ -418,7 +418,7 @@ async function terminalUmgeleitet(woerter, um, status) {
     if (res.cwd) { t.oldpwd = terminalArbeitsverzeichnis(); t.ort = res.cwd.ort; t.virtuellerOrt = res.cwd.virtuellerOrt; }
     /* E6 am tatsächlichen Lesepfad: jeder Zugriff auf /intel (auch nur die Prüfung eines Zwischenordners) führt zur Abweisung; das Ziel
        ist bis hierhin unberührt */
-    if (herkunft.has('intel') || res.schutzBloecke || res.schutzZeilen) {
+    if (herkunft.has('intel') || herkunft.has('exporte') || res.schutzBloecke || res.schutzZeilen) {
       if (t.version === version) terminalAusgabe('bash: ' + befehl + ': Operation not permitted');
       return 1;
     }
@@ -498,7 +498,7 @@ async function terminalBefehlNano(ctx) {
   const name = z.operanden[0], seg = await terminalDateiSeg(ctx, name, { fehltVerzeichnis: 'EISDIR' });
   if (!seg || !seg.length) return { code: 1, stdout: [], stderr: ['nano: ' + name + ': ' + terminalDateiFehlerText(seg ? 'EACCES' : ctx.segFehler)] };
   if (seg[0] === TERMINAL_DB && terminalArchivNameZiel(seg.at(-1))) return { code: 1, stdout: [], stderr: ['nano: ' + name + ': Permission denied'] };
-  if (seg[0] === 'intel') return { code: 1, stdout: [], stderr: ['nano: ' + name + ': Read-only file system'] };   /* /intel: kein Editor (E6, E7) */
+  if (seg[0] === 'intel' || seg[0] === 'exports') return { code: 1, stdout: [], stderr: ['nano: ' + name + ': Read-only file system'] };   /* /intel: kein Editor (E6, E7) */
   let text = '', neu = false;
   const st = await ctx.fs.stat(seg, { pruefen: true });
   if (st.fehler && st.fehler !== 'ENOENT') return { code: 1, stdout: [], stderr: ['nano: ' + name + ': ' + terminalDateiFehlerText(st.fehler)] };

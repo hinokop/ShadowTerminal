@@ -59,6 +59,9 @@ const INTEL = (function () {
     if (dep.art === 'sichtung') return dossierGesperrtId(dep.dossier);
     if (dep.art === 'pin') { const p = (PROFIL.pins || []).find(function (x) { return x.id === dep.id; }); return !!p && pinGesperrt(p); }
     if (dep.art === 'zone') { const z = (PROFIL.zonen || []).find(function (x) { return x.id === dep.id; }); return !!z && zoneGesperrt(z); }
+    /* Herkunft eines verwalteten Exports (Paket 4, M4): ursprüngliche Abhängigkeiten UND Bindung; fehlende oder ungültige Herkunft gilt als gesperrt
+       (fail closed), damit auch ein früher ausgegebener Name nach Sperre, Identitätswechsel oder Löschung aus dem Scrollback verschwindet */
+    if (dep.art === 'herkunft') return !Array.isArray(dep.deps) || !dep.deps.length || !Array.isArray(dep.bindung) || !dep.bindung.length || dep.deps.some(gesperrt) || !dep.bindung.every(bindungGueltig);
     return false;
   }
   const dep = { dossier: function (id) { return { art: 'dossier', id: id }; }, pin: function (id) { return { art: 'pin', id: id }; },
@@ -250,7 +253,8 @@ const INTEL = (function () {
   }
   /* Auflösen: folgt Links in Zwischenkomponenten und, mit folgen, auch in der letzten. Linkziele sind kanonisch und enthalten keine Links,
      ein Folgen endet daher nach einem Schritt (keine Zyklen, auch bei gegenseitigen Verweisen Dossier <-> Fall). */
-  function aufloesen(rel, folgen, tiefe) {
+  /* sammeln (optional): nimmt die Abhängigkeiten jedes durchlaufenen Eintrags auf, auch der Links (Versand, Paket 4) */
+  function aufloesen(rel, folgen, tiefe, sammeln) {
     if ((tiefe || 0) > 4) return { fehler: 'ELOOP' };
     let cur = [], eintrag = D('', INTEL_START);
     for (let i = 0; i < rel.length; i++) {
@@ -258,10 +262,11 @@ const INTEL = (function () {
       if (!k) return { fehler: 'ENOENT' };
       const e = k.find(function (x) { return x.name === rel[i]; });
       if (!e) return { fehler: 'ENOENT' };
+      if (sammeln) sammeln.push.apply(sammeln, e.deps);
       if (e.deps.some(gesperrt)) return { fehler: 'EACCES', bei: e.art === 'link' ? e.ziel : cur.concat(rel[i]) };
       const letzt = i === rel.length - 1;
       if (e.art === 'link' && (!letzt || folgen)) {
-        const z = aufloesen(e.ziel, true, (tiefe || 0) + 1);
+        const z = aufloesen(e.ziel, true, (tiefe || 0) + 1, sammeln);
         if (z.fehler) return z;
         cur = z.kanonisch; eintrag = z.eintrag;
         continue;
@@ -279,6 +284,41 @@ const INTEL = (function () {
     else x.bytes = e.art === 'dir' ? 4096 : bytes(rendern(e).text);
     return x;
   }
+  /* ---- Versand (Paket 4, M3): Momentaufnahme mit Ursprung und Bindung ----
+     Bindung einer Abhängigkeit: der Zustand des Objekts beim Versand (Pin und Zone mit Anlegezeit und Dossier, Sichtung mit dauerhafter UID).
+     Gültig bleibt sie nur, solange das Objekt mit derselben Identität besteht und weder das damalige noch das heutige Dossier gesperrt ist;
+     eine neu vergebene Kennung wird nicht als der alte Ursprung gedeutet. */
+  /* Identität fail closed (Review 2 zu #140): Pin und Zone brauchen eine Anlegezeit t, eine Sichtung ihre dauerhafte UID; fehlt sie, ist die
+     Bindung ungültig (da: false). Das damalige Dossier muss weiter bestehen. */
+  function kennzeit(t) { return typeof t === 'string' && t !== '' ? t : null; }
+  function bindung(d) {
+    if (d.art === 'pin' || d.art === 'zone') {
+      const x = (d.art === 'pin' ? pins() : zonen()).find(function (y) { return y.id === d.id; });
+      return { art: d.art, id: d.id, t: x ? kennzeit(x.t) : null, dossier: x ? x.dossier || null : null, da: !!x && !!kennzeit(x.t) && (!x.dossier || !!entitaet(x.dossier)) };
+    }
+    if (d.art === 'sichtung') {
+      const si = sichtungen(d.dossier).find(function (y) { return y.id === d.id; });
+      return { art: 'sichtung', dossier: d.dossier, id: d.id, uid: si ? si.uid || null : null, da: !!si && !!si.uid && !!entitaet(d.dossier) };
+    }
+    return { art: d.art, id: d.id, da: d.art !== 'dossier' || !!entitaet(d.id) };
+  }
+  function bindungGueltig(b) {
+    if (!b || !b.da) return false;
+    if (b.art === 'dossier') return !!entitaet(b.id) && !dossierGesperrtId(b.id);
+    if (b.art === 'pin' || b.art === 'zone') {
+      const x = (b.art === 'pin' ? pins() : zonen()).find(function (y) { return y.id === b.id; });
+      return !!x && !!b.t && kennzeit(x.t) === b.t && !(b.dossier && (!entitaet(b.dossier) || dossierGesperrtId(b.dossier))) && !(x.dossier && dossierGesperrtId(x.dossier));
+    }
+    if (b.art === 'sichtung') {
+      const si = sichtungen(b.dossier).find(function (y) { return y.id === b.id; });
+      return !!si && !!b.uid && si.uid === b.uid && !!entitaet(b.dossier) && !dossierGesperrtId(b.dossier);
+    }
+    return !gesperrt(b);
+  }
+  function eindeutig(liste) {
+    const s = new Set();
+    return liste.filter(function (d) { const k = JSON.stringify([d.art, d.id, d.dossier || null]); if (s.has(k)) return false; s.add(k); return true; });
+  }
   const FEHLER = { EACCES: 'Permission denied' };
   const f = function (r) { return { fehler: FEHLER[r.fehler] || r.fehler }; };
   function objektVon(kan) {
@@ -292,9 +332,10 @@ const INTEL = (function () {
     gesperrt: gesperrt,
     /* Schnittstelle des Anbieters (seg ohne führendes "intel") */
     stat: function (rel) {
-      const r = aufloesen(rel, true);
+      const pfad = [], r = aufloesen(rel, true, 0, pfad);
       if (r.fehler) return f(r);
-      return { adapter: 'intel', typ: r.eintrag.art === 'file' ? 'file' : 'dir', eintrag: anzeige(r.eintrag), kanonisch: ['intel'].concat(r.kanonisch), deps: r.eintrag.deps };
+      /* pfadDeps: Abhängigkeiten aller durchlaufenen Einträge einschließlich Links (Versand, Paket 4) */
+      return { adapter: 'intel', typ: r.eintrag.art === 'file' ? 'file' : 'dir', eintrag: anzeige(r.eintrag), kanonisch: ['intel'].concat(r.kanonisch), deps: r.eintrag.deps, pfadDeps: eindeutig(pfad) };
     },
     readdir: function (rel) {
       const r = aufloesen(rel, true);
@@ -312,6 +353,25 @@ const INTEL = (function () {
       if (r.eintrag.deps.some(gesperrt)) return { fehler: 'Permission denied' };
       return { text: x.text, deps: r.eintrag.deps, zeilenDeps: x.zeilenDeps };
     },
+    /* Versand einer Blattdatei: { text, deps, bindung, kanonisch } aus genau einer Darstellung. deps vereinigt Pfad (einschließlich Links),
+       Datei und alle enthaltenen Zeilen; zusammengesetzte Indizes sind die Momentaufnahme der sichtbaren Zeilen. */
+    /* zusatz: Abhängigkeiten des physisch aufgelösten Eingabepfads (terminalSendPfad), damit Links vor ".." erhalten bleiben. Ein Sichtungsrecord
+       bettet seinen Ursprungspin ein (sichtungText): dessen Bindung gehört zur Momentaufnahme (spätere Verknüpfung oder Sperre des Pins). */
+    versand: function (rel, zusatz) {
+      const pfad = [], r = aufloesen(rel, true, 0, pfad);
+      if (r.fehler) return f(r);
+      if (r.eintrag.art !== 'file') return { fehler: 'EISDIR' };
+      const x = rendern(r.eintrag), k = r.kanonisch, eingebettet = [];
+      if (k[0] === 'geospatial' && k[1] === 'sightings' && k[4] === 'record' && typeof sichtungPin === 'function') {
+        const si = sichtungen(k[2]).find(function (y) { return y.id === k[3]; }), p = si && sichtungPin(si, k[2]);
+        if (p) eingebettet.push(dep.pin(p.id));
+      }
+      const deps = eindeutig((zusatz || []).concat(pfad, r.eintrag.deps, eingebettet, [].concat.apply([], (x.zeilenDeps || []).map(function (z) { return z || []; }))));
+      if (deps.some(gesperrt)) return { fehler: 'Permission denied' };
+      return { text: x.text, deps: deps, bindung: deps.map(bindung), kanonisch: ['intel'].concat(r.kanonisch) };
+    },
+    bindung: bindung,
+    bindungGueltig: bindungGueltig,
     readlink: function (rel) {
       const r = aufloesen(rel, false);
       if (r.fehler) return f(r);

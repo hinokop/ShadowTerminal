@@ -45,6 +45,7 @@ fehler() {
 [ -f "$DIR/terminal-locale.js" ] || fehler "terminal-locale.js fehlt neben dieser Datei."
 [ -f "$DIR/terminal-vfs.js" ] || fehler "terminal-vfs.js fehlt neben dieser Datei."
 [ -f "$DIR/terminal-intel.js" ] || fehler "terminal-intel.js fehlt neben dieser Datei."
+[ -f "$DIR/terminal-exporte.js" ] || fehler "terminal-exporte.js fehlt neben dieser Datei."
 [ -f "$DIR/terminal-sys.js" ] || fehler "terminal-sys.js fehlt neben dieser Datei."
 [ -f "$DIR/terminal-dateibefehle.js" ] || fehler "terminal-dateibefehle.js fehlt neben dieser Datei."
 

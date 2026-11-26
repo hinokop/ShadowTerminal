@@ -94,7 +94,7 @@ const { APP } = require('./_pfad');
     assert.deepEqual({ adapter: stOps.adapter, typ: stOps.typ, name: stOps.eintrag && stOps.eintrag.name, dir: stOps.eintrag && stOps.eintrag.dir }, { adapter: 'archiv', typ: 'dir', name: 'ops', dir: true }, 'stat mit Prüfung liefert zusätzlich den Eintrag der Quelle (6a-3, für ls -l)');
     /* readdir */
     const wurzel = await r('readdir', []);
-    assert.deepEqual(wurzel.eintraege.map(x => x.name), ['etc', 'home', 'intel', 'tmp', 'usr', 'var', db]);
+    assert.deepEqual(wurzel.eintraege.map(x => x.name), ['etc', 'exports', 'home', 'intel', 'tmp', 'usr', 'var', db]);
     assert.ok(wurzel.eintraege.every(x => x.dir));
     assert.deepEqual((await r('readdir', ['var', 'log'])).eintraege, [{ name: 'syslog', dir: false }]);
     const ops = await r('readdir', [db, 'ops']);
