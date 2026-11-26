@@ -147,3 +147,9 @@ Keine neue Shell- oder Dateisystemarchitektur: die neuen Befehle lesen über `TE
 - **P2:** `sha256sum` nur mit Archivoperanden hasht nicht die Standardeingabe; `sort -n` vergleicht exakt.
 - **A0:** `tests/terminal-paket5-a0.js` mit gesteuerter Uhr und 200 zusätzlichen Dossiers: Recherche bei angehaltener Uhr, Einwahl mit unveränderten Dauern, Recherche bei bestehendem Link, Linkende während einer laufenden Recherche (Hangup zum vorgesehenen Zeitpunkt, Ergebnis danach korrekt).
 - **Gegenproben am Stand ff59d3e:** Pfade (G), ursprüngliche Bindung (H b), Zahl nach leerem Filter und ausgefilterter Archivname (H a), große Datei (I: `Dateioperation fehlgeschlagen` durch RangeError) jeweils rot; mit Korrektur grün.
+
+### 9.5 Korrekturen nach dem zweiten Review zu #141 (6074509119)
+
+- **Terminierung:** `-F -w` mit leerem Muster prüft jede Position genau einmal (vorher Endlosschleife am Zeilenende, isoliert am Stand b4229e1 nachgewiesen).
+- **`-w`-Semantik:** Die Automatenvariante verlangte am Rand des Treffers zusätzlich ein Wortzeichen; jetzt wie GNU nur kein Wortzeichen davor und danach (`echo 'a -' | grep -w -- -` trifft). Vergleich mit GNU grep 3.11 für leere Muster, mehrere `-e`, Satzzeichen, `-x`, `-c`.
+- **Altbestand ohne Anlegezeit/Kennung:** keine dynamische Rückfallebene mehr allein, sondern Bindung von Existenz (neue Abhängigkeitsart `objekt` in `INTEL.gesperrt`) und Dossier zum Zeitpunkt des Treffers; ohne Migration, ohne neue Datenbank. Verbleibende Grenze: Ersetzen des ganzen Profils mit einem anderen Objekt unter derselben Kennung ist bei Altobjekten nicht erkennbar.
