@@ -2,6 +2,19 @@
 const assert=require('node:assert/strict');
 const {chromium}=require('playwright');
 const {APP}=require('./_pfad');
+// Mercator-Projektion und Rückprojektion beim Neigungswechsel verursachen
+// Rundungsreste. 1e-9 Grad (< 0,12 mm) toleriert nur numerisches Rauschen;
+// Zoom, Neigung, Drehung und beide Mittelpunktkoordinaten bleiben geprüft.
+function assertCamera(actual,expected){
+ const {center:a,...restA}=actual,{center:e,...restE}=expected;
+ assert.deepEqual(restA,restE,'Kamerazoom, Neigung und Drehung');
+ assert.equal(a.length,2);assert.equal(e.length,2);
+ for(let i=0;i<2;i++){
+  assert.ok(Number.isFinite(a[i])&&Number.isFinite(e[i])&&Math.abs(a[i]-e[i])<=1e-9,
+   'Kameramittelpunkt Achse '+i+': '+a[i]+' statt '+e[i]);
+ }
+}
+
 (async()=>{
  const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
@@ -89,7 +102,7 @@ const {APP}=require('./_pfad');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true','Gebäudewunsch über Stilwechsel');
   await p.click('#k-v2-gebaeude');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'false');
-  assert.deepEqual(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
   assert.equal((await hit([52.51,13.41])).renderKey,kb);
   assert.ok(anfragen.every(x=>x.key===fixtureKey&&!x.referer),'Schlüssel und Referrer');
   assert.ok(!(await p.locator('body').innerText()).includes(fixtureKey));
@@ -102,7 +115,7 @@ const {APP}=require('./_pfad');
       return a?.ready()&&a.hitTest(a.project(ll))?.renderKey===k;
     },{ll:[52.51,13.41],k:kb});
     assert.equal((await hit([52.51,13.41]))?.renderKey,kb);
-    assert.deepEqual(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
+    assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
     assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
     assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]]);
     assert.equal(await p.locator('#k-v2-leer').getAttribute('aria-pressed'),'true');
