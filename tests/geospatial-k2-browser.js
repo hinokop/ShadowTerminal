@@ -41,7 +41,7 @@ const Q = require('../karte-v2-quellen');
     const meldung=text=>p.waitForFunction(text=>document.getElementById('meldung').textContent.includes(text),text);
     await p.goto(pathToFileURL(path.join(ROOT,'karte-v2-prototyp.html')).href);
     await meldung('Keine Kachelquelle aktiv');
-    assert.equal(await p.evaluate(()=>maplibregl.version),'4.7.1');
+    assert.equal(await p.evaluate(()=>maplibregl.getVersion()),'4.7.1');
     assert.equal(await p.locator('canvas.maplibregl-canvas').count(),1);
     assert.ok(await p.locator('.maplibregl-ctrl-zoom-in').isVisible());
     assert.match(await p.locator('footer').innerText(),/OpenStreetMap contributors, © CARTO/);
