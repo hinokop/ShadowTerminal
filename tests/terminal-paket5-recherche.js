@@ -69,7 +69,12 @@ async function bruecke() {
     const status = () => p.evaluate(() => TERMINAL_ZUSTAND.status);
     const mitStatus = async z => [await lauf(z), await status()];
     const ausgabe = () => p.evaluate(() => TERMINAL_ZUSTAND.ausgabe.join('\n'));
-    const vfs = (pfad, text) => p.evaluate(([s, t]) => TERMINAL_FS.schreiben(s, t), [pfad.split('/').filter(Boolean), text]);
+    /* Testdaten: jedes Schreiben und Anlegen muss gelingen (Review zu #141: zuvor ungeprüft, Datei über der VFS-Grenze) */
+    const vfs = async (pfad, text) => {
+      const r = await p.evaluate(([s, t]) => TERMINAL_FS.schreiben(s, t), [pfad.split('/').filter(Boolean), text]);
+      assert.ok(r && !r.fehler, 'Testdatei ' + pfad + ': ' + JSON.stringify(r));
+    };
+    const mkdir = async pfad => { const r = await p.evaluate(s => TERMINAL_FS.mkdir(s), pfad.split('/').filter(Boolean)); assert.ok(r && !r.fehler, 'mkdir ' + pfad + ': ' + JSON.stringify(r)); };
     const DATEN = {
       'report.txt': 'Berlin eins\nHamburg\nBerlin eins\nStraße Köln\n-x Zeile\nberlin klein\n',
       'zahlen.txt': '10\n9\n-3\n1,000\n2.5\nabc\n10\n',
@@ -78,7 +83,7 @@ async function bruecke() {
       'zahlen-c.txt': '10\n9\n-3\n2.5\nabc\n10\n007\n'
     };
     for (const [n, t] of Object.entries(DATEN)) await vfs('/home/raizo/' + n, t);
-    await p.evaluate(() => TERMINAL_FS.mkdir(['home', 'raizo', 'projects']));
+    await mkdir('/home/raizo/projects');
     await vfs('/home/raizo/projects/notiz.txt', 'Projekt Berlin\n');
 
     /* ---- A ---- */
@@ -299,23 +304,129 @@ async function bruecke() {
     console.log('Messung (a|aa)*b auf 200.000 Zeichen: ' + Math.round(messung.dauer) + ' ms, größte Lücke der Ereignisschleife ' + Math.round(messung.maxLuecke) + ' ms');
     assert.equal(messung.status, 1);
     assert.ok(messung.maxLuecke < 250, 'Ereignisschleife blockiert: ' + messung.maxLuecke);
-    /* Strg+C während einer langen Suche */
-    await vfs('/home/raizo/viel.txt', ('zeile ' + 'x'.repeat(50) + '\n').repeat(40000));
-    await inp.fill('grep -c -E "(x|xx)*y" ~/viel.txt'); await inp.press('Enter');
-    await p.waitForFunction(() => TERMINAL_ZUSTAND.dateiLaeuft);
+    /* Strg+C und Sitzungswechsel wirklich während laufender Arbeit: Haltestelle am tatsächlichen Lesepunkt der zweiten Datei (VFS-Anbieter);
+       die erste Datei ist gelesen, die Suche läuft. Dateien innerhalb der VFS-Grenze. */
+    await vfs('/home/raizo/viel1.txt', ('zeile ' + 'x'.repeat(50) + '\n').repeat(15000));
+    await vfs('/home/raizo/viel2.txt', ('zeile ' + 'x'.repeat(50) + '\n').repeat(15000));
+    await p.evaluate(() => {
+      const a = TERMINAL_ANBIETER.vfs, rf = a.readFile;
+      window.__vh = null;
+      a.readFile = async function (seg) {
+        const h = window.__vh;
+        if (h && seg.join('/').endsWith(h.bei)) { window.__vh = null; h.erreicht = true; await new Promise(ok => { h.weiter = ok; }); }
+        return rf.apply(this, arguments);
+      };
+    });
+    const angehalten = async (zeile, bei) => {
+      await p.evaluate(b => { window.__vhAkt = window.__vh = { bei: b }; }, bei);
+      await inp.fill(zeile); await inp.press('Enter');
+      await p.waitForFunction(() => window.__vhAkt.erreicht);
+      assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.dateiLaeuft), true, 'Suche läuft');
+    };
+    let vorAbbruch = await p.evaluate(() => TERMINAL_ZUSTAND.ausgabe.length);
+    await angehalten('grep -c x ~/viel1.txt ~/viel2.txt | wc -l', 'viel2.txt');
     await inp.press('Control+c');
+    await p.evaluate(() => window.__vhAkt.weiter());
     await warten();
-    assert.equal(await status(), 130);
-    assert.doesNotMatch((await ausgabe()).split('\n').slice(-2).join('\n'), /^\d+$/m, 'kein Ergebnis nach Abbruch');
-    /* Sitzungswechsel: verspätetes Ergebnis wird nicht ausgegeben */
-    await inp.fill('grep -c -E "(x|xx)*y" ~/viel.txt'); await inp.press('Enter');
-    await p.waitForFunction(() => TERMINAL_ZUSTAND.dateiLaeuft);
+    assert.equal(await status(), 130, 'Strg+C');
+    const nachAbbruch = await p.evaluate(n => TERMINAL_ZUSTAND.ausgabe.slice(n), vorAbbruch);
+    assert.ok(!nachAbbruch.some(l => /^\d+$|viel1\.txt:/.test(l)), 'kein Ergebnis nach Abbruch: ' + JSON.stringify(nachAbbruch));
+    assert.deepEqual(await mitStatus('echo weiter'), ['weiter', 0], 'Shell danach normal');
+    /* Sitzungswechsel während der Arbeit: kein Ergebnis in die neue Sitzung */
+    await angehalten('grep -c x ~/viel1.txt ~/viel2.txt', 'viel2.txt');
     const vorSitzung = await p.evaluate(() => TERMINAL_ZUSTAND.ausgabe.length);
-    await p.evaluate(() => { TERMINAL_ZUSTAND.version++; });
+    await p.evaluate(() => { TERMINAL_ZUSTAND.version++; window.__vhAkt.weiter(); });
     await p.waitForFunction(() => !TERMINAL_ZUSTAND.dateiLaeuft);
     await p.waitForTimeout(200);
-    assert.equal(await p.evaluate(() => TERMINAL_ZUSTAND.ausgabe.length), vorSitzung, 'keine Ausgabe in die neue Sitzung: ' + JSON.stringify(await p.evaluate(n => TERMINAL_ZUSTAND.ausgabe.slice(n - 2), vorSitzung)));
+    assert.deepEqual(await p.evaluate(n => TERMINAL_ZUSTAND.ausgabe.slice(n), vorSitzung), [], 'keine Ausgabe in die neue Sitzung');
     await warten();
+    assert.deepEqual(await mitStatus('echo weiter'), ['weiter', 0], 'Shell nach Sitzungswechsel normal');
+    void vorAbbruch;
+
+    /* ---- G: Pfade (Review zu #141): Zwischenordner, ENOTDIR, Links in /intel, E6 über durchlaufenes /intel ---- */
+    assert.deepEqual(await mitStatus('grep Berlin ~/fehlt/../report.txt'), ['grep: /home/raizo/fehlt/../report.txt: No such file or directory', 2]);
+    assert.deepEqual(await mitStatus('grep Berlin ~/report.txt/../report.txt'), ['grep: /home/raizo/report.txt/../report.txt: Not a directory', 2]);
+    assert.deepEqual(await mitStatus('wc -l ~/report.txt/'), ['wc: /home/raizo/report.txt/: Not a directory', 1]);
+    assert.deepEqual(await mitStatus('sort ~/fehlt/../report.txt'), ['sort: cannot read: /home/raizo/fehlt/../report.txt: No such file or directory', 2]);
+    assert.deepEqual(await mitStatus('sha256sum ~/fehlt/../report.txt'), ['sha256sum: /home/raizo/fehlt/../report.txt: No such file or directory', 1]);
+    assert.deepEqual(await mitStatus('cat ~/fehlt/../report.txt | wc -l'), ['cat: /home/raizo/fehlt/../report.txt: No such file or directory\n0', 0]);
+    assert.deepEqual(await mitStatus('find ~/fehlt/..'), ['find: \u2018/home/raizo/fehlt/..\u2019: No such file or directory', 1]);
+    assert.deepEqual(await mitStatus('find ~/projects/notiz.txt/'), ['find: \u2018/home/raizo/projects/notiz.txt/\u2019: Not a directory', 1]);
+    assert.deepEqual(await mitStatus('grep -c Berlin ~/projects/../report.txt'), ['2', 0], 'bestehender Zwischenordner');
+    const P3 = '/intel/geospatial/pins/' + ids.p3;
+    assert.match(await lauf('grep -c "" ' + P3 + '/dossier/../index'), /^[1-9]\d*$/, 'physisch: dossier/../index ist der Personenindex');
+    assert.deepEqual(await mitStatus('grep -c "" ' + P3 + '/dossier/../record'), ['grep: ' + P3 + '/dossier/../record: No such file or directory', 2], 'nicht lexikalisch pins/<id>/record');
+    assert.equal(await lauf('find ' + P3 + '/dossier'), P3 + '/dossier', 'find -P: letzter Link nicht gefolgt');
+    assert.match(await lauf('find ' + P3 + '/dossier/ -maxdepth 1 -name profile'), /dossier\/profile$/, 'mit / gefolgt');
+    assert.deepEqual(await mitStatus('grep Berlin /intel/dossiers/../../home/raizo/report.txt > ~/e6.txt'), ['bash: grep: Operation not permitted', 1], 'E6: /intel durchlaufen');
+    assert.match(await lauf('ls ~/e6.txt'), /No such file or directory/);
+    await p.evaluate(() => dispatch({ type: 'DOSSIER_SPERREN', id: 'P-0003' }));
+    assert.deepEqual(await mitStatus('grep x ' + P3 + '/dossier/../index'), ['grep: ' + P3 + '/dossier/../index: Permission denied', 2], 'gesperrter Zwischenpfad');
+    assert.deepEqual(await mitStatus('cat /intel/dossiers/persons/P-0003/../index | wc -l'), ['cat: /intel/dossiers/persons/P-0003/../index: Permission denied\n0', 0]);
+    await p.evaluate(() => dispatch({ type: 'DOSSIER_ENTSPERREN', id: 'P-0003' }));
+
+    /* ---- H: Herkunft durch die Pipeline (Review zu #141) ---- */
+    const sauber = async () => { await lauf('clear'); };
+    const zeilen = async () => (await ausgabe()).split('\n').filter(l => !/^raizo@terminal/.test(l));
+    /* (a) Zahl nach Filter, auch 0, und uniq -c binden alles Gelesene */
+    await sauber();
+    await lauf('grep -ri marke /intel/dossiers/persons/P-0003 | grep -c zzz');
+    await lauf('grep -ri marke /intel/dossiers/persons/P-0003 | grep -v Hamburg | uniq -c | wc -l');
+    await lauf('grep -rh MARKE /intel/geospatial | grep -c Zufahrt');
+    await lauf('grep -ri marke /intel/dossiers/persons/P-0003 | grep -v -i marke | grep -c x');   /* leere Eingabe nach Filter */
+    await lauf('find ' + A + '/ops -name "lageblatt-*" | grep -v lageblatt | wc -l');           /* ausgefilterter Archivname */
+    assert.deepEqual(await zeilen(), ['0', '0', '1', '0', '0']);
+    await p.evaluate(() => dispatch({ type: 'DOSSIER_SPERREN', id: 'P-0003' }));
+    assert.deepEqual(await zeilen(), [], 'Zahlen über gesperrte Herkunft verschwinden, auch 0');
+    await p.evaluate(() => dispatch({ type: 'DOSSIER_ENTSPERREN', id: 'P-0003' }));
+    /* (b) ursprüngliche Bindung: alter Pin-Treffer, Archivname und Index-Zeile nach Verknüpfung A -> B und Sperre A */
+    await sauber();
+    await lauf('grep -r Zufahrt /intel/geospatial/pins');
+    await lauf('find ' + A + '/ops -name "lageblatt-*"');
+    const p1zahl = await lauf('grep -c "" /intel/dossiers/persons/P-0001/notes');
+    let vorher2 = await zeilen();
+    assert.ok(vorher2.some(l => l.includes(ids.p3)) && vorher2.some(l => l.includes('lageblatt-' + ids.p3)), vorher2.join('\n'));
+    await p.evaluate(id => { dispatch({ type: 'PIN_GEAENDERT', id, dossier: 'P-0002' }); dispatch({ type: 'DOSSIER_SPERREN', id: 'P-0003' }); }, ids.p3);
+    let nach2 = await zeilen();
+    assert.ok(!nach2.some(l => l.includes(ids.p3)), 'Relink A -> B, Sperre A:\n' + nach2.join('\n'));
+    assert.deepEqual(nach2, [p1zahl], 'nur die unabhängige Zeile (P-0001) bleibt');
+    await p.evaluate(id => { dispatch({ type: 'DOSSIER_ENTSPERREN', id: 'P-0003' }); dispatch({ type: 'PIN_GEAENDERT', id, dossier: 'P-0003' }); }, ids.p3);
+    /* Identitätswechsel und Löschung */
+    await sauber();
+    await lauf('grep -r Zufahrt /intel/geospatial/pins | wc -l');
+    await lauf('grep -r Zufahrt /intel/geospatial/pins');
+    assert.equal((await zeilen()).length, 2);
+    await p.evaluate(id => { PROFIL.pins.find(x => x.id === id).t = '2026-02-02T00:00:00.000Z'; profilSpeichern(); dispatch({ type: 'PIN_GEAENDERT', id, notiz: 'MARKE Zufahrt' }); }, ids.p3);
+    assert.deepEqual(await zeilen(), [], 'Identitätswechsel');
+    /* verzögerte zweite Stufe: Sperre zwischen den Stufen */
+    w = await waehrend('grep -rh MARKE /intel/geospatial | grep -c MARKE /intel/dossiers/persons/P-0001/notes -', 'P-0001/notes', sp3);
+    assert.ok(!(await zeilen()).some(l => /^\(standard input\):/.test(l) && !/:0$/.test(l)), 'gesperrte Zeilen der ersten Stufe nicht gezählt');
+    await p.evaluate(() => dispatch({ type: 'DOSSIER_ENTSPERREN', id: 'P-0003' }));
+    void w;
+
+    /* ---- I: große Dateien innerhalb der Grenzen (250.000 kurze Zeilen, 500 KB) ---- */
+    await vfs('/home/raizo/kurz.txt', 'a\n'.repeat(250000));
+    assert.deepEqual(await mitStatus('wc -l ~/kurz.txt'), ['250000 /home/raizo/kurz.txt', 0]);
+    assert.deepEqual(await mitStatus('cat ~/kurz.txt | wc -l'), ['250000', 0]);
+    assert.deepEqual(await mitStatus('grep -c a ~/kurz.txt'), ['250000', 0]);
+    assert.deepEqual(await mitStatus('grep a ~/kurz.txt | head -n 2'), ['a\na', 0]);
+    assert.deepEqual(await mitStatus('cat ~/kurz.txt | sort | uniq -c'), [' 250000 a', 0]);
+    assert.deepEqual(await mitStatus('cat ~/kurz.txt | sha256sum'), [require('node:crypto').createHash('sha256').update('a\n'.repeat(250000)).digest('hex') + '  -', 0]);
+    assert.deepEqual(await mitStatus('grep -F -w zzz ~/kurz.txt'), ['', 1]);
+    /* Puffergrenze in UTF-8-Bytes (6 Zeichen ä = 12 Bytes + Zeilenende > 10) */
+    await vfs('/home/raizo/umlaut.txt', 'ääääää\n');
+    await p.evaluate(() => { RECHERCHE_GRENZE.puffer = 10; });
+    assert.deepEqual(await mitStatus('cat ~/umlaut.txt | wc -l'), ['wc: output limit reached (4 MiB); no result', 2]);
+    await p.evaluate(() => { RECHERCHE_GRENZE.puffer = 4 * 1048576; });
+    /* head/tail zählen die gelesenen Daten, nicht die gekürzte Ausgabe */
+    await p.evaluate(() => { RECHERCHE_GRENZE.gelesen = 100000; });
+    assert.deepEqual(await mitStatus('head -n 1 ~/kurz.txt | wc -l'), ['wc: read limit reached (16 MiB); no result', 2]);
+    await p.evaluate(() => { RECHERCHE_GRENZE.gelesen = 16 * 1048576; });
+
+    /* ---- P2 ---- */
+    assert.deepEqual(await mitStatus('sha256sum ' + A + '/dokumente/bericht.txt'), ['sha256sum: ' + A + '/dokumente/bericht.txt: Operation not supported (archive files are delivered as decoded text)', 1], 'nur Archivoperand: keine Prüfsumme der Standardeingabe');
+    await vfs('/home/raizo/gross-zahl.txt', '12345678901234567891\n12345678901234567890\n');
+    assert.deepEqual(await mitStatus('sort -nu ~/gross-zahl.txt'), ['12345678901234567890\n12345678901234567891', 0], 'große ganze Zahlen exakt');
 
     /* ---- F: Tab ---- */
     const tab = async (wert, erwartet, text) => {
