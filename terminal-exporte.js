@@ -193,8 +193,12 @@ const EXPORTE = (function () {
 /* Anbieter /exports (Einhängepunkt in profil-modul.js): Verzeichnisse sind virtuell und bestehen nur über zugänglichen Exporten. */
 const EXPORTE_ANBIETER = {
   name: 'exporte', schreibFehler: 'EROFS',
-  baum: async function () {
+  /* opt.cache (Paket 5, eine Such- oder Pipelineoperation): Bestand einmal je Operation lesen. Unbedenklich, weil jede ausgegebene Zeile ihre
+     eigene Herkunft trägt und unmittelbar vor Ausgabe und Übernahme gegen den aktuellen Stand geprüft wird. */
+  baum: async function (opt) {
+    if (opt && opt.cache && opt.cache.exporte) return opt.cache.exporte;
     const l = await EXPORTE.liste();
+    if (!l.fehler && opt && opt.cache) opt.cache.exporte = l.alle;
     return l.fehler ? null : l.alle;
   },
   /* Schutzabhängigkeiten einer Ausgabezeile (Review 3 zu #140): eine Datei trägt ihre vollständige Herkunft (ursprüngliche Abhängigkeiten
@@ -204,8 +208,8 @@ const EXPORTE_ANBIETER = {
     if (!rel.length) return [];
     return (recs || []).map(EXPORTE.herkunftDep);
   },
-  knoten: async function (rel) {
-    const alle = await EXPORTE_ANBIETER.baum();
+  knoten: async function (rel, opt) {
+    const alle = await EXPORTE_ANBIETER.baum(opt);
     if (!alle) return rel.length ? { fehler: 'EIO' } : { typ: 'dir', kinder: [], recs: [] };
     const p = rel.join('/'), datei = alle.find(function (r) { return r.pfad === p; });
     if (datei) return { typ: 'file', rec: datei, recs: [datei] };
@@ -227,14 +231,14 @@ const EXPORTE_ANBIETER = {
     return { name: rel[rel.length - 1] || 'exports', dir: dir, bytes: dir ? 4096 : k.rec.bytes, mtime: Math.floor((k.mtime || (k.rec && k.rec.erstellt) || Date.now()) / 1000), modus: dir ? 0o555 : 0o444, uid: 0,
       deps: EXPORTE_ANBIETER.deps(rel, k.recs) };
   },
-  stat: async function (seg) {
-    const rel = seg.slice(1), k = await EXPORTE_ANBIETER.knoten(rel);
+  stat: async function (seg, opt) {
+    const rel = seg.slice(1), k = await EXPORTE_ANBIETER.knoten(rel, opt);
     if (k.fehler) return k;
     const e = EXPORTE_ANBIETER.eintrag(rel, k);
     return { adapter: 'exporte', typ: k.typ, eintrag: e, deps: e.deps };
   },
-  readdir: async function (seg) {
-    const rel = seg.slice(1), k = await EXPORTE_ANBIETER.knoten(rel);
+  readdir: async function (seg, opt) {
+    const rel = seg.slice(1), k = await EXPORTE_ANBIETER.knoten(rel, opt);
     if (k.fehler) return k;
     if (k.typ !== 'dir') return { fehler: 'ENOTDIR' };
     /* Das Verzeichnis selbst ist über den getippten Pfad benannt (vereinbarte Ausnahme); jede Kindzeile trägt ihre eigene Herkunft, damit andere

@@ -45,7 +45,11 @@ const { imUeberflug, bis, verbunden } = require('./_kestrel');
     await cmd('&& echo x'); assert.match(await letzte(), /syntax error near unexpected token `&&'/);
     await cmd('echo x &&'); assert.match(await letzte(), /syntax error near unexpected token `newline'/);
     await cmd('echo x ;'); assert.equal(await letzte(), 'x');
-    await cmd('ls | grep ops'); assert.match(await letzte(), /terminal: \|: pipes, redirections and substitutions are not supported/);
+    /* Paket 5: einfache Pipes sind erlaubt; |&, Umleitung mitten in der Pipeline und < bleiben ausgeschlossen */
+    await cmd('echo ops | grep ops'); assert.equal(await letzte(), 'ops');
+    await cmd('echo a |& cat'); assert.match(await letzte(), /terminal: \|&: pipes of standard error are not supported/);
+    await cmd('echo a > x | cat'); assert.match(await letzte(), /terminal: redirections are only supported at the end of a pipeline/);
+    await cmd('| cat'); assert.match(await letzte(), /syntax error near unexpected token `\|'/);
     await cmd('echo a < datei'); assert.match(await letzte(), /terminal: <: /);
 
     /* Verkettung und Rückgabewerte */
