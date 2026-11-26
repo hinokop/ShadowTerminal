@@ -474,8 +474,8 @@ function karteAuswahlSchluessel() {
 function karteMarkerAuswahl(marker) {
   return karteMarkerFinden(VIEW.karte.auswahl, karteAuswahlSchluessel(), marker);
 }
-function karteAuswahlNachricht() {
-  const m = karteMarkerAuswahl();
+function karteAuswahlNachricht(marker) {
+  const m = karteMarkerAuswahl(marker);
   return { typ: 'karte3d-auswahl', id: VIEW.karte.auswahl || null, renderKey: m ? karteMarkerSchluessel(m) : null };
 }
 function karteRenderModell() {
@@ -484,7 +484,7 @@ function karteRenderModell() {
   const marker = karteMarker().map(function (m) {
     return Object.assign({}, m, { renderKey: karteMarkerSchluessel(m), ll: m.ll.slice() });
   });
-  const zonen = karteZonen().map(function (z) {
+  const zonen = (K.ebenen.zonen === false ? [] : karteZonen()).map(function (z) {
     return Object.assign({}, z, { renderKey: karteRenderSchluessel('zone', z.id), ll: z.ll && z.ll.slice() });
   });
   const sichtbar = new Set(marker.filter(function (m) { return m.entitaet; }).map(function (m) { return m.id; }));
@@ -495,7 +495,7 @@ function karteRenderModell() {
   }) : [];
   return { marker: marker, zonen: zonen, kanten: kanten };
 }
-function zeichneKarte(svg) {
+function zeichneKarte(svg, renderModell) {
   const K = VIEW.karte, P = karteProj(), Z = K.ebenen, zm = K.zoom;
   const vb = { lonMin: P.lon(0), lonMax: P.lon(KW), latMin: P.lat(KH), latMax: P.lat(0) };
   const kids = [s('rect', { x: 0, y: 0, width: KW, height: KH, class: 'k-meer' })];
@@ -566,7 +566,7 @@ function zeichneKarte(svg) {
     kids.push(s('circle', { cx: cx, cy: cy, r: r, class: 'k-fenster-fl ' + w.zustand }), s('circle', { cx: cx, cy: cy, r: r, class: 'k-fenster ' + w.zustand }, s('title', null, w.id + ' ' + w.titel + ' (' + w.zustand + ')')));
   });
   /* Markierungen und Verbindungen */
-  const modell = karteRenderModell(), marker = modell.marker, def = karteAuftragsansicht(), pos = {};
+  const modell = renderModell || karteRenderModell(), marker = modell.marker, def = karteAuftragsansicht(), pos = {};
   const ci = def && STATE.agent.checkin && STATE.agent.checkin.standortId, zielpersonen = def ? zielpersonenListe() : [];
   /* Markierungen, die sich überdecken, werden auf einem kleinen Kreis aufgefächert; ein Leitstrich führt zur wahren Lage */
   { const gruppen = [];
@@ -1198,9 +1198,16 @@ function zonenMehrPanel(fertig) {
       h('button', { type: 'button', class: 'link', id: 'mz-aus', onclick: function () { K.mehr = []; delete VIEW.draft['mz-weg']; K.auswahl = null; renderModule(); } }, 'Auswahl aufheben'))]);
 }
 /* Änderungen an Pin und eigener Zone sofort in 2D und 3D zeigen (die Aktionen sind „leicht“ und zeichnen die Karte nicht selbst) */
+/* K1c-2a: ein frischer, gefilterter Snapshot für beide Renderer.
+   Kamera-Redraws und Kachelnachladen bleiben beim SVG; keine 3D-Datenflut beim Ziehen. */
+function karteRendererDatenAktualisieren() {
+  if (!KARTE_ST || !KARTE_ST.aktiv()) return;
+  const modell = karteRenderModell();
+  KARTE_ST.setData(modell);
+  KARTE_3D_ADAPTER.setData(modell);
+}
 function karteNeuZeichnen() {
-  const svg = $('k-svg'); if (svg) zeichneKarte(svg);
-  if (VIEW.karte.ansicht3d) karte3dSenden(karte3dDaten());
+  karteRendererDatenAktualisieren();
   karteStatusAkt();
 }
 function dossierOptionen(gewaehlt) {
@@ -1348,9 +1355,9 @@ function karteFokus(svg, id, key) {
 }
 /* 3D-Ansicht: eingebettete Seite karte3d.html (MapLibre). Das Terminal liefert Markierungen, Zonen und die Kamera per postMessage;
    die Kamera der 3D-Ansicht wird gemerkt, damit ein Neuaufbau des Moduls sie nicht zurücksetzt. */
-function karte3dDaten() {
+function karte3dDaten(renderModell) {
   const K = VIEW.karte;
-  const modell = karteRenderModell();
+  const modell = renderModell || karteRenderModell();
   const marker = modell.marker.filter(function (m) { return m.ll; }).map(function (m) { return { id: m.id, renderKey: m.renderKey, kat: m.kat, typ: m.typ, stufe: m.stufe || 0, name: typeof sperreText === 'function' ? sperreText(m.name) : m.name, ll: m.ll }; });
   const zonen = modell.zonen.filter(function (z) { return z.ll; }).map(function (z) { return { id: z.id, renderKey: z.renderKey, name: typeof sperreText === 'function' ? sperreText(z.name) : z.name, ll: z.ll, r: z.r }; });
   /* Ohne gemerkte Kamera: bei weiter Ausgangsansicht auf den ersten Standort (sonst erste Markierung) gehen, sonst die aktuelle Mitte nehmen */
@@ -1358,7 +1365,7 @@ function karte3dDaten() {
   const kamera = K.kamera3d || (ziel
     ? { center: [ziel.ll[1], ziel.ll[0]], zoom: 15.5, pitch: 60, bearing: -20 }
     : { center: [K.lon, K.lat], zoom: Math.max(14, Math.min(17.5, K.zoom - 0.5)), pitch: 60, bearing: -20 });
-  return { typ: 'karte3d-daten', marker: marker, zonen: zonen, kamera: kamera, auswahl: K.auswahl || null, auswahlRenderKey: karteAuswahlNachricht().renderKey, fadenkreuz: !!(K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen || K.messen), mess: K.messPts || [] };
+  return { typ: 'karte3d-daten', marker: marker, zonen: zonen, kamera: kamera, auswahl: K.auswahl || null, auswahlRenderKey: karteAuswahlNachricht(modell.marker).renderKey, fadenkreuz: !!(K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen || K.messen), mess: K.messPts || [] };
 }
 function webglVorhanden() {
   try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; }
@@ -1394,11 +1401,20 @@ function karte3dKlick(d) {
      damit gültige Koordinaten ihre Präzision behalten. */
   const lon = d.lon >= -180 && d.lon <= 180 ? d.lon : ((d.lon % 360 + 540) % 360) - 180;
   st.klickGeo({ ll: [d.lat, lon], markerId: d.id || null, markerKey: d.renderKey || null, kanteId: null,
-    zoneId: d.id ? null : d.zid || null, mehr: !!d.umschalt });
+    zoneId: d.id ? null : d.zid || null, mehr: !!d.umschalt }, function () { karteRendererDatenAktualisieren(); });
   karte3dSenden(karteAuswahlNachricht());
 }
 let KARTE_ST = null;
 const KARTE3D = { host: null, frame: null, platz: null, bereit: false, aktiv: false, sitzung: 0, folge: null };
+/* Derselbe Datenvertrag wie beim SVG-Adapter; der Frame bezieht beim Bereit-Signal
+   stets einen frischen Snapshot, statt Daten aus einer früheren Sitzung zu puffern. */
+const KARTE_3D_ADAPTER = {
+  art: 'maplibre-iframe',
+  aktiv: function () { return KARTE3D.aktiv; },
+  setData: function (modell) {
+    if (KARTE3D.aktiv && KARTE3D.bereit) karte3dSenden(karte3dDaten(modell));
+  }
+};
 /* K1c: SVG-Adapter wird vor jedem Modul-Neuaufbau freigegeben; der 3D-Frame
    bleibt geladen, erhält aber für jede Aktivierung eine neue Ereignisgeneration. */
 function karte3dNachrichtZulaessig(d) {
@@ -1439,7 +1455,7 @@ function karteRendererNachRender() {
   karte3dAktivSetzen(aktiv);
   if (aktiv) {
     if (KARTE3D.folge === null) karte3dFolgen();
-    if (KARTE3D.bereit) karte3dSenden(karte3dDaten());
+    KARTE_3D_ADAPTER.setData();
   }
 }
 /* Die 3D-Seite lebt dauerhaft außerhalb des Moduls (fest am Seitenende) und wird über den Platzhalter in der Karte positioniert.
@@ -1548,6 +1564,7 @@ function karteKlickVerarbeiten(eingabe, neu) {
   if (zt && !K.messen) {
     const zid = zt;
     const zo = karteZoneFinden(zid), vorher = K.auswahl ? karteZoneFinden(K.auswahl) : null;
+    if (!zo || (K.ebenen && K.ebenen.zonen === false)) return;  /* veralteter/ausgeblendeter Renderer-Treffer */
     /* Mehrfachbearbeitung gilt nur für Zonen des Auftrags; eigene Zonen werden einzeln bearbeitet */
     if ((eingabe.mehr || K.mehrModus) && !(zo && zo.profil)) {   /* Mehrfachauswahl: Zone zur Auswahl hinzufügen oder entfernen */
       K.mehr = K.mehr || [];
@@ -1621,7 +1638,7 @@ function karteSteuerung(svg) {
     neu();
   });
   /* SVG-Adapter: DOM-Treffer und Bildschirmkoordinaten in das gemeinsame Klickformat übersetzen. */
-  const klickGeo = function (eingabe) { if (aktiv()) karteKlickVerarbeiten(eingabe, neu); };
+  const klickGeo = function (eingabe, redraw) { if (aktiv()) karteKlickVerarbeiten(eingabe, redraw || neu); };
   const klick = function (ev) {
     if (!aktiv()) return;
     const c = koordUm(ev), P = karteProj();
@@ -1663,6 +1680,7 @@ function karteSteuerung(svg) {
     if (t && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); klick({ target: t, clientX: 0, clientY: 0 }); }
   });
   return { art: 'svg', aktiv: aktiv, unmount: unmount,
+    setData: function (modell) { if (aktiv()) zeichneKarte(svg, modell); },
     camera: function () { return { center: [K.lon, K.lat], zoom: K.zoom, pitch: 0, bearing: 0 }; },
     project: function (ll) { const P = karteProj(); return [P.px(ll[1]), P.py(ll[0])]; },
     unproject: function (xy) { const P = karteProj(); return [P.lat(xy[1]), P.lon(xy[0])]; },
@@ -1810,7 +1828,7 @@ function renderKarte(m) {
   const ebene = function (keys, text, ikon, titel) {
     keys = [].concat(keys);
     return h('label', { class: 'k-ebene', title: titel || null },
-      h('input', { type: 'checkbox', id: 'ke-' + keys[0], checked: keys.some(function (k) { return K.ebenen[k]; }), onchange: function (ev) { keys.forEach(function (k) { K.ebenen[k] = ev.target.checked; }); karteWahlSichern(); st.neu(); karteAuswahlAnzeige(); karteFensterListe(); if (keys[0] === 'kacheln') renderModule(); } }),
+      h('input', { type: 'checkbox', id: 'ke-' + keys[0], checked: keys.some(function (k) { return K.ebenen[k]; }), onchange: function (ev) { keys.forEach(function (k) { K.ebenen[k] = ev.target.checked; }); karteWahlSichern(); karteRendererDatenAktualisieren(); karteAuswahlAnzeige(); karteFensterListe(); if (keys[0] === 'kacheln') renderModule(); } }),
       ikon || h('span', { class: 'k-ik leer' }), h('span', null, text));
   };
   const fallPick = K.pick && K.pick.startsWith('X:') ? xFall(K.pick.slice(2)) : null;

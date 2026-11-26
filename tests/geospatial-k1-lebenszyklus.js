@@ -42,6 +42,47 @@ const { APP } = require('./_pfad');
       return {ersetzt,projektion,protokoll,erlaubt,weg,generation};
     });
     for (const [k,v] of Object.entries(res)) assert.equal(v,true,k);
+    /* Echte Layer-Handler und beide Datenadapter, ohne Netz oder WebGL.
+       Nachrichten werden an der Transportgrenze abgefangen, nicht die Filter nachgebaut. */
+    const sync = await p.evaluate(() => {
+      dispatch({type:'OZONE_ANGELEGT',ll:[52.5,13.4]});
+      const zid=PROFIL.zonen.at(-1).id;
+      dispatch({type:'DOSSIER_ANGELEGT',typ:'Person',name:'K1c Test'});
+      const eid=STATE.dossiers.auswahl;
+      dispatch({type:'SICHTUNG_HINZU',id:eid,ort:'52.5000, 13.4000',text:'Test'});
+      dispatch({type:'NAVIGATION',modul:'karte'});
+      const K=VIEW.karte; K.reiter='karte'; K.lat=52.5; K.lon=13.4; K.zoom=14;
+      K.ebenenOffen=true; K.ebenen.zonen=true; K.ebenen.sichtungen=true;
+      K.sichtungFokus=null; K.auswahl=null; renderModule();
+      const messages=[], senden=karte3dSenden, warBereit=KARTE3D.bereit;
+      karte3dSenden=d=>messages.push(d);
+      KARTE3D.aktiv=true; KARTE3D.bereit=true;
+      const letzter=()=>messages.filter(m=>m.typ==='karte3d-daten').at(-1);
+      const toggle=(id,on)=>{const e=$(id);e.checked=on;e.dispatchEvent(new Event('change',{bubbles:true}));};
+      const zoneSvg=()=>[...document.querySelectorAll('.k-zone')].some(g=>g.getAttribute('data-id')===zid);
+      const siSvg=()=>[...document.querySelectorAll('.k-marker')].some(g=>g.getAttribute('data-render-key')===karteRenderSchluessel('sichtung',STATE.dossiers.entitaeten[eid].sichtungen.at(-1).id,eid));
+      try {
+        karteRendererDatenAktualisieren();
+        const sichtbar=zoneSvg() && siSvg() && letzter().zonen.some(z=>z.id===zid) &&
+          letzter().marker.some(m=>m.renderKey===karteRenderSchluessel('sichtung',STATE.dossiers.entitaeten[eid].sichtungen.at(-1).id,eid));
+        toggle('ke-zonen',false);
+        const zoneAus=!zoneSvg() && !letzter().zonen.some(z=>z.id===zid);
+        karteWaehlen(null,false); karte3dKlick({lat:52.5,lon:13.4,zid});
+        const stale=K.auswahl===null;
+        toggle('ke-sichtungen',false);
+        const sichtAus=!siSvg() && !letzter().marker.some(m=>m.kat==='sichtung');
+        toggle('ke-zonen',true); toggle('ke-sichtungen',true);
+        const wieder=zoneSvg() && siSvg() && letzter().zonen.some(z=>z.id===zid);
+        K.messen=true; K.messPts=[];
+        karte3dKlick({lat:52.5,lon:13.4});
+        const mess=letzter().mess.length===1 && letzter().mess[0][0]===52.5 && letzter().mess[0][1]===13.4;
+        K.messen=false; K.messPts=[];
+        KARTE3D.aktiv=false; messages.length=0; karteNeuZeichnen();
+        const inaktiv=messages.length===0;
+        return {sichtbar,zoneAus,stale,sichtAus,wieder,mess,inaktiv};
+      } finally { KARTE3D.aktiv=false; KARTE3D.bereit=warBereit; karte3dSenden=senden; }
+    });
+    for (const [k,v] of Object.entries(sync)) assert.equal(v,true,k);
     await p.waitForTimeout(100);
     assert.deepEqual(errors,[]);
     console.log('OK: SVG mount/unmount, Projektion, Modulwechsel und 3D-Ereignisgeneration');
