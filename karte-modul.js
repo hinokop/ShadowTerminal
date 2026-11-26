@@ -1317,7 +1317,11 @@ function karte3dKlick(d) {
   const st = KARTE_ST, svg = $('k-svg');
   if (!st || !st.klickGeo || !svg || !d || !Number.isFinite(d.lat) || !Number.isFinite(d.lon) || Math.abs(d.lat) > 90) return;
   /* MapLibre liefert geografische Koordinaten direkt; kein Umweg über ein unsichtbares SVG und künstliche DOM-Treffer. */
-  st.klickGeo({ ll: [d.lat, d.lon], markerId: d.id || null, kanteId: null,
+  /* Die SVG-Präsenz ist vorerst ein Lebenszyklus-Wächter: KARTE_ST überlebt einen Modulwechsel.
+     Weltkopien in MapLibre können Längengrade außerhalb ±180° liefern. Nur diese normalisieren,
+     damit gültige Koordinaten ihre Präzision behalten. */
+  const lon = d.lon >= -180 && d.lon <= 180 ? d.lon : ((d.lon % 360 + 540) % 360) - 180;
+  st.klickGeo({ ll: [d.lat, lon], markerId: d.id || null, kanteId: null,
     zoneId: d.id ? null : d.zid || null, mehr: !!d.umschalt });
   karte3dSenden({ typ: 'karte3d-auswahl', id: VIEW.karte.auswahl || null });
 }
@@ -1376,7 +1380,8 @@ function karte3dEingang(d, fr) {
 }
 /* Gemeinsame Klicksemantik (K1a): Renderer liefern echte [lat, lon] und Trefferkennungen.
    Persistente IDs, Dispatch-Aktionen und bisherige Moduspriorität bleiben unverändert.
-   Keine Abhängigkeit von DOM, SVG oder MapLibre; neu ist der Redraw-Callback des aktiven Adapters. */
+   Keine Abhängigkeit von Bildschirmkoordinaten, DOM-Treffern oder Renderer-API; die bestehenden
+   Anwendungsaktionen können die Oberfläche aktualisieren. neu ist der Redraw-Callback des Adapters. */
 function karteKlickVerarbeiten(eingabe, neu) {
   const K = VIEW.karte, ll = eingabe.ll;
   if (!Array.isArray(ll) || ll.length !== 2 || !ll.every(Number.isFinite)) return;
