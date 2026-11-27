@@ -20,6 +20,21 @@ assert.equal(new Set(R.legende.filter(l=>l.filter).map(l=>l.filter)).size,8);
 assert.ok(Object.isFrozen(R.legende)&&R.legende.every(Object.isFrozen));
 for(const [i,k] of ['sichtungen','sichtungen','pins','personen','organisationen'].entries())
   assert.equal(s.quellen.punkte.features[i].properties.farbe,R.legende.find(l=>l.filter===k).farbe);
+const punktLegende=R.legende.filter(l=>l.symbol);
+assert.equal(punktLegende.length,6);
+assert.equal(new Set(punktLegende.map(l=>l.form)).size,6);
+assert.equal(new Set(punktLegende.map(l=>l.symbol)).size,6);
+const masken=punktLegende.map(l=>{
+  const b=R.symbolBild(l.symbol);
+  assert.deepEqual([b.width,b.height,b.data.length],[40,40,6400]);
+  assert.ok(b.data.some((v,i)=>i%4===3&&v===255));
+  assert.ok(b.data.some((v,i)=>i%4===3&&v===0));
+  return Buffer.from(b.data.filter((v,i)=>i%4===3)).toString('base64');
+});
+assert.equal(new Set(masken).size,6,'tatsächlich unterschiedliche Silhouetten');
+assert.deepEqual(R.symbolBild('toString'),R.symbolBild('sonstige'),'unbekannte Kategorie sicher');
+for(const [i,k] of ['sichtungen','sichtungen','pins','personen','organisationen'].entries())
+  assert.equal(s.quellen.punkte.features[i].properties.symbol,'shadow-v2-icon-'+R.legende.find(l=>l.filter===k).symbol);
 assert.equal(s.treffer.size,7);
 assert.equal(s.quellen.punkte.features.length,5);
 assert.deepEqual(s.quellen.punkte.features[0].geometry.coordinates,[13.4,52.52]);
@@ -50,6 +65,12 @@ assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).que
   const warten=()=>p.waitForFunction(()=>__adapter.ready()&&__map.loaded()&&__map.areTilesLoaded());
   await warten();
   const hit=async ll=>p.evaluate(ll=>__adapter.hitTest(__adapter.project(ll)),ll);
+  assert.equal(await p.evaluate(()=>__map.getLayer('shadow-v2-punkt').type),'symbol');
+  assert.equal(await p.evaluate(()=>__map.hasImage('shadow-v2-icon-sichtung')),true);
+  for(const marker of model.marker)assert.equal((await hit(marker.ll)).renderKey,marker.renderKey);
+  await p.evaluate(()=>__map.jumpTo({pitch:45,bearing:25}));await warten();
+  for(const marker of model.marker)assert.equal((await hit(marker.ll)).renderKey,marker.renderKey,'Treffer auch geneigt');
+  await p.evaluate(()=>__map.jumpTo({pitch:0,bearing:0}));await warten();
   assert.equal((await hit(model.marker[0].ll)).renderKey,a);
   assert.equal((await hit(model.marker[1].ll)).renderKey,b);
   assert.equal((await hit(model.zonen[0].ll)).renderKey,zone);
@@ -77,6 +98,7 @@ assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).que
   assert.ok(Math.abs(round[0]-52.52)<1e-6&&Math.abs(round[1]-13.4)<1e-6);
   await p.evaluate(()=>__adapter.setStyle(KARTE_V2_QUELLEN.leererStil()));
   await warten();
+  assert.equal(await p.evaluate(()=>__map.hasImage('shadow-v2-icon-sichtung')),true,'lokales Sprite nach Stilwechsel');
   assert.equal((await hit(model.marker[0].ll)).renderKey,a,'Stilwechsel erhält Snapshot');
   assert.deepEqual(await p.evaluate(()=>__map.getFilter('shadow-v2-auswahl')),['==',['get','renderKey'],a]);
   await p.evaluate(model=>__adapter.setData(model),{...model,marker:model.marker.filter(x=>x.renderKey!==a)});
@@ -86,6 +108,7 @@ assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).que
   assert.equal((await hit(model.marker[1].ll)).renderKey,b);
   await p.evaluate(()=>{__adapter.unmount();__adapter.setData({});});
   assert.equal(await p.evaluate(()=>!!__map.getSource('shadow-v2-punkte')),false);
+  assert.equal(await p.evaluate(()=>__map.hasImage('shadow-v2-icon-sichtung')),false);
   assert.equal(await p.evaluate(()=>__map.boxZoom.isEnabled()),true,'vorherige BoxZoom-Einstellung nach unmount wiederhergestellt');
   assert.equal(await hit(model.marker[1].ll),null);
   await p.evaluate(()=>__map.remove());
