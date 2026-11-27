@@ -138,7 +138,11 @@ function assertCamera(actual,expected){
   await klapp.click();
   await click([52.505,13.395]);
   assert.equal(await body.isVisible(),true);
-  assert.match(await body.innerText(),/K2 Pin/);
+  assert.equal(await klapp.getAttribute('aria-expanded'),'true');
+  assert.equal(await p.evaluate(()=>VIEW.karte.auswahl),f.pin,'new pin selected');
+  // The pin name is in the inspector header and the input value, not body.innerText().
+  assert.equal(await p.locator('#k-auswahl .k-pop-kopf strong').innerText(),'K2 Pin');
+  assert.equal(await body.locator('#pin-name').inputValue(),'K2 Pin');
   await click([52.51,13.41]);
   // K3c-1: the legend is a real filter control, not a second data store.
   assert.equal(await p.locator('#k-v2-legendenliste input').count(),8);
