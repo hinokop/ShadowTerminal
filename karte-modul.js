@@ -1416,6 +1416,7 @@ function karteSichtungZeigen(entId, sid, zoom) {
 /* Weiche Kamerafahrt (550 ms); ohne Bewegungsreduktion */
 function karteFlug(lat, lon, zoom, fertig, bezugId) {
   karteBezugSetzen(bezugId);                      /* gezielter Sprung setzt den Objektkontext der Lage-Box; Region, Europa und Welt löschen ihn */
+  if (typeof KARTE_V2_DEV !== 'undefined' && KARTE_V2_DEV.kameraSetzen(lat,lon,zoom,true,fertig)) return;
   if (VIEW.karte.ansicht3d) { KARTE_3D_ADAPTER.flyTo([lon, lat], Math.max(15, zoom || 15)); if (fertig) fertig(); return; }
   const K = VIEW.karte, a = { lat: K.lat, lon: K.lon, zoom: K.zoom }, t0 = performance.now();
   if (K.flug) cancelAnimationFrame(K.flug);
@@ -1791,6 +1792,7 @@ function karteSteuerung(svg) {
     const Wd = 256 * Math.pow(2, K.zoom);
     K.lon = gl - (cx - KW / 2) / Wd * 360;
     K.lat = Math.max(-80, Math.min(80, mercInv(merc(gb) + (cy - KH / 2) * 2 * Math.PI / Wd)));
+    if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.kameraSetzen(K.lat,K.lon,K.zoom);
     neu();
   };
   const koordUm = function (ev) {
@@ -1848,8 +1850,15 @@ function karteSteuerung(svg) {
     const t = ev.target && ev.target.closest ? ev.target.closest('.k-marker') : null;
     if (t && !zug) tip(ev, t.getAttribute('data-id'), t.getAttribute('data-render-key'));
   });
-  on('pointerup', function (ev) { const z = zug; zug = null; if (z && !z.bewegt) klick({ target: z.ziel, clientX: ev.clientX, clientY: ev.clientY, shiftKey: ev.shiftKey, ctrlKey: ev.ctrlKey, metaKey: ev.metaKey }); });
-  on('pointercancel', function () { zug = null; });
+  on('pointerup', function (ev) {
+    const z = zug; zug = null;
+    if (z && !z.bewegt) klick({ target: z.ziel, clientX: ev.clientX, clientY: ev.clientY, shiftKey: ev.shiftKey, ctrlKey: ev.ctrlKey, metaKey: ev.metaKey });
+    else if (z && typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.kameraSetzen(K.lat,K.lon,K.zoom);
+  });
+  on('pointercancel', function () {
+    const z=zug;zug=null;
+    if(z?.bewegt && typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.kameraSetzen(K.lat,K.lon,K.zoom);
+  });
   on('dblclick', function (ev) { if (K.pick) return; const c = koordUm(ev); zoomUm(1, c[0], c[1]); });
   on('keydown', function (ev) {
     if (ev.key === 'Escape' && (K.messen || K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen || (K.mehr && K.mehr.length) || K.mehrModus)) { K.pinSetzen = false; K.messen = false; K.messPts = []; K.pick = null; K.zoneSetzen = false; K.zugriffSetzen = false; K.mehr = []; K.mehrModus = false; K.auswahl = null; renderModule(); return; }

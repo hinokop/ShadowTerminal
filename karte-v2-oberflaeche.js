@@ -152,7 +152,7 @@
         h('div',{id:'k-v2-kamera',style:'font-size:11px;font-variant-numeric:tabular-nums;'},'Kamera wird geladen.'),
         h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Karte wird geladen. Shadow ist die Standardkarte.')),
       h('details',{class:'pad',style:'border-top:1px solid var(--border);'},h('summary',null,'Technische Hinweise und Diagnose'),
-        h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die alte Lagekarte. Die gemeinsame Kamera folgt in K4.'),
+        h('p',{class:'note'},'Mitte, Zoom und Zentrieren sind mit der SVG-Lagekarte gekoppelt. Masken und die historische 3D-Ansicht folgen in K4.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('button',{type:'button',id:'k-v2-qualitaet',onclick:qualitaetsbericht},'Qualitätsbericht'),
         h('textarea',{id:'k-v2-qualitaetsbericht',hidden:true,readonly:true,rows:8,'aria-label':'Redigierter Qualitätsbericht',style:'display:none;width:100%;margin-top:8px;'}),

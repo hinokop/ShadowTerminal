@@ -52,14 +52,48 @@
     c.a.setData(m,{mess:VIEW.karte.messPts});
     c.a.setSelection(auswahl(m));legendeAktualisieren();werkzeugAnzeige();
   }
+  // VIEW.karte owns geographic center and scale; V2 keeps its orientation.
+  const normLon=lon=>lon>=-180&&lon<=180?lon:((lon%360+540)%360)-180;
+  function zielKamera(lat,lon,zoom){
+    if(![lat,lon,zoom].every(Number.isFinite))return null;
+    return {center:[normLon(lon),Math.max(-85.051129,Math.min(85.051129,lat))],
+      zoom:Math.max(1.1,Math.min(22,zoom-0.5))};
+  }
+  function kameraTeilen(c){
+    if(!aktiv(c)||!c.a||VIEW.karte.ansicht3d)return;
+    const p=c.a.camera(),K=VIEW.karte;
+    if(!p||!p.center.every(Number.isFinite)||!Number.isFinite(p.zoom))return;
+    const lon=normLon(p.center[0]),lat=p.center[1],zoom=p.zoom+.5;
+    const anders=K.lon!==lon||K.lat!==lat||K.zoom!==zoom;
+    K.lon=lon;K.lat=lat;K.zoom=zoom;
+    if(anders){const svg=$('k-svg');if(svg)zeichneKarte(svg);}
+  }
+  function kameraSetzen(lat,lon,zoom,animiert=false,fertig){
+    const c=kontext,z=zielKamera(lat,lon,zoom),K=VIEW.karte;
+    if(!dev||!z||K.ansicht3d||!aktiv(c))return false;
+    if(K.flug){cancelAnimationFrame(K.flug);K.flug=null;}
+    if(!c.map||!c.a){
+      K.lon=z.center[0];K.lat=z.center[1];K.zoom=z.zoom+.5;K.init=true;
+      if(fertig)fertig();return true;
+    }
+    const reduziert=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    c.map.stop();
+    const p=c.a.camera(),gleich=Math.abs(p.center[0]-z.center[0])<1e-8&&Math.abs(p.center[1]-z.center[1])<1e-8&&Math.abs(p.zoom-z.zoom)<1e-8;
+    if(gleich){kameraTeilen(c);if(fertig)fertig();return true;}
+    if(animiert&&!reduziert){
+      if(fertig)c.map.once('moveend',()=>{if(aktiv(c))fertig();});
+      c.map.easeTo({...z,duration:550});
+    }else{
+      c.map.jumpTo(z);kameraTeilen(c);if(fertig)fertig();
+    }
+    return true;
+  }
   function mitte(){
     if(!dev||document.body.classList.contains('locked')||STATE.ui.modul!=='karte'||VIEW.karte.reiter==='protokoll')return null;
     const c=kontext;
-    if(aktiv(c)&&c.map){const p=bildPosition(c);return [p[1],p[0]];}
-    // During a normal remount, keep the same reference until MapLibre is
-    // ready. Never read a saved camera after access lock (session cleared).
-    const p=sitzung?.kamera?.center;
-    return Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)?[p[1],((p[0]%360+540)%360)-180]:null;
+    if(aktiv(c)&&c.map&&!VIEW.karte.ansicht3d){const p=bildPosition(c);return [p[1],p[0]];}
+    const K=VIEW.karte;
+    return [K.lat,K.lon].every(Number.isFinite)?[K.lat,K.lon]:null;
   }
   function klick(c,e){
     if(!aktiv(c)||!e||!Array.isArray(e.ll)||!e.ll.every(Number.isFinite))return;
@@ -118,7 +152,8 @@
       const K=VIEW.karte, sel=$('k-v2-bildwahl');
       if(sel)for(const q of KARTE_V2_QUELLEN.bildListe())sel.appendChild(h('option',{value:q.id},q.name));
       c.map=new maplibregl.Map({container:el,style:KARTE_V2_QUELLEN.leererStil(),
-        ...(alt?.kamera||{center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5))}),attributionControl:true,renderWorldCopies:false,
+        ...zielKamera(K.lat,K.lon,K.zoom),pitch:alt?.kamera?.pitch||0,bearing:alt?.kamera?.bearing||0,
+        minZoom:1.1,attributionControl:true,renderWorldCopies:false,
         transformRequest:url=>KARTE_V2_QUELLEN.cartoRequest(url,c.key)});
       c.map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
       c.map.addControl(new maplibregl.ScaleControl({maxWidth:100,unit:'metric'}),'bottom-left');
@@ -128,6 +163,7 @@
       c.map.on('moveend',()=>{
         if(!aktiv(c))return;
         gebaeudeKnoepfe(c);bildAktualisieren(c);kameraAnzeige(c);
+        kameraTeilen(c);
         const jetzt=mitte();
         if(jetzt&&(!letzteMitte||jetzt.some((v,i)=>Math.abs(v-letzteMitte[i])>1e-9))){
           letzteMitte=jetzt;karteStatusAkt();
@@ -136,7 +172,7 @@
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
       quelle.ereignisse(c);
       knoepfe(c);gebaeudeKnoepfe(c);
-      sync();karteStatusAkt();kameraAnzeige(c);
+      sync();kameraTeilen(c);karteStatusAkt();kameraAnzeige(c);
       $('k-v2-voll').disabled=false;layout(c);
       if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);
       else if(!alt)wechseln(c,'shadow');
@@ -148,5 +184,5 @@
   }
   /* Nur für die Entwicklungsansicht; Rückgabe der Adapterreferenz zur Prüfung
      tatsächlicher Treffer und des Lebenszyklus, kein zusätzlicher Datenbestand. */
-  root.KARTE_V2_DEV=Object.freeze({ansicht,mount,unmount,sync,mitte,aktiviert:dev,adapter:()=>aktiv(kontext)?kontext.a:null});
+  root.KARTE_V2_DEV=Object.freeze({ansicht,mount,unmount,sync,mitte,kameraSetzen,aktiviert:dev,adapter:()=>aktiv(kontext)?kontext.a:null});
 })(window);

@@ -795,7 +795,34 @@ function assertCamera(actual,expected){
   assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Messung löschen ohne Neuaufbau');
   assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'true');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),werkCam);
-  await p.click('#k-v2-voll');await p.close();
+  await p.click('#k-v2-voll');
+  {
+    // Shared camera in both directions; explicit navigation wins on remount.
+    await p.evaluate(()=>{VIEW.karte.ebenen.kacheln=false;KARTE_V2_DEV.adapter().flyTo({center:[13.405,52.505],zoom:13.5,pitch:0,bearing:0,duration:0});});
+    await p.waitForFunction(()=>Math.abs(VIEW.karte.lat-52.505)<1e-6&&Math.abs(VIEW.karte.lon-13.405)<1e-6&&Math.abs(VIEW.karte.zoom-14)<1e-6);
+    const gemeinsameCam=async()=>{
+      const a=await p.evaluate(()=>({v:KARTE_V2_DEV.adapter().camera(),k:{lat:VIEW.karte.lat,lon:VIEW.karte.lon,zoom:VIEW.karte.zoom}}));
+      assert.ok(Math.abs(a.v.center[0]-a.k.lon)<1e-6&&Math.abs(a.v.center[1]-a.k.lat)<1e-6&&Math.abs(a.v.zoom+.5-a.k.zoom)<1e-6);
+      return a.v;
+    };
+    await gemeinsameCam();
+    await p.click('#k-eu');await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-3.9)<1e-6);
+    await gemeinsameCam();
+    await p.evaluate(id=>kartenObjektZeigen(id),f.pin);await ready();
+    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().center[0]-13.395)<1e-6);
+    await gemeinsameCam();
+    const vorher=await gemeinsameCam();
+    await p.click('#pin-zentrum');
+    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-16)<1e-6);
+    const zentriert=await gemeinsameCam();
+    assert.ok(zentriert.zoom>vorher.zoom&&Math.abs(zentriert.center[1]-52.505)<1e-6);
+    await p.click('#k-plus');await gemeinsameCam();
+    const zurueck=await gemeinsameCam();
+    await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'dossier'}));
+    await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await ready();
+    assertCamera(await gemeinsameCam(),zurueck);
+  }
+  await p.close();
   // Echtes Laden des alten Browserprofils mit abweichender Schlüsseldatei.
   // Nur der in .kartenwahl bereits vorhandene Key darf verwendet werden.
   const browserKey='K2C_BROWSER_STORED+/k', stored=await b.newPage({reducedMotion:'reduce'});
