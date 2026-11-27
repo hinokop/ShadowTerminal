@@ -285,13 +285,16 @@
           h('button',{type:'button',id:'k-v2-flach',disabled:true,'aria-pressed':'true',onclick:()=>neigung(kontext,0)},'2D'),
           h('button',{type:'button',id:'k-v2-geneigt',disabled:true,'aria-pressed':'false',onclick:()=>neigung(kontext,60)},'3D-Neigung'),
           h('button',{type:'button',id:'k-v2-gebaeude',disabled:true,'aria-pressed':'false',onclick:()=>gebaeudeUmschalten(kontext)},'Gebäude')),
-        h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die Lagekarte. Die gemeinsame Kamera folgt später.'),
+        h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die alte Lagekarte. Lagebox und Objektinspektor werden gemeinsam genutzt; die gemeinsame Kamera folgt in K4.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('p',{class:'note',id:'k-v2-status',role:'status'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.'),
         h('div',null,h('button',{type:'button',id:'k-v2-qualitaet',onclick:qualitaetsbericht},'Qualitätsbericht'),
           h('textarea',{id:'k-v2-qualitaetsbericht',hidden:true,readonly:true,rows:8,'aria-label':'Redigierter Qualitätsbericht',style:'display:none;width:100%;margin-top:8px;'})),
         h('small',null,'Bei Online-Auswahl sieht der jeweilige Anbieter Kartenausschnitt und IP, CARTO zusätzlich den Schlüssel. Die Bildquelle und ihre Metadaten werden im Status und in der Kartenattribution ausgewiesen. © OpenStreetMap-Mitwirkende, © CARTO.')),
-      h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:420px;min-height:240px;background:#101820;border:1px solid var(--border);'}));
+      h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:420px;min-height:240px;background:#101820;border:1px solid var(--border);'}),
+      h('div',{id:'k-v2-paneele',style:'display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;padding:12px;'},
+        h('div',{class:'k-status',id:'k-status','aria-label':'Lage',style:'position:static;max-width:none;width:auto;flex:1 1 240px;box-sizing:border-box;'}),
+        h('div',{class:'k-popup',id:'k-auswahl',hidden:true,'aria-live':'polite',style:'position:static;transform:none;width:auto;flex:1 1 320px;max-height:55vh;box-sizing:border-box;'})));
   }
   function qualitaetsbericht(){
     const c=kontext,feld=$('k-v2-qualitaetsbericht');
@@ -332,6 +335,15 @@
     c.a.setData(m,{mess:VIEW.karte.messPts});
     c.a.setSelection(auswahl(m));
   }
+  function mitte(){
+    if(!dev||document.body.classList.contains('locked')||STATE.ui.modul!=='karte'||VIEW.karte.reiter==='protokoll')return null;
+    const c=kontext;
+    if(aktiv(c)&&c.map){const p=bildPosition(c);return [p[1],p[0]];}
+    // During a normal remount, keep the same reference until MapLibre is
+    // ready. Never read a saved camera after access lock (session cleared).
+    const p=sitzung?.kamera?.center;
+    return Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)?[p[1],((p[0]%360+540)%360)-180]:null;
+  }
   function klick(c,e){
     if(!aktiv(c)||!e||!Array.isArray(e.ll)||!e.ll.every(Number.isFinite))return;
     const m=karteRenderModell(), t=e.treffer;
@@ -340,8 +352,13 @@
     if(t&&m.marker.concat(m.zonen,m.kanten).filter(x=>x.id===t.id&&x.renderKey===t.renderKey).length!==1)return;
     const lon=e.ll[1], ll=[e.ll[0],lon>=-180&&lon<=180?lon:((lon%360+540)%360)-180];
     if(Math.abs(ll[0])>90)return;
+    const K=VIEW.karte, werkzeug=K.pick||K.pinSetzen||K.zoneSetzen||K.zugriffSetzen||K.messen;
     karteKlickVerarbeiten({ll,markerId:t&&t.art==='marker'?t.id:null,markerKey:t&&t.art==='marker'?t.renderKey:null,
       zoneId:t&&t.art==='zone'?t.id:null,kanteId:t&&t.art==='verbindung'?t.id:null,mehr:!!e.mehr},karteRendererDatenAktualisieren);
+    if(!werkzeug&&aktiv(c)){
+      if(t&&K.auswahl===t.id)karteBezugSetzen(t.id);
+      else if(!t&&!K.auswahl)karteBezugSetzen(null);
+    }
     sync();
   }
   function unmount(erhalten=false){
@@ -441,7 +458,16 @@
         ...(alt?.kamera||{center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5))}),attributionControl:true,
         transformRequest:url=>KARTE_V2_QUELLEN.cartoRequest(url,c.key)});
       c.map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
-      c.map.on('moveend',()=>{gebaeudeKnoepfe(c);bildAktualisieren(c);});
+      let letzteMitte=mitte();
+      c.map.on('dragstart',()=>{if(aktiv(c)){VIEW.karte.bezug=null;VIEW.karte.bezugRenderKey=null;}});
+      c.map.on('moveend',()=>{
+        if(!aktiv(c))return;
+        gebaeudeKnoepfe(c);bildAktualisieren(c);
+        const jetzt=mitte();
+        if(jetzt&&(!letzteMitte||jetzt.some((v,i)=>Math.abs(v-letzteMitte[i])>1e-9))){
+          letzteMitte=jetzt;karteStatusAkt();
+        }
+      });
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
       c.map.on('sourcedata',e=>{
         if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase))return;
@@ -473,7 +499,7 @@
       });
       c.map.on('idle',()=>kachelAuswerten(c));
       knoepfe(c);gebaeudeKnoepfe(c);
-      sync();
+      sync();karteStatusAkt();
       if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);
     }).catch(()=>{
       if(!aktiv(c))return;
@@ -483,5 +509,5 @@
   }
   /* Nur für die Entwicklungsansicht; Rückgabe der Adapterreferenz zur Prüfung
      tatsächlicher Treffer und des Lebenszyklus, kein zusätzlicher Datenbestand. */
-  root.KARTE_V2_DEV=Object.freeze({ansicht,mount,unmount,sync,adapter:()=>aktiv(kontext)?kontext.a:null});
+  root.KARTE_V2_DEV=Object.freeze({ansicht,mount,unmount,sync,mitte,aktiviert:dev,adapter:()=>aktiv(kontext)?kontext.a:null});
 })(window);

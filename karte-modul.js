@@ -1026,7 +1026,29 @@ function wetterText(w) {
     + (c.wind_gusts_10m > c.wind_speed_10m + 15 ? ', Böen ' + Math.round(c.wind_gusts_10m) : '') + (c.precipitation > 0 ? ' · Niederschlag ' + String(c.precipitation).replace('.', ',') + ' mm' : '') + sicht + ' · ' + String(c.time || '').slice(11, 16) + 'Z';
 }
 /* Objektkontext der Lage-Box: Kennung des Objekts, auf das gezielt gesprungen wurde (Zone, Pin, Sichtung, Dossierort, Ausgangsort). */
+/* K3b: ein eindeutiger Treffer aus dem gefilterten Kartenmodell, kein
+   Rückfall auf eine andere Objektart oder eine gleichnamige Sichtung. */
+function kartePanelObjekt(id, key, modell) {
+  if (!id) return null;
+  const m = modell || karteRenderModell();
+  const treffer = m.marker.map(objekt => ({art:'marker',objekt}))
+    .concat(m.zonen.map(objekt => ({art:'zone',objekt})),m.kanten.map(objekt => ({art:'verbindung',objekt})))
+    .filter(x => x.objekt.id === id && (!key || x.objekt.renderKey === key));
+  return treffer.length === 1 ? treffer[0] : null;
+}
+function karteGemeinsamePaneele() { return !!$('k-v2-paneele'); }
+function karteBezugModell(id,key,modell) {
+  const x = kartePanelObjekt(id,key,modell);
+  if (!x || !x.objekt.ll) return null;
+  const o = x.objekt;
+  const typ = x.art === 'zone' ? (o.art === 'zugriff' ? 'Zugriffspunkt' : 'Zone') :
+    o.kat === 'pin' ? 'Pin' : o.kat === 'ausgang' ? 'Ausgangsort' :
+    o.kat === 'sichtung' ? 'Sichtung' : o.entitaet ? 'Dossier ' + o.typ : 'Standort';
+  return {id:o.id,typ,name:o.name||o.id,ll:o.ll,stand:x.art==='zone'&&o.profil?(o.stand||o.t):null,
+    filter:o.kat==='pin'||(x.art==='zone'&&!!o.profil)};
+}
 function karteBezugVon(id, key) {
+  if (karteGemeinsamePaneele()) return karteBezugModell(id,key);
   if (!id) return null;
   const zn = typeof karteZoneFinden === 'function' ? karteZoneFinden(id) : null;
   if (zn) return { id: id, typ: zn.art === 'zugriff' ? 'Zugriffspunkt' : 'Zone', name: zn.profil ? zn.name : (zn.name || zn.id), ll: zn.ll, stand: zn.profil ? (zn.stand || zn.t) : null, filter: !!zn.profil };
@@ -1053,8 +1075,10 @@ function karteStatusAkt() {
   if (!box) return;
   const K = VIEW.karte;
   const bz = K.bezug ? karteBezugVon(K.bezug, K.bezugRenderKey) : null;
-  if (K.bezug && !bz) K.bezug = null;
-  const ref = bz ? bz.ll : [K.lat, K.lon];
+  if (K.bezug && !bz) { K.bezug = null; K.bezugRenderKey = null; }
+  const mitte = karteGemeinsamePaneele() && typeof KARTE_V2_DEV !== 'undefined' ? KARTE_V2_DEV.mitte() : null;
+  const center = mitte || [K.lat,K.lon];
+  const ref = bz ? bz.ll : center;
   const zeile = function (k, v, id) { return h('div', { class: 'k-st-z' }, h('span', { class: 'k-st-k' }, k), h('span', { class: 'k-st-v', id: id }, v)); };
   const kurz = bz ? bz.typ + ' · ' + bz.name : 'Kartenmitte';
   const zeilen = [];
@@ -1062,7 +1086,7 @@ function karteStatusAkt() {
     zeilen.push(zeile('Objekt', bz.typ + ' · ' + bz.name, 'k-st-objekt'), zeile('Position', bz.ll[0].toFixed(5) + ', ' + bz.ll[1].toFixed(5), 'k-st-pos'));
     if (bz.stand) zeilen.push(zeile('Stand', fmtZ(bz.stand), 'k-st-stand'));
     if (bz.filter) zeilen.push(h('div', { class: 'k-st-z' }, h('button', { type: 'button', class: 'link', id: 'k-st-protokoll', onclick: function () { K.kpObjekt = bz.id; K.kpFilter = ''; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen')));
-  } else zeilen.push(zeile('Position', 'Kartenmitte ' + K.lat.toFixed(3) + ', ' + K.lon.toFixed(3), 'k-st-pos'));
+  } else zeilen.push(zeile('Position', 'Kartenmitte ' + center[0].toFixed(3) + ', ' + center[1].toFixed(3), 'k-st-pos'));
   zeilen.push(zeile('Licht', lichtText(ref[0], ref[1], Date.now()), 'k-st-licht'));
   if (K.wetter) zeilen.push(zeile('Wetter', wetterText(wetterStand(ref[0], ref[1])), 'k-st-wetter'));
   box.classList.toggle('offen', !!K.statusOffen);
@@ -1099,6 +1123,11 @@ function kartePopupZiehbar(kopf, box) {
 }
 function kartePopupPos() {
   const box = $('k-auswahl'), K = VIEW.karte;
+  if (box && karteGemeinsamePaneele()) {
+    // Shared dock: independent of SVG projection and camera pitch.
+    box.style.visibility = 'visible'; box.style.translate = ''; box.style.left = ''; box.style.right = '';
+    box.style.top = ''; box.style.transform = 'none'; box.classList.remove('links','unten'); return;
+  }
   if (box) box.style.translate = K.popupVersatz ? K.popupVersatz.x + 'px ' + K.popupVersatz.y + 'px' : '';
   if (box && K.ansicht3d) { if (box.hidden) return; box.style.visibility = 'visible'; box.style.left = 'auto'; box.style.right = '64px'; box.style.top = '64px'; box.style.transform = 'none'; return; }
   if (box) { box.style.right = ''; box.style.transform = ''; }
@@ -1124,10 +1153,12 @@ function karteAuswahlAnzeige() {
   const box = $('k-auswahl'), id = VIEW.karte.auswahl;
   if (!box) return;
   const zu = h('button', { type: 'button', class: 'link k-pop-x', id: 'k-pop-x', 'aria-label': 'Schließen', onclick: function () { karteWaehlen(null, false); } }, '×');
-  const fertig = function (kopf, nodes) { box.hidden = false; const kk = h('div', { class: 'k-pop-kopf', title: 'Zum Verschieben ziehen' }, h('strong', null, kopf), zu); kartePopupZiehbar(kk, box); box.replaceChildren(kk, h('div', { class: 'k-pop-body' }, nodes)); kartePopupPos(); };
+  const fertig = function (kopf, nodes) { box.hidden = false; const kk = h('div', { class: 'k-pop-kopf', title: karteGemeinsamePaneele() ? 'Objektinspektor' : 'Zum Verschieben ziehen' }, h('strong', null, kopf), zu); if (!karteGemeinsamePaneele()) kartePopupZiehbar(kk, box); box.replaceChildren(kk, h('div', { class: 'k-pop-body' }, nodes)); kartePopupPos(); };
   if (VIEW.karte.mehr && VIEW.karte.mehr.length) { zonenMehrPanel(fertig); return; }
   if (!id) { box.hidden = true; box.replaceChildren(); return; }
-  const v = dossierRechercheKanten().find(function (x) { return x.id === id; });
+  const gemeinsam = karteGemeinsamePaneele(), objekt = gemeinsam ? kartePanelObjekt(id,karteAuswahlSchluessel()) : null;
+  if (gemeinsam && !objekt) { box.hidden = true; box.replaceChildren(); return; }
+  const v = gemeinsam ? (objekt.art==='verbindung'?objekt.objekt:null) : dossierRechercheKanten().find(function (x) { return x.id === id; });
   if (v) {
     const a = entitaet(v.von), b = entitaet(v.nach);
     fertig('Verbindung ' + v.id, [h('dl', { class: 'fields' }, feld('Art', v.typ), feld('Richtung', v.richtung === 'beidseitig' ? 'beidseitig' : 'gerichtet'), feld('Bewertung', [bewertungAnzeige(v)]), feld('Stand', bewertungEff(v).fr.text + ' (' + bewertungEff(v).fr.stufe + ')'), feld('Quelle', v.quelle || '–', 'full')),
@@ -1135,11 +1166,11 @@ function karteAuswahlAnzeige() {
         h('button', { type: 'button', class: 'link', id: 'k-kante-best', title: 'Bestätigt, dass die Verbindung weiterhin besteht (setzt den Stand zurück)', onclick: function () { dispatch({ type: 'KANTE_BESTAETIGT', id: v.id }); } }, 'Bestand bestätigen'))]);
     return;
   }
-  const pin = (PROFIL.pins || []).find(function (y) { return y.id === id; });
+  const pin = (!gemeinsam || objekt.art==='marker'&&objekt.objekt.kat==='pin') ? (PROFIL.pins || []).find(function (y) { return y.id === id; }) : null;
   if (pin) { if (pinGesperrt(pin)) { box.hidden = true; box.replaceChildren(); } else pinPopup(pin, fertig); return; }
-  const zn = karteZoneFinden(id);
+  const zn = gemeinsam ? (objekt.art==='zone'?objekt.objekt:null) : karteZoneFinden(id);
   if (zn) { zonePopup(zn, fertig); return; }
-  const m = karteMarkerAuswahl();
+  const m = gemeinsam ? (objekt.art==='marker'?objekt.objekt:null) : karteMarkerAuswahl();
   if (!m) { box.hidden = true; box.replaceChildren(); return; }
   if (m.kat === 'sichtung') {
     const e0 = entitaet(m.entId), pinX = sichtungPin(m.si, m.entId);
@@ -1206,6 +1237,10 @@ function karteRendererDatenAktualisieren() {
   KARTE_ST.setData(modell);
   KARTE_3D_ADAPTER.setData(modell);
   if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.sync(modell);
+  if (karteGemeinsamePaneele()) {
+    if (VIEW.karte.auswahl && !kartePanelObjekt(VIEW.karte.auswahl,karteAuswahlSchluessel(),modell)) karteAuswahlAnzeige();
+    karteStatusAkt();
+  }
 }
 function karteNeuZeichnen() {
   karteRendererDatenAktualisieren();
@@ -1950,8 +1985,8 @@ function renderKarte(m) {
         knopf('k-pick-x', 'Abbrechen', function () { K.pick = null; renderModule(); })) : null,
       h('div', { class: 'row' }, kopf),
       h('div', { class: 'karte-wrap' + (K.ansicht3d ? ' ist3d' : '') }, svg, K.ansicht3d ? karte3dRahmen() : null, leiste,
-        h('div', { class: 'k-status', id: 'k-status', 'aria-label': 'Lage' }),
-        h('div', { class: 'k-popup', id: 'k-auswahl', hidden: true, 'aria-live': 'polite' }),
+        typeof KARTE_V2_DEV==='undefined'||!KARTE_V2_DEV.aktiviert ? h('div', { class: 'k-status', id: 'k-status', 'aria-label': 'Lage' }) : null,
+        typeof KARTE_V2_DEV==='undefined'||!KARTE_V2_DEV.aktiviert ? h('div', { class: 'k-popup', id: 'k-auswahl', hidden: true, 'aria-live': 'polite' }) : null,
         h('div', { class: 'k-tip', id: 'k-tip', hidden: true }),
         h('div', { class: 'k-zoom' }, knopf('k-plus', '+', function () { st.zoom(0.8); }), knopf('k-minus', '−', function () { st.zoom(-0.8); })))),
     def ? panel('Zeitfenster-Overlay', null,

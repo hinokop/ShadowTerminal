@@ -51,6 +51,19 @@ const { APP } = require('./_pfad');
     assert.equal(vor.pin.length, 1); assert.equal(vor.zone.length, 1);
     assert.deepEqual(vor.pin, vor.framePin); assert.deepEqual(vor.zone, vor.frameZone);
     const schluessel = vor.si.find(x => x[0] === f.a)[2], zweiter = vor.si.find(x => x[0] === f.b)[2];
+    const paneel=await p.evaluate(({f,schluessel,zweiter})=>{
+      const m=karteRenderModell();
+      return {
+        mehrdeutig:kartePanelObjekt(f.si,null,m),
+        nord:kartePanelObjekt(f.si,schluessel,m)?.objekt.entId,
+        sued:kartePanelObjekt(f.si,zweiter,m)?.objekt.entId,
+        veraltet:kartePanelObjekt(f.si,'missing',m),
+        pin:karteBezugModell(f.pin,null,m)?.filter,
+        zone:karteBezugModell(f.zone,null,m)?.filter,
+        ausgeblendet:kartePanelObjekt(f.pin,null,{...m,marker:m.marker.filter(x=>x.id!==f.pin)})
+      };
+    },{f,schluessel,zweiter});
+    assert.deepEqual(paneel,{mehrdeutig:null,nord:f.a,sued:f.b,veraltet:null,pin:true,zone:true,ausgeblendet:null});
     const svgTreffer = await p.evaluate(f => [...document.querySelectorAll('.k-marker')].filter(g => g.getAttribute('data-id') === f.si).map(g => g.getAttribute('data-render-key')), f);
     assert.deepEqual(svgTreffer.sort(), [schluessel, zweiter].sort(), 'beide SVG-Objekte einzeln gezeichnet');
     await p.evaluate(key => {

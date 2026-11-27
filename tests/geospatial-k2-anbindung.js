@@ -105,6 +105,21 @@ function assertCamera(actual,expected){
   };
   await click([52.51,13.41]);assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
   assert.match(await p.locator('#k-auswahl').innerText(),/K2 Sued/);
+  assert.equal(await p.locator('#k-v2-paneele #k-auswahl').count(),1);
+  assert.equal(await p.locator('#k-v2-paneele #k-status').count(),1);
+  assert.equal(await p.locator('#k-auswahl').count(),1);
+  assert.equal(await p.locator('#k-status').count(),1);
+  assert.match(await p.locator('#k-st-objekt').innerText(),/K2 Sued/);
+  assert.equal(await p.evaluate(({si})=>kartePanelObjekt(si,null),f),null,'duplicate ID without typed key');
+  await click([52.505,13.395]);
+  assert.match(await p.locator('#k-auswahl').innerText(),/K2 Pin/);
+  assert.ok(await p.locator('#pin-export').isVisible());
+  assert.ok(await p.locator('#k-st-protokoll').isVisible());
+  await click([52.505,13.415]);
+  assert.ok(await p.locator('#oz-name').isVisible());
+  assert.ok(await p.locator('#oz-protokoll').isVisible());
+  await click([52.51,13.41]);
+  assert.match(await p.locator('#k-st-objekt').innerText(),/K2 Sued/);
   const status=text=>p.waitForFunction(text=>$('k-v2-status')?.textContent.includes(text),text);
   const stilAbrufe=()=>anfragen.filter(x=>x.art==='stil').length;
   const fixtureKey='K2C_FIXTURE+/k';
@@ -321,7 +336,12 @@ function assertCamera(actual,expected){
   assert.ok(anfragen.every(a=>a.key===fixtureKey&&!a.referer));
   await p.evaluate(()=>{VIEW.karte.messen=false;VIEW.karte.messPts=[];karteRendererDatenAktualisieren();});
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();});
+  await p.evaluate(({si,key})=>{karteWaehlen(si,false,key);karteBezugSetzen(si);},{si:f.si,key:ka});
+  assert.match(await p.locator('#k-auswahl').innerText(),/K2 Nord/);
   await p.evaluate(id=>dispatch({type:'DOSSIER_SPERREN',id}),f.a);
+  assert.equal(await p.locator('#k-auswahl').isVisible(),false,'locked selected object not rebound to other SI');
+  assert.ok(!(await p.locator('#k-status').innerText()).includes('K2 Nord'));
+  assert.equal(await p.evaluate(({si,key})=>karteBezugModell(si,key),{si:f.si,key:ka}),null);
   assert.equal(await p.evaluate(()=>__alt.ready()),false,'alter Renderer freigegeben');
   await ready();
   await p.waitForFunction(k=>{const a=KARTE_V2_DEV.adapter();return a?.ready()&&a.hitTest(a.project([52.51,13.41]))?.renderKey===k;},kb);
@@ -440,8 +460,11 @@ function assertCamera(actual,expected){
   // Position changes remain a real trigger (bypass only the time throttle,
   // not the cache/position selection). Without this control, a disabled
   // weather implementation would falsely pass the negative assertion.
-  await p.evaluate(()=>{VIEW.karte.lat=52.705;WETTER.zuletzt=0;karteStatusAkt();});
-  await p.waitForFunction(()=>$('k-st-wetter')?.textContent.includes('12 °C')&&!WETTER.laufend);
+  await p.evaluate(()=>{
+    const a=KARTE_V2_DEV.adapter(),cam=a.camera();WETTER.zuletzt=0;
+    a.flyTo({...cam,center:[cam.center[0],cam.center[1]+0.2],duration:0});
+  });
+  await p.waitForFunction(()=>!WETTER.laufend&&$('k-st-wetter')?.textContent.includes('12 °C')&&WETTER.zuletzt>0);
   assert.equal(wetterAnfragen.length,wetterVorStil+1);
   assert.notEqual(wetterAnfragen.at(-1).lat,wetterAnfragen.at(-2).lat);
   await p.evaluate(()=>{VIEW.karte.ebenen.kacheln=false;karteStatusAkt();});
@@ -467,6 +490,9 @@ function assertCamera(actual,expected){
   await standard.waitForFunction(()=>!document.body.classList.contains('locked'));
   await standard.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
   assert.equal(await standard.locator('#k-v2-map').count(),0);
+  assert.equal(await standard.locator('#k-v2-paneele').count(),0);
+  assert.equal(await standard.locator('.karte-wrap #k-status').count(),1);
+  assert.equal(await standard.locator('.karte-wrap #k-auswahl').count(),1);
   assert.equal(await standard.evaluate(()=>typeof maplibregl),'undefined','keine Bibliotheksladung ohne Opt-in');
   await standard.close();assert.deepEqual(errors,[]);
   console.log('OK: K2b-2b gefiltertes Anwendungsmodell, echte MapLibre-Klicks, Sperre, Ebenen und Lebenszyklus');
