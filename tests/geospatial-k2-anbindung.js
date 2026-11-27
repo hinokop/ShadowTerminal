@@ -71,6 +71,24 @@ function assertCamera(actual,expected){
     }
     return r.abort();
   };
+  // Track actual outstanding provider requests, including aborted requests
+  // from the preliminary raster-only hybrid style.
+  const providerHosts=new Set(['gdi.berlin.de','isk.geobasis-bb.de','geo4.service24.rlp.de','www.wms.nrw.de','tiles.maps.eox.at','basemaps.cartocdn.com','tiles.basemaps.cartocdn.com']);
+  const pendingProvider=new Set(),providerWaiters=new Set();
+  p.on('request',req=>{if(providerHosts.has(new URL(req.url()).hostname))pendingProvider.add(req);});
+  const providerDone=req=>{
+    pendingProvider.delete(req);
+    if(!pendingProvider.size)for(const done of providerWaiters)done();
+  };
+  p.on('requestfinished',providerDone);p.on('requestfailed',providerDone);
+  function providerDrain(){
+    if(!pendingProvider.size)return Promise.resolve();
+    return new Promise((resolve,reject)=>{
+      const done=()=>{clearTimeout(timer);providerWaiters.delete(done);resolve();};
+      const timer=setTimeout(()=>{providerWaiters.delete(done);reject(Error('Provider requests still pending: '+pendingProvider.size));},25000);
+      providerWaiters.add(done);
+    });
+  }
   await p.route(/^https?:/,route);
   await p.goto(APP+'?geospatial-v2=1');
   await p.fill('#gate-pw','pw-test-123');if(await p.isVisible('#gate-pw2'))await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
@@ -586,17 +604,56 @@ function assertCamera(actual,expected){
   assert.equal(wetterAnfragen.length,wetterVorStil+1);
   assert.notEqual(wetterAnfragen.at(-1).lat,wetterAnfragen.at(-2).lat);
   await p.evaluate(()=>{VIEW.karte.ebenen.kacheln=false;karteStatusAkt();});
-  await p.click('#k-v2-hybrid');await status('Bildkacheln geladen');await status('Vektorkacheln geladen');
-  const werkNetz=[stilAbrufe(),bildAnfragen.length];
-  const werkOnlineCam=await p.evaluate(()=>{window.__werkzeugAdapter=KARTE_V2_DEV.adapter();return __werkzeugAdapter.camera();});
-  for(const art of ['pin','zone','messen']){
-    const b=p.locator('#k-v2-werkzeug-'+art);
-    await b.click();assert.equal(await b.getAttribute('aria-pressed'),'true');
-    await b.click();assert.equal(await b.getAttribute('aria-pressed'),'false');
-    assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Hybrid-Werkzeug '+art+' ohne Neuaufbau');
-  }
-  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),werkOnlineCam);
-  assert.deepEqual([stilAbrufe(),bildAnfragen.length],werkNetz,'kein neuer Stil-/Bildabruf allein durch Werkzeugwahl');
+  // Observe the actual MapLibre instance, setStyle calls and source instances.
+  // "Bildkacheln geladen" only confirms one tile, not a fully settled viewport.
+  await p.evaluate(()=>{
+    const proto=maplibregl.Map.prototype,original=proto.setStyle;
+    window.__werkMap=null;window.__werkStyleCalls=0;window.__werkIdle=0;
+    const idle=()=>{window.__werkIdle++;};
+    proto.setStyle=function(...args){
+      if(this.getContainer().id==='k-v2-map'){
+        if(window.__werkMap!==this){
+          window.__werkMap?.off('idle',idle);window.__werkMap=this;this.on('idle',idle);
+        }
+        window.__werkStyleCalls++;
+      }
+      return original.apply(this,args);
+    };
+    window.__restoreWerk=()=>{proto.setStyle=original;window.__werkMap?.off('idle',idle);delete window.__restoreWerk;};
+  });
+  const werkSettled=async()=>{
+    const idle=await p.evaluate(()=>{const n=window.__werkIdle;window.__werkMap.triggerRepaint();return n;});
+    await p.waitForFunction(n=>{
+      const m=window.__werkMap;
+      return window.__werkIdle>n&&m.loaded()&&m.areTilesLoaded()&&!m.isMoving();
+    },idle);
+    await providerDrain();
+  };
+  const werkCounts=()=>[stilAbrufe(),anfragen.filter(x=>x.art==='tile').length,bildAnfragen.length];
+  try{
+    await p.click('#k-v2-hybrid');await hybridBereit();await werkSettled();
+    const werkNetz=werkCounts();
+    const werkOnlineCam=await p.evaluate(()=>{
+      const m=window.__werkMap;
+      window.__werkzeugAdapter=KARTE_V2_DEV.adapter();
+      window.__werkStyleBaseline=window.__werkStyleCalls;
+      window.__werkSources=Object.entries(m.getStyle().sources).filter(([,s])=>s.type==='raster'||s.type==='vector').map(([id])=>[id,m.getSource(id)]);
+      return window.__werkzeugAdapter.camera();
+    });
+    assert.ok(await p.evaluate(()=>window.__werkStyleBaseline>=1&&window.__werkSources.length===2),'positive control: real hybrid style and both sources');
+    for(const art of ['pin','zone','messen']){
+      const b=p.locator('#k-v2-werkzeug-'+art);
+      for(const pressed of ['true','false']){
+        await b.click();assert.equal(await b.getAttribute('aria-pressed'),pressed);
+        await werkSettled();
+        assert.equal(await p.evaluate(()=>window.__werkzeugAdapter===KARTE_V2_DEV.adapter()&&
+          window.__werkStyleCalls===window.__werkStyleBaseline&&window.__werkSources.every(([id,src])=>window.__werkMap.getSource(id)===src)),true,
+          'Hybrid-Werkzeug '+art+' '+pressed+': Adapter, Style und Quellen unverändert');
+        assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),werkOnlineCam);
+        assert.deepEqual(werkCounts(),werkNetz,'kein neuer Stil-/Vektor-/Bildabruf durch '+art+' '+pressed);
+      }
+    }
+  }finally{await p.evaluate(()=>window.__restoreWerk?.());}
   await p.click('#k-v2-leer');await status('Ohne Basiskarte');
   // Real actions in the expanded map. Same application state and click contract.
   await p.click('#k-v2-voll');
@@ -617,8 +674,13 @@ function assertCamera(actual,expected){
   await p.click('#k-v2-werkzeug-messen');await ready();
   assert.match(await p.locator('#k-v2-messwert').innerText(),/Ersten Messpunkt/);
   await click(pos);assert.match(await p.locator('#k-v2-messwert').innerText(),/Zweiten Messpunkt/);
-  await click([pos[0]+0.001,pos[1]+0.001]);await ready();
-  assert.match(await p.locator('#k-v2-messwert').innerText(),/^Luftlinie: \d+ m$/);
+  // A second point far enough from the first pin cannot snap to the same icon.
+  await click([pos[0]+0.005,pos[1]+0.005]);await ready();
+  const messung=await p.evaluate(()=>{
+    const [a,b]=VIEW.karte.messPts;return {a,b,m:Math.round(karteDistanz(a,b)*1000)};
+  });
+  assert.ok(messung.m>100&&messung.m<1000,'non-zero short distance: '+JSON.stringify(messung));
+  assert.equal(await p.locator('#k-v2-messwert').innerText(),'Luftlinie: '+messung.m+' m');
   assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Messabschluss ohne Neuaufbau');
   assert.equal(await p.evaluate(()=>VIEW.karte.messPts.length),2);
   assert.equal(await p.locator('#k-v2-werkzeug-messen').innerText(),'Messung löschen');
