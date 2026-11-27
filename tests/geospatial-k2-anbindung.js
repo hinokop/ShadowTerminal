@@ -807,10 +807,26 @@ function assertCamera(actual,expected){
     };
     await gemeinsameCam();
     await p.click('#k-eu');await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-3.9)<1e-6);
-    await gemeinsameCam();
-    await p.evaluate(id=>kartenObjektZeigen(id),f.pin);await ready();
+    const europa=await gemeinsameCam();
+    // f.pin belongs to the dossier explicitly locked earlier in this test.
+    // A denied jump must not move either camera; never unlock it for this test.
+    assert.equal(await p.evaluate(id=>zielZugang(id)?.gesperrt,f.pin),true,'locked pin fixture');
+    assert.equal(await p.evaluate(id=>kartenObjektZeigen(id),f.pin),false,'locked pin jump denied');
+    assertCamera(await gemeinsameCam(),europa);
+    // Independent authorized fixture with the same known reference coordinates.
+    const kameraPin=await p.evaluate(()=>{
+      dispatch({type:'PIN_ANGELEGT',ll:[52.505,13.395],name:'K4 Kamera-Testpin'});
+      const pin=PROFIL.pins.at(-1);
+      return {id:pin.id,accessible:zielZugang(pin.id)?.gesperrt===false,ll:pin.ll};
+    });
+    assert.equal(kameraPin.accessible,true);
+    assert.deepEqual(kameraPin.ll,[52.505,13.395]);
+    await ready();
+    assert.equal(await p.evaluate(id=>kartenObjektZeigen(id),kameraPin.id),true,'authorized pin jump accepted');
+    await ready();
     await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().center[0]-13.395)<1e-6);
-    await gemeinsameCam();
+    assert.equal(await p.evaluate(()=>VIEW.karte.auswahl),kameraPin.id);
+    assert.equal(await p.locator('#pin-name').inputValue(),'K4 Kamera-Testpin');
     const vorher=await gemeinsameCam();
     await p.click('#pin-zentrum');
     await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-16)<1e-6);
