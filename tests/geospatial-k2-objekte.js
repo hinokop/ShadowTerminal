@@ -15,6 +15,11 @@ const model={marker:[
   {id:'P-2',renderKey:p2,kat:'figur',entitaet:true,typ:'Organisation',ll:[52.516,13.41]}
 ],zonen:[{id:'ZO-1',renderKey:zone,ll:[52.524,13.41],r:150}],kanten:[{id:'V-1',renderKey:edge,von:'P-1',nach:'P-2'}]};
 const s=R.daten(model,{mess:[[52.52,179.99],[52.52,-179.99]]});
+assert.equal(R.legende.filter(l=>l.filter).length,8);
+assert.equal(new Set(R.legende.filter(l=>l.filter).map(l=>l.filter)).size,8);
+assert.ok(Object.isFrozen(R.legende)&&R.legende.every(Object.isFrozen));
+for(const [i,k] of ['sichtungen','sichtungen','pins','personen','organisationen'].entries())
+  assert.equal(s.quellen.punkte.features[i].properties.farbe,R.legende.find(l=>l.filter===k).farbe);
 assert.equal(s.treffer.size,7);
 assert.equal(s.quellen.punkte.features.length,5);
 assert.deepEqual(s.quellen.punkte.features[0].geometry.coordinates,[13.4,52.52]);

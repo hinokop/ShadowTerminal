@@ -120,6 +120,29 @@ function assertCamera(actual,expected){
   assert.ok(await p.locator('#oz-protokoll').isVisible());
   await click([52.51,13.41]);
   assert.match(await p.locator('#k-st-objekt').innerText(),/K2 Sued/);
+  // K3c-1: the legend is a real filter control, not a second data store.
+  assert.equal(await p.locator('#k-v2-legendenliste input').count(),8);
+  assert.ok(await p.locator('#k-v2-kamera').innerText().then(s=>s.includes('Zoom')));
+  assert.equal(await p.locator('#k-v2-map .maplibregl-ctrl-scale').count(),1);
+  await p.locator('#k-v2-legende summary').click();
+  const legendCam=await p.evaluate(()=>{window.__legendenAdapter=KARTE_V2_DEV.adapter();return __legendenAdapter.camera();});
+  const legendVorNetz=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
+  await p.uncheck('#k-v2-eb-pins');
+  await p.waitForFunction(ll=>{const a=KARTE_V2_DEV.adapter();return a?.ready()&&a.hitTest(a.project(ll))===null;},[52.505,13.395]);
+  assert.equal(await p.evaluate(()=>VIEW.karte.ebenen.pins),false);
+  await p.check('#k-v2-eb-pins');
+  await p.waitForFunction(({ll,id})=>{const a=KARTE_V2_DEV.adapter();return a?.hitTest(a.project(ll))?.id===id;},{ll:[52.505,13.395],id:f.pin});
+  await p.uncheck('#k-v2-eb-sichtungen');
+  await p.waitForFunction(ll=>{const a=KARTE_V2_DEV.adapter();return a?.hitTest(a.project(ll))===null;},[52.51,13.41]);
+  assert.equal(await p.locator('#k-auswahl').isVisible(),false);
+  assert.ok(!(await p.locator('#k-status').innerText()).includes('K2 Sued'));
+  await p.check('#k-v2-eb-sichtungen');
+  await p.waitForFunction(({ll,key})=>{const a=KARTE_V2_DEV.adapter();return a?.hitTest(a.project(ll))?.renderKey===key;},{ll:[52.51,13.41],key:kb});
+  assert.equal(await p.evaluate(()=>__legendenAdapter===KARTE_V2_DEV.adapter()),true);
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),legendCam);
+  assert.deepEqual([anfragen.length,bildAnfragen.length,wetterAnfragen.length],legendVorNetz);
+  await p.locator('#k-v2-legende summary').click();
+  await click([52.51,13.41]);
   const status=text=>p.waitForFunction(text=>$('k-v2-status')?.textContent.includes(text),text);
   const stilAbrufe=()=>anfragen.filter(x=>x.art==='stil').length;
   const fixtureKey='K2C_FIXTURE+/k';
@@ -286,6 +309,7 @@ function assertCamera(actual,expected){
   assert.equal(await p.locator('#k-v2-gebaeude').isDisabled(),true);
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
   assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]]);
+  await p.locator('#k-v2-qualitaet').evaluate(el=>{el.closest('details').open=true;});
   await p.click('#k-v2-qualitaet');
   const bericht=await p.locator('#k-v2-qualitaetsbericht').inputValue();
   assert.ok(bericht.includes('Modus: Hybrid')&&bericht.includes('Bildquelle: Berlin TrueDOP 2024'));

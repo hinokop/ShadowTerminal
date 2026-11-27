@@ -4,6 +4,22 @@
   'use strict';
   const P='shadow-v2-', ids={punkte:P+'punkte',zonen:P+'zonen',kanten:P+'kanten',mess:P+'mess',unsicherheit:P+'unsicherheit'};
   const farben={pin:'#2e9d4f',sichtung:'#d13b2f',person:'#2f7fd1',org:'#7a4fc9',ort:'#8e5bd6',ausgang:'#2e9d4f',standort:'#0f8a8a',zugriff:'#e08a00'};
+  const linienfarben=Object.freeze({zone:'#e08a00',kante:'#879fb6',unsicherheit:farben.sichtung,auswahl:'#ffe66a',mess:'#fff'});
+  // Actual renderer symbols, shared with the K3 legend. Do not promise
+  // distinct shapes before the corresponding renderer layers exist.
+  const legende=Object.freeze([
+    ['personen','Personen','punkt',farben.person],
+    ['organisationen','Organisationen','punkt',farben.org],
+    ['orte','Orte','punkt',farben.ort],
+    ['pins','Pins','punkt',farben.pin],
+    ['zonen','Eigene Zonen','zone',linienfarben.zone],
+    ['sichtungen','Sichtungen','punkt',farben.sichtung],
+    ['verbindungen','Verbindungen','linie',linienfarben.kante],
+    ['ausgang','Ausgangsorte','punkt',farben.ausgang],
+    [null,'Unschärfering','ring',linienfarben.unsicherheit],
+    [null,'Auswahl','ring',linienfarben.auswahl],
+    [null,'Messung','linie',linienfarben.mess]
+  ].map(([filter,name,form,farbe])=>Object.freeze({filter,name,form,farbe})));
   const fc=features=>({type:'FeatureCollection',features});
   const gueltig=ll=>Array.isArray(ll)&&ll.length===2&&ll.every(Number.isFinite)&&Math.abs(ll[0])<=85.051129&&Math.abs(ll[1])<=180;
   const xy=ll=>[ll[1],ll[0]];
@@ -62,15 +78,15 @@
     return {quellen:{punkte:fc(punkte),zonen:fc(flaechen),kanten:fc(verbindungen),mess:fc(mess),unsicherheit:fc(unsicherheit)},treffer};
   }
   const layer=[
-    {id:P+'zone-fill',type:'fill',source:ids.zonen,paint:{'fill-color':'#e08a00','fill-opacity':0.18}},
-    {id:P+'zone-line',type:'line',source:ids.zonen,paint:{'line-color':'#e08a00','line-width':2,'line-dasharray':[3,2]}},
-    {id:P+'unsicherheit-line',type:'line',source:ids.unsicherheit,paint:{'line-color':'#d13b2f','line-width':2,'line-dasharray':[2,2]}},
-    {id:P+'kante',type:'line',source:ids.kanten,paint:{'line-color':'#879fb6','line-width':3}},
-    {id:P+'mess-line',type:'line',source:ids.mess,filter:['==',['geometry-type'],'LineString'],paint:{'line-color':'#fff','line-width':3}},
-    {id:P+'mess-point',type:'circle',source:ids.mess,filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':5,'circle-color':'#fff','circle-stroke-width':2,'circle-stroke-color':'#101820'}},
-    {id:P+'auswahl-zone',type:'line',source:ids.zonen,filter:['==',['get','renderKey'],''],paint:{'line-color':'#ffe66a','line-width':4}},
-    {id:P+'auswahl-kante',type:'line',source:ids.kanten,filter:['==',['get','renderKey'],''],paint:{'line-color':'#ffe66a','line-width':5}},
-    {id:P+'auswahl',type:'circle',source:ids.punkte,filter:['==',['get','renderKey'],''],paint:{'circle-radius':13,'circle-color':'#ffe66a','circle-stroke-width':2,'circle-stroke-color':'#fff'}},
+    {id:P+'zone-fill',type:'fill',source:ids.zonen,paint:{'fill-color':linienfarben.zone,'fill-opacity':0.18}},
+    {id:P+'zone-line',type:'line',source:ids.zonen,paint:{'line-color':linienfarben.zone,'line-width':2,'line-dasharray':[3,2]}},
+    {id:P+'unsicherheit-line',type:'line',source:ids.unsicherheit,paint:{'line-color':linienfarben.unsicherheit,'line-width':2,'line-dasharray':[2,2]}},
+    {id:P+'kante',type:'line',source:ids.kanten,paint:{'line-color':linienfarben.kante,'line-width':3}},
+    {id:P+'mess-line',type:'line',source:ids.mess,filter:['==',['geometry-type'],'LineString'],paint:{'line-color':linienfarben.mess,'line-width':3}},
+    {id:P+'mess-point',type:'circle',source:ids.mess,filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':5,'circle-color':linienfarben.mess,'circle-stroke-width':2,'circle-stroke-color':'#101820'}},
+    {id:P+'auswahl-zone',type:'line',source:ids.zonen,filter:['==',['get','renderKey'],''],paint:{'line-color':linienfarben.auswahl,'line-width':4}},
+    {id:P+'auswahl-kante',type:'line',source:ids.kanten,filter:['==',['get','renderKey'],''],paint:{'line-color':linienfarben.auswahl,'line-width':5}},
+    {id:P+'auswahl',type:'circle',source:ids.punkte,filter:['==',['get','renderKey'],''],paint:{'circle-radius':13,'circle-color':linienfarben.auswahl,'circle-stroke-width':2,'circle-stroke-color':'#fff'}},
     {id:P+'punkt',type:'circle',source:ids.punkte,paint:{'circle-radius':8,'circle-color':['get','farbe'],'circle-stroke-color':'#fff','circle-stroke-width':2}}
   ];
   function adapter(map,optionen){
@@ -132,6 +148,6 @@
       unmount:()=>{if(!aktiv)return;aktiv=false;map.off('style.load',installieren);map.off('click',click);if(boxZoomWarAktiv)map.boxZoom.enable();if(installiert){for(const l of layer.slice().reverse())if(map.getLayer(l.id))map.removeLayer(l.id);for(const id of Object.values(ids))if(map.getSource(id))map.removeSource(id);}snapshot=daten(null);auswahl=null;installiert=false;}
     };
   }
-  const api=Object.freeze({daten,adapter});
+  const api=Object.freeze({daten,adapter,legende});
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.KARTE_V2_RENDERER=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
