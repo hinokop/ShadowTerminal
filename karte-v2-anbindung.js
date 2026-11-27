@@ -4,7 +4,8 @@
 (function(root){
   'use strict';
   const dev=new URLSearchParams(location.search).get('geospatial-v2')==='1';
-  let kontext=null, laden=null, sitzung=null, voll=false;
+  let kontext=null, laden=null, sitzung=null, voll=false, rueckfall=false;
+  const v2Aktiv=()=>dev&&!rueckfall;
   /* Nur Opt-in, vor allen MapLibre-Netzanfragen. Die Standardansicht bleibt unverändert. */
   if(dev){
     const meta=document.createElement('meta');meta.name='referrer';meta.content='no-referrer';document.head.appendChild(meta);
@@ -70,7 +71,7 @@
   }
   function kameraSetzen(lat,lon,zoom,animiert=false,fertig){
     const c=kontext,z=zielKamera(lat,lon,zoom),K=VIEW.karte;
-    if(!dev||!z||K.ansicht3d||!aktiv(c))return false;
+    if(!v2Aktiv()||!z||K.ansicht3d||!aktiv(c))return false;
     if(K.flug){cancelAnimationFrame(K.flug);K.flug=null;}
     if(!c.map||!c.a){
       K.lon=z.center[0];K.lat=z.center[1];K.zoom=z.zoom+.5;K.init=true;
@@ -98,7 +99,7 @@
     return true;
   }
   function mitte(){
-    if(!dev||document.body.classList.contains('locked')||STATE.ui.modul!=='karte'||VIEW.karte.reiter==='protokoll')return null;
+    if(!v2Aktiv()||document.body.classList.contains('locked')||STATE.ui.modul!=='karte'||VIEW.karte.reiter==='protokoll')return null;
     const c=kontext;
     if(aktiv(c)&&c.map&&!VIEW.karte.ansicht3d){const p=bildPosition(c);return [p[1],p[0]];}
     const K=VIEW.karte;
@@ -142,8 +143,20 @@
     try{if(c.a)c.a.unmount();}catch(e){}
     try{if(c.map)c.map.remove();}catch(e){}
   }
+  function zurueckfallen(c){
+    if(!aktiv(c)||rueckfall)return;
+    // Keep the existing authorized application model, camera and placement
+    // state. Do not activate a different online provider as a side effect.
+    rueckfall=true;
+    VIEW.karte.ebenen.kacheln=false;
+    VIEW.karte.ansicht3d=false;
+    unmount();
+    // The full render now assigns the shared panels and export control back
+    // to SVG. The session flag prevents automatic retry loops.
+    renderModule();
+  }
   function mount(){
-    if(!dev)return;
+    if(!v2Aktiv())return;
     const el=$('k-v2-map'),status=$('k-v2-status');
     if(!el||!status||document.body.classList.contains('locked'))return;
     if(kontext)unmount(true,true);
@@ -186,12 +199,11 @@
       if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);
       else if(!alt)wechseln(c,'shadow');
     }).catch(()=>{
-      if(!aktiv(c))return;
-      hinweis(c,'Lokale MapLibre-Ansicht nicht verfügbar. Bestehende Karte bleibt verfügbar.');
-      try{unmount();}catch(e){/* Fehler darf Standardkarte nicht beeinflussen */}
+      zurueckfallen(c);
     });
   }
   /* Nur für die Entwicklungsansicht; Rückgabe der Adapterreferenz zur Prüfung
      tatsächlicher Treffer und des Lebenszyklus, kein zusätzlicher Datenbestand. */
-  root.KARTE_V2_DEV=Object.freeze({ansicht,mount,unmount,sync,mitte,kameraSetzen,ansichtUmschalten,aktiviert:dev,adapter:()=>aktiv(kontext)?kontext.a:null});
+  root.KARTE_V2_DEV=Object.freeze({ansicht:()=>v2Aktiv()?ansicht():null,mount,unmount,sync,mitte,kameraSetzen,ansichtUmschalten,
+    get aktiviert(){return v2Aktiv();},get rueckfall(){return rueckfall;},adapter:()=>aktiv(kontext)?kontext.a:null});
 })(window);
