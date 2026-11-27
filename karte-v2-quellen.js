@@ -79,6 +79,33 @@
         'text-pitch-alignment':'viewport','text-rotation-alignment':'viewport','text-padding':1,'text-allow-overlap':false},
       paint:{'text-color':'#d6dbe0','text-halo-color':'#24292e','text-halo-width':1.2}});
   }
+  /* K3d-1: lokale Shadow-Palette; Quellen, Filter, Layout und Zoom bleiben erhalten.
+     Nur bekannte semantische Layer und vorhandene Paint-Eigenschaften verändern. */
+  function shadowStil(s){
+    if(!vektorStil(s))throw Error('Keine Vektorquelle');
+    const copy=JSON.parse(JSON.stringify(s));
+    for(const l of copy.layers){
+      const p=l.paint||(l.paint={}), src=l['source-layer'], id=l.id;
+      if(l.type==='background')p['background-color']='#101820';
+      if(l.type==='fill'){
+        if(src==='water')p['fill-color']='#142d3b';
+        else if(src==='buildings')p['fill-color']='#344550';
+        else if(src==='earth')p['fill-color']='#17232b';
+      }
+      if(l.type==='symbol'&&l.layout?.['text-field']){
+        const adresse=src==='buildings'&&(id==='housenumber'||id===HAUSNUMMER_ID||
+          JSON.stringify(l.layout['text-field']).includes('addr_housenumber'));
+        if(adresse){
+          p['text-color']='#e5edf2';p['text-halo-color']='#101820';p['text-halo-width']=1.5;
+        }else if(src==='roads'||src==='places'){
+          p['text-color']=src==='places'?'#dce8ed':'#bcced8';
+          p['text-halo-color']='#101820';p['text-halo-width']=1.2;
+        }
+      }
+      if(id===GEBAEUDE_ID&&l.type==='fill-extrusion')p['fill-extrusion-color']='#526674';
+    }
+    return copy;
+  }
   function gebaeudeStil(s,nacht,an){
     if(!vektorStil(s))throw Error('Keine Vektorquelle');
     const copy=JSON.parse(JSON.stringify(s));
@@ -253,7 +280,7 @@
     raster.layers.push(...linien,...texte);
     return raster;
   }
-  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, styleCachebar, GEBAEUDE_ID, HAUSNUMMER_ID, bildInfo, bildBereich, bildListe, bildKandidaten, bildStil, hybridStil, BILD_ID, BILD_LAYER });
+  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, shadowStil, styleCachebar, GEBAEUDE_ID, HAUSNUMMER_ID, bildInfo, bildBereich, bildListe, bildKandidaten, bildStil, hybridStil, BILD_ID, BILD_LAYER });
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KARTE_V2_QUELLEN = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
