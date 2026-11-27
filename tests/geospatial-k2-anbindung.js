@@ -25,6 +25,9 @@ function assertCamera(actual,expected){
 {
  const cam={center:[13.4,52.5],zoom:14.25,pitch:0,bearing:0};
  assertCamera({...cam,bearing:-0},cam);
+ // Actual numerical residuals from the K4b-2 pitch regression.
+ assertCamera({...cam,center:[13.395000000001517,52.50500000000022],pitch:60},
+   {...cam,center:[13.395,52.50500000000002],pitch:60});
  for(const k of ['zoom','pitch','bearing']){
   assert.throws(()=>assertCamera({...cam,[k]:cam[k]+0.001},cam),assert.AssertionError);
   assert.throws(()=>assertCamera({...cam,[k]:NaN},cam),assert.AssertionError);
@@ -845,21 +848,30 @@ function assertCamera(actual,expected){
     assert.equal(await p.locator('#k-3d-frame').count(),frameVor,'no new legacy iframe');
     assert.equal(await p.evaluate(()=>VIEW.karte.ansicht3d),false,'legacy renderer stays flat');
     const geneigt=await gemeinsameCam();
-    assert.deepEqual(geneigt.center,zurueck.center);assert.equal(geneigt.zoom,zurueck.zoom);
+    // Pitch changes reproject the center, leaving sub-millimeter
+    // floating-point noise. Keep the existing strict camera contract.
+    assertCamera(geneigt,{...zurueck,pitch:60});
     await p.click('#k-v2-flach');
     await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===0&&$('k-3d').textContent==='3D');
     assertCamera(await gemeinsameCam(),zurueck);
     await p.click('#k-v2-geneigt');
-    await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===60);
+    await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===60&&$('k-3d').textContent==='2D');
     await p.click('#k-v2-welt');
     await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-1.4)<1e-6&&KARTE_V2_DEV.adapter().camera().pitch===0);
     const welt=await gemeinsameCam();assert.ok(Math.abs(welt.center[0]-20)<1e-6&&Math.abs(welt.center[1]-25)<1e-6);
     await p.click('#k-v2-europa');
     await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-3.9)<1e-6);
     await gemeinsameCam();
+    // Region uses the established legacy region calculation, which may
+    // depend on the profile. Compare both real controls rather than hardcode
+    // the empty-scenario fallback zoom alone.
+    await p.click('#k-raum');
+    const region=await gemeinsameCam();
+    await p.click('#k-v2-europa');
+    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-3.9)<1e-6);
     await p.click('#k-v2-region');
-    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-1.7)<1e-6);
-    await gemeinsameCam();
+    await p.waitForFunction(z=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-z)<1e-6,region.zoom);
+    assertCamera(await gemeinsameCam(),region);
     assert.equal(await p.evaluate(()=>__k4Adapter===KARTE_V2_DEV.adapter()),true,'overview/orientation preserve map');
     assert.equal(stilAbrufe(),stilVor);assert.equal(bildAnfragen.length,bildVor);
   }
