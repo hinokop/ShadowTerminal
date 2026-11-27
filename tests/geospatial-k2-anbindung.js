@@ -120,6 +120,26 @@ function assertCamera(actual,expected){
   assert.ok(await p.locator('#oz-protokoll').isVisible());
   await click([52.51,13.41]);
   assert.match(await p.locator('#k-st-objekt').innerText(),/K2 Sued/);
+  // K3e: collapsing the inspector is not deselection or a new weather query.
+  const vorKlapp=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
+  const klapp=p.locator('#k-v2-inspektor-klapp'), body=p.locator('#k-v2-inspektor-body');
+  assert.equal(await klapp.getAttribute('aria-expanded'),'true');
+  await klapp.click();
+  assert.equal(await body.isVisible(),false);
+  assert.equal(await klapp.getAttribute('aria-expanded'),'false');
+  assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
+  await p.evaluate(()=>karteAuswahlAnzeige());
+  assert.equal(await body.isVisible(),false,'same selection retains collapse');
+  await klapp.click();
+  assert.equal(await body.isVisible(),true);
+  assert.equal(await klapp.getAttribute('aria-expanded'),'true');
+  assert.deepEqual([anfragen.length,bildAnfragen.length,wetterAnfragen.length],vorKlapp);
+  // A different selection opens its own inspector.
+  await klapp.click();
+  await click([52.505,13.395]);
+  assert.equal(await body.isVisible(),true);
+  assert.match(await body.innerText(),/K2 Pin/);
+  await click([52.51,13.41]);
   // K3c-1: the legend is a real filter control, not a second data store.
   assert.equal(await p.locator('#k-v2-legendenliste input').count(),8);
   assert.ok(await p.locator('#k-v2-kamera').innerText().then(s=>s.includes('Zoom')));
@@ -165,6 +185,7 @@ function assertCamera(actual,expected){
   await p.setViewportSize({width:800,height:600});
   await p.waitForFunction(()=>Math.abs($('k-v2-panel').getBoundingClientRect().width-innerWidth)<=2);
   assert.ok(await p.locator('#k-v2-voll').isVisible());
+  assert.ok(await p.evaluate(()=>{const a=$('k-v2-map').getBoundingClientRect(),b=$('k-v2-panel').getBoundingClientRect();return a.left>=b.left-1&&a.right<=b.right+1;}),'Karte bleibt im Vollbildrahmen');
   await p.setViewportSize({width:1500,height:1100});
   await p.locator('#k-v2-voll').focus();await p.keyboard.press('Escape');
   assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'false');
@@ -362,6 +383,7 @@ function assertCamera(actual,expected){
   await p.click('#k-v2-qualitaet');
   const bericht=await p.locator('#k-v2-qualitaetsbericht').inputValue();
   assert.ok(bericht.includes('Modus: Hybrid')&&bericht.includes('Bildquelle: Berlin TrueDOP 2024'));
+  assert.match(bericht,/Kartenfläche: \d+ × \d+ CSS-Pixel · DPR [\d.]+ · Vollbild nein/);
   assert.ok(bericht.includes('Hausnummern:')&&bericht.includes('Extrusion: 0 aktive Layer'));
   assert.ok(!bericht.includes(fixtureKey)&&!bericht.includes('https://')&&!bericht.includes('K2 Sued')&&!bericht.includes('13.405'));
   const vorHybridRemount=stilAbrufe();
@@ -592,6 +614,7 @@ function assertCamera(actual,expected){
   assert.equal(await standard.locator('#k-v2-paneele').count(),0);
   assert.equal(await standard.locator('.karte-wrap #k-status').count(),1);
   assert.equal(await standard.locator('.karte-wrap #k-auswahl').count(),1);
+  assert.equal(await standard.locator('#k-v2-inspektor-klapp').count(),0);
   assert.equal(await standard.evaluate(()=>typeof maplibregl),'undefined','keine Bibliotheksladung ohne Opt-in');
   await standard.close();assert.deepEqual(errors,[]);
   console.log('OK: K2b-2b gefiltertes Anwendungsmodell, echte MapLibre-Klicks, Sperre, Ebenen und Lebenszyklus');
