@@ -2,6 +2,7 @@
    Historische UI-Tests (siehe docs/r5-bereinigung.md) sind per Namen weiterhin aufrufbar.
    Aufruf (im Ordner tests/, Playwright installiert):   node runall.js            Standardauswahl
                                                         node runall.js zev zp     nur diese Skripte (ohne .js)
+                                                        node runall.js --geospatial  gezielte Kartenregression
    Je Gruppe laufen die Skripte parallel, höchstens FT_PARALLEL gleichzeitig (Vorgabe: os.availableParallelism(), ältere Node-Versionen: Anzahl der Kerne); Ausgaben und von den Tests geschriebene Dateien (zum Beispiel Screenshots) liegen in <TMP>/ft-out/.
    Ergebnis je Skript: grün; rot (Exit-Code != 0, Zeitüberschreitung nach 170 s oder Treffer auf FAIL, FEHLER: n, Fehlschläge: n, Error);
    ungeprüft (Exit 0, aber keine Ausgabe: das Skript hat nichts belegt); fehlt (Datei nicht vorhanden). Bekannt rote und unzuverlässige Skripte
@@ -41,7 +42,28 @@ async function gruppeLaufen(namen) {
   return erg;
 }
 const ausgabe = path.join(process.env.TMPDIR || os.tmpdir(), 'ft-out'); fs.mkdirSync(ausgabe, { recursive: true });
-const wahl = process.argv.slice(2);
+// Targeted map suite follows the same group boundaries as the full run.
+const GEO_SCHNITTSTELLEN = new Set([
+  'zonen-vorschau', 'kartenprotokoll', 'pins', 'kartensprung', 'identitaeten',
+  'kartenbereinigung', 'dossier-maske', 'sichtung-pin', 'karten-messen',
+  'karte-sperre-pins', 'terminal-objektnavigation'
+]);
+const argumente = process.argv.slice(2);
+const geo = argumente.length === 1 && argumente[0] === '--geospatial';
+if (argumente.some(x => x.startsWith('--')) && !geo) {
+  console.error('Aufruf: node runall.js [--geospatial | testname ...]');
+  process.exit(1);
+}
+const geoGruppen = GRUPPEN.map(g => g.filter(n => n.startsWith('geospatial-') || GEO_SCHNITTSTELLEN.has(n))).filter(g => g.length);
+// Guard against accidentally dropping a mandatory interface regression.
+// Newly added geospatial-* scripts enter the focused suite automatically
+// when registered in the standard selection.
+if (geo && (!geoGruppen.flat().some(n => n.startsWith('geospatial-')) ||
+    Array.from(GEO_SCHNITTSTELLEN).some(n => !geoGruppen.flat().includes(n)))) {
+  console.error('Geospatial-Auswahl unvollständig; GRUPPEN prüfen.');
+  process.exit(1);
+}
+const wahl = geo ? geoGruppen.flat() : argumente;
 if (!fs.existsSync(path.join(__dirname, '..', 'kartenschluessel.js'))) console.log('Hinweis: ../kartenschluessel.js fehlt (lokale Datei, nie einchecken). Ohne sie erscheint ein Startfehler, einige Tests (zum Beispiel zn, pn) scheitern dann.\n');
 function lauf(name) {
   return new Promise(res => {
@@ -59,11 +81,12 @@ function lauf(name) {
   });
 }
 (async () => {
-  const gruppen = wahl.length ? [wahl] : GRUPPEN, erg = [];
+  const gruppen = geo ? geoGruppen : wahl.length ? [wahl] : GRUPPEN, erg = [];
+  if (geo) console.log('Geospatial: ' + wahl.length + ' gezielte Skripte.');
   console.log('Gleichzeitig: ' + PARALLEL + ' (FT_PARALLEL)\n');
   for (const g of gruppen) erg.push(...await gruppeLaufen(g));
   let neu = 0;
-  erg.forEach(r => { const b = (BEKANNT_NUR[r.name] ? (r.status === 'rot' && r.falsch.length && r.falsch.every(x => BEKANNT_NUR[r.name].indexOf(x) >= 0) ? BEKANNT[r.name] : null) : BEKANNT[r.name]) || (HISTORISCH.indexOf(r.name) >= 0 ? 'historisch, stillgelegter Missionsablauf' : null), angefordert = wahl.indexOf(r.name) >= 0; console.log(r.name.padEnd(18) + r.status + (r.art && r.art !== 'fachlich' ? ' [' + r.art + ']' : '') + (r.status !== 'grün' && r.status !== 'fehlt' && b ? '  (bekannt: ' + b + ')' : '') + (r.status === 'fehlt' && angefordert ? '  (angefordert, aber nicht vorhanden)' : '')); if ((r.status === 'rot' || r.status === 'Zeit' || r.status === 'ungeprüft') && !b) neu++; if (r.status === 'fehlt' && angefordert) neu++; });
+  erg.forEach(r => { const b = (BEKANNT_NUR[r.name] ? (r.status === 'rot' && r.falsch.length && r.falsch.every(x => BEKANNT_NUR[r.name].indexOf(x) >= 0) ? BEKANNT[r.name] : null) : BEKANNT[r.name]) || (HISTORISCH.indexOf(r.name) >= 0 ? 'historisch, stillgelegter Missionsablauf' : null), angefordert = wahl.indexOf(r.name) >= 0; console.log(r.name.padEnd(18) + r.status + (r.art && r.art !== 'fachlich' ? ' [' + r.art + ']' : '') + (r.status !== 'grün' && r.status !== 'fehlt' && b ? '  (bekannt: ' + b + ')' : '') + (r.status === 'fehlt' && angefordert ? '  (angefordert, aber nicht vorhanden)' : '')); if ((r.status === 'rot' || r.status === 'Zeit' || r.status === 'ungeprüft') && (geo || !b)) neu++; if (r.status === 'fehlt' && angefordert) neu++; });
   console.log('\n' + erg.filter(r => r.status === 'grün').length + ' grün, ' + erg.filter(r => r.status === 'ungeprüft').length + ' ungeprüft, ' + erg.filter(r => r.status === 'fehlt').length + ' nicht vorhanden, ' + neu + ' unerwartet rot, ungeprüft oder fehlend. Ausgaben: ' + ausgabe);
   process.exit(neu ? 1 : 0);
 })();
