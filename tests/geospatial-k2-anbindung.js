@@ -644,7 +644,7 @@ function assertCamera(actual,expected){
     const K=VIEW.karte;K.wetter=true;K.ebenen.kacheln=true;K.statusOffen=true;
     K.bezug=null;K.bezugRenderKey=null;K.lat=52.505;K.lon=13.405;
     clearTimeout(WETTER.retry);WETTER.retry=null;WETTER.cache={};WETTER.zuletzt=0;
-    karteStatusAkt();
+    KARTE_V2_DEV.sync();karteStatusAkt();
   });
   await p.waitForFunction(()=>$('k-st-wetter')?.textContent.includes('12 °C')&&!WETTER.laufend);
   assert.equal(wetterAnfragen.length,vorWetter+1,'weather positive control');
@@ -667,7 +667,27 @@ function assertCamera(actual,expected){
   await p.waitForFunction(()=>!WETTER.laufend&&$('k-st-wetter')?.textContent.includes('12 °C')&&WETTER.zuletzt>0);
   assert.equal(wetterAnfragen.length,wetterVorStil+1);
   assert.notEqual(wetterAnfragen.at(-1).lat,wetterAnfragen.at(-2).lat);
-  await p.evaluate(()=>{VIEW.karte.ebenen.kacheln=false;karteStatusAkt();});
+  // Explicit V2 weather permission is independent of the legacy tile
+  // switch. Disabling it must block even an otherwise eligible request.
+  assert.equal(await p.locator('#k-v2-wetter-online').isChecked(),true);
+  const wetterVorAus=wetterAnfragen.length;
+  const wetterCam=await p.evaluate(()=>{window.__wetterAdapter=KARTE_V2_DEV.adapter();return __wetterAdapter.camera();});
+  await p.uncheck('#k-v2-wetter-online');
+  assert.match(await p.locator('#k-st-wetter').innerText(),/Offline, keine Abfrage/);
+  const offline=await p.evaluate(()=>{
+    clearTimeout(WETTER.retry);WETTER.retry=null;WETTER.cache={};WETTER.zuletzt=0;
+    const r=wetterStand(52.5,13.4);karteStatusAkt();return r;
+  });
+  assert.deepEqual(offline,{offline:true});assert.equal(wetterAnfragen.length,wetterVorAus);
+  await p.evaluate(()=>{VIEW.karte.ebenen.kacheln=false;});
+  await p.check('#k-v2-wetter-online');
+  await p.waitForFunction(()=>!WETTER.laufend&&$('k-st-wetter')?.textContent.includes('12 °C'));
+  assert.equal(wetterAnfragen.length,wetterVorAus+1,'explicit weather opt-in without legacy tiles');
+  assert.equal(await p.evaluate(()=>VIEW.karte.ebenen.kacheln),false,'weather does not enable tiles');
+  assert.equal(await p.evaluate(()=>__wetterAdapter===KARTE_V2_DEV.adapter()),true);
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),wetterCam);
+  await p.uncheck('#k-v2-wetter-online');
+  assert.match(await p.locator('#k-st-wetter').innerText(),/Offline, keine Abfrage/);
   // Observe the actual MapLibre instance, setStyle calls and source instances.
   // "Bildkacheln geladen" only confirms one tile, not a fully settled viewport.
   await p.evaluate(()=>{

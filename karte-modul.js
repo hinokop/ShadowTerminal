@@ -11,7 +11,7 @@
    ===================================================================== */
 const KW = 960, KH = 540, DEG = Math.PI / 180;
 VIEW.karte = { cartoKey: '', cartoStil: 'dark_all', zoneSetzen: false, statusOffen: false, lat: 50.5, lon: 8, zoom: 5, dt: 0, auswahl: null, pick: null, init: false, messen: false, messPts: [], spiel: null, flug: null, suche: '', anbieter: 'osm', url: '', dunkel: true,
-  ebenenOffen: true, quellenAus: {}, wetter: true,
+  ebenenOffen: true, quellenAus: {}, wetter: true, wetterOnline: null,
   ebenen: { ausgang: true, standorte: true, orte: true, personen: true, organisationen: true, verbindungen: true, sichtungen: true, fenster: true, route: true, strecke: true, gelaende: true, strassen: true, namen: true, zonen: true, pins: true, kacheln: false } };
 try {
   const gespeichert = JSON.parse(window.localStorage.getItem(STORAGE_KEY + '.kartenwahl') || 'null');
@@ -1046,9 +1046,24 @@ const WMO_TEXT = { 0: 'klar', 1: 'überwiegend klar', 2: 'teils bewölkt', 3: 'b
   80: 'leichte Regenschauer', 81: 'Regenschauer', 82: 'heftige Regenschauer', 85: 'Schneeschauer', 86: 'heftige Schneeschauer', 95: 'Gewitter', 96: 'Gewitter mit Hagel', 99: 'schweres Gewitter mit Hagel' };
 const WETTER = { cache: {}, laufend: false, zuletzt: 0 };
 function windRichtung(grad) { return ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'][Math.round(((grad % 360) + 360) % 360 / 45) % 8]; }
+/* A deliberate V2 weather choice is independent of the basemap. Until
+   explicitly chosen, retain the previous online permission. SVG fallback
+   always respects the legacy offline switch. No new persisted permission. */
+function karteWetterOnline() {
+  const K=VIEW.karte;
+  if(karteGemeinsamePaneele()&&typeof K.wetterOnline==='boolean')return K.wetterOnline;
+  return !!K.ebenen&&K.ebenen.kacheln!==false;
+}
+function karteWetterOnlineWaehlen(wert) {
+  if(!karteGemeinsamePaneele())return false;
+  VIEW.karte.wetterOnline=!!wert;
+  if(!wert&&WETTER.retry){clearTimeout(WETTER.retry);WETTER.retry=null;}
+  karteStatusAkt();
+  return true;
+}
 function wetterStand(lat, lon) {
   if (!VIEW.karte.wetter || typeof fetch !== 'function') return null;
-  if (VIEW.karte.ebenen && VIEW.karte.ebenen.kacheln === false) return { offline: true };      /* Offline: keine externe Abfrage, auch nicht beim Zentrieren */
+  if (!karteWetterOnline()) return { offline: true };      /* Keine externe Abfrage, auch nicht beim Zentrieren */
   const key = lat.toFixed(1) + ',' + lon.toFixed(1), c = WETTER.cache[key], jetzt = Date.now();
   if (c && jetzt - c.t < 15 * 60000) return c;
   if (!WETTER.laufend && jetzt - WETTER.zuletzt > 8000) {

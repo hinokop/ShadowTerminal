@@ -126,6 +126,8 @@
   }
   function werkzeugAnzeige(){
     const K=VIEW.karte;
+    const wetter=$('k-v2-wetter-online');
+    if(wetter){wetter.checked=karteWetterOnline();wetter.disabled=!getKontext()?.a;}
     const slot=$('k-v2-platzierung');
     if(slot){
       const maske=kartePlatzierungsMaske();
@@ -187,6 +189,11 @@
             h('button',{type:'button',id:'k-v2-flach',disabled:true,'aria-pressed':'true',onclick:()=>neigung(getKontext(),0)},'2D'),
             h('button',{type:'button',id:'k-v2-geneigt',disabled:true,'aria-pressed':'false',onclick:()=>neigung(getKontext(),60)},'3D-Neigung'),
             h('button',{type:'button',id:'k-v2-gebaeude',disabled:true,'aria-pressed':'false',onclick:()=>gebaeudeUmschalten(getKontext())},'Gebäude')])),
+        h('label',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap;'},
+          h('input',{id:'k-v2-wetter-online',type:'checkbox',checked:karteWetterOnline(),disabled:true,
+            onchange:e=>{if(aktiv(getKontext())&&getKontext().a)karteWetterOnlineWaehlen(e.target.checked);}}),
+          h('span',null,'Wetter online'),
+          h('small',null,'Unabhängig von der Basiskarte · Open-Meteo erhält den auf 0,1° gerundeten Bezugspunkt.')),
         h('div',{id:'k-v2-bildwahl-zeile',hidden:true},
           h('label',{for:'k-v2-bildwahl'},'Bildquelle '),
           h('select',{id:'k-v2-bildwahl',disabled:true,onchange:e=>bildManuell(getKontext(),e.target.value)},h('option',{value:'auto'},'Automatisch'))),
