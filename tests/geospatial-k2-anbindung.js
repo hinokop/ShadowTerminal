@@ -253,6 +253,8 @@ function assertCamera(actual,expected){
   const legendCam=await p.evaluate(()=>{window.__legendenAdapter=KARTE_V2_DEV.adapter();return __legendenAdapter.camera();});
   const legendVorNetz=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
   await p.uncheck('#k-v2-eb-pins');
+  assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem(STORAGE_KEY+'.kartenwahl')).ebenen.pins),false);
+  assert.equal(await p.evaluate(()=>Object.hasOwn(JSON.parse(localStorage.getItem(STORAGE_KEY+'.kartenwahl')),'cartoKey')),false,'file-only key stays out of browser storage');
   await p.waitForFunction(ll=>{const a=KARTE_V2_DEV.adapter();return a?.ready()&&a.hitTest(a.project(ll))===null;},[52.505,13.395]);
   assert.equal(await p.evaluate(()=>VIEW.karte.ebenen.pins),false);
   await p.check('#k-v2-eb-pins');
@@ -1090,6 +1092,28 @@ function assertCamera(actual,expected){
   await stored.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
   await stored.waitForFunction(()=>$('k-v2-status')?.textContent.includes('Shadow bereit'));
   assert.ok(anfragen.length>gespeichertVorher&&anfragen.slice(gespeichertVorher).every(x=>x.key===browserKey&&!x.referer),'Browserquelle hat Vorrang beim Start');
+  {
+    // Persist filters in the existing settings record, preserving key/provider.
+    await stored.locator('#k-v2-legende summary').click();
+    await stored.uncheck('#k-v2-eb-pins');await stored.uncheck('#k-v2-eb-zonen');
+    const gespeicherteFilter=await stored.evaluate(()=>JSON.parse(localStorage.getItem(STORAGE_KEY+'.kartenwahl')));
+    assert.equal(gespeicherteFilter.ebenen.pins,false);assert.equal(gespeicherteFilter.ebenen.zonen,false);
+    assert.equal(gespeicherteFilter.cartoKey,browserKey);assert.equal(gespeicherteFilter.anbieter,'osm');
+    // Fresh context with the actual saved record, not in-memory VIEW state.
+    const filterSeite=await b.newPage({reducedMotion:'reduce'});
+    await filterSeite.addInitScript(wahl=>localStorage.setItem('fieldterminal.v1.kartenwahl',JSON.stringify(wahl)),gespeicherteFilter);
+    await filterSeite.route(/^https?:/,route);
+    await filterSeite.goto(APP+'?geospatial-v2=1');
+    await filterSeite.fill('#gate-pw','pw-test-123');if(await filterSeite.isVisible('#gate-pw2'))await filterSeite.fill('#gate-pw2','pw-test-123');await filterSeite.click('#gate-go');
+    await filterSeite.waitForFunction(()=>!document.body.classList.contains('locked'));
+    assert.equal(await filterSeite.evaluate(()=>VIEW.karte.ebenen.pins===false&&VIEW.karte.ebenen.zonen===false),true);
+    await filterSeite.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
+    await filterSeite.waitForFunction(()=>$('k-v2-status')?.textContent.includes('Shadow bereit'));
+    await filterSeite.locator('#k-v2-legende summary').click();
+    assert.equal(await filterSeite.locator('#k-v2-eb-pins').isChecked(),false);
+    assert.equal(await filterSeite.locator('#k-v2-eb-zonen').isChecked(),false);
+    await filterSeite.close();
+  }
   await stored.close();
   const standard=await b.newPage({reducedMotion:'reduce'});await standard.route(/^https?:/,r=>r.abort());await standard.goto(APP);
   await standard.fill('#gate-pw','pw-test-123');if(await standard.isVisible('#gate-pw2'))await standard.fill('#gate-pw2','pw-test-123');await standard.click('#gate-go');

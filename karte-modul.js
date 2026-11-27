@@ -12,7 +12,7 @@
 const KW = 960, KH = 540, DEG = Math.PI / 180;
 VIEW.karte = { cartoKey: '', cartoStil: 'dark_all', zoneSetzen: false, statusOffen: false, lat: 50.5, lon: 8, zoom: 5, dt: 0, auswahl: null, pick: null, init: false, messen: false, messPts: [], spiel: null, flug: null, suche: '', anbieter: 'osm', url: '', dunkel: true,
   ebenenOffen: true, quellenAus: {}, wetter: true,
-  ebenen: { ausgang: true, standorte: true, orte: true, personen: true, organisationen: true, verbindungen: true, sichtungen: true, fenster: true, route: true, strecke: true, gelaende: true, strassen: true, namen: true, zonen: true, kacheln: false } };
+  ebenen: { ausgang: true, standorte: true, orte: true, personen: true, organisationen: true, verbindungen: true, sichtungen: true, fenster: true, route: true, strecke: true, gelaende: true, strassen: true, namen: true, zonen: true, pins: true, kacheln: false } };
 try {
   const gespeichert = JSON.parse(window.localStorage.getItem(STORAGE_KEY + '.kartenwahl') || 'null');
   if (gespeichert && typeof gespeichert === 'object') {
@@ -33,6 +33,19 @@ try {
   }
 } catch (e) { /* ohne gespeicherte Wahl */ }
 function karteWahlSichern() { try { window.localStorage.setItem(STORAGE_KEY + '.kartenwahl', JSON.stringify({ ebenen: VIEW.karte.ebenen, anbieter: VIEW.karte.anbieter, url: VIEW.karte.url, dunkel: VIEW.karte.dunkel, cartoKey: VIEW.karte.cartoKey, cartoStil: VIEW.karte.cartoStil, quellenAus: VIEW.karte.quellenAus })); } catch (e) { /* ohne Speicher */ } }
+/* V2 object filters share the existing settings record, without copying
+   a CARTO key resolved from the local key file into browser storage. */
+function karteRechercheFilterSichern() {
+  try {
+    const key=STORAGE_KEY+'.kartenwahl',K=VIEW.karte;
+    let alt=JSON.parse(window.localStorage.getItem(key)||'null');
+    if(!alt||typeof alt!=='object'||Array.isArray(alt))alt={anbieter:K.anbieter,ebenen:{kacheln:!!K.ebenen.kacheln}};
+    const ebenen=alt.ebenen&&typeof alt.ebenen==='object'&&!Array.isArray(alt.ebenen)?{...alt.ebenen}:{};
+    for(const n of ['orte','personen','organisationen','verbindungen','ausgang','sichtungen','zonen','pins'])ebenen[n]=K.ebenen[n]!==false;
+    window.localStorage.setItem(key,JSON.stringify({...alt,ebenen}));
+    return true;
+  }catch(e){return false;}
+}
 function merc(lat) { return Math.log(Math.tan(Math.PI / 4 + Math.max(-85, Math.min(85, lat)) * DEG / 2)); }
 function mercInv(y) { return (2 * Math.atan(Math.exp(y)) - Math.PI / 2) / DEG; }
 function karteProj() {

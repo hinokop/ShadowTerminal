@@ -91,7 +91,8 @@
       if(key==='sichtungen'&&!wert)VIEW.karte.sichtungFokus=null;
       const alt=$('ke-'+key);if(alt)alt.checked=!!wert;
     }
-    // Same session-local filter state as the existing V2 individual toggles.
+    // Preserve the established settings record; never copy a file-only key.
+    karteRechercheFilterSichern();
     karteRendererDatenAktualisieren();karteAuswahlAnzeige();karteStatusAkt();legendeAktualisieren();
   }
   function ebeneWaehlen(key,wert){ebenenWaehlen({[key]:wert});}
