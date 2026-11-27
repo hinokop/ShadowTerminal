@@ -820,6 +820,8 @@ function assertCamera(actual,expected){
   assert.equal(await standard.locator('.karte-wrap #k-auswahl').count(),1);
   assert.equal(await standard.locator('#k-v2-inspektor-klapp').count(),0);
   assert.equal(await standard.evaluate(()=>typeof maplibregl),'undefined','keine Bibliotheksladung ohne Opt-in');
+  assert.equal(await standard.evaluate(()=>typeof KARTE_V2_QUELLENSTEUERUNG.erstellen==='function'&&
+    typeof KARTE_V2_OBERFLAECHE.erstellen==='function'&&KARTE_V2_DEV.aktiviert===false&&KARTE_V2_DEV.adapter()===null),true,'passive factory scripts in standard view');
   await standard.close();assert.deepEqual(errors,[]);
   console.log('OK: K2b-2b gefiltertes Anwendungsmodell, echte MapLibre-Klicks, Sperre, Ebenen und Lebenszyklus');
  }finally{await b.close();}
