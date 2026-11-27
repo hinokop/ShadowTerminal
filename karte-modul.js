@@ -1506,7 +1506,7 @@ function karte3dFolgen() {
   KARTE3D.folge = requestAnimationFrame(karte3dFolgen);
 }
 function karteRendererVorRender(modul) {
-  if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.unmount(true);
+  if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.unmount(true, modul === 'karte' && VIEW.karte.reiter !== 'protokoll');
   if (KARTE_ST) { KARTE_ST.unmount(); KARTE_ST = null; }
   const K = VIEW.karte;
   const karteOffen = modul === 'karte' && K.reiter !== 'protokoll';
@@ -1581,6 +1581,20 @@ function karte3dEingang(d, fr) {
    Persistente IDs, Dispatch-Aktionen und bisherige Moduspriorität bleiben unverändert.
    Keine Abhängigkeit von Bildschirmkoordinaten, DOM-Treffern oder Renderer-API; die bestehenden
    Anwendungsaktionen können die Oberfläche aktualisieren. neu ist der Redraw-Callback des Adapters. */
+/* Gemeinsame Werkzeugwahl für die alte und neue Lagekarte. Die
+   eigentliche Objektanlage/Messung bleibt im Klickvertrag. */
+function karteWerkzeugWaehlen(art) {
+  const K = VIEW.karte;
+  if (art === 'pin') {
+    K.pinSetzen = !K.pinSetzen; K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = [];
+  } else if (art === 'zone') {
+    K.zoneSetzen = K.zoneSetzen === 'eigen' ? false : 'eigen'; K.pinSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = [];
+  } else if (art === 'messen') {
+    if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; }
+    else { K.messen = true; K.auswahl = null; }
+  } else return;
+  renderModule();
+}
 function karteKlickVerarbeiten(eingabe, neu) {
   const K = VIEW.karte, ll = eingabe.ll;
   if (!Array.isArray(ll) || ll.length !== 2 || !ll.every(Number.isFinite)) return;
@@ -1911,12 +1925,12 @@ function renderKarte(m) {
   const kopf = [knopf('k-raum', 'Region', function () { const a = { lat: K.lat, lon: K.lon, zoom: K.zoom }; karteGrundansicht(); const z = { lat: K.lat, lon: K.lon, zoom: K.zoom }; K.lat = a.lat; K.lon = a.lon; K.zoom = a.zoom; karteFlug(z.lat, z.lon, z.zoom); }),
     knopf('k-eu', 'Europa', function () { karteFlug(50, 10, 4.4); }),
     knopf('k-welt', 'Welt', function () { karteFlug(25, 20, 1.9); }),
-    h('button', { type: 'button', id: 'k-pin-neu', class: K.pinSetzen ? 'aktiv' : '', 'aria-pressed': K.pinSetzen ? 'true' : 'false', title: 'Auf die Karte klicken: setzt einen eigenen Pin mit Lageblatt (Zweck, Umgebung, Notiz, Textexport)', onclick: function () { K.pinSetzen = !K.pinSetzen; K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.pinSetzen ? 'Pin: auf Karte klicken' : 'Pin setzen'),
-    h('button', { type: 'button', id: 'k-ozone-neu', class: K.zoneSetzen === 'eigen' ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen === 'eigen' ? 'true' : 'false', title: 'Auf die Karte klicken: setzt eine eigene Zone mit Radius, Notiz und Stand', onclick: function () { K.zoneSetzen = K.zoneSetzen === 'eigen' ? false : 'eigen'; K.pinSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen === 'eigen' ? 'Zone: auf Karte klicken' : 'Zone markieren'),
+    h('button', { type: 'button', id: 'k-pin-neu', class: K.pinSetzen ? 'aktiv' : '', 'aria-pressed': K.pinSetzen ? 'true' : 'false', title: 'Auf die Karte klicken: setzt einen eigenen Pin mit Lageblatt (Zweck, Umgebung, Notiz, Textexport)', onclick: function () { karteWerkzeugWaehlen('pin'); } }, K.pinSetzen ? 'Pin: auf Karte klicken' : 'Pin setzen'),
+    h('button', { type: 'button', id: 'k-ozone-neu', class: K.zoneSetzen === 'eigen' ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen === 'eigen' ? 'true' : 'false', title: 'Auf die Karte klicken: setzt eine eigene Zone mit Radius, Notiz und Stand', onclick: function () { karteWerkzeugWaehlen('zone'); } }, K.zoneSetzen === 'eigen' ? 'Zone: auf Karte klicken' : 'Zone markieren'),
     def ? h('button', { type: 'button', id: 'k-zone-neu', class: K.zoneSetzen === true ? 'aktiv' : '', 'aria-pressed': K.zoneSetzen === true ? 'true' : 'false', title: 'Auf die Karte klicken: setzt eine Lagezone mit Radius und Sicherheitsbewertung', onclick: function () { K.zoneSetzen = K.zoneSetzen === true ? false : true; K.messen = false; K.messPts = []; renderModule(); } }, K.zoneSetzen === true ? 'Lagezone: auf Karte klicken' : 'Lagezone (Auftrag)') : null,
     def ? h('button', { type: 'button', id: 'k-zugriff-neu', class: K.zugriffSetzen ? 'aktiv' : '', 'aria-pressed': K.zugriffSetzen ? 'true' : 'false', title: 'Wiederholt auf die Karte klicken: markiert mögliche Zugriffspunkte. Ende mit Esc oder erneutem Klick', onclick: function () { K.zugriffSetzen = !K.zugriffSetzen; K.zoneSetzen = false; K.messen = false; K.messPts = []; renderModule(); } }, K.zugriffSetzen ? 'Zugriffspunkte: klicken, Ende mit Esc' : 'Zugriffspunkte markieren') : null,
     def ? h('button', { type: 'button', id: 'k-mehr', class: K.mehrModus ? 'aktiv' : '', 'aria-pressed': K.mehrModus ? 'true' : 'false', title: 'Zonen nacheinander anklicken, um mehrere gemeinsam zu bearbeiten (auch mit Umschalt- oder Strg-Klick)', onclick: function () { K.mehrModus = !K.mehrModus; if (!K.mehrModus) { K.mehr = []; } K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; renderModule(); } }, K.mehrModus ? 'Mehrfach: Zonen anklicken' : 'Mehrfach') : null,
-    h('button', { type: 'button', id: 'k-messen', class: K.messen ? 'aktiv' : '', 'aria-pressed': K.messen ? 'true' : 'false', title: 'Zwei Punkte oder Markierungen anklicken: Entfernung und Fahrzeit', onclick: function () { if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; } else { K.messen = true; K.auswahl = null; } renderModule(); } }, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen'),
+    h('button', { type: 'button', id: 'k-messen', class: K.messen ? 'aktiv' : '', 'aria-pressed': K.messen ? 'true' : 'false', title: 'Zwei Punkte oder Markierungen anklicken: Entfernung und Fahrzeit', onclick: function () { karteWerkzeugWaehlen('messen'); } }, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen'),
     h('button', { type: 'button', id: 'k-3d', class: K.ansicht3d ? 'aktiv' : '', 'aria-pressed': K.ansicht3d ? 'true' : 'false', title: 'Wechselt zwischen der flachen Karte und der geneigten Ansicht mit Gebäuden (benötigt Internetverbindung)', onclick: karte3dUmschalten }, K.ansicht3d ? '2D' : '3D'),
     kartenExportVerwaistKnopf('k-export-verwaist-leiste')];
   const preset = function (name, sets) {

@@ -4,7 +4,7 @@
 (function(root){
   'use strict';
   const dev=new URLSearchParams(location.search).get('geospatial-v2')==='1';
-  let kontext=null, laden=null, sitzung=null;
+  let kontext=null, laden=null, sitzung=null, voll=false;
   /* Nur Opt-in, vor allen MapLibre-Netzanfragen. Die Standardansicht bleibt unverändert. */
   if(dev){
     const meta=document.createElement('meta');meta.name='referrer';meta.content='no-referrer';document.head.appendChild(meta);
@@ -313,12 +313,40 @@
     const el=$('k-v2-kamera'),p=bildPosition(c);
     if(el)el.textContent=p[1].toFixed(5)+', '+p[0].toFixed(5)+' · Zoom '+c.map.getZoom().toFixed(2)+' · Neigung '+c.map.getPitch().toFixed(0)+'°';
   }
+  function werkzeugAnzeige(){
+    const K=VIEW.karte;
+    for(const [id,aktiv,txt] of [
+      ['pin',K.pinSetzen,K.pinSetzen?'Pin: auf Karte klicken':'Pin setzen'],
+      ['zone',K.zoneSetzen==='eigen',K.zoneSetzen==='eigen'?'Zone: auf Karte klicken':'Zone markieren'],
+      ['messen',K.messen,K.messen?'Messen beenden':K.messPts.length?'Messung löschen':'Messen']
+    ]){
+      const b=$('k-v2-werkzeug-'+id);
+      if(b){b.disabled=!kontext?.a;b.textContent=txt;b.setAttribute('aria-pressed',String(!!aktiv));}
+    }
+  }
+  const normalHoehe='clamp(420px,60vh,850px)';
+  const vollHoehe='max(280px,calc(100vh - 230px))';
+  function layout(c){
+    const panel=$('k-v2-panel'),el=$('k-v2-map'),b=$('k-v2-voll');
+    if(!panel||!el||!b)return;
+    panel.style.cssText=voll?'position:fixed;inset:30px 0 0;z-index:80;margin:0;overflow:auto;background:var(--panel);box-sizing:border-box;':'';
+    panel.dataset.voll=String(voll);
+    el.style.height=voll?vollHoehe:normalHoehe;
+    b.setAttribute('aria-pressed',String(voll));
+    b.textContent=voll?'Vollbild verlassen (Esc)':'Vollbild';
+    if(aktiv(c)&&c.a){c.a.resize();kameraAnzeige(c);}
+  }
+  function vollWaehlen(wert){
+    const c=kontext;if(!aktiv(c)||!c.a)return;
+    voll=!!wert;layout(c);$('k-v2-voll')?.focus({preventScroll:true});
+  }
   function ansicht(){
     if(!dev)return null;
     return h('section',{class:'panel',id:'k-v2-panel'},
       h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:10px;'},
         h('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;'},
-          h('strong',null,'Lagekarte · MapLibre'),h('small',null,'Entwicklungsansicht')),
+          h('strong',null,'Lagekarte · MapLibre'),h('small',null,'Entwicklungsansicht'),
+          h('button',{type:'button',id:'k-v2-voll',disabled:true,'aria-pressed':String(voll),onclick:()=>vollWaehlen(!voll)},voll?'Vollbild verlassen (Esc)':'Vollbild')),
         h('div',{style:'display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;'},
           gruppe('Basiskarte',Object.keys(namen).map(n=>h('button',{type:'button',id:'k-v2-'+n,disabled:true,'aria-pressed':String(n==='leer'),onclick:()=>wechseln(kontext,n)},namen[n]))),
           gruppe('Ansicht',[
@@ -328,11 +356,14 @@
         h('div',{id:'k-v2-bildwahl-zeile',hidden:true},
           h('label',{for:'k-v2-bildwahl'},'Bildquelle '),
           h('select',{id:'k-v2-bildwahl',disabled:true,onchange:e=>bildManuell(e.target.value)},h('option',{value:'auto'},'Automatisch'))),
+        gruppe('Werkzeuge',[
+          ...['pin','zone','messen'].map((art,i)=>h('button',{type:'button',id:'k-v2-werkzeug-'+art,disabled:true,'aria-pressed':'false',
+            onclick:()=>{if(aktiv(kontext)&&kontext.a)karteWerkzeugWaehlen(art);}},['Pin setzen','Zone markieren','Messen'][i]))]),
         h('details',{id:'k-v2-legende',style:'border:1px solid var(--border);padding:6px 10px;'},
           h('summary',{style:'cursor:pointer;'},'Rechercheebenen und Legende'),
           h('div',{id:'k-v2-legendenliste',style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:4px 12px;margin:6px 0;'}),
           h('small',null,'Objekte werden nach den vorhandenen Zugriffs- und Ebenenfiltern angezeigt. Basiskartenbeschriftungen sind davon unabhängig.'))),
-      h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:420px;min-height:240px;background:#101820;border:1px solid var(--border);'}),
+      h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:clamp(420px,60vh,850px);min-height:240px;background:#101820;border:1px solid var(--border);'}),
       h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);'},
         h('div',{id:'k-v2-kamera',style:'font-size:11px;font-variant-numeric:tabular-nums;'},'Kamera wird geladen.'),
         h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.')),
@@ -383,7 +414,7 @@
     const c=kontext;if(!aktiv(c)||!c.a)return;
     const m=modell||karteRenderModell();
     c.a.setData(m,{mess:VIEW.karte.messPts});
-    c.a.setSelection(auswahl(m));legendeAktualisieren();
+    c.a.setSelection(auswahl(m));legendeAktualisieren();werkzeugAnzeige();
   }
   function mitte(){
     if(!dev||document.body.classList.contains('locked')||STATE.ui.modul!=='karte'||VIEW.karte.reiter==='protokoll')return null;
@@ -411,8 +442,10 @@
     }
     sync();
   }
-  function unmount(erhalten=false){
+  function unmount(erhalten=false,layoutErhalten=false){
     const c=kontext;kontext=null;
+    if(!erhalten||!layoutErhalten||document.body.classList.contains('locked'))voll=false;
+    if(c?.vollTaste)document.removeEventListener('keydown',c.vollTaste,true);
     if(!erhalten||document.body.classList.contains('locked'))sitzung=null;
     else if(c?.a&&c.map){
       // Auch bei fehlerhafter/entfernter Map muss der Abbau weiterlaufen.
@@ -496,10 +529,16 @@
     if(!dev)return;
     const el=$('k-v2-map'),status=$('k-v2-status');
     if(!el||!status||document.body.classList.contains('locked'))return;
-    if(kontext)unmount(true);
+    if(kontext)unmount(true,true);
     const alt=sitzung;
     const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,bildWahl:alt?.bildWahl||'auto',bildAusgefallen:alt?.bildAusgefallen?.slice()||[],bildQuelle:null,bildSourceId:null,hyb:null,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null,fehlerTimer:null};
-    kachelReset(c);kontext=c;
+    kachelReset(c);kontext=c;layout(c);
+    c.vollTaste=e=>{
+      if(!aktiv(c)||!voll||e.key!=='Escape'||e.defaultPrevented||$('dlg')?.open||$('regie')?.open)return;
+      if(['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName)&&e.target.type!=='checkbox'&&e.target.type!=='radio')return;
+      e.preventDefault();e.stopPropagation();vollWaehlen(false);
+    };
+    document.addEventListener('keydown',c.vollTaste,true);
     bibliothek().then(()=>{
       if(!aktiv(c))return;
       const K=VIEW.karte, sel=$('k-v2-bildwahl');
@@ -551,6 +590,7 @@
       c.map.on('idle',()=>kachelAuswerten(c));
       knoepfe(c);gebaeudeKnoepfe(c);
       sync();karteStatusAkt();kameraAnzeige(c);
+      $('k-v2-voll').disabled=false;layout(c);
       if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);
     }).catch(()=>{
       if(!aktiv(c))return;

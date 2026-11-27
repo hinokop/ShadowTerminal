@@ -143,6 +143,26 @@ function assertCamera(actual,expected){
   assert.deepEqual([anfragen.length,bildAnfragen.length,wetterAnfragen.length],legendVorNetz);
   await p.locator('#k-v2-legende summary').click();
   await click([52.51,13.41]);
+  // K3c-2: enlarge the same MapLibre instance, retain camera and selection.
+  const layoutVor=await p.evaluate(()=>{window.__layoutAdapter=KARTE_V2_DEV.adapter();return {cam:__layoutAdapter.camera(),h:$('k-v2-map').clientHeight};});
+  const layoutNetz=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
+  await p.click('#k-v2-voll');
+  assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'true');
+  assert.ok(await p.evaluate(h=>$('k-v2-map').clientHeight>h,layoutVor.h));
+  assert.equal(await p.evaluate(()=>__layoutAdapter===KARTE_V2_DEV.adapter()),true);
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),layoutVor.cam);
+  assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
+  assert.equal(await p.locator('#k-v2-paneele #k-status').count(),1);
+  // Actual layout at small viewport, then restore before camera comparisons.
+  await p.setViewportSize({width:800,height:600});
+  await p.waitForFunction(()=>Math.abs($('k-v2-panel').getBoundingClientRect().width-innerWidth)<=2);
+  assert.ok(await p.locator('#k-v2-voll').isVisible());
+  await p.setViewportSize({width:1500,height:1100});
+  await p.locator('#k-v2-voll').focus();await p.keyboard.press('Escape');
+  assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'false');
+  assert.equal(await p.evaluate(()=>__layoutAdapter===KARTE_V2_DEV.adapter()),true);
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),layoutVor.cam);
+  assert.deepEqual([anfragen.length,bildAnfragen.length,wetterAnfragen.length],layoutNetz);
   const status=text=>p.waitForFunction(text=>$('k-v2-status')?.textContent.includes(text),text);
   const stilAbrufe=()=>anfragen.filter(x=>x.art==='stil').length;
   const fixtureKey='K2C_FIXTURE+/k';
@@ -435,15 +455,18 @@ function assertCamera(actual,expected){
     assert.equal(await p.locator('#k-v2-'+stil).getAttribute('aria-pressed'),'true');
   }
   const vorModulwechsel=stilAbrufe();
+  await p.click('#k-v2-voll');
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();dispatch({type:'NAVIGATION',modul:'dossier'});});
   assert.equal(await p.locator('#k-v2-map').count(),0);
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
   await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await status('Dark Matter bereit');
+  assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'false','Modulwechsel beendet Vollbild');
   assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
   assert.equal(stilAbrufe(),vorModulwechsel,'kein Stilabruf nach Modulwechsel');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),pinCam);
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
   await p.click('#k-v2-hybrid');await hybridBereit();
+  await p.click('#k-v2-voll');
   /* Reale Zugangssperre und erneute Freigabe, ohne Navigation oder Neuladen. */
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();Zugang.sperren('K2-Test');});
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
@@ -455,6 +478,7 @@ function assertCamera(actual,expected){
   assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
   assert.equal(await p.locator('#k-v2-leer').getAttribute('aria-pressed'),'true');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'false');
+  assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'false','Sperre verwirft Layoutzustand');
   assert.equal(anfragen.length,gesperrt,'kein automatischer erneuter CARTO-Abruf nach Sperre');
   assert.equal(bildAnfragen.length,bildGesperrt,'kein automatischer erneuter Bildabruf nach Sperre');
   const nachSperre=stilAbrufe();await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
@@ -492,7 +516,29 @@ function assertCamera(actual,expected){
   assert.equal(wetterAnfragen.length,wetterVorStil+1);
   assert.notEqual(wetterAnfragen.at(-1).lat,wetterAnfragen.at(-2).lat);
   await p.evaluate(()=>{VIEW.karte.ebenen.kacheln=false;karteStatusAkt();});
-  await p.close();
+  // Real actions in the expanded map. Same application state and click contract.
+  await p.click('#k-v2-voll');
+  const werkCam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
+  const pos=werkCam.center.slice().reverse();
+  const pins=await p.evaluate(()=>PROFIL.pins.length),zonen=await p.evaluate(()=>PROFIL.zonen.length);
+  await p.click('#k-v2-werkzeug-pin');await ready();
+  assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.locator('#k-v2-werkzeug-pin').getAttribute('aria-pressed'),'true');
+  await click(pos);await ready();
+  assert.equal(await p.evaluate(()=>PROFIL.pins.length),pins+1);
+  assert.equal(await p.locator('#k-v2-werkzeug-pin').getAttribute('aria-pressed'),'false');
+  await p.click('#k-v2-werkzeug-zone');await ready();
+  await click([pos[0]+0.001,pos[1]]);await ready();
+  assert.equal(await p.evaluate(()=>PROFIL.zonen.length),zonen+1);
+  await p.click('#k-v2-werkzeug-messen');await ready();
+  await click(pos);await click([pos[0]+0.001,pos[1]+0.001]);await ready();
+  assert.equal(await p.evaluate(()=>VIEW.karte.messPts.length),2);
+  assert.equal(await p.locator('#k-v2-werkzeug-messen').innerText(),'Messung löschen');
+  await p.click('#k-v2-werkzeug-messen');await ready();
+  assert.equal(await p.evaluate(()=>VIEW.karte.messPts.length),0);
+  assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'true');
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),werkCam);
+  await p.click('#k-v2-voll');await p.close();
   // Echtes Laden des alten Browserprofils mit abweichender Schlüsseldatei.
   // Nur der in .kartenwahl bereits vorhandene Key darf verwendet werden.
   const browserKey='K2C_BROWSER_STORED+/k', stored=await b.newPage({reducedMotion:'reduce'});
