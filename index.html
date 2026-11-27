@@ -2928,7 +2928,13 @@ function dispatch(action, opt) {
     if ((PROFIL_AKTIONEN[action.type] || kpNeu) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
   }
   if (typeof terminalSchutzPruefen === 'function') terminalSchutzPruefen();   /* gelesene geschützte Archivtexte nach jeder Zustandsänderung neu prüfen */
-  render(liste.every(function (e) { return e.leicht; })); /* (4) */
+  /* Only ordinary map-toolbar creation may retain the live V2 module.
+     Persistence, logging and access checks above are always executed first. */
+  const karteAnlage = opt && opt.karteAnlage === true && !action.xFall && !action.dossier &&
+    (action.type === 'PIN_ANGELEGT' || action.type === 'OZONE_ANGELEGT') &&
+    STATE.ui.modul === 'karte' && typeof karteAnlageAktualisieren === 'function' &&
+    karteAnlageAktualisieren();
+  render(karteAnlage || liste.every(function (e) { return e.leicht; })); /* (4) */
 }
 
 /* =====================================================================

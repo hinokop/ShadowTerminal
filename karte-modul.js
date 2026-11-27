@@ -1650,6 +1650,16 @@ function karteWerkzeugAktualisieren() {
   karteRendererDatenAktualisieren(); karteAuswahlAnzeige();
   return true;
 }
+/* Narrow in-place path after a successfully dispatched ordinary creation.
+   Legacy navigation, draft placement and mission UI retain full rendering. */
+function karteAnlageAktualisieren() {
+  const K = VIEW.karte;
+  if (STATE.ui.modul !== 'karte' || K.reiter === 'protokoll' || K.pick ||
+      karteAuftragsansicht() || !karteGemeinsamePaneele() ||
+      typeof KARTE_V2_DEV === 'undefined' || !KARTE_V2_DEV.adapter()?.ready()) return false;
+  K.auswahlIdentitaet = null; K.popupVersatz = null; K.mehr = []; K.mehrModus = false;
+  return karteWerkzeugAktualisieren();
+}
 function karteWerkzeugWaehlen(art) {
   const K = VIEW.karte;
   if (art === 'pin') {
@@ -1703,15 +1713,13 @@ function karteKlickVerarbeiten(eingabe, neu) {
   }
   if (K.pinSetzen && !K.messen) {                                  /* Pin setzen: einmalig */
     K.pinSetzen = false;
-    dispatch({ type: 'PIN_ANGELEGT', ll: ll });
-    renderModule();
+    dispatch({ type: 'PIN_ANGELEGT', ll: ll }, {karteAnlage:true});
     return;
   }
   if (K.zoneSetzen) {                                              /* Zone markieren: einmalig, danach normales Verhalten */
     const eigen = K.zoneSetzen === 'eigen';
     K.zoneSetzen = false;
-    dispatch({ type: eigen ? 'OZONE_ANGELEGT' : 'ZONE_ANGELEGT', ll: ll });
-    renderModule();
+    dispatch({ type: eigen ? 'OZONE_ANGELEGT' : 'ZONE_ANGELEGT', ll: ll }, {karteAnlage:eigen});
     return;
   }
   const zt = !t && !vt && eingabe.zoneId;

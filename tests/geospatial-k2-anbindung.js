@@ -587,8 +587,9 @@ function assertCamera(actual,expected){
     const n=await p.evaluate(()=>PROFIL.pins.length), vorPin=stilAbrufe();
     await click(ll);assert.equal(await p.evaluate(()=>PROFIL.pins.length),n+1,'gemeinsame Pin-Aktion '+stil);
     await status(bezeichnung+' bereit');
-    assert.equal(await p.evaluate(()=>__alt.ready()),false,'Renderer erneuert '+stil);
-    assert.equal(stilAbrufe(),vorPin,'kein Stilabruf bei Pin-Neuaufbau '+stil);
+    assert.equal(await p.evaluate(()=>__alt===KARTE_V2_DEV.adapter()&&__alt.ready()),true,'Renderer bleibt erhalten '+stil);
+    assert.equal(stilAbrufe(),vorPin,'kein Stilabruf bei Pinanlage '+stil);
+    assert.ok(await p.locator('#pin-name').isVisible(),'neuer Pin im Inspektor');
     assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),pinCam);
     assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
     assert.equal(await p.locator('#k-v2-'+stil).getAttribute('aria-pressed'),'true');
@@ -704,6 +705,36 @@ function assertCamera(actual,expected){
         assert.deepEqual(werkCounts(),werkNetz,'kein neuer Stil-/Vektor-/Bildabruf durch '+art+' '+pressed);
       }
     }
+    // Real creation on settled hybrid. Keep the same network/source baseline.
+    // Close the overlay before selecting the next point to preserve free canvas.
+    const center=werkOnlineCam.center.slice().reverse();
+    for(const [art,list,field,action,delta] of [
+      ['pin','pins','#pin-name','Pin gesetzt',[0.002,0]],
+      ['zone','zonen','#oz-name','Zone angelegt',[0.003,0]]
+    ]){
+      const old=await p.evaluate(list=>({count:PROFIL[list].length,seq:STATE.seq.log}),list);
+      await p.click('#k-v2-werkzeug-'+art);
+      await click([center[0]+delta[0],center[1]+delta[1]]);
+      await werkSettled();
+      const created=await p.evaluate(({list,action})=>{
+        const item=PROFIL[list].at(-1),saved=JSON.parse(localStorage.getItem(PROFIL_KEY)||'{}');
+        return {count:PROFIL[list].length,selected:VIEW.karte.auswahl,id:item.id,
+          persisted:JSON.stringify(saved[list]?.find(x=>x.id===item.id))===JSON.stringify(item),
+          log:STATE.log.findLast(x=>x.aktion===action)?.id,seq:STATE.seq.log};
+      },{list,action});
+      assert.equal(created.count,old.count+1);
+      assert.equal(created.selected,created.id);
+      assert.equal(created.persisted,true,'object persisted');
+      assert.ok(created.log>old.seq&&created.seq>old.seq,'creation recorded');
+      assert.ok(await p.locator(field).isVisible(),'new object inspector');
+      assert.equal(await p.locator('#k-v2-werkzeug-'+art).getAttribute('aria-pressed'),'false');
+      assert.equal(await p.evaluate(()=>window.__werkzeugAdapter===KARTE_V2_DEV.adapter()&&
+        window.__werkStyleCalls===window.__werkStyleBaseline&&window.__werkSources.every(([id,src])=>window.__werkMap.getSource(id)===src)),true,
+        'creation '+art+': unchanged adapter, style and sources');
+      assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),werkOnlineCam);
+      assert.deepEqual(werkCounts(),werkNetz,'no new provider requests on '+art+' creation');
+      await p.click('#k-pop-x');await werkSettled();
+    }
   }finally{await p.evaluate(()=>window.__restoreWerk?.());}
   await p.click('#k-v2-leer');await status('Ohne Basiskarte');
   // Real actions in the expanded map. Same application state and click contract.
@@ -717,11 +748,12 @@ function assertCamera(actual,expected){
   assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Werkzeugwahl ohne Neuaufbau');
   await click(pos);await ready();
   assert.equal(await p.evaluate(()=>PROFIL.pins.length),pins+1);
+  assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Pinanlage ohne Neuaufbau im Vollbild');
   assert.equal(await p.locator('#k-v2-werkzeug-pin').getAttribute('aria-pressed'),'false');
   await p.click('#k-v2-werkzeug-zone');await ready();
   await click([pos[0]+0.001,pos[1]]);await ready();
   assert.equal(await p.evaluate(()=>PROFIL.zonen.length),zonen+1);
-  await p.evaluate(()=>{window.__werkzeugAdapter=KARTE_V2_DEV.adapter();});
+  assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Zonenanlage ohne Neuaufbau im Vollbild');
   await p.click('#k-v2-werkzeug-messen');await ready();
   assert.match(await p.locator('#k-v2-messwert').innerText(),/Ersten Messpunkt/);
   await click(pos);assert.match(await p.locator('#k-v2-messwert').innerText(),/Zweiten Messpunkt/);
