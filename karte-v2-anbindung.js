@@ -11,7 +11,7 @@
   }
   // Die Lagekarte hat Datei- und Browserquelle bereits aufgelöst (Browser hat Vorrang).
   const lokalKey=()=>typeof VIEW.karte.cartoKey==='string'?VIEW.karte.cartoKey.trim():'';
-  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter',luftbild:'Luftbild',hybrid:'Hybrid'};
+  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter',shadow:'Shadow',luftbild:'Luftbild',hybrid:'Hybrid'};
   const STIL_RAM_MS=10*60*1000; // begrenzte Wiederverwendung, nur beim Neuaufbau
   /* Nur Sitzungs-RAM: Kamera, explizite Stilwahl, Gebäudewunsch; kein Schlüssel,
      keine Objekte, keine persistente Speicherung. Gemeinsame Kamera folgt in K4. */
@@ -237,13 +237,14 @@
       const cacheTreffer=cache&&cache.modus===n&&Date.now()-cache.zeit<STIL_RAM_MS&&Q.styleCachebar(cache.stil,key);
       if(cacheTreffer){s=cache.stil;zeit=cache.zeit;}
       else{
-        const antwort=await fetch(Q.cartoRequest(Q.stil(n),key).url,{signal:ac.signal,referrerPolicy:'no-referrer',redirect:'error',credentials:'omit'});
+        const antwort=await fetch(Q.cartoRequest(Q.stil(n==='shadow'?'dunkel':n),key).url,{signal:ac.signal,referrerPolicy:'no-referrer',redirect:'error',credentials:'omit'});
         if(!antwort.ok)throw Error('Stilabruf');
         s=await antwort.json();zeit=Date.now();
       }
       if(!aktiv(c)||c.generation!==g)return;
       if(!Q.vektorStil(s))throw Error('Vektorstil');
-      const stil=Q.gebaeudeStil(s,n==='dunkel',c.gebaeude);
+      const basis=Q.gebaeudeStil(s,n==='dunkel'||n==='shadow',c.gebaeude);
+      const stil=n==='shadow'?Q.shadowStil(basis):basis;
       if(Q.styleCachebar(s,key)){
         c.stilKandidat={modus:n,zeit,stil:s};
         if(cacheTreffer)c.stilCache=c.stilKandidat; // bereits in dieser Sitzung online bewährt
