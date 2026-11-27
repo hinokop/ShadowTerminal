@@ -47,6 +47,36 @@ s.treffer.get(a).ll[0]=0;assert.equal(model.marker[0].ll[0],52.52);
 const dup=R.daten({...model,marker:model.marker.concat(model.marker[0])});
 assert.equal(dup.treffer.has(a),false);assert.equal(dup.treffer.has(b),true);
 assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).quellen.kanten.features.length,0);
+/* K3f-3: deterministic screen layout and strict geography invariants. */
+const ringMarker=[
+  {id:'PIN-R1',renderKey:key('pin','PIN-R1'),kat:'pin',ll:[52.52,13.405]},
+  {id:'PIN-R2',renderKey:key('pin','PIN-R2'),kat:'pin',ll:[52.52,13.405]},
+  {id:'PIN-R3',renderKey:key('pin','PIN-R3'),kat:'pin',ll:[52.52005,13.40505]}
+];
+{
+ const base=R.daten({...model,marker:ringMarker});
+ const before=JSON.stringify(base.quellen);
+ const fake=(scale)=>({
+   getCanvas:()=>({clientWidth:1000,clientHeight:800}),getCenter:()=>({lng:13.405}),
+   project:([x,y])=>({x:500+(x-13.405)*scale,y:400-(y-52.52)*scale}),
+   unproject:([x,y])=>({lng:13.405+(x-500)/scale,lat:52.52-(y-400)/scale})
+ });
+ const out=R.entflechten(base.quellen,fake(10000));
+ assert.equal(out.leit.features.filter(f=>f.geometry.type==='LineString').length,3);
+ const points=out.punkte.features.map(f=>fake(10000).project(f.geometry.coordinates));
+ for(let i=0;i<points.length;i++)for(let j=i+1;j<points.length;j++)
+   assert.ok(Math.hypot(points[i].x-points[j].x,points[i].y-points[j].y)>=27.9);
+ assert.equal(JSON.stringify(base.quellen),before,'display never mutates snapshot');
+ for(const m of ringMarker)assert.deepEqual(base.treffer.get(m.renderKey).ll,m.ll);
+ for(const k of ['mess','zonen','kanten','unsicherheit'])assert.equal(out[k],base.quellen[k]);
+ const reverse=R.entflechten(R.daten({marker:ringMarker.slice().reverse()}).quellen,fake(10000));
+ for(const f of out.punkte.features)assert.deepEqual(f.geometry,reverse.punkte.features.find(g=>g.properties.renderKey===f.properties.renderKey).geometry);
+ const zoom=R.entflechten(base.quellen,fake(1000000));
+ assert.equal(zoom.leit.features.filter(f=>f.geometry.type==='LineString').length,2);
+ assert.deepEqual(zoom.punkte.features[2].geometry.coordinates,[13.40505,52.52005],'separated point returns to true position');
+ const single=R.daten({marker:[ringMarker[0]]});
+ assert.equal(R.entflechten(single.quellen,fake(10000)),single.quellen);
+}
 /* Adapter-level regression without browser timing: equivalent snapshots must
    not cause worker refreshes, but changed or removed objects must. */
 {
@@ -149,6 +179,30 @@ assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).que
   await warten();
   assert.deepEqual(await p.evaluate(()=>__map.getFilter('shadow-v2-auswahl')),['==',['get','renderKey'],'']);
   assert.equal((await hit(model.marker[1].ll)).renderKey,b);
+  // Real browser: overlapping pins are individually clickable; clicks
+  // report the original position, not the fanned-out display coordinate.
+  await p.evaluate(marker=>{__adapter.setData({marker});__adapter.setSelection(marker[0].renderKey);},ringMarker);
+  const ringReady=()=>p.waitForFunction(marker=>{
+    const d=KARTE_V2_RENDERER.entflechten(KARTE_V2_RENDERER.daten({marker}).quellen,__map);
+    return d.leit.features.filter(f=>f.geometry.type==='LineString').length===3&&
+      d.punkte.features.every(f=>__adapter.hitTest(__map.project(f.geometry.coordinates))?.renderKey===f.properties.renderKey);
+  },ringMarker);
+  await ringReady();
+  for(const m of ringMarker){
+    const pnt=await p.evaluate(({marker,key})=>{
+      const d=KARTE_V2_RENDERER.entflechten(KARTE_V2_RENDERER.daten({marker}).quellen,__map);
+      const q=__map.project(d.punkte.features.find(f=>f.properties.renderKey===key).geometry.coordinates);
+      return {x:q.x,y:q.y};
+    },{marker:ringMarker,key:m.renderKey});
+    await p.mouse.click(pnt.x,pnt.y);
+    assert.deepEqual(await p.evaluate(()=>__clicks.at(-1).treffer.ll),m.ll);
+    assert.equal(await p.evaluate(()=>__clicks.at(-1).treffer.renderKey),m.renderKey);
+  }
+  await p.evaluate(()=>__map.jumpTo({pitch:45,bearing:25}));await ringReady();
+  await p.evaluate(()=>__adapter.setStyle(KARTE_V2_QUELLEN.leererStil()));await ringReady();
+  await p.evaluate(marker=>__adapter.setData({marker}),[ringMarker[0]]);
+  await p.waitForFunction(m=>__adapter.hitTest(__adapter.project(m.ll))?.renderKey===m.renderKey,ringMarker[0]);
+  assert.equal(await p.evaluate(()=>__map.queryRenderedFeatures({layers:['shadow-v2-leit-line']}).length),0);
   await p.evaluate(()=>{__adapter.unmount();__adapter.setData({});});
   assert.equal(await p.evaluate(()=>!!__map.getSource('shadow-v2-punkte')),false);
   assert.equal(await p.evaluate(()=>__map.hasImage('shadow-v2-icon-sichtung')),false);
