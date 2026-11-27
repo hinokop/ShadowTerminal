@@ -313,8 +313,21 @@ function assertCamera(actual,expected){
   await rueckfallTreffer();
   // Automatik: alle drei Kandidaten am Berliner Mittelpunkt fallen aus.
   // Keine Schleife, kein CARTO-Wechsel; Luftbild bleibt als Modus erhalten.
-  await p.click('#k-v2-luftbild');await p.selectOption('#k-v2-bildwahl','auto');
+  // Der manuelle Fehler hat gerade auf "leer" zurückgeschaltet. Bei sofort
+  // erneutem Fehler kann der manuelle Modus schon wieder verlassen sein,
+  // bevor Playwright die Quellenauswahl erreicht. Erst reproduzierbar einen
+  // funktionierenden manuellen Modus herstellen, dann den Totalausfall auslösen.
+  bildFehler=false;
+  await p.click('#k-v2-luftbild');await status('Bildkacheln geladen');
+  assert.equal(await p.locator('#k-v2-luftbild').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.locator('#k-v2-bildwahl').inputValue(),'berlin2024');
+  const vorTotalAusfall=bildAnfragen.length;
+  bildFehler=true;
+  await p.selectOption('#k-v2-bildwahl','auto');
   await status('Keine geeignete Bildquelle verfügbar');
+  const ausfallHosts=new Set(bildAnfragen.slice(vorTotalAusfall).map(a=>new URL(a.url).hostname));
+  for(const host of ['gdi.berlin.de','isk.geobasis-bb.de','tiles.maps.eox.at'])
+    assert.ok(ausfallHosts.has(host),'Automatik muss Kandidaten tatsächlich anfragen: '+host);
   assert.equal(await p.locator('#k-v2-luftbild').getAttribute('aria-pressed'),'true');
   await p.waitForFunction(k=>{const a=KARTE_V2_DEV.adapter();return a?.ready()&&a.hitTest(a.project([52.51,13.41]))?.renderKey===k;},kb);
   await p.click('#k-v2-leer');await status('Ohne Basiskarte');
