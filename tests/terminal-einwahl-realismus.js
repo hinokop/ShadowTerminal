@@ -96,14 +96,21 @@ const { imUeberflug, verbunden, gescheitert } = require('./_kestrel');
 
     /* Erfolg: Signal nach Elevation, Wahl ins Gateway, vollständiges Protokoll */
     await p.evaluate(() => { TERMINAL_ZUSTAND.wahlVorgabe = 'ok'; });
+    // The test pass and the highest satellite at dial time can differ.
+    const erwartet = await p.evaluate(() => {
+      const ms = Date.now();
+      return kestrelSats().map(s => ({name:s.name,el:kestrelEl(s,ms)})).filter(s=>s.el>=0).sort((a,b)=>b.el-a.el)[0]?.name;
+    });
+    assert.ok(erwartet, 'sichtbarer Einwahlsatellit');
     await cmd('pppd call kestrel updetach'); await verbunden(p);
+    assert.equal(await p.evaluate(()=>TERMINAL_ZUSTAND.satLink?.sat.name),erwartet,'höchster Satellit bei Einwahl');
     const log = await out.textContent();
     for (const z of ['send (AT+CSQ^M)', 'send (ATDT00882994401^M)', 'expect (CONNECT)', 'CONNECT 19200', ' -- got it',
       'Connect: ppp0 <--> /dev/ttyUSB0', 'remote IP address 10.64.0.1']) assert.ok(log.includes(z), z);
     assert.match(log, /\+CSQ: ([4-9]|[12]\d|3[01]),99\^M/);
     assert.match(log, /local  IP address 10\.64\.\d+\.\d+/);
     assert.ok(!/AT\+CBST|008816|\*99\*\*\*1#/.test(log), 'keine Iridium- oder GPRS-Wahl');
-    assert.match(await p.locator('#profil-terminal-sat').textContent(), new RegExp('^' + S + ' · EST\\. LINK END '));
+    assert.match(await p.locator('#profil-terminal-sat').textContent(), new RegExp('^' + erwartet + ' · EST\\. LINK END '));
 
     /* poff(1) */
     assert.deepEqual(await nach('poff other'), ["poff: I could not find a pppd process for provider 'other'. None stopped."]);

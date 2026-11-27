@@ -1315,10 +1315,14 @@ function kartenObjektZeigen(id) {
 function eigeneZonePopup(zn, fertig) {
   const K = VIEW.karte, ab = function (patch) {
     dispatch(Object.assign({ type: 'OZONE_GEAENDERT', id: zn.id }, patch)); karteNeuZeichnen();
+    // Resolve the current authorized zone; zn is a render snapshot.
+    const aktuell = karteGemeinsamePaneele()
+      ? kartePanelObjekt(zn.id,karteAuswahlSchluessel())?.objekt
+      : karteZoneFinden(zn.id);
     const sub = $('oz-koordinaten'), title = $('k-auswahl')?.querySelector('.k-pop-kopf strong');
-    if (K.auswahl === zn.id) {
-      if (sub) sub.textContent = zn.ll[0].toFixed(5) + ', ' + zn.ll[1].toFixed(5) + ' · Radius ' + zn.r + ' m';
-      if (title) title.textContent = zn.name;
+    if (K.auswahl === zn.id && aktuell) {
+      if (sub) sub.textContent = aktuell.ll[0].toFixed(5) + ', ' + aktuell.ll[1].toFixed(5) + ' · Radius ' + aktuell.r + ' m';
+      if (title) title.textContent = aktuell.name;
     }
   };
   const R = PROFIL.recherche || { beobachtungen: [] };

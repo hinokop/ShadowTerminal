@@ -739,7 +739,10 @@ function assertCamera(actual,expected){
       assert.deepEqual(werkCounts(),werkNetz,'no new provider requests on '+art+' creation');
       if(art==='zone'){
         await p.selectOption('#oz-r','100');
+        assert.equal(await p.evaluate(()=>PROFIL.zonen.at(-1).r),100,'radius in authoritative profile');
         assert.match(await p.locator('#oz-koordinaten').innerText(),/Radius 100 m/);
+        await p.fill('#oz-name','K3 Radiusprobe');await p.locator('#oz-name').blur();
+        assert.equal(await p.locator('#k-auswahl .k-pop-kopf strong').innerText(),'K3 Radiusprobe');
         await p.fill('#oz-bem','K3 Prüfnachweis');
         const seq=await p.evaluate(()=>STATE.seq.log);
         await p.click('#oz-stand');await werkSettled();
