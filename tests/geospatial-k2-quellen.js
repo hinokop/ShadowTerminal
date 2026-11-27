@@ -41,6 +41,27 @@ const angepasst=Q.gebaeudeStil(vorhanden,true,true), nr=angepasst.layers.find(l=
 assert.equal(nr.minzoom,17);assert.equal(nr.layout.visibility,'visible');
 assert.ok(angepasst.layers.indexOf(nr)>angepasst.layers.findIndex(l=>l.id===Q.GEBAEUDE_ID));
 assert.ok(!angepasst.layers.some(l=>l.id===Q.HAUSNUMMER_ID),'keine Duplikate');
+// K3d: transformation must not mutate the cached provider style.
+const shadowBasis=JSON.parse(JSON.stringify(dunkel));
+for(const id of ['motorway','primary','minor','primary_casing','unknown']){
+  shadowBasis.layers.push({id,type:'line',source:'protomaps','source-layer':'roads',
+    minzoom:9,filter:['==',['get','kind'],'major_road'],paint:{'line-color':'#333333','line-width':3}});
+}
+const shadowOriginal=JSON.stringify(shadowBasis), shadow=Q.shadowStil(shadowBasis);
+assert.equal(JSON.stringify(shadowBasis),shadowOriginal);
+assert.deepEqual(shadow.sources,shadowBasis.sources);
+assert.equal(shadow.glyphs,shadowBasis.glyphs);
+assert.equal(shadow.layers.find(l=>l.id===Q.HAUSNUMMER_ID).paint['text-color'],'#e5edf2');
+const roadColors=['#a6a18b','#718b99','#455c69','#101820','#333333'];
+for(const [i,id] of ['motorway','primary','minor','primary_casing','unknown'].entries()){
+  const l=shadow.layers.find(l=>l.id===id), before=shadowBasis.layers.find(l=>l.id===id);
+  assert.equal(l.paint['line-color'],roadColors[i]);
+  assert.equal(l.paint['line-width'],3);
+  assert.deepEqual(l.filter,before.filter);
+  assert.equal(l.minzoom,before.minzoom);
+}
+assert.deepEqual(shadow.layers.map(l=>l.id),shadowBasis.layers.map(l=>l.id));
+assert.throws(()=>Q.shadowStil(Q.leererStil()));
 assert.ok(Q.styleCachebar(detail,key));
 for(const u of ['https://example.invalid/a?key=other','https://example.invalid/a?access_token=other','https://u:p@example.invalid/a','https://example.invalid/'+encodeURIComponent(key)]){
   const copy=JSON.parse(JSON.stringify(detail));copy.sources.protomaps.tiles=[u];assert.equal(Q.styleCachebar(copy,key),false);
