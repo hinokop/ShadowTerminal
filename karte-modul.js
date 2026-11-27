@@ -495,6 +495,41 @@ function karteRenderModell() {
   }) : [];
   return { marker: marker, zonen: zonen, kanten: kanten };
 }
+/* K4c: local search over the exact authorized, layer-filtered map model.
+   No external geocoder, persistent index, or raw dossier cache. */
+function karteSuchTreffer(modell,frage,typ='alle') {
+  const q=falten(frage||'').trim();
+  if(!q||!['alle','pin','zone','sichtung','dossier','sonstige'].includes(typ))return [];
+  const zeilen=modell.marker.map(o=>({o,typ:o.kat==='pin'?'pin':o.kat==='sichtung'?'sichtung':o.entitaet?'dossier':'sonstige',
+    label:o.kat==='pin'?'Pin':o.kat==='sichtung'?'Sichtung':o.entitaet?'Dossier '+o.typ:o.kat==='ausgang'?'Ausgangsort':'Standort'}))
+    .concat(modell.zonen.map(o=>({o,typ:'zone',label:'Zone'})));
+  const anzahl=new Map();
+  for(const x of zeilen)anzahl.set(x.o.renderKey,(anzahl.get(x.o.renderKey)||0)+1);
+  return zeilen.filter(x=>x.o.renderKey&&anzahl.get(x.o.renderKey)===1&&Array.isArray(x.o.ll)&&x.o.ll.length===2&&x.o.ll.every(Number.isFinite)&&
+    (typ==='alle'||typ===x.typ)).map(x=>{
+    const o=x.o,name=sperreText(o.name||o.id),label=x.label;
+    return {id:o.id,key:o.renderKey,typ:x.typ,label,name,entId:x.typ==='sichtung'?o.entId:null};
+  }).map(x=>{
+    const id=falten(x.id),name=falten(x.name),text=falten([x.id,x.name,x.label,x.entId||''].join(' '));
+    if(!q.split(/\s+/).every(w=>text.includes(w)))return null;
+    return {x,rank:id===q?0:name===q?1:id.startsWith(q)||name.startsWith(q)?2:3};
+  }).filter(Boolean).sort((a,b)=>a.rank-b.rank||a.x.name.localeCompare(b.x.name,'de')||a.x.key.localeCompare(b.x.key))
+    .slice(0,30).map(a=>a.x);
+}
+function karteSuchSprung(id,key) {
+  const K=VIEW.karte;
+  if(K.pick||K.pinSetzen||K.zoneSetzen||K.zugriffSetzen||K.messen)return false;
+  const modell=karteRenderModell(),x=kartePanelObjekt(id,key,modell);
+  if(!x||!['marker','zone'].includes(x.art)||!Array.isArray(x.objekt.ll)||!x.objekt.ll.every(Number.isFinite))return false;
+  // Zones have their own render-key contract; marker lookup rejects zone keys.
+  if(x.art==='zone'){
+    if(!kartePanelObjekt(id,null,modell))return false;
+    karteWaehlen(id,false);
+  }else karteWaehlen(id,false,key);
+  const ll=x.objekt.ll;
+  karteFlug(ll[0],ll[1],Math.max(K.zoom,16.5),karteAuswahlAnzeige,id);
+  return true;
+}
 function zeichneKarte(svg, renderModell) {
   const K = VIEW.karte, P = karteProj(), Z = K.ebenen, zm = K.zoom;
   const vb = { lonMin: P.lon(0), lonMax: P.lon(KW), latMin: P.lat(KH), latMax: P.lat(0) };

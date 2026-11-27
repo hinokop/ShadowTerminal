@@ -90,6 +90,29 @@
     const el=$('k-v2-kamera'),p=bildPosition(c);
     if(el)el.textContent=p[1].toFixed(5)+', '+p[0].toFixed(5)+' · Zoom '+c.map.getZoom().toFixed(2)+' · Neigung '+c.map.getPitch().toFixed(0)+'°';
   }
+  function sucheAktualisieren(modell){
+    const c=getKontext(),eingabe=$('k-v2-suche'),typ=$('k-v2-suchtyp'),liste=$('k-v2-suchergebnisse'),status=$('k-v2-suchstatus');
+    if(!eingabe||!typ||!liste||!status)return;
+    const K=VIEW.karte,gesperrt=!aktiv(c)||!c.a||!!(K.pick||K.pinSetzen||K.zoneSetzen||K.zugriffSetzen||K.messen);
+    eingabe.disabled=typ.disabled=gesperrt;
+    const q=eingabe.value.trim();
+    const treffer=!gesperrt&&q?karteSuchTreffer(modell||karteRenderModell(),q,typ.value):[];
+    const stand=JSON.stringify(treffer);
+    if(liste.dataset.stand!==stand){
+      liste.replaceChildren(...treffer.map(x=>h('li',null,
+        h('button',{type:'button',class:'link','data-render-key':x.key,
+          style:'display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;text-align:left;width:100%;padding:5px;',
+          onclick:()=>{
+            if(!aktiv(getKontext())||!getKontext().a)return;
+            if(karteSuchSprung(x.id,x.key)){eingabe.value='';sucheAktualisieren();eingabe.focus({preventScroll:true});}
+            else sucheAktualisieren();
+          }},h('small',null,x.label+' · '+x.id+(x.entId?' / '+x.entId:'')),h('span',null,x.name)))));
+      liste.dataset.stand=stand;
+    }
+    liste.hidden=!treffer.length;
+    const hinweis=gesperrt?'Suche während aktiver Werkzeuge nicht verfügbar.':!q?'':!treffer.length?'Keine sichtbaren Treffer.':treffer.length===30?'30 Treffer angezeigt – Suche eingrenzen.':treffer.length+' Treffer';
+    if(status.textContent!==hinweis)status.textContent=hinweis;
+  }
   function werkzeugAnzeige(){
     const K=VIEW.karte;
     const slot=$('k-v2-platzierung');
@@ -157,6 +180,17 @@
           h('label',{for:'k-v2-bildwahl'},'Bildquelle '),
           h('select',{id:'k-v2-bildwahl',disabled:true,onchange:e=>bildManuell(getKontext(),e.target.value)},h('option',{value:'auto'},'Automatisch'))),
         h('div',{id:'k-v2-platzierung',hidden:true}),
+        h('div',{style:'display:flex;flex-direction:column;gap:5px;min-width:0;'},
+          h('label',{for:'k-v2-suche',style:'font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.72;'},'Kartensuche'),
+          h('div',{style:'display:flex;gap:6px;flex-wrap:wrap;'},
+            h('input',{id:'k-v2-suche',type:'search',placeholder:'Name oder Kennung',autocomplete:'off',spellcheck:'false',disabled:true,
+              style:'flex:1;min-width:min(180px,100%);',oninput:()=>sucheAktualisieren(),
+              onkeydown:e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();e.target.value='';sucheAktualisieren();}
+                else if(e.key==='Enter'){e.preventDefault();$('k-v2-suchergebnisse')?.querySelector('button')?.click();}}}),
+            h('select',{id:'k-v2-suchtyp','aria-label':'Objekttyp',disabled:true,onchange:()=>sucheAktualisieren()},
+              [['alle','Alle Objekte'],['pin','Pins'],['zone','Zonen'],['sichtung','Sichtungen'],['dossier','Dossiers'],['sonstige','Sonstige']].map(([value,label])=>h('option',{value},label)))),
+          h('small',{id:'k-v2-suchstatus',role:'status','aria-live':'polite'},''),
+          h('ul',{id:'k-v2-suchergebnisse',hidden:true,style:'list-style:none;padding:0;margin:0;max-height:180px;overflow:auto;'})),
         gruppe('Werkzeuge',[
           ...['pin','zone','messen'].map((art,i)=>h('button',{type:'button',id:'k-v2-werkzeug-'+art,disabled:true,'aria-pressed':'false',
             onclick:()=>{if(aktiv(getKontext())&&getKontext().a)karteWerkzeugWaehlen(art);}},['Pin setzen','Zone markieren','Messen'][i]))]),
@@ -207,7 +241,7 @@
     }catch(e){out.push('Renderstichprobe nicht auswertbar.');}
     feld.value=out.join('\n');feld.hidden=false;feld.style.display='block';
   }
-  return Object.freeze({knoepfe,gebaeudeKnoepfe,neigung,legendeAktualisieren,kameraAnzeige,werkzeugAnzeige,layout,vollWaehlen,ansicht});
+  return Object.freeze({knoepfe,gebaeudeKnoepfe,neigung,legendeAktualisieren,kameraAnzeige,werkzeugAnzeige,sucheAktualisieren,layout,vollWaehlen,ansicht});
   }
   root.KARTE_V2_OBERFLAECHE=Object.freeze({erstellen});
 })(window);

@@ -9,7 +9,7 @@
    werden getrennt ausgewiesen. Exit-Code 1 bei jedem anderen roten oder ungeprüften Skript und bei einem ausdrücklich angeforderten, fehlenden Skript. */
 const { spawn } = require('child_process'); const fs = require('fs'); const os = require('os'); const path = require('path');
 const GRUPPEN = [
-  ['geospatial-k1-klickvertrag', 'geospatial-k1-zonen', 'geospatial-k1-modell', 'geospatial-k1-lebenszyklus', 'zonen-vorschau', 'geospatial-k2-quellen'],
+  ['geospatial-k4-suche', 'geospatial-k1-klickvertrag', 'geospatial-k1-zonen', 'geospatial-k1-modell', 'geospatial-k1-lebenszyklus', 'zonen-vorschau', 'geospatial-k2-quellen'],
   ['geospatial-k2-browser'], ['geospatial-k2-objekte'], ['geospatial-k2-anbindung'], ['geospatial-k2-gebaeude'],
   ['kt', 'kv3', 'alterung', 'pin-nummern-tasten', 'speicher-voll'], ['rs'],
   ['un'], ['p4', 'pn', 'kc'],

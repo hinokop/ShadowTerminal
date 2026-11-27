@@ -50,7 +50,7 @@
     const c=kontext;if(!aktiv(c)||!c.a)return;
     const m=modell||karteRenderModell();
     c.a.setData(m,{mess:VIEW.karte.messPts});
-    c.a.setSelection(auswahl(m));legendeAktualisieren();werkzeugAnzeige();
+    c.a.setSelection(auswahl(m));legendeAktualisieren();werkzeugAnzeige();ui.sucheAktualisieren(m);
   }
   // VIEW.karte owns geographic center and scale; V2 keeps its orientation.
   const normLon=lon=>lon>=-180&&lon<=180?lon:((lon%360+540)%360)-180;

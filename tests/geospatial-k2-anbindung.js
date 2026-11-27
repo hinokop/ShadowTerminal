@@ -127,6 +127,11 @@ function assertCamera(actual,expected){
   assert.equal(bildAnfragen.length,0,'keine Bildanfrage vor expliziter Wahl');
   const key=(...x)=>JSON.stringify(x), ka=key('sichtung',f.a,f.si),kb=key('sichtung',f.b,f.si);
   const hit=ll=>p.evaluate(ll=>{const a=KARTE_V2_DEV.adapter();return a.hitTest(a.project(ll));},ll);
+  // Identical sighting numbers must remain separate search results.
+  await p.selectOption('#k-v2-suchtyp','sichtung');
+  await p.fill('#k-v2-suche',f.si);
+  assert.deepEqual((await p.locator('#k-v2-suchergebnisse button').evaluateAll(bs=>bs.map(b=>b.dataset.renderKey))).sort(),[ka,kb].sort());
+  await p.fill('#k-v2-suche','');await p.selectOption('#k-v2-suchtyp','alle');
   // Style registration precedes the asynchronous GeoJSON worker update.
   // Wait for real rendered hits, not just adapter.ready(), after Voyager -> local.
   await p.waitForFunction(({ka,kb,pin,zone})=>{
@@ -983,6 +988,56 @@ function assertCamera(actual,expected){
     assert.equal(await p.evaluate(()=>PROFIL.pins.length),pinsVor);
     assert.equal(await p.evaluate(()=>VIEW.karte.pick),null);
     assert.equal(await p.locator('#k-v2-platzierung').isVisible(),false);
+  }
+  {
+    // Search after the earlier access-lock and real placement fixtures.
+    const z=await p.evaluate(()=>{
+      dispatch({type:'OZONE_ANGELEGT',ll:[52.51,13.42]});
+      const id=PROFIL.zonen.at(-1).id;
+      dispatch({type:'OZONE_GEAENDERT',id,name:'K4 Suchzone'});
+      Object.assign(VIEW.karte.ebenen,{personen:true,zonen:true,pins:true,sichtungen:true});
+      karteRendererDatenAktualisieren();
+      return id;
+    });
+    await ready();await providerDrain();
+    const netzVor=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
+    const a=await p.evaluate(()=>{window.__suchAdapter=KARTE_V2_DEV.adapter();return __suchAdapter.camera();});
+    const buttons=p.locator('#k-v2-suchergebnisse button');
+    await p.fill('#k-v2-suche','K2 Nord');
+    assert.equal(await buttons.count(),0,'locked name not searchable');
+    await p.fill('#k-v2-suche',f.pin);
+    assert.equal(await buttons.count(),0,'locked linked pin not searchable');
+    await p.fill('#k-v2-suche',f.si);
+    assert.deepEqual(await buttons.evaluateAll(bs=>bs.map(b=>b.dataset.renderKey)),[kb]);
+    await p.selectOption('#k-v2-suchtyp','dossier');await p.fill('#k-v2-suche','k2 sued');assert.equal(await buttons.count(),1);
+    await p.selectOption('#k-v2-suchtyp','zone');await p.fill('#k-v2-suche','K4 Suchzone');
+    assert.equal(await buttons.count(),1);
+    await p.evaluate(()=>{window.__alterSuchTreffer=$('k-v2-suchergebnisse').querySelector('button');});
+    await p.locator('#k-v2-legende summary').click();await p.uncheck('#k-v2-eb-zonen');
+    assert.equal(await buttons.count(),0,'filtered zone disappears immediately');
+    await p.evaluate(()=>__alterSuchTreffer.click());
+    assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),a);
+    await p.check('#k-v2-eb-zonen');assert.equal(await buttons.count(),1);
+    await p.locator('#k-v2-legende summary').click();
+    assert.deepEqual([anfragen.length,bildAnfragen.length,wetterAnfragen.length],netzVor,'query/filter never contacts provider');
+    await buttons.first().click();
+    assert.equal(await p.evaluate(()=>VIEW.karte.auswahl),z);
+    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().center[0]-13.42)<1e-6&&Math.abs(KARTE_V2_DEV.adapter().camera().center[1]-52.51)<1e-6);
+    assert.equal(await p.locator('#oz-name').inputValue(),'K4 Suchzone');
+    assert.equal(await p.evaluate(()=>__suchAdapter===KARTE_V2_DEV.adapter()),true);
+    await p.selectOption('#k-v2-suchtyp','pin');await p.fill('#k-v2-suche','K4 Kamera-Testpin');
+    assert.equal(await buttons.count(),1);await p.locator('#k-v2-suche').press('Enter');
+    assert.equal(await p.locator('#pin-name').inputValue(),'K4 Kamera-Testpin');
+    await p.selectOption('#k-v2-suchtyp','sichtung');await p.fill('#k-v2-suche',f.si);
+    assert.equal(await buttons.count(),1);await buttons.first().click();
+    assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
+    assert.match(await p.locator('#k-auswahl').innerText(),/K2 Sued/);
+    await p.selectOption('#k-v2-suchtyp','dossier');await p.fill('#k-v2-suche','K2 Sued');
+    assert.equal(await buttons.count(),1);await buttons.first().click();
+    assert.equal(await p.evaluate(()=>VIEW.karte.auswahl),f.b);
+    assert.equal(await p.evaluate(()=>__suchAdapter===KARTE_V2_DEV.adapter()),true);
+    await p.fill('#k-v2-suche','K2 Sued');await p.locator('#k-v2-suche').press('Escape');
+    assert.equal(await p.locator('#k-v2-suche').inputValue(),'');assert.equal(await buttons.count(),0);
   }
   await p.close();
   // Echtes Laden des alten Browserprofils mit abweichender Schlüsseldatei.
