@@ -104,6 +104,15 @@ function assertCamera(actual,expected){
   assert.equal(bildAnfragen.length,0,'keine Bildanfrage vor expliziter Wahl');
   const key=(...x)=>JSON.stringify(x), ka=key('sichtung',f.a,f.si),kb=key('sichtung',f.b,f.si);
   const hit=ll=>p.evaluate(ll=>{const a=KARTE_V2_DEV.adapter();return a.hitTest(a.project(ll));},ll);
+  // Style registration precedes the asynchronous GeoJSON worker update.
+  // Wait for real rendered hits, not just adapter.ready(), after Voyager -> local.
+  await p.waitForFunction(({ka,kb,pin,zone})=>{
+    const a=KARTE_V2_DEV.adapter();
+    if(!a?.ready())return false;
+    const hit=ll=>a.hitTest(a.project(ll));
+    return hit([52.5,13.4])?.renderKey===ka&&hit([52.51,13.41])?.renderKey===kb&&
+      hit([52.505,13.395])?.id===pin&&hit([52.505,13.415])?.id===zone;
+  },{ka,kb,pin:f.pin,zone:f.zone});
   assert.equal((await hit([52.5,13.4])).renderKey,ka);assert.equal((await hit([52.51,13.41])).renderKey,kb);
   assert.equal((await hit([52.505,13.415])).id,f.zone);
   const click=async ll=>{
@@ -253,7 +262,6 @@ function assertCamera(actual,expected){
   await p.click('#k-v2-shadow');await status('Shadow bereit');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true','Gebäudewunsch über Stilwechsel');
   assert.equal(await p.locator('#k-v2-shadow').getAttribute('aria-pressed'),'true');
-  assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
   assert.equal((await hit([52.51,13.41])).renderKey,kb);
   assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
