@@ -74,6 +74,16 @@ const ringMarker=[
  const zoom=R.entflechten(base.quellen,fake(1000000));
  assert.equal(zoom.leit.features.filter(f=>f.geometry.type==='LineString').length,2);
  assert.deepEqual(zoom.punkte.features[2].geometry.coordinates,[13.40505,52.52005],'separated point returns to true position');
+ // A 30-point chain at 15 px spacing must remain local, not one giant ring.
+ const chain=Array.from({length:30},(_,i)=>({id:'C'+i,renderKey:'C'+i,kat:'pin',ll:[52.52,13.405+(i-15)*.0015]}));
+ const chainData=R.daten({marker:chain}), chainOut=R.entflechten(chainData.quellen,fake(10000));
+ assert.ok(chainOut.leit.features.length>0);
+ const drawn=chainOut.punkte.features.map(f=>fake(10000).project(f.geometry.coordinates));
+ for(let i=0;i<chain.length;i++){
+   const orig=fake(10000).project(chainData.quellen.punkte.features[i].geometry.coordinates);
+   assert.ok(Math.hypot(drawn[i].x-orig.x,drawn[i].y-orig.y)<30,'local displacement '+i);
+   for(let j=0;j<i;j++)assert.ok(Math.hypot(drawn[i].x-drawn[j].x,drawn[i].y-drawn[j].y)>=20,'distinct adjacent targets');
+ }
  const single=R.daten({marker:[ringMarker[0]]});
  assert.equal(R.entflechten(single.quellen,fake(10000)),single.quellen);
 }

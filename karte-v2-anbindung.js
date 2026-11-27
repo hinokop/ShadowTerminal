@@ -392,13 +392,13 @@
           h('div',{class:'k-popup',id:'k-auswahl',hidden:true,'aria-live':'polite',role:'region','aria-label':'Objektinspektor'}))),
       h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);'},
         h('div',{id:'k-v2-kamera',style:'font-size:11px;font-variant-numeric:tabular-nums;'},'Kamera wird geladen.'),
-        h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Karte wird geladen. Voyager ist die Standardkarte.')),
+        h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Karte wird geladen. Shadow ist die Standardkarte.')),
       h('details',{class:'pad',style:'border-top:1px solid var(--border);'},h('summary',null,'Technische Hinweise und Diagnose'),
         h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die alte Lagekarte. Die gemeinsame Kamera folgt in K4.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('button',{type:'button',id:'k-v2-qualitaet',onclick:qualitaetsbericht},'Qualitätsbericht'),
         h('textarea',{id:'k-v2-qualitaetsbericht',hidden:true,readonly:true,rows:8,'aria-label':'Redigierter Qualitätsbericht',style:'display:none;width:100%;margin-top:8px;'}),
-        h('p',null,'Voyager lädt beim Kartenstart mit lokalem Schlüssel. Bei Online-Karten sieht der Anbieter Kartenausschnitt und IP, CARTO zusätzlich den Schlüssel. Attributionen stehen auf der Karte. © OpenStreetMap-Mitwirkende, © CARTO.')));
+        h('p',null,'Shadow lädt beim Kartenstart mit lokalem Schlüssel. Bei Online-Karten sieht der Anbieter Kartenausschnitt und IP, CARTO zusätzlich den Schlüssel. Attributionen stehen auf der Karte. © OpenStreetMap-Mitwirkende, © CARTO.')));
   }
   function qualitaetsbericht(){
     const c=kontext,feld=$('k-v2-qualitaetsbericht');
@@ -568,7 +568,7 @@
       const K=VIEW.karte, sel=$('k-v2-bildwahl');
       if(sel)for(const q of KARTE_V2_QUELLEN.bildListe())sel.appendChild(h('option',{value:q.id},q.name));
       c.map=new maplibregl.Map({container:el,style:KARTE_V2_QUELLEN.leererStil(),
-        ...(alt?.kamera||{center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5))}),attributionControl:true,
+        ...(alt?.kamera||{center:[K.lon,Math.max(-85,Math.min(85,K.lat))],zoom:Math.max(1,Math.min(19,K.zoom-0.5))}),attributionControl:true,renderWorldCopies:false,
         transformRequest:url=>KARTE_V2_QUELLEN.cartoRequest(url,c.key)});
       c.map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
       c.map.addControl(new maplibregl.ScaleControl({maxWidth:100,unit:'metric'}),'bottom-left');
@@ -617,7 +617,7 @@
       sync();karteStatusAkt();kameraAnzeige(c);
       $('k-v2-voll').disabled=false;layout(c);
       if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);
-      else if(!alt)wechseln(c,'voyager');
+      else if(!alt)wechseln(c,'shadow');
     }).catch(()=>{
       if(!aktiv(c))return;
       hinweis(c,'Lokale MapLibre-Ansicht nicht verfügbar. Bestehende Karte bleibt verfügbar.');

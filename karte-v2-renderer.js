@@ -126,30 +126,35 @@
       const p=map.project([lon+360*Math.round((mitte-lon)/360),lat]);
       return {i,f,x:p.x,y:p.y};
     }).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=-30&&p.y>=-30&&p.x<=w+30&&p.y<=h+30);
-    // Connected components of nearby symbols; stable identity order, no
-    // dependency on the order in which the source model was imported.
-    proj.sort((a,b)=>a.f.properties.renderKey<b.f.properties.renderKey?-1:a.f.properties.renderKey>b.f.properties.renderKey?1:0);
-    const parent=proj.map((_,i)=>i), grid=new Map();
-    function find(i){while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;}
-    for(let i=0;i<proj.length;i++){
-      const p=proj[i],gx=Math.floor(p.x/abstand),gy=Math.floor(p.y/abstand);
+    // Complete-link local groups: every pair must overlap. Stable order.
+    proj.sort((a,b)=>a.x-b.x||a.y-b.y||(a.f.properties.renderKey<b.f.properties.renderKey?-1:a.f.properties.renderKey>b.f.properties.renderKey?1:0));
+    const gruppen=[],grid=new Map();
+    for(const p of proj){
+      const gx=Math.floor(p.x/abstand),gy=Math.floor(p.y/abstand);
+      let g=null,best=Infinity;
       for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
-        for(const j of grid.get((gx+dx)+':'+(gy+dy))||[]){
-          const q=proj[j];
-          if(Math.hypot(p.x-q.x,p.y-q.y)<abstand)parent[find(i)]=find(j);
+        for(const candidate of grid.get((gx+dx)+':'+(gy+dy))||[]){
+          const dist=Math.hypot(p.x-candidate[0].x,p.y-candidate[0].y);
+          if(dist<best&&candidate.every(q=>Math.hypot(p.x-q.x,p.y-q.y)<abstand)){g=candidate;best=dist;}
         }
       }
-      const k=gx+':'+gy;if(!grid.has(k))grid.set(k,[]);grid.get(k).push(i);
+      if(g)g.push(p);
+      else{
+        g=[p];gruppen.push(g);
+        const key=gx+':'+gy;if(!grid.has(key))grid.set(key,[]);grid.get(key).push(g);
+      }
     }
-    const gruppen=new Map();
-    proj.forEach((p,i)=>{const k=find(i);if(!gruppen.has(k))gruppen.set(k,[]);gruppen.get(k).push(p);});
     const punkte=original.slice(),leit=[];
-    for(const g of gruppen.values()){
+    for(const g of gruppen){
       if(g.length<2)continue;
+      g.sort((a,b)=>a.f.properties.renderKey<b.f.properties.renderKey?-1:a.f.properties.renderKey>b.f.properties.renderKey?1:0);
       const cx=g.reduce((s,p)=>s+p.x,0)/g.length,cy=g.reduce((s,p)=>s+p.y,0)/g.length;
       const radius=Math.max(24,15+2*g.length,28/(2*Math.sin(Math.PI/g.length)));
+      // Pairs spread perpendicular to their original axis.
+      const dx=g[1].x-g[0].x,dy=g[1].y-g[0].y;
+      const start=g.length===2&&Math.hypot(dx,dy)>0.01?Math.atan2(dy,dx)-Math.PI/2:-Math.PI/2;
       const ziele=g.map((p,i)=>{
-        const a=-Math.PI/2+2*Math.PI*i/g.length;
+        const a=start+2*Math.PI*i/g.length;
         const q=map.unproject([cx+radius*Math.cos(a),cy+radius*Math.sin(a)]);
         const lon=((q.lng+180)%360+360)%360-180;
         return [q.lat,lon];

@@ -2931,9 +2931,9 @@ function dispatch(action, opt) {
   /* Only ordinary map-toolbar creation may retain the live V2 module.
      Persistence, logging and access checks above are always executed first. */
   const karteAnlage = opt && opt.karteAnlage === true && !action.xFall && !action.dossier &&
-    (action.type === 'PIN_ANGELEGT' || action.type === 'OZONE_ANGELEGT') &&
+    (action.type === 'PIN_ANGELEGT' || action.type === 'OZONE_ANGELEGT' || action.type === 'OZONE_STAND') &&
     STATE.ui.modul === 'karte' && typeof karteAnlageAktualisieren === 'function' &&
-    karteAnlageAktualisieren();
+    karteAnlageAktualisieren(action);
   render(karteAnlage || liste.every(function (e) { return e.leicht; })); /* (4) */
 }
 
@@ -3974,6 +3974,7 @@ function render(leicht) {
     aktualisiereSchreibt();
     document.querySelectorAll('[data-nstatus]').forEach(function (e) { const n = nachricht(e.getAttribute('data-nstatus')); if (n) e.textContent = 'Status: ' + n.msg.status; });
     if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.sync();
+    if (STATE.ui.modul === 'karte' && typeof kartenProtokollReiterAktualisieren === 'function') kartenProtokollReiterAktualisieren();
   } else renderModule();
   renderLog(); renderSysbar();
 }

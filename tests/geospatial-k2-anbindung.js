@@ -36,6 +36,7 @@ function assertCamera(actual,expected){
  const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
   const p=await b.newPage({viewport:{width:1500,height:1100},reducedMotion:'reduce'});p.setDefaultTimeout(25000);
+  await p.addInitScript(()=>{Element.prototype.requestFullscreen=function(){return Promise.resolve();};});
   const errors=[],anfragen=[],bildAnfragen=[],wetterAnfragen=[];let netz='ok',einzelFehler=0,bildFehler=false,berlinFehler=false;p.on('pageerror',e=>errors.push(e.message));
   const Q=require('../karte-v2-quellen');
   const tile='https://tiles.basemaps.cartocdn.com/v/fixture/vectortiles/test/{z}/{x}/{y}.mvt';
@@ -110,10 +111,11 @@ function assertCamera(actual,expected){
   });
   const ready=()=>p.waitForFunction(()=>$('k-v2-leer')?.getAttribute('aria-pressed')==='true'&&/Objektlayer bereit|Ohne Basiskarte|Kein lokaler CARTO-Schlüssel/.test($('k-v2-status')?.textContent||'')&&KARTE_V2_DEV.adapter()?.ready());
   const startKey=await p.evaluate(()=>VIEW.karte.cartoKey);
+  if(process.env.CI)assert.ok(startKey,'CI default-style key fixture missing');
   if(startKey){
-    await p.waitForFunction(()=>$('k-v2-status')?.textContent.includes('Voyager bereit'));
-    assert.equal(await p.locator('#k-v2-voyager').getAttribute('aria-pressed'),'true');
-    assert.ok(anfragen.some(x=>x.art==='tile'&&x.key===startKey),'Voyager lädt beim Erststart');
+    await p.waitForFunction(()=>$('k-v2-status')?.textContent.includes('Shadow bereit'));
+    assert.equal(await p.locator('#k-v2-shadow').getAttribute('aria-pressed'),'true');
+    assert.ok(anfragen.some(x=>x.art==='tile'&&x.key===startKey),'Shadow lädt beim Erststart');
     await p.click('#k-v2-leer');
   }
   await ready();
@@ -614,14 +616,14 @@ function assertCamera(actual,expected){
   const gesperrt=anfragen.length, bildGesperrt=bildAnfragen.length;
   await p.fill('#gate-pw','pw-test-123');await p.click('#gate-go');
   await p.waitForFunction(()=>!document.body.classList.contains('locked'));
-  await status('Voyager bereit');
+  await status('Shadow bereit');
   assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
-  assert.equal(await p.locator('#k-v2-voyager').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.locator('#k-v2-shadow').getAttribute('aria-pressed'),'true');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'false');
   assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'false','Sperre verwirft Layoutzustand');
-  assert.ok(anfragen.slice(gesperrt).some(x=>x.art==='tile'),'Voyager nach Entsperrung frisch geladen');
+  assert.ok(anfragen.slice(gesperrt).some(x=>x.art==='tile'),'Shadow nach Entsperrung frisch geladen');
   assert.equal(bildAnfragen.length,bildGesperrt,'kein automatischer erneuter Bildabruf nach Sperre');
-  const nachSperre=stilAbrufe();await p.click('#k-v2-shadow');await status('Shadow bereit');
+  const nachSperre=stilAbrufe();await p.click('#k-v2-voyager');await status('Voyager bereit');
   assert.equal(stilAbrufe(),nachSperre+1,'Stil nach Sperre frisch abrufen');
   await p.click('#k-v2-leer');await status('Ohne Basiskarte');
   // K3: shared Lagebox weather cache is independent of every V2 style.
@@ -693,6 +695,7 @@ function assertCamera(actual,expected){
       return window.__werkzeugAdapter.camera();
     });
     assert.ok(await p.evaluate(()=>window.__werkStyleBaseline>=1&&window.__werkSources.length===2),'positive control: real hybrid style and both sources');
+    assert.equal(await p.evaluate(()=>window.__werkMap.getRenderWorldCopies()),false,'no repeating worlds');
     for(const art of ['pin','zone','messen']){
       const b=p.locator('#k-v2-werkzeug-'+art);
       for(const pressed of ['true','false']){
@@ -726,6 +729,7 @@ function assertCamera(actual,expected){
       assert.equal(created.selected,created.id);
       assert.equal(created.persisted,true,'object persisted');
       assert.ok(created.log>old.seq&&created.seq>old.seq,'creation recorded');
+      assert.equal(await p.locator('#ktab-protokoll').innerText(),await p.evaluate(()=>kartenProtokollReiterText()),'protocol counter after creation');
       assert.ok(await p.locator(field).isVisible(),'new object inspector');
       assert.equal(await p.locator('#k-v2-werkzeug-'+art).getAttribute('aria-pressed'),'false');
       assert.equal(await p.evaluate(()=>window.__werkzeugAdapter===KARTE_V2_DEV.adapter()&&
@@ -733,6 +737,21 @@ function assertCamera(actual,expected){
         'creation '+art+': unchanged adapter, style and sources');
       assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),werkOnlineCam);
       assert.deepEqual(werkCounts(),werkNetz,'no new provider requests on '+art+' creation');
+      if(art==='zone'){
+        await p.selectOption('#oz-r','100');
+        assert.match(await p.locator('#oz-koordinaten').innerText(),/Radius 100 m/);
+        await p.fill('#oz-bem','K3 Prüfnachweis');
+        const seq=await p.evaluate(()=>STATE.seq.log);
+        await p.click('#oz-stand');await werkSettled();
+        assert.match(await p.locator('#oz-stand-text').innerText(),/K3 Prüfnachweis/);
+        assert.equal(await p.locator('#oz-bem').inputValue(),'');
+        assert.equal(await p.evaluate(()=>JSON.parse(localStorage.getItem(PROFIL_KEY)).zonen.at(-1).standBemerkung),'K3 Prüfnachweis');
+        assert.ok(await p.evaluate(seq=>STATE.log.some(x=>x.id>seq&&x.aktion==='Stand der Zone aktualisiert'),seq));
+        assert.equal(await p.locator('#ktab-protokoll').innerText(),await p.evaluate(()=>kartenProtokollReiterText()));
+        assert.equal(await p.evaluate(()=>window.__werkzeugAdapter===KARTE_V2_DEV.adapter()&&window.__werkStyleCalls===window.__werkStyleBaseline&&window.__werkSources.every(([id,src])=>window.__werkMap.getSource(id)===src)),true);
+        assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),werkOnlineCam);
+        assert.deepEqual(werkCounts(),werkNetz,'no provider requests on radius or status update');
+      }
       await p.click('#k-pop-x');await werkSettled();
     }
   }finally{await p.evaluate(()=>window.__restoreWerk?.());}
@@ -785,7 +804,7 @@ function assertCamera(actual,expected){
   assert.ok(await stored.evaluate(k=>VIEW.karte.cartoKey===k,browserKey));
   const gespeichertVorher=anfragen.length;
   await stored.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
-  await stored.waitForFunction(()=>$('k-v2-status')?.textContent.includes('Voyager bereit'));
+  await stored.waitForFunction(()=>$('k-v2-status')?.textContent.includes('Shadow bereit'));
   assert.ok(anfragen.length>gespeichertVorher&&anfragen.slice(gespeichertVorher).every(x=>x.key===browserKey&&!x.referer),'Browserquelle hat Vorrang beim Start');
   await stored.close();
   const standard=await b.newPage({reducedMotion:'reduce'});await standard.route(/^https?:/,r=>r.abort());await standard.goto(APP);

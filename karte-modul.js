@@ -1313,7 +1313,14 @@ function kartenObjektZeigen(id) {
 }
 /* Eigene Zone (Profil): neutrale Darstellung ohne Bewertung, Handler und Zeitgeber; Schaltflächen benennen ihre tatsächliche Wirkung */
 function eigeneZonePopup(zn, fertig) {
-  const K = VIEW.karte, ab = function (patch) { dispatch(Object.assign({ type: 'OZONE_GEAENDERT', id: zn.id }, patch)); karteNeuZeichnen(); };
+  const K = VIEW.karte, ab = function (patch) {
+    dispatch(Object.assign({ type: 'OZONE_GEAENDERT', id: zn.id }, patch)); karteNeuZeichnen();
+    const sub = $('oz-koordinaten'), title = $('k-auswahl')?.querySelector('.k-pop-kopf strong');
+    if (K.auswahl === zn.id) {
+      if (sub) sub.textContent = zn.ll[0].toFixed(5) + ', ' + zn.ll[1].toFixed(5) + ' · Radius ' + zn.r + ' m';
+      if (title) title.textContent = zn.name;
+    }
+  };
   const R = PROFIL.recherche || { beobachtungen: [] };
   const unterlageText = function (id) {
     const z = typeof rchZuBeobachtung === 'function' ? rchZuBeobachtung(id) : null;
@@ -1330,7 +1337,7 @@ function eigeneZonePopup(zn, fertig) {
   const andere = frei.filter(function (b) { return auswahl.indexOf(b) < 0; });
   const optionen = function (L) { return L.map(function (b) { return h('option', { value: b.id }, unterlageText(b.id)); }); };
   fertig(zn.name, [
-    h('p', { class: 'k-pop-sub' }, zn.ll[0].toFixed(5) + ', ' + zn.ll[1].toFixed(5) + ' · Radius ' + zn.r + ' m'),
+    h('p', { class: 'k-pop-sub', id: 'oz-koordinaten' }, zn.ll[0].toFixed(5) + ', ' + zn.ll[1].toFixed(5) + ' · Radius ' + zn.r + ' m'),
     h('div', { class: 'k-pop-form' },
       h('label', { for: 'oz-name' }, 'Name'), h('input', { type: 'text', id: 'oz-name', maxlength: '60', value: zn.name, onchange: function (ev) { ab({ name: ev.target.value }); } }),
       h('label', { for: 'oz-r' }, 'Radius'), h('select', { id: 'oz-r', 'aria-label': 'Radius der Zone', onchange: function (ev) { ab({ r: Number(ev.target.value) }); } }, OZONE_RADIEN.map(function (r) { return h('option', { value: String(r), selected: r === zn.r }, r + ' m'); })),
@@ -1354,7 +1361,7 @@ function eigeneZonePopup(zn, fertig) {
           if (id) dispatch({ type: 'OZONE_UNTERLAGE', id: zn.id, unterlage: id, op: 'verknuepfen' });
         } }, 'Verknüpfen'))) : null,
     h('div', { class: 'k-pop-akt' },
-      h('button', { type: 'button', id: 'oz-stand', onclick: function () { const t = VIEW.draft['oz-bem-' + zn.id] || ''; delete VIEW.draft['oz-bem-' + zn.id]; dispatch({ type: 'OZONE_STAND', id: zn.id, bemerkung: t }); } }, 'Stand aktualisieren'),
+      h('button', { type: 'button', id: 'oz-stand', onclick: function () { const t = VIEW.draft['oz-bem-' + zn.id] || ''; delete VIEW.draft['oz-bem-' + zn.id]; dispatch({ type: 'OZONE_STAND', id: zn.id, bemerkung: t }, {karteAnlage:true}); } }, 'Stand aktualisieren'),
       h('button', { type: 'button', class: 'link', id: 'oz-protokoll', onclick: function () { K.kpObjekt = zn.id; K.kpFilter = ''; K.reiter = 'protokoll'; renderModule(); } }, 'Protokoll öffnen'),
       h('button', { type: 'button', class: 'link', id: 'oz-zentrum', onclick: function () { karteFlug(zn.ll[0], zn.ll[1], Math.max(K.zoom, 15), karteAuswahlAnzeige, zn.id); } }, 'Zentrieren'),
       h('button', { type: 'button', class: 'link', id: 'oz-export', onclick: function () { kartenTxtExport('zone', zn.id); } }, 'Als TXT exportieren'), kartenExportLoeschenKnopf('zone', zn.id, null, 'oz-export-loeschen'),
@@ -1633,7 +1640,7 @@ function karte3dEingang(d, fr) {
    eigentliche Objektanlage/Messung bleibt im Klickvertrag. */
 /* V2: reine Werkzeugzustände ohne Modul-/MapLibre-Neuaufbau aktualisieren. */
 function karteWerkzeugAktualisieren() {
-  if (typeof KARTE_V2_DEV === 'undefined' || !KARTE_V2_DEV.adapter()) return false;
+  if (typeof KARTE_V2_DEV === 'undefined' || !KARTE_V2_DEV.adapter() || karteAuftragsansicht()) return false;
   const K = VIEW.karte, svg = $('k-svg');
   if (svg) {
     svg.classList.toggle('pick', !!(K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen));
@@ -1652,12 +1659,16 @@ function karteWerkzeugAktualisieren() {
 }
 /* Narrow in-place path after a successfully dispatched ordinary creation.
    Legacy navigation, draft placement and mission UI retain full rendering. */
-function karteAnlageAktualisieren() {
+function karteAnlageAktualisieren(action) {
   const K = VIEW.karte;
   if (STATE.ui.modul !== 'karte' || K.reiter === 'protokoll' || K.pick ||
       karteAuftragsansicht() || !karteGemeinsamePaneele() ||
       typeof KARTE_V2_DEV === 'undefined' || !KARTE_V2_DEV.adapter()?.ready()) return false;
-  K.auswahlIdentitaet = null; K.popupVersatz = null; K.mehr = []; K.mehrModus = false;
+  if (action.type === 'OZONE_STAND') {
+    if (K.auswahl !== action.id || !kartePanelObjekt(action.id,karteAuswahlSchluessel())) return false;
+  } else {
+    K.auswahlIdentitaet = null; K.popupVersatz = null; K.mehr = []; K.mehrModus = false;
+  }
   return karteWerkzeugAktualisieren();
 }
 function karteWerkzeugWaehlen(art) {
@@ -1921,11 +1932,17 @@ ACTIONS.KARTENPROTOKOLL_LEEREN = function () {
   P.eintraege = [];
   return { modul: 'Karte', aktion: 'Protokoll geleert', detail: n + ' Einträge des Kartenprotokolls entfernt' };
 };
+function kartenProtokollReiterText() {
+  return 'Protokoll (' + (PROFIL.kartenProtokoll?.eintraege?.length || 0) + ')';
+}
+function kartenProtokollReiterAktualisieren() {
+  const b = $('ktab-protokoll');
+  if (b) b.textContent = kartenProtokollReiterText();
+}
 function kartenReiter(aktiv) {
   kpAufraeumen();
-  const n = PROFIL.kartenProtokoll.eintraege.length;
   return h('div', { class: 'reiterleiste', role: 'tablist', 'aria-label': 'Bereiche der Karte' },
-    [['karte', 'Lagekarte'], ['protokoll', 'Protokoll (' + n + ')']].map(function (x) {
+    [['karte', 'Lagekarte'], ['protokoll', kartenProtokollReiterText()]].map(function (x) {
       return h('button', { type: 'button', role: 'tab', id: 'ktab-' + x[0], 'aria-selected': aktiv === x[0] ? 'true' : 'false', class: aktiv === x[0] ? 'reiter on' : 'reiter', onclick: function () { VIEW.karte.reiter = x[0]; renderModule(); } }, x[1]);
     }));
 }
