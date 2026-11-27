@@ -99,7 +99,22 @@ assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).que
   await p.evaluate(()=>__adapter.setStyle(KARTE_V2_QUELLEN.leererStil()));
   await warten();
   assert.equal(await p.evaluate(()=>__map.hasImage('shadow-v2-icon-sichtung')),true,'lokales Sprite nach Stilwechsel');
-  assert.equal((await hit(model.marker[0].ll)).renderKey,a,'Stilwechsel erhält Snapshot');
+  // loaded()/areTilesLoaded() guarantee neither a completed symbol placement
+  // nor a current rendered-symbol hit index after a fresh style. Wait for the
+  // real adapter hit (bounded by the test timeout), never substitute source data.
+  try{
+    await p.waitForFunction(marker=>marker.every(m=>
+      __adapter.hitTest(__adapter.project(m.ll))?.renderKey===m.renderKey),model.marker,{timeout:10000});
+  }catch(e){
+    const diagnose=await p.evaluate(marker=>({
+      ready:__adapter.ready(),loaded:__map.loaded(),tilesLoaded:__map.areTilesLoaded(),
+      layer:__map.getLayer('shadow-v2-punkt')?.type,
+      rendered:__map.queryRenderedFeatures({layers:['shadow-v2-punkt']}).map(f=>f.properties.renderKey),
+      hits:marker.map(m=>({expected:m.renderKey,actual:__adapter.hitTest(__adapter.project(m.ll))?.renderKey??null}))
+    }),model.marker);
+    throw Error('Stilwechsel: Symboltreffer nicht wiederhergestellt: '+JSON.stringify(diagnose),{cause:e});
+  }
+  assert.equal((await hit(model.marker[0].ll))?.renderKey,a,'Stilwechsel erhält Snapshot');
   assert.deepEqual(await p.evaluate(()=>__map.getFilter('shadow-v2-auswahl')),['==',['get','renderKey'],a]);
   await p.evaluate(model=>__adapter.setData(model),{...model,marker:model.marker.filter(x=>x.renderKey!==a)});
   assert.equal(await hit(model.marker[0].ll),null,'entfernter Treffer sofort ungültig, auch vor Worker-Update');
