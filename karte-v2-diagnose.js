@@ -110,6 +110,27 @@
   }
   // M2: fixed-category metadata only. Never return house numbers, names,
   // coordinates, filter expressions or provider URLs.
+  // Report only whitelisted scalar style constants; expressions may contain
+  // arbitrary strings, so never serialize their contents or layer IDs.
+  function stilKonstante(v,art){
+    if(v===undefined)return 'nicht gesetzt';
+    if(Array.isArray(v)||v&&typeof v==='object')return 'Ausdruck/Objekt';
+    if(art==='zahl'&&typeof v==='number'&&Number.isFinite(v))return v;
+    if(art==='ausrichtung'&&['map','viewport','auto'].includes(v))return v;
+    if(art==='farbe'&&typeof v==='string'&&v.length<=80&&
+      (/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(v)||
+       /^(?:rgba?|hsla?)\([\d.,%+\-\s]+\)$/i.test(v)||
+       /^(?:black|white|transparent|gray|grey|silver|red|green|blue|yellow|orange|purple|navy|teal|aqua|lime|maroon|olive|fuchsia)$/i.test(v)))return v;
+    return 'nicht ausgewertet';
+  }
+  function adressStil(l){
+    return {farbe:stilKonstante(l.paint?.['text-color'],'farbe'),
+      halo:stilKonstante(l.paint?.['text-halo-color'],'farbe'),
+      haloBreite:stilKonstante(l.paint?.['text-halo-width'],'zahl'),
+      opazitaet:stilKonstante(l.paint?.['text-opacity'],'zahl'),
+      groesse:stilKonstante(l.layout?.['text-size'],'zahl'),
+      neigung:stilKonstante(l.layout?.['text-pitch-alignment'],'ausrichtung')};
+  }
   function adressDetails(map){
     const stil=map.getStyle(),id=quelle(stil);
     if(!id)return null;
@@ -119,10 +140,15 @@
       const filter=JSON.stringify(l.filter||[]);
       return {min:Number.isFinite(l.minzoom)?l.minzoom:0,max:Number.isFinite(l.maxzoom)?l.maxzoom:24,
         sichtbar:l.layout?.visibility!=='none',geometrieFilter:filter.includes('geometry-type')||filter.includes('$type'),
-        kindFilter:filter.includes('"kind"'),nummerFilter:filter.includes('addr_housenumber')};
+        kindFilter:filter.includes('"kind"'),nummerFilter:filter.includes('addr_housenumber'),stil:adressStil(l)};
     });
     const features=map.querySourceFeatures(id,{sourceLayer:'buildings'});
-    const out={gesamt:features.length,geprueft:Math.min(features.length,10000),punkt:0,polygon:0,sonstige:0,kindAddress:0,layer};
+    const extrusion=stil.layers.filter(l=>l.source===id&&l.type==='fill-extrusion').map(l=>({
+      sichtbar:l.layout?.visibility!=='none',
+      farbe:stilKonstante(l.paint?.['fill-extrusion-color'],'farbe'),
+      opazitaet:stilKonstante(l.paint?.['fill-extrusion-opacity'],'zahl')
+    }));
+    const out={gesamt:features.length,geprueft:Math.min(features.length,10000),punkt:0,polygon:0,sonstige:0,kindAddress:0,layer,extrusion};
     for(let i=0;i<out.geprueft;i++){
       const f=features[i],p=f.properties||{},nr=p.addr_housenumber;
       if(nr===undefined||nr===null||String(nr).trim()==='')continue;

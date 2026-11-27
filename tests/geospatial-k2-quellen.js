@@ -225,6 +225,29 @@ const adr=D.adressDetails({getStyle:()=>angepasst,querySourceFeatures:()=>[
 assert.equal(adr.punkt,1);assert.equal(adr.polygon,1);assert.equal(adr.kindAddress,1);
 assert.equal(adr.geprueft,4);assert.equal(adr.layer.length,1);assert.equal(adr.layer[0].min,17);
 assert.ok(!JSON.stringify(adr).includes('PRIVATE_'));
+const adrFallback=D.adressDetails({getStyle:()=>dunkel,querySourceFeatures:()=>[]});
+assert.equal(adr.layer[0].stil.farbe,'nicht gesetzt');
+assert.equal(adrFallback.layer[0].stil.farbe,'#d6dbe0');
+assert.equal(adrFallback.layer[0].stil.halo,'#24292e');
+assert.equal(adrFallback.layer[0].stil.haloBreite,1.2);
+assert.equal(adrFallback.layer[0].stil.opazitaet,'nicht gesetzt');
+assert.equal(adrFallback.layer[0].stil.groesse,11);
+assert.equal(adrFallback.layer[0].stil.neigung,'viewport');
+assert.equal(adr.extrusion[0].farbe,'#637783');
+assert.equal(adr.extrusion[0].opazitaet,0.82);
+const adrStil=JSON.parse(JSON.stringify(dunkel));
+const adrLayer=adrStil.layers.find(l=>l.id===Q.HAUSNUMMER_ID);
+adrLayer.paint['text-color']=['match',['get','PRIVATE_PROPERTY'],'PRIVATE_VALUE','#000','#fff'];
+adrLayer.paint['text-halo-color']='https://example.invalid/PRIVATE_URL';
+adrLayer.paint['text-opacity']=0.5;
+adrLayer.layout['text-size']=['interpolate',['linear'],['zoom'],17,11,19,13];
+const adrSicher=D.adressDetails({getStyle:()=>adrStil,querySourceFeatures:()=>[]});
+assert.equal(adrSicher.layer[0].stil.farbe,'Ausdruck/Objekt');
+assert.equal(adrSicher.layer[0].stil.halo,'nicht ausgewertet');
+assert.equal(adrSicher.layer[0].stil.opazitaet,0.5);
+assert.equal(adrSicher.layer[0].stil.groesse,'Ausdruck/Objekt');
+assert.ok(!JSON.stringify(adrSicher).includes('PRIVATE_'));
+
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'shadow-maplibre-'));
 try {
   const pkg=path.join(__dirname,'node_modules','maplibre-gl'), ziel=path.join(tmp,'vendor');

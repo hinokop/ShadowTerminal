@@ -36,7 +36,7 @@ function assertCamera(actual,expected){
  const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
   const p=await b.newPage({viewport:{width:1500,height:1100},reducedMotion:'reduce'});p.setDefaultTimeout(25000);
-  const errors=[],anfragen=[],bildAnfragen=[];let netz='ok',einzelFehler=0,bildFehler=false,berlinFehler=false;p.on('pageerror',e=>errors.push(e.message));
+  const errors=[],anfragen=[],bildAnfragen=[],wetterAnfragen=[];let netz='ok',einzelFehler=0,bildFehler=false,berlinFehler=false;p.on('pageerror',e=>errors.push(e.message));
   const Q=require('../karte-v2-quellen');
   const tile='https://tiles.basemaps.cartocdn.com/v/fixture/vectortiles/test/{z}/{x}/{y}.mvt';
   // Leere, aber gültige MVT-Layer (Name buildings, Version 2, Extent 4096).
@@ -49,6 +49,10 @@ function assertCamera(actual,expected){
   ]};
   const route=async r=>{
     const u=new URL(r.request().url()),bare=u.origin+u.pathname;
+    if(u.hostname==='api.open-meteo.com'){
+      wetterAnfragen.push({lat:u.searchParams.get('latitude'),lon:u.searchParams.get('longitude')});
+      return r.fulfill({json:{current:{temperature_2m:12,precipitation:0,weather_code:3,cloud_cover:80,wind_speed_10m:5,wind_direction_10m:90,wind_gusts_10m:6,visibility:20000,time:'2026-11-27T12:00'}},headers:{'access-control-allow-origin':'*'}});
+    }
     if(['gdi.berlin.de','isk.geobasis-bb.de','geo4.service24.rlp.de','www.wms.nrw.de','tiles.maps.eox.at'].includes(u.hostname)){
       bildAnfragen.push({url:u.href,referer:r.request().headers().referer||''});
       if(bildFehler||(berlinFehler&&u.hostname==='gdi.berlin.de'))return r.fulfill({status:500,body:'fixture',headers:{'access-control-allow-origin':'*'}});
@@ -338,13 +342,39 @@ function assertCamera(actual,expected){
   await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.camera()?.pitch===45);
   const neuCam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
   const neuKey='K2C_SECOND+/k', vorher=anfragen.length, vorKeywechsel=stilAbrufe();
-  await p.evaluate(k=>{window.__alt=KARTE_V2_DEV.adapter();VIEW.karte.cartoKey=k;renderModule();},neuKey);
-  await status('Voyager bereit');
+  // T1: associate transformations with the newly constructed Map instance,
+  // not with delivery time of an already queued request from the old map.
+  await p.evaluate(k=>{
+    const Original=maplibregl.Map;
+    window.__neueTransforms=[];
+    maplibregl.Map=class extends Original{
+      constructor(opts){
+        const transform=opts.transformRequest;
+        super({...opts,transformRequest:(url,...args)=>{
+          const result=transform(url,...args);
+          const u=new URL(result.url,location.href);
+          if(u.hostname==='basemaps.cartocdn.com'||u.hostname.endsWith('.basemaps.cartocdn.com'))
+            window.__neueTransforms.push({key:u.searchParams.get('key'),art:u.pathname.endsWith('.mvt')?'tile':'sonst'});
+          return result;
+        }});
+      }
+    };
+    window.__restoreMap=()=>{maplibregl.Map=Original;delete window.__restoreMap;};
+    window.__alt=KARTE_V2_DEV.adapter();VIEW.karte.cartoKey=k;renderModule();
+  },neuKey);
+  try{await status('Voyager bereit');}
+  finally{await p.evaluate(()=>window.__restoreMap?.());}
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
   assert.equal(stilAbrufe(),vorKeywechsel+1,'Keywechsel verlangt frischen Stil');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),neuCam);
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
-  assert.ok(anfragen.length>vorher&&anfragen.slice(vorher).every(x=>x.key===neuKey&&!x.referer),'neuer Schlüssel bei Wiederaufbau');
+  const neueTransforms=await p.evaluate(()=>window.__neueTransforms);
+  assert.ok(neueTransforms.some(x=>x.art==='tile'),'neue Map hat Vektorkacheln angefordert');
+  assert.ok(neueTransforms.every(x=>x.key===neuKey),'ausschließlich neuer Schlüssel bei Transformation der neuen Map');
+  const neuAnfragen=anfragen.slice(vorher);
+  assert.ok(neuAnfragen.some(x=>x.art==='tile'&&x.key===neuKey),'neuer Schlüssel im tatsächlichen Tileabruf');
+  assert.deepEqual(neuAnfragen.filter(x=>x.art==='stil'),[{art:'stil',key:neuKey,referer:''}]);
+  assert.ok(neuAnfragen.every(x=>!x.referer),'kein Referrer auch bei auslaufenden Anfragen');
   assert.equal(await p.evaluate(k=>Object.values(localStorage).some(v=>v.includes(k)),neuKey),false);
   await p.click('#k-v2-flach');await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===0&&KARTE_V2_DEV.adapter().camera().bearing===0);
   const pinCam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
@@ -386,6 +416,36 @@ function assertCamera(actual,expected){
   const nachSperre=stilAbrufe();await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
   assert.equal(stilAbrufe(),nachSperre+1,'Stil nach Sperre frisch abrufen');
   await p.click('#k-v2-leer');await status('Ohne Basiskarte');
+  // K3: shared Lagebox weather cache is independent of every V2 style.
+  // Enable the existing online weather permission without changing the map
+  // position or rebuilding the legacy renderer. No live request in CI.
+  const vorWetter=wetterAnfragen.length;
+  await p.evaluate(()=>{
+    const K=VIEW.karte;K.wetter=true;K.ebenen.kacheln=true;K.statusOffen=true;
+    K.bezug=null;K.bezugRenderKey=null;K.lat=52.505;K.lon=13.405;
+    clearTimeout(WETTER.retry);WETTER.retry=null;WETTER.cache={};WETTER.zuletzt=0;
+    karteStatusAkt();
+  });
+  await p.waitForFunction(()=>$('k-st-wetter')?.textContent.includes('12 °C')&&!WETTER.laufend);
+  assert.equal(wetterAnfragen.length,vorWetter+1,'weather positive control');
+  const wetterVorStil=wetterAnfragen.length;
+  const wetterTextVor=await p.locator('#k-st-wetter').innerText();
+  for(const [modus,erwartet] of [['voyager','Voyager bereit'],['dunkel','Dark Matter bereit'],['luftbild','Bildkacheln geladen'],['hybrid','Vektorkacheln geladen'],['leer','Ohne Basiskarte']]){
+    await p.click('#k-v2-'+modus);await status(erwartet);
+    // Refresh through the real shared panel, e.g. after camera/UI updates.
+    await p.evaluate(()=>karteStatusAkt());
+    assert.equal(await p.locator('#k-st-wetter').innerText(),wetterTextVor);
+    assert.equal(wetterAnfragen.length,wetterVorStil,'no weather fetch on basemap '+modus);
+  }
+  // Position changes remain a real trigger (bypass only the time throttle,
+  // not the cache/position selection). Without this control, a disabled
+  // weather implementation would falsely pass the negative assertion.
+  await p.evaluate(()=>{VIEW.karte.lat=52.705;WETTER.zuletzt=0;karteStatusAkt();});
+  await p.waitForFunction(()=>$('k-st-wetter')?.textContent.includes('12 °C')&&!WETTER.laufend);
+  assert.equal(wetterAnfragen.length,wetterVorStil+1);
+  assert.notEqual(wetterAnfragen.at(-1).lat,wetterAnfragen.at(-2).lat);
+  await p.evaluate(()=>{VIEW.karte.ebenen.kacheln=false;karteStatusAkt();});
+  await p.close();
   // Echtes Laden des alten Browserprofils mit abweichender Schlüsseldatei.
   // Nur der in .kartenwahl bereits vorhandene Key darf verwendet werden.
   const browserKey='K2C_BROWSER_STORED+/k', stored=await b.newPage({reducedMotion:'reduce'});

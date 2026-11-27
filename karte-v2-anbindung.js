@@ -308,7 +308,12 @@
       const a=KARTE_V2_DIAGNOSE.adressDetails(c.map);
       if(a){
         out.push('Adressdaten: '+a.geprueft+'/'+a.gesamt+' Gebäudefragmente geprüft; nummerierte Punkte '+a.punkt+', Polygone '+a.polygon+', sonstige '+a.sonstige+'; kind=address '+a.kindAddress);
-        for(const [i,l] of a.layer.entries())out.push('Adresslayer '+(i+1)+': Zoom '+l.min+'–'+l.max+', sichtbar '+(l.sichtbar?'ja':'nein')+', Geometriefilter '+(l.geometrieFilter?'ja':'nein')+', kind-Filter '+(l.kindFilter?'ja':'nein')+', Nummernfilter '+(l.nummerFilter?'ja':'nein'));
+        for(const [i,l] of a.layer.entries()){
+          out.push('Adresslayer '+(i+1)+': Zoom '+l.min+'–'+l.max+', sichtbar '+(l.sichtbar?'ja':'nein')+', Geometriefilter '+(l.geometrieFilter?'ja':'nein')+', kind-Filter '+(l.kindFilter?'ja':'nein')+', Nummernfilter '+(l.nummerFilter?'ja':'nein'));
+          const st=l.stil;
+          out.push('Adressstil '+(i+1)+': text-color '+st.farbe+' · text-halo-color '+st.halo+' · text-halo-width '+st.haloBreite+' · text-opacity '+st.opazitaet+' · text-size '+st.groesse+' · text-pitch-alignment '+st.neigung);
+        }
+        for(const [i,l] of a.extrusion.entries())out.push('Extrusionsstil '+(i+1)+': sichtbar '+(l.sichtbar?'ja':'nein')+' · fill-extrusion-color '+l.farbe+' · fill-extrusion-opacity '+l.opazitaet);
       }
       out.push('Kartenressourcen geladen: '+(c.map.areTilesLoaded()?'ja':'nein'));
     }catch(e){out.push('Renderstichprobe nicht auswertbar.');}
