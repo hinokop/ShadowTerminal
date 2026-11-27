@@ -14,7 +14,7 @@ const fabrik = new Function('VIEW', 'dispatch', 'renderModule', 'entitaet', 'sic
   'karteZoneFinden', 'karteWaehlen', 'karteMarker', 'karteAuswahlAnzeige', '$', 'karte3dSenden',
   'karteProj', 'requestAnimationFrame', 'KW', 'KH', 'svg', 'karteRendererDatenAktualisieren', 'KARTE_3D_ADAPTER',
   ausschnitt('function karteRenderSchluessel(', 'function karteRenderModell(') +
-  ausschnitt('function karteKlickVerarbeiten(', '/* =====================================================================\n   KARTENPROTOKOLL:') +
+  ausschnitt('function karteWerkzeugAktualisieren(', '/* =====================================================================\n   KARTENPROTOKOLL:') +
   ausschnitt('function karte3dKlick(', 'let KARTE_ST = null;') +
   ausschnitt('function karte3dEingang(', '/* Gemeinsame Klicksemantik') +
   '\nconst KARTE_ST = karteSteuerung(svg); return { st: KARTE_ST, klick3d: karte3dKlick, eingang: karte3dEingang };');
