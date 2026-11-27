@@ -92,13 +92,21 @@
   }
   function werkzeugAnzeige(){
     const K=VIEW.karte;
+    const slot=$('k-v2-platzierung');
+    if(slot){
+      const maske=kartePlatzierungsMaske();
+      slot.hidden=!maske;
+      // Preserve the cancel button while the target remains unchanged.
+      const stand=maske?maske.textContent:'';
+      if(slot.dataset.stand!==stand){slot.replaceChildren(...(maske?[maske]:[]));slot.dataset.stand=stand;}
+    }
     for(const [id,aktiv,txt] of [
       ['pin',K.pinSetzen,K.pinSetzen?'Pin: auf Karte klicken':'Pin setzen'],
       ['zone',K.zoneSetzen==='eigen',K.zoneSetzen==='eigen'?'Zone: auf Karte klicken':'Zone markieren'],
       ['messen',K.messen,K.messen?'Messen beenden':K.messPts.length?'Messung löschen':'Messen']
     ]){
       const b=$('k-v2-werkzeug-'+id);
-      if(b){b.disabled=!getKontext()?.a;b.textContent=txt;b.setAttribute('aria-pressed',String(!!aktiv));}
+      if(b){b.disabled=!getKontext()?.a||!!K.pick;b.textContent=txt;b.setAttribute('aria-pressed',String(!!aktiv));}
     }
     const mess=$('k-v2-messwert');
     if(mess){
@@ -148,6 +156,7 @@
         h('div',{id:'k-v2-bildwahl-zeile',hidden:true},
           h('label',{for:'k-v2-bildwahl'},'Bildquelle '),
           h('select',{id:'k-v2-bildwahl',disabled:true,onchange:e=>bildManuell(getKontext(),e.target.value)},h('option',{value:'auto'},'Automatisch'))),
+        h('div',{id:'k-v2-platzierung',hidden:true}),
         gruppe('Werkzeuge',[
           ...['pin','zone','messen'].map((art,i)=>h('button',{type:'button',id:'k-v2-werkzeug-'+art,disabled:true,'aria-pressed':'false',
             onclick:()=>{if(aktiv(getKontext())&&getKontext().a)karteWerkzeugWaehlen(art);}},['Pin setzen','Zone markieren','Messen'][i]))]),

@@ -1702,7 +1702,7 @@ function karteKlickVerarbeiten(eingabe, neu) {
   if (typeof K.pick === 'string' && K.pick.indexOf('SI:') === 0) {      /* Sichtung platzieren: Entwurfs-Pin zum Dossier */
     const eid = K.pick.slice(3), de = entitaet(eid);
     K.pick = null;
-    if (de) {
+    if (de && (typeof dossierGesperrt !== 'function' || !dossierGesperrt(de))) {
       dispatch({ type: 'PIN_ANGELEGT', ll: ll, name: sichtungsPinName(), dossier: de.id, notiz: '' });
     }
     renderModule();
@@ -1991,6 +1991,20 @@ function kartenProtokollAnsicht() {
       return [td('nw', fmtZ(x.t)), td('nw', x.art), td('nw', x.objekt ? objName(x) : '–'), td('nw', x.aktion), td('txt', gesperrt(x) ? '–' : x.text || '–'), td('nw', P.frist ? fmtZ(new Date(Date.parse(x.t) + P.frist * 3600000).toISOString()) : 'nie')];
     }), filter || objFilter ? 'Keine Einträge dieser Auswahl.' : 'Noch keine Einträge.'));
 }
+/* The same placement prompt belongs to the active card surface; the
+   existing click contract still owns all mutations. */
+function kartePlatzierungsMaske() {
+  const K=VIEW.karte;
+  const fallPick = K.pick && K.pick.startsWith('X:') ? xFall(K.pick.slice(2)) : null;
+  const pickE = K.pick ? (fallPick ? { id: fallPick.id, name: fallPick.titel } : K.pick.indexOf('SI:') === 0 ? (entitaet(K.pick.slice(3)) ? { id: 'Sichtung zu ' + K.pick.slice(3), name: entitaet(K.pick.slice(3)).name } : null) : K.pick === 'CI-AUS' ? { id: 'Check-in', name: 'Ausweichort' } : K.pick.indexOf('AO-') === 0 ? (PROFIL.ausgang.find(function (x) { return x.id === K.pick; }) || null) : K.pick.indexOf('ZP-') === 0 ? { id: K.pick, name: 'Zugriffspunkt' } : entitaet(K.pick)) : null;
+  if (!pickE) return null;
+  const dossier=K.pick.startsWith('SI:')?entitaet(K.pick.slice(3)):entitaet(K.pick);
+  if(dossier&&dossierGesperrt(dossier)) return h('div',{class:'row k-pickbar'},
+    h('span',null,'Ziel nicht zugänglich.'),
+    h('button',{type:'button',id:'k-pick-x',onclick:function(){K.pick=null;if(!karteWerkzeugAktualisieren())renderModule();}},'Abbrechen'));
+  return pickE ? h('div', { class: 'row k-pickbar' }, h('span', null, fallPick ? 'Klick auf die Karte setzt einen Pin für ' + fallPick.id + ' · ' + fallPick.titel + '.' : K.pick.indexOf('SI:') === 0 ? 'Klick auf die Karte setzt einen Sichtungsentwurf zu ' + K.pick.slice(3) + ' ' + pickE.name + '.' : 'Klick auf die Karte setzt die Position von ' + pickE.id + ' ' + pickE.name + '.'),
+        h('button', { type:'button', id:'k-pick-x', onclick:function () { K.pick = null; if (!karteWerkzeugAktualisieren()) renderModule(); } }, 'Abbrechen')) : null;
+}
 function karteRegionZeigen() {
   const K=VIEW.karte,a={lat:K.lat,lon:K.lon,zoom:K.zoom};
   karteGrundansicht();
@@ -2033,8 +2047,6 @@ function renderKarte(m) {
       h('input', { type: 'checkbox', id: 'ke-' + keys[0], checked: keys.some(function (k) { return K.ebenen[k]; }), onchange: function (ev) { keys.forEach(function (k) { K.ebenen[k] = ev.target.checked; }); karteWahlSichern(); karteRendererDatenAktualisieren(); karteAuswahlAnzeige(); karteFensterListe(); if (keys[0] === 'kacheln') renderModule(); } }),
       ikon || h('span', { class: 'k-ik leer' }), h('span', null, text));
   };
-  const fallPick = K.pick && K.pick.startsWith('X:') ? xFall(K.pick.slice(2)) : null;
-  const pickE = K.pick ? (fallPick ? { id: fallPick.id, name: fallPick.titel } : K.pick.indexOf('SI:') === 0 ? (entitaet(K.pick.slice(3)) ? { id: 'Sichtung zu ' + K.pick.slice(3), name: entitaet(K.pick.slice(3)).name } : null) : K.pick === 'CI-AUS' ? { id: 'Check-in', name: 'Ausweichort' } : K.pick.indexOf('AO-') === 0 ? (PROFIL.ausgang.find(function (x) { return x.id === K.pick; }) || null) : K.pick.indexOf('ZP-') === 0 ? { id: K.pick, name: 'Zugriffspunkt' } : entitaet(K.pick)) : null;
   const kopf = [knopf('k-raum', 'Region', karteRegionZeigen),
     knopf('k-eu', 'Europa', function () { karteFlug(50, 10, 4.4); }),
     knopf('k-welt', 'Welt', function () { karteFlug(25, 20, 1.9); }),
@@ -2108,8 +2120,7 @@ function renderKarte(m) {
     modKopf(m),
     kartenReiter('karte'),
     panel('Lagekarte', null,
-      pickE ? h('div', { class: 'row k-pickbar' }, h('span', null, fallPick ? 'Klick auf die Karte setzt einen Pin für ' + fallPick.id + ' · ' + fallPick.titel + '.' : K.pick.indexOf('SI:') === 0 ? 'Klick auf die Karte setzt einen Sichtungsentwurf zu ' + K.pick.slice(3) + ' ' + pickE.name + '.' : 'Klick auf die Karte setzt die Position von ' + pickE.id + ' ' + pickE.name + '.'),
-        knopf('k-pick-x', 'Abbrechen', function () { K.pick = null; renderModule(); })) : null,
+      (typeof KARTE_V2_DEV==='undefined'||!KARTE_V2_DEV.aktiviert) ? kartePlatzierungsMaske() : null,
       h('div', { class: 'row' }, kopf),
       h('div', { class: 'karte-wrap' + (K.ansicht3d ? ' ist3d' : '') }, svg, K.ansicht3d ? karte3dRahmen() : null, leiste,
         typeof KARTE_V2_DEV==='undefined'||!KARTE_V2_DEV.aktiviert ? h('div', { class: 'k-status', id: 'k-status', 'aria-label': 'Lage' }) : null,

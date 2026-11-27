@@ -917,6 +917,47 @@ function assertCamera(actual,expected){
     assert.equal(await p.evaluate(()=>__k4Adapter===KARTE_V2_DEV.adapter()),true,'overview/orientation preserve map');
     assert.equal(stilAbrufe(),stilVor);assert.equal(bildAnfragen.length,bildVor);
   }
+  {
+    // Placement masks must be visible in the new surface even in fullscreen.
+    // Use the existing authorized and locked synthetic dossiers from above.
+    await p.evaluate(id=>{
+      Object.assign(VIEW.karte,{pick:'SI:'+id,lat:52.505,lon:13.405,zoom:15,auswahl:null});
+      renderModule();
+    },f.b);
+    await ready();
+    assert.equal(await p.locator('#k-v2-platzierung #k-pick-x').count(),1);
+    assert.equal(await p.locator('#k-pick-x').count(),1);
+    assert.match(await p.locator('#k-v2-platzierung').innerText(),/Sichtungsentwurf.*K2 Sued/);
+    assert.ok(await p.locator('#k-v2-werkzeug-pin').isDisabled());
+    await p.click('#k-v2-voll');
+    assert.ok(await p.locator('#k-v2-platzierung').isVisible());
+    const before=await p.evaluate(()=>{window.__pickAdapter=KARTE_V2_DEV.adapter();return {pins:PROFIL.pins.length,cam:__pickAdapter.camera()};});
+    await p.click('#k-pick-x');
+    assert.equal(await p.evaluate(()=>VIEW.karte.pick),null);
+    assert.equal(await p.locator('#k-v2-platzierung').isVisible(),false);
+    assert.equal(await p.locator('#k-v2-werkzeug-pin').isDisabled(),false);
+    assert.equal(await p.evaluate(()=>__pickAdapter===KARTE_V2_DEV.adapter()),true);
+    assert.equal(await p.evaluate(()=>PROFIL.pins.length),before.pins);
+    assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),before.cam);
+    await p.click('#k-v2-voll');
+    // Actual dossier location placement via the common click contract.
+    await p.evaluate(id=>{VIEW.karte.pick=id;VIEW.karte.auswahl=null;renderModule();},f.b);
+    await ready();
+    assert.match(await p.locator('#k-v2-platzierung').innerText(),/Position.*K2 Sued/);
+    await click([52.505,13.405]);
+    await ready();
+    assert.deepEqual(await p.evaluate(id=>PROFIL.koord[id],f.b),[52.505,13.405]);
+    assert.equal(await p.locator('#k-v2-platzierung').isVisible(),false);
+    // Stale locked sighting placement must not disclose a name or write a pin.
+    await p.evaluate(id=>{VIEW.karte.pick='SI:'+id;VIEW.karte.auswahl=null;renderModule();},f.a);
+    await ready();
+    assert.match(await p.locator('#k-v2-platzierung').innerText(),/Ziel nicht zugänglich/);
+    const pinsVor=await p.evaluate(()=>PROFIL.pins.length);
+    await click([52.505,13.405]);await ready();
+    assert.equal(await p.evaluate(()=>PROFIL.pins.length),pinsVor);
+    assert.equal(await p.evaluate(()=>VIEW.karte.pick),null);
+    assert.equal(await p.locator('#k-v2-platzierung').isVisible(),false);
+  }
   await p.close();
   // Echtes Laden des alten Browserprofils mit abweichender Schlüsseldatei.
   // Nur der in .kartenwahl bereits vorhandene Key darf verwendet werden.
