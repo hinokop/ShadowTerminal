@@ -355,6 +355,7 @@
     b.setAttribute('aria-pressed',String(voll));
     b.textContent=voll?'Vollbild verlassen (Esc)':'Vollbild';
     if(aktiv(c)&&c.a){c.a.resize();kameraAnzeige(c);}
+    kartePopupPos();
   }
   function vollWaehlen(wert){
     const c=kontext;if(!aktiv(c)||!c.a)return;
@@ -384,13 +385,14 @@
           h('summary',{style:'cursor:pointer;'},'Rechercheebenen und Legende'),
           h('div',{id:'k-v2-legendenliste',style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(155px,100%),1fr));gap:4px 12px;margin:6px 0;'}),
           h('small',null,'Objekte werden nach den vorhandenen Zugriffs- und Ebenenfiltern angezeigt. Basiskartenbeschriftungen sind davon unabhängig.'))),
-      h('div',{id:'k-v2-map',style:'position:relative;width:100%;box-sizing:border-box;height:clamp(420px,60vh,850px);min-height:240px;background:#101820;border:1px solid var(--border);'}),
+      h('div',{id:'k-v2-buehne'},
+        h('div',{id:'k-v2-map',style:'position:relative;width:100%;box-sizing:border-box;height:clamp(420px,60vh,850px);min-height:240px;background:#101820;border:1px solid var(--border);'}),
+        h('div',{id:'k-v2-paneele'},
+          h('div',{class:'k-status',id:'k-status','aria-label':'Lage'}),
+          h('div',{class:'k-popup',id:'k-auswahl',hidden:true,'aria-live':'polite',role:'region','aria-label':'Objektinspektor'}))),
       h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);'},
         h('div',{id:'k-v2-kamera',style:'font-size:11px;font-variant-numeric:tabular-nums;'},'Kamera wird geladen.'),
         h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Karte wird geladen. Voyager ist die Standardkarte.')),
-      h('div',{id:'k-v2-paneele',style:'display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;padding:12px;'},
-        h('div',{class:'k-status',id:'k-status','aria-label':'Lage',style:'position:static;max-width:none;width:auto;flex:1 1 240px;min-width:0;overflow-wrap:anywhere;box-sizing:border-box;'}),
-        h('div',{class:'k-popup',id:'k-auswahl',hidden:true,'aria-live':'polite',style:'position:static;transform:none;width:auto;flex:1 1 320px;min-width:0;overflow-wrap:anywhere;max-height:55vh;box-sizing:border-box;'})),
       h('details',{class:'pad',style:'border-top:1px solid var(--border);'},h('summary',null,'Technische Hinweise und Diagnose'),
         h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die alte Lagekarte. Die gemeinsame Kamera folgt in K4.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
@@ -571,6 +573,7 @@
       c.map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
       c.map.addControl(new maplibregl.ScaleControl({maxWidth:100,unit:'metric'}),'bottom-left');
       let letzteMitte=mitte();
+      c.map.on('resize',()=>{if(aktiv(c))kartePopupPos();});
       c.map.on('dragstart',()=>{if(aktiv(c)){VIEW.karte.bezug=null;VIEW.karte.bezugRenderKey=null;}});
       c.map.on('moveend',()=>{
         if(!aktiv(c))return;

@@ -1113,9 +1113,18 @@ function karteFensterListe() {
 function kartePopupZiehbar(kopf, box) {
   kopf.addEventListener('pointerdown', function (ev) {
     if (ev.button > 0 || (ev.target.closest && ev.target.closest('button'))) return;
-    const K = VIEW.karte, v0 = K.popupVersatz || { x: 0, y: 0 }, x0 = ev.clientX, y0 = ev.clientY;
+    const K = VIEW.karte, gemeinsam = karteGemeinsamePaneele(), v0 = K.popupVersatz || { x: 0, y: 0 }, x0 = ev.clientX, y0 = ev.clientY;
+    const start = gemeinsam ? {x: box.offsetLeft, y: box.offsetTop} : v0;
     try { kopf.setPointerCapture(ev.pointerId); } catch (e) { /* ohne Capture */ }
-    const bew = function (e2) { K.popupVersatz = { x: v0.x + e2.clientX - x0, y: v0.y + e2.clientY - y0 }; box.style.translate = K.popupVersatz.x + 'px ' + K.popupVersatz.y + 'px'; };
+    const bew = function (e2) {
+      if (gemeinsam) {
+        box._v2FensterPos = { x: start.x + e2.clientX - x0, y: start.y + e2.clientY - y0 };
+        kartePopupPos();
+      } else {
+        K.popupVersatz = { x: v0.x + e2.clientX - x0, y: v0.y + e2.clientY - y0 };
+        box.style.translate = K.popupVersatz.x + 'px ' + K.popupVersatz.y + 'px';
+      }
+    };
     const ende = function () { kopf.removeEventListener('pointermove', bew); kopf.removeEventListener('pointerup', ende); kopf.removeEventListener('pointercancel', ende); };
     kopf.addEventListener('pointermove', bew); kopf.addEventListener('pointerup', ende); kopf.addEventListener('pointercancel', ende);
     ev.preventDefault();
@@ -1124,9 +1133,20 @@ function kartePopupZiehbar(kopf, box) {
 function kartePopupPos() {
   const box = $('k-auswahl'), K = VIEW.karte;
   if (box && karteGemeinsamePaneele()) {
-    // Shared dock: independent of SVG projection and camera pitch.
-    box.style.visibility = 'visible'; box.style.translate = ''; box.style.left = ''; box.style.right = '';
-    box.style.top = ''; box.style.transform = 'none'; box.classList.remove('links','unten'); return;
+    // Floating non-modal window in the overlay, independent of both cameras.
+    // Preserve its position for the same object; clamp after drag/resize.
+    if (box.hidden) return;
+    box.style.visibility = 'visible'; box.style.translate = ''; box.style.transform = 'none';
+    box.style.left = ''; box.style.right = ''; box.style.top = ''; box.style.bottom = '';
+    box.classList.remove('links','unten');
+    const p = box._v2FensterPos, rahmen = $('k-v2-paneele');
+    if (p && rahmen && rahmen.clientWidth && rahmen.clientHeight) {
+      const x = Math.max(8, Math.min(p.x, rahmen.clientWidth - box.offsetWidth - 8));
+      const y = Math.max(8, Math.min(p.y, rahmen.clientHeight - box.offsetHeight - 8));
+      box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.bottom = 'auto';
+      box._v2FensterPos = {x:x,y:y};
+    }
+    return;
   }
   if (box) box.style.translate = K.popupVersatz ? K.popupVersatz.x + 'px ' + K.popupVersatz.y + 'px' : '';
   if (box && K.ansicht3d) { if (box.hidden) return; box.style.visibility = 'visible'; box.style.left = 'auto'; box.style.right = '64px'; box.style.top = '64px'; box.style.transform = 'none'; return; }
@@ -1160,7 +1180,9 @@ function karteAuswahlAnzeige() {
       // Only remember the collapsed state for the same visible selection in this DOM.
       // No new persistence, no changes to selection or weather/reference state.
       const key = JSON.stringify([id, karteAuswahlSchluessel(), VIEW.karte.mehr || []]);
-      const offen = box.hidden || box._v2InspektorKey !== key || box._v2InspektorOffen !== false;
+      const neu = box.hidden || box._v2InspektorKey !== key;
+      const offen = neu || box._v2InspektorOffen !== false;
+      if (neu) box._v2FensterPos = null;
       box._v2InspektorKey = key;
       body.id = 'k-v2-inspektor-body';
       function zustand(wert) {
@@ -1168,16 +1190,16 @@ function karteAuswahlAnzeige() {
         body.hidden = !wert;
         klapp.setAttribute('aria-expanded', String(wert));
         klapp.textContent = wert ? 'Einklappen' : 'Ausklappen';
+        if (body.isConnected) kartePopupPos();
       }
       klapp = h('button', { type: 'button', class: 'link', id: 'k-v2-inspektor-klapp', 'aria-controls': body.id,
         onclick: function () { zustand(body.hidden); } });
       zustand(offen);
     }
-    const kk = h('div', { class: 'k-pop-kopf', title: gemeinsam ? 'Objektinspektor' : 'Zum Verschieben ziehen',
-      ...(gemeinsam ? {style: 'cursor:default;touch-action:auto;flex-wrap:wrap;'} : {}) },
+    const kk = h('div', { class: 'k-pop-kopf', title: 'Zum Verschieben ziehen' },
       h('strong', null, kopf), gemeinsam ? h('span', {style:'display:flex;align-items:center;gap:8px;'}, klapp, zu) : zu);
     box.hidden = false;
-    if (!gemeinsam) kartePopupZiehbar(kk, box);
+    kartePopupZiehbar(kk, box);
     box.replaceChildren(kk, body); kartePopupPos();
   };
   if (VIEW.karte.mehr && VIEW.karte.mehr.length) { zonenMehrPanel(fertig); return; }

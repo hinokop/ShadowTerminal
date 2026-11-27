@@ -158,6 +158,41 @@ function assertCamera(actual,expected){
   assert.equal(await p.locator('#k-auswahl').count(),1);
   assert.equal(await p.locator('#k-status').count(),1);
   assert.match(await p.locator('#k-st-objekt').innerText(),/K2 Sued/);
+  // K3f-2: panels are overlay siblings, not MapLibre children or a lower dock.
+  const overlayBounds=()=>p.evaluate(()=>{
+    const r=id=>{const b=$(id).getBoundingClientRect();return {left:b.left,top:b.top,right:b.right,bottom:b.bottom,width:b.width,height:b.height};};
+    return {map:r('k-v2-map'),lage:r('k-status'),inspektor:r('k-auswahl')};
+  });
+  const panelsInside=()=>p.evaluate(()=>{
+    const m=$('k-v2-map').getBoundingClientRect(), within=e=>{
+      const r=e.getBoundingClientRect();return r.left>=m.left&&r.top>=m.top&&r.right<=m.right&&r.bottom<=m.bottom;
+    };
+    return within($('k-status'))&&within($('k-auswahl'));
+  });
+  assert.equal(await p.locator('#k-v2-buehne > #k-v2-paneele').count(),1);
+  assert.equal(await p.locator('#k-v2-map #k-status, #k-v2-map #k-auswahl').count(),0);
+  assert.equal(await panelsInside(),true);
+  const ov=await overlayBounds();
+  assert.ok(ov.lage.top-ov.map.top<20&&ov.map.right-ov.lage.right<65&&ov.lage.left>ov.map.left+ov.map.width/2,'Lage oben rechts, Navigation frei');
+  assert.ok(ov.inspektor.left-ov.map.left<20&&ov.inspektor.top-ov.map.top<20,'Inspektor frei über Karte');
+  assert.equal(await p.evaluate(()=>getComputedStyle($('k-v2-paneele')).pointerEvents),'none');
+  const dragCam=await p.evaluate(()=>{window.__panelAdapter=KARTE_V2_DEV.adapter();return __panelAdapter.camera();});
+  const dragNet=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
+  const kopf=p.locator('#k-auswahl .k-pop-kopf strong');
+  await kopf.scrollIntoViewIfNeeded();
+  const dr=await kopf.boundingBox();assert.ok(dr);
+  await p.mouse.move(dr.x+dr.width/2,dr.y+dr.height/2);
+  await p.mouse.down();await p.mouse.move(dr.x+dr.width/2+24,dr.y+dr.height/2+32,{steps:5});await p.mouse.up();
+  const gezogen=await overlayBounds();
+  assert.ok(Math.abs((gezogen.inspektor.left-gezogen.map.left)-(ov.inspektor.left-ov.map.left)-24)<=2);
+  assert.ok(Math.abs((gezogen.inspektor.top-gezogen.map.top)-(ov.inspektor.top-ov.map.top)-32)<=2);
+  assert.equal(await panelsInside(),true);
+  assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
+  assert.equal(await p.evaluate(()=>__panelAdapter===KARTE_V2_DEV.adapter()),true);
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),dragCam);
+  await p.evaluate(()=>karteAuswahlAnzeige());
+  const neu=await overlayBounds();assert.ok(Math.abs(neu.inspektor.left-gezogen.inspektor.left)<=2&&Math.abs(neu.inspektor.top-gezogen.inspektor.top)<=2,'same object retains window position');
+  assert.deepEqual([anfragen.length,bildAnfragen.length,wetterAnfragen.length],dragNet);
   assert.equal(await p.evaluate(({si})=>kartePanelObjekt(si,null),f),null,'duplicate ID without typed key');
   await click([52.505,13.395],key('pin',f.pin));
   assert.match(await p.locator('#k-auswahl').innerText(),/K2 Pin/);
@@ -234,11 +269,13 @@ function assertCamera(actual,expected){
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),layoutVor.cam);
   assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
   assert.equal(await p.locator('#k-v2-paneele #k-status').count(),1);
+  assert.equal(await panelsInside(),true);
   // Actual layout at small viewport, then restore before camera comparisons.
   await p.setViewportSize({width:800,height:600});
   await p.waitForFunction(()=>Math.abs($('k-v2-panel').getBoundingClientRect().width-innerWidth)<=2);
   assert.ok(await p.locator('#k-v2-voll').isVisible());
   assert.ok(await p.evaluate(()=>{const a=$('k-v2-map').getBoundingClientRect(),b=$('k-v2-panel').getBoundingClientRect();return a.left>=b.left-1&&a.right<=b.right+1;}),'Karte bleibt im Vollbildrahmen');
+  assert.equal(await panelsInside(),true,'both overlays stay within map on small viewport');
   await p.setViewportSize({width:1500,height:1100});
   await p.locator('#k-v2-voll').focus();await p.keyboard.press('Escape');
   assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'false');
