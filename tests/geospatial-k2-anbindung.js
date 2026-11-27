@@ -841,6 +841,7 @@ function assertCamera(actual,expected){
     await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await ready();
     assertCamera(await gemeinsameCam(),zurueck);
     await p.evaluate(()=>{window.__k4Adapter=KARTE_V2_DEV.adapter();});
+    await providerDrain();
     const stilVor=stilAbrufe(),bildVor=bildAnfragen.length,frameVor=await p.locator('#k-3d-frame').count();
     await p.click('#k-3d');
     await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().pitch-60)<1e-6&&$('k-3d').textContent==='2D');
@@ -856,22 +857,63 @@ function assertCamera(actual,expected){
     assertCamera(await gemeinsameCam(),zurueck);
     await p.click('#k-v2-geneigt');
     await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===60&&$('k-3d').textContent==='2D');
-    await p.click('#k-v2-welt');
-    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-1.4)<1e-6&&KARTE_V2_DEV.adapter().camera().pitch===0);
-    const welt=await gemeinsameCam();assert.ok(Math.abs(welt.center[0]-20)<1e-6&&Math.abs(welt.center[1]-25)<1e-6);
-    await p.click('#k-v2-europa');
-    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-3.9)<1e-6);
-    await gemeinsameCam();
-    // Region uses the established legacy region calculation, which may
-    // depend on the profile. Compare both real controls rather than hardcode
-    // the empty-scenario fallback zoom alone.
-    await p.click('#k-raum');
-    const region=await gemeinsameCam();
-    await p.click('#k-v2-europa');
-    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-3.9)<1e-6);
-    await p.click('#k-v2-region');
-    await p.waitForFunction(z=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-z)<1e-6,region.zoom);
-    assertCamera(await gemeinsameCam(),region);
+    // The pinned MapLibre 4.7.1 transform constrains both longitude and
+    // latitude and may raise minimum zoom when world copies are disabled.
+    // Observe the actual requested target separately from the attainable
+    // camera. The isolated transform is an oracle for MapLibre's policy,
+    // not a call to our production camera controller or a second map.
+    await p.evaluate(()=>{
+      const proto=maplibregl.Map.prototype,original=proto.jumpTo;
+      window.__overviewJumps=[];
+      proto.jumpTo=function(opts,...args){
+        if(this.getContainer().id==='k-v2-map'&&Array.isArray(opts?.center)&&Number.isFinite(opts.zoom)){
+          const tr=this.transform.clone();
+          tr.zoom=opts.zoom;
+          tr.center=maplibregl.LngLat.convert(opts.center);
+          if(opts.bearing!==undefined)tr.bearing=opts.bearing;
+          if(opts.pitch!==undefined)tr.pitch=opts.pitch;
+          window.__overviewJumps.push({
+            request:{center:opts.center.slice(),zoom:opts.zoom,pitch:opts.pitch??this.getPitch(),bearing:opts.bearing??this.getBearing()},
+            expected:{center:tr.center.toArray(),zoom:tr.zoom,pitch:tr.pitch,bearing:tr.bearing},
+            size:{width:tr.width,height:tr.height},singleWorld:!this.getRenderWorldCopies()
+          });
+        }
+        return original.call(this,opts,...args);
+      };
+      window.__restoreOverview=()=>{proto.jumpTo=original;delete window.__restoreOverview;};
+    });
+    try{
+      const uebersicht=async(selector,target)=>{
+        await p.evaluate(()=>{window.__overviewJumps=[];});
+        await p.click(selector);
+        // reducedMotion=reduce: production uses synchronous jumpTo.
+        const jumps=await p.evaluate(()=>window.__overviewJumps);
+        assert.equal(jumps.length,1,selector+' exactly one camera command: '+JSON.stringify(jumps));
+        const j=jumps[0],actual=await gemeinsameCam();
+        assert.equal(j.singleWorld,true,'single world retained');
+        assert.ok(j.size.width>0&&j.size.height>0,'real viewport');
+        if(target)assertCamera(j.request,target);
+        if(j.request.zoom<4){
+          assert.equal(j.request.pitch,0,selector+' requested flat overview');
+          assert.ok(j.request.bearing===0,selector+' requested north-up overview');
+        }
+        // Compare every parameter; allow only numerical projection residue.
+        // The constrained minimum zoom may differ from the requested zoom.
+        assert.ok(Math.abs(actual.zoom-j.expected.zoom)<1e-9,selector+' zoom '+JSON.stringify(j)+' actual '+JSON.stringify(actual));
+        assertCamera(actual,{...j.expected,zoom:actual.zoom});
+        return {actual,request:j.request};
+      };
+      await uebersicht('#k-v2-welt',{center:[20,25],zoom:1.9-.5,pitch:0,bearing:0});
+      await uebersicht('#k-v2-europa',{center:[10,50],zoom:4.4-.5,pitch:0,bearing:0});
+      // Region depends on the existing profile. Both controls must issue
+      // identical requests and reach the same constrained real camera.
+      const region=await uebersicht('#k-raum');
+      await uebersicht('#k-v2-europa',{center:[10,50],zoom:4.4-.5,pitch:0,bearing:0});
+      const v2Region=await uebersicht('#k-v2-region');
+      assertCamera(v2Region.request,region.request);
+      assertCamera(v2Region.actual,region.actual);
+    }finally{await p.evaluate(()=>window.__restoreOverview?.());}
+    await providerDrain();
     assert.equal(await p.evaluate(()=>__k4Adapter===KARTE_V2_DEV.adapter()),true,'overview/orientation preserve map');
     assert.equal(stilAbrufe(),stilVor);assert.equal(bildAnfragen.length,bildVor);
   }
