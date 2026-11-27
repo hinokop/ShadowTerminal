@@ -177,7 +177,7 @@
     return h('section',{class:'panel',id:'k-v2-panel'},
       h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:8px;min-width:0;'},
         h('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;'},
-          h('strong',null,'Lagekarte · MapLibre'),h('small',null,'Entwicklungsansicht'),
+          h('strong',null,'Lagekarte · MapLibre'),h('small',null,root.KARTE_V2_DEV?.solo?'Eigenständige Testansicht':'Entwicklungsansicht'),
           h('button',{type:'button',id:'k-v2-voll',disabled:true,'aria-pressed':String(getVoll()),onclick:()=>vollWaehlen(!getVoll())},getVoll()?'Vollbild verlassen (Esc)':'Vollbild')),
         h('div',{style:'display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;'},
           gruppe('Basiskarte',Object.keys(namen).map(n=>h('button',{type:'button',id:'k-v2-'+n,disabled:true,'aria-pressed':String(n==='leer'),onclick:()=>wechseln(getKontext(),n)},namen[n]))),
@@ -228,7 +228,17 @@
       h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);'},
         h('div',{id:'k-v2-kamera',style:'font-size:11px;font-variant-numeric:tabular-nums;'},'Kamera wird geladen.'),
         h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Karte wird geladen. Shadow ist die Standardkarte.')),
+      h('p',{id:'k-v2-systemmeldung',class:'note pad','aria-hidden':'true',style:'overflow-wrap:anywhere;'},$('sys-msg')?.textContent||''),
       h('details',{class:'pad',style:'border-top:1px solid var(--border);'},h('summary',null,'Technische Hinweise und Diagnose'),
+        root.KARTE_V2_DEV?.solo?h('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap;'},
+          h('label',{for:'k-v2-carto-key'},'CARTO-Schlüssel'),
+          h('input',{id:'k-v2-carto-key',type:'password',autocomplete:'off',spellcheck:'false',value:VIEW.karte.cartoKey||''}),
+          h('button',{type:'button',onclick:()=>{
+            const feld=$('k-v2-carto-key');if(!feld||!aktiv(getKontext()))return;
+            VIEW.karte.cartoKey=feld.value.trim();karteWahlSichern();
+            const c=getKontext();
+            if(c.a&&['voyager','shadow','hybrid'].includes(c.modus))wechseln(c,c.modus);
+            meldung('CARTO-Schlüssel aktualisiert.');}},'Übernehmen')):null,
         h('p',{class:'note'},'Mitte, Zoom, Zentrieren und der 3D-Schalter der SVG-Lagekarte steuern die gemeinsame V2-Ansicht. Die alte 3D-Ansicht bleibt im Standardmodus verfügbar.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('button',{type:'button',id:'k-v2-qualitaet',onclick:qualitaetsbericht},'Qualitätsbericht'),

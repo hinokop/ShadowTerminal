@@ -3,7 +3,8 @@
    K2c-1: explizite Vektorstile, lokaler Schlüssel, leerer bedienbarer Rückfall. */
 (function(root){
   'use strict';
-  const dev=new URLSearchParams(location.search).get('geospatial-v2')==='1';
+  const modus=new URLSearchParams(location.search).get('geospatial-v2');
+  const solo=modus==='solo',dev=modus==='1'||solo;
   let kontext=null, laden=null, sitzung=null, voll=false, rueckfall=false;
   const v2Aktiv=()=>dev&&!rueckfall;
   /* Nur Opt-in, vor allen MapLibre-Netzanfragen. Die Standardansicht bleibt unverändert. */
@@ -164,9 +165,17 @@
     const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,bildWahl:alt?.bildWahl||'auto',bildAusgefallen:alt?.bildAusgefallen?.slice()||[],bildQuelle:null,bildSourceId:null,hyb:null,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null,fehlerTimer:null};
     kachelReset(c);kontext=c;layout(c);
     c.vollTaste=e=>{
-      if(!aktiv(c)||!voll||e.key!=='Escape'||e.defaultPrevented||$('dlg')?.open||$('regie')?.open)return;
+      if(!aktiv(c)||!c.a||e.key!=='Escape'||e.defaultPrevented||$('dlg')?.open||$('regie')?.open)return;
       if(['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName)&&e.target.type!=='checkbox'&&e.target.type!=='radio')return;
-      e.preventDefault();e.stopPropagation();vollWaehlen(false);
+      if(!voll&&!$('k-v2-panel')?.contains(e.target))return;
+      const K=VIEW.karte;
+      if(K.pick||K.pinSetzen||K.zoneSetzen||K.zugriffSetzen||K.messen){
+        e.preventDefault();e.stopPropagation();
+        K.pick=null;K.pinSetzen=false;K.zoneSetzen=false;K.zugriffSetzen=false;K.messen=false;K.messPts=[];
+        if(!karteWerkzeugAktualisieren())renderModule();
+        return;
+      }
+      if(voll){e.preventDefault();e.stopPropagation();vollWaehlen(false);}
     };
     document.addEventListener('keydown',c.vollTaste,true);
     bibliothek().then(()=>{
@@ -194,7 +203,7 @@
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
       quelle.ereignisse(c);
       knoepfe(c);gebaeudeKnoepfe(c);
-      sync();kameraTeilen(c);karteStatusAkt();kameraAnzeige(c);
+      sync();kameraTeilen(c);karteAuswahlAnzeige();karteStatusAkt();kameraAnzeige(c);
       $('k-v2-voll').disabled=false;layout(c);
       if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);
       else if(!alt)wechseln(c,'shadow');
@@ -205,5 +214,5 @@
   /* Nur für die Entwicklungsansicht; Rückgabe der Adapterreferenz zur Prüfung
      tatsächlicher Treffer und des Lebenszyklus, kein zusätzlicher Datenbestand. */
   root.KARTE_V2_DEV=Object.freeze({ansicht:()=>v2Aktiv()?ansicht():null,mount,unmount,sync,mitte,kameraSetzen,ansichtUmschalten,
-    get aktiviert(){return v2Aktiv();},get rueckfall(){return rueckfall;},adapter:()=>aktiv(kontext)?kontext.a:null});
+    get aktiviert(){return v2Aktiv();},get solo(){return solo&&v2Aktiv();},get rueckfall(){return rueckfall;},adapter:()=>aktiv(kontext)?kontext.a:null});
 })(window);

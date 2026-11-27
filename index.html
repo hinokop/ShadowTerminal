@@ -3964,7 +3964,11 @@ function renderSysbar() {
     ? 'Archiv pgcl-eu3.arch07 verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1–4 · P, L, X'
     : 'Archiv pgcl-eu3.arch07 nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1–4 · P, L, X';
 }
-function meldung(text) { $('sys-msg').textContent = text ? dtg(new Date()) + ' · ' + text : ''; }
+function meldung(text) {
+  const msg=text ? dtg(new Date()) + ' · ' + text : '';
+  $('sys-msg').textContent=msg;
+  const spiegel=$('k-v2-systemmeldung');if(spiegel)spiegel.textContent=msg;
+}
 
 /* leicht = true: Modulbereich bleibt stehen, nur die Änderungszeitstempel der Freitextfelder werden nachgeführt */
 function render(leicht) {

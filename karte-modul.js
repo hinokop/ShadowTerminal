@@ -1343,9 +1343,10 @@ function zonenMehrPanel(fertig) {
 /* K1c-2a: ein frischer, gefilterter Snapshot für beide Renderer.
    Kamera-Redraws und Kachelnachladen bleiben beim SVG; keine 3D-Datenflut beim Ziehen. */
 function karteRendererDatenAktualisieren() {
-  if (!KARTE_ST || !KARTE_ST.aktiv()) return;
+  const svgAktiv=!!KARTE_ST&&KARTE_ST.aktiv();
+  if (!svgAktiv&&!karteGemeinsamePaneele()) return;
   const modell = karteRenderModell();
-  KARTE_ST.setData(modell);
+  if(svgAktiv)KARTE_ST.setData(modell);
   KARTE_3D_ADAPTER.setData(modell);
   if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.sync(modell);
   if (karteGemeinsamePaneele()) {
@@ -1748,7 +1749,7 @@ function karteWerkzeugWaehlen(art) {
     K.zoneSetzen = K.zoneSetzen === 'eigen' ? false : 'eigen'; K.pinSetzen = false; K.zugriffSetzen = false; K.messen = false; K.messPts = [];
   } else if (art === 'messen') {
     if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; }
-    else { K.messen = true; K.auswahl = null; }
+    else { K.messen = true; K.auswahl = null; K.pinSetzen=false; K.zoneSetzen=false; K.zugriffSetzen=false; }
   } else return;
   if (!karteWerkzeugAktualisieren()) renderModule();
 }
@@ -2093,6 +2094,11 @@ function renderKarte(m) {
     K.zugriffSetzen = false;
     K.mehr = [];
     K.mehrModus = false;
+  }
+  // Separate opt-in: no hidden SVG DOM, tile requests or adapter.
+  if(!def&&typeof KARTE_V2_DEV!=='undefined'&&KARTE_V2_DEV.solo){
+    K.ansicht3d=false;
+    return [modKopf(m),kartenReiter('karte'),KARTE_V2_DEV.ansicht()].filter(Boolean);
   }
   const svg = s('svg', { id: 'k-svg', class: 'karte-svg' + (K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen ? ' pick' : '') + (K.messen ? ' messen' : ''), viewBox: '0 0 ' + KW + ' ' + KH, role: 'application', tabindex: '-1', 'aria-label': 'Karte, mit Maus ziehen und Mausrad zoomen' });
   const st = karteSteuerung(svg); KARTE_ST = st;

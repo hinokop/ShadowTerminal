@@ -1,0 +1,65 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {chromium}=require('playwright');
+const {APP}=require('./_pfad');
+(async()=>{
+ const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
+ try{
+  const p=await b.newPage({viewport:{width:1500,height:1100},reducedMotion:'reduce'});
+  const net=[],errors=[];p.on('pageerror',e=>errors.push(e.message));
+  await p.route(/^https?:/,r=>{net.push(r.request().url());return r.abort();});
+  await p.addInitScript(()=>{Element.prototype.requestFullscreen=()=>Promise.resolve();});
+  await p.goto(APP+'?geospatial-v2=solo');
+  await p.fill('#gate-pw','pw-test-123');if(await p.isVisible('#gate-pw2'))await p.fill('#gate-pw2','pw-test-123');await p.click('#gate-go');
+  await p.waitForFunction(()=>!document.body.classList.contains('locked'));
+  const id=await p.evaluate(()=>{
+    VIEW.karte.cartoKey='';VIEW.karte.ebenen.kacheln=false;
+    dispatch({type:'PIN_ANGELEGT',name:'K4 Solo Test',ll:[52.5,13.4]});
+    const id=PROFIL.pins.at(-1).id;
+    dispatch({type:'NAVIGATION',modul:'karte'});
+    Object.assign(VIEW.karte,{lat:52.5,lon:13.4,zoom:15,init:true,auswahl:id});
+    renderModule();return id;
+  });
+  await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready()&&$('k-v2-status')?.textContent.includes('Kein lokaler CARTO-Schlüssel'));
+  assert.equal(await p.locator('#k-svg').count(),0);
+  assert.equal(await p.evaluate(()=>KARTE_ST===null&&KARTE_V2_DEV.solo),true);
+  assert.equal(await p.locator('#pin-name').inputValue(),'K4 Solo Test');
+  await p.evaluate(()=>{window.__soloAdapter=KARTE_V2_DEV.adapter();});
+  await p.locator('#k-v2-legende summary').click();await p.uncheck('#k-v2-eb-pins');
+  assert.equal(await p.locator('#k-auswahl').isVisible(),false);
+  await p.check('#k-v2-eb-pins');
+  await p.locator('#k-v2-legende summary').click();
+  await p.fill('#k-v2-suche','K4 Solo Test');await p.locator('#k-v2-suchergebnisse button').first().click();
+  assert.equal(await p.evaluate(()=>VIEW.karte.auswahl),id);
+  await p.click('#k-v2-werkzeug-pin');await p.click('#k-v2-werkzeug-messen');
+  assert.equal(await p.evaluate(()=>VIEW.karte.messen&&!VIEW.karte.pinSetzen&&!VIEW.karte.zoneSetzen),true);
+  await p.click('#k-v2-voll');await p.keyboard.press('Escape');
+  assert.equal(await p.evaluate(()=>VIEW.karte.messen),false);
+  assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'true');
+  await p.evaluate(()=>meldung('K4 Testmeldung'));
+  assert.match(await p.locator('#k-v2-systemmeldung').innerText(),/K4 Testmeldung/);
+  await p.keyboard.press('Escape');assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'false');
+  assert.equal(await p.evaluate(()=>__soloAdapter===KARTE_V2_DEV.adapter()),true);
+  await p.click('#k-v2-werkzeug-pin');
+  await p.locator('#k-v2-map canvas.maplibregl-canvas').scrollIntoViewIfNeeded();
+  const ziel=await p.evaluate(()=>{
+    const canvas=$('k-v2-map').querySelector('canvas.maplibregl-canvas'),r=canvas.getBoundingClientRect();
+    const q=KARTE_V2_DEV.adapter().project([52.501,13.401]);
+    return [r.left+q.x,r.top+q.y];
+  });
+  assert.ok(ziel.every(Number.isFinite));
+  assert.equal(await p.evaluate(([x,y])=>document.elementFromPoint(x,y)===$('k-v2-map').querySelector('canvas.maplibregl-canvas'),ziel),true);
+  const n=await p.evaluate(()=>PROFIL.pins.length);
+  await p.mouse.click(...ziel);
+  assert.equal(await p.evaluate(()=>PROFIL.pins.length),n+1);
+  assert.equal(await p.evaluate(()=>__soloAdapter===KARTE_V2_DEV.adapter()),true);
+  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'dossier'}));
+  assert.equal(await p.evaluate(()=>KARTE_V2_DEV.adapter()),null);
+  await p.evaluate(()=>kartenObjektZeigen(id));
+  await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
+  assert.equal(await p.locator('#pin-name').inputValue(),'K4 Solo Test');
+  assert.equal(await p.locator('#k-svg').count(),0);
+  assert.deepEqual(net,[]);assert.deepEqual(errors,[]);
+  console.log('OK: eigenständiges V2, Filter, Suche, Werkzeuge, Meldungen, Pin-Anlage, Navigation ohne SVG');
+ }finally{await b.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

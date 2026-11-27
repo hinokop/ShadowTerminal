@@ -29,7 +29,7 @@ const {APP}=require('./_pfad');
       };
     }
    },art);
-   await p.goto(APP+'?geospatial-v2=1');
+   await p.goto(APP+'?geospatial-v2=solo');
    await p.fill('#gate-pw','pw-test-123');if(await p.isVisible('#gate-pw2'))await p.fill('#gate-pw2','pw-test-123');
    await p.click('#gate-go');await p.waitForFunction(()=>!document.body.classList.contains('locked'));
    const id=await p.evaluate(()=>{
