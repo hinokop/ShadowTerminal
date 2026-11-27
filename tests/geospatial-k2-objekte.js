@@ -86,6 +86,31 @@ const ringMarker=[
  }
  const single=R.daten({marker:[ringMarker[0]]});
  assert.equal(R.entflechten(single.quellen,fake(10000)),single.quellen);
+ // The entire ring of a visible group near the top left remains clickable.
+ const randMap={...fake(10000),project:([x,y])=>({x:8+(x-13.405)*10000,y:9-(y-52.52)*10000}),
+   unproject:([x,y])=>({lng:13.405+(x-8)/10000,lat:52.52-(y-9)/10000})};
+ const rand=R.entflechten(base.quellen,randMap);
+ assert.equal(rand.leit.features.filter(f=>f.geometry.type==='LineString').length,3);
+ for(const f of rand.punkte.features){
+   const q=randMap.project(f.geometry.coordinates);
+   assert.ok(q.x>=12.99&&q.y>=12.99&&q.x<=987.01&&q.y<=787.01,'ring inside viewport');
+ }
+ // Single-world maps must not project the other side of the date line
+ // as a neighboring visible copy.
+ const seam=R.daten({marker:[
+   {id:'A',kat:'pin',renderKey:'seam-a',ll:[0,179.99]},
+   {id:'B',kat:'pin',renderKey:'seam-b',ll:[0,-179.99]}
+ ]});
+ const seamMap={getCanvas:()=>({clientWidth:1000,clientHeight:800}),getCenter:()=>({lng:179.99}),
+   getRenderWorldCopies:()=>false,project:([x,y])=>({x:500+(x-179.99)*100,y:400-y*100}),
+   unproject:([x,y])=>({lng:179.99+(x-500)/100,lat:(400-y)/100})};
+ assert.equal(R.entflechten(seam.quellen,seamMap),seam.quellen,'no phantom world copy');
+ // A ring crossing the single-world seam is not wrapped to the other side.
+ const same=R.daten({marker:[
+   {id:'A',kat:'pin',renderKey:'seam-a',ll:[0,179.99]},
+   {id:'B',kat:'pin',renderKey:'seam-b',ll:[.01,179.99]}
+ ]});
+ assert.equal(R.entflechten(same.quellen,seamMap),same.quellen,'invalid ring retains true geography');
 }
 /* Adapter-level regression without browser timing: equivalent snapshots must
    not cause worker refreshes, but changed or removed objects must. */
@@ -114,6 +139,46 @@ const ringMarker=[
  assert.ok(writes.includes('shadow-v2-punkte'));
  assert.equal(adapter.hitTest({x:0,y:0}),null,'stale removed hit immediately rejected');
  adapter.unmount();
+ assert.equal(handlers.has('move'),false,'movement listener removed');
+ assert.equal(handlers.has('moveend'),false);
+}
+// Controlled clock: intermediate motion updates only local points/leader
+// lines; rapid events are throttled, moveend settles the exact final layout.
+{
+ const sources=new Map(),layers=new Map(),images=new Set(),handlers=new Map(),writes=[];
+ let scale=10000,zeit=0,moving=false;
+ const mock={
+   on:(e,fn)=>handlers.set(e,fn),off:e=>handlers.delete(e),
+   isStyleLoaded:()=>true,getSource:id=>sources.get(id),getLayer:id=>layers.get(id),hasImage:id=>images.has(id),
+   addSource:(id,s)=>sources.set(id,{data:s.data,setData(data){this.data=data;writes.push(id);}}),
+   addLayer:l=>layers.set(l.id,l),addImage:id=>images.add(id),setFilter:()=>{},
+   removeSource:id=>sources.delete(id),removeLayer:id=>layers.delete(id),removeImage:id=>images.delete(id),
+   getCanvas:()=>({clientWidth:1000,clientHeight:800}),getCenter:()=>({lng:13.405}),isMoving:()=>moving,
+   project:([x,y])=>({x:500+(x-13.405)*scale,y:400-(y-52.52)*scale}),
+   unproject:([x,y])=>({lng:13.405+(x-500)/scale,lat:52.52-(y-400)/scale})
+ };
+ const descriptor=Object.getOwnPropertyDescriptor(globalThis,'performance');
+ Object.defineProperty(globalThis,'performance',{configurable:true,value:{now:()=>zeit}});
+ try{
+   const adapter=R.adapter(mock);adapter.setData({marker:ringMarker});
+   writes.length=0;scale=15000;handlers.get('move')();
+   assert.deepEqual(writes,[],'not moving');
+   moving=true;handlers.get('move')();
+   assert.deepEqual(writes,['shadow-v2-punkte','shadow-v2-leit']);
+   writes.length=0;scale=18000;zeit=50;handlers.get('move')();
+   assert.deepEqual(writes,[],'burst throttled');
+   zeit=100;handlers.get('move')();
+   assert.deepEqual(writes,['shadow-v2-punkte','shadow-v2-leit']);
+   writes.length=0;scale=1000000;zeit=110;moving=false;handlers.get('moveend')();
+   assert.deepEqual(writes,['shadow-v2-punkte','shadow-v2-leit'],'final layout not throttled');
+   const expected=R.entflechten(R.daten({marker:ringMarker}).quellen,mock);
+   assert.deepEqual(sources.get('shadow-v2-punkte').data,expected.punkte);
+   assert.deepEqual(sources.get('shadow-v2-leit').data,expected.leit);
+   adapter.unmount();assert.equal(handlers.size,0);
+ }finally{
+   if(descriptor)Object.defineProperty(globalThis,'performance',descriptor);
+   else delete globalThis.performance;
+ }
 }
 (async()=>{
  const browser=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});

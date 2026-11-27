@@ -114,16 +114,18 @@
   }
   /* K3f-3: circle layout in screen space; only the displayed point source
      changes. Geographic hit registry, measurements, edges and rings stay true.
-     Recompute at the end of camera movement and on resize. */
+     Recompute during camera movement at a bounded rate, and exactly on
+     moveend/resize. No change to the authoritative geographic snapshot. */
   function entflechten(quellen,map){
     const original=quellen.punkte.features;
     if(original.length<2||typeof map.project!=='function'||typeof map.unproject!=='function'||typeof map.getCanvas!=='function')return quellen;
     const canvas=map.getCanvas(),w=canvas.clientWidth,h=canvas.clientHeight;
     if(!w||!h)return quellen;
     const mitte=map.getCenter().lng, abstand=20;
+    const weltkopien=typeof map.getRenderWorldCopies!=='function'||map.getRenderWorldCopies();
     const proj=original.map((f,i)=>{
       const [lon,lat]=f.geometry.coordinates;
-      const p=map.project([lon+360*Math.round((mitte-lon)/360),lat]);
+      const p=map.project([weltkopien?lon+360*Math.round((mitte-lon)/360):lon,lat]);
       return {i,f,x:p.x,y:p.y};
     }).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=-30&&p.y>=-30&&p.x<=w+30&&p.y<=h+30);
     // Complete-link local groups: every pair must overlap. Stable order.
@@ -148,15 +150,22 @@
     for(const g of gruppen){
       if(g.length<2)continue;
       g.sort((a,b)=>a.f.properties.renderKey<b.f.properties.renderKey?-1:a.f.properties.renderKey>b.f.properties.renderKey?1:0);
-      const cx=g.reduce((s,p)=>s+p.x,0)/g.length,cy=g.reduce((s,p)=>s+p.y,0)/g.length;
+      let cx=g.reduce((s,p)=>s+p.x,0)/g.length,cy=g.reduce((s,p)=>s+p.y,0)/g.length;
       const radius=Math.max(24,15+2*g.length,28/(2*Math.sin(Math.PI/g.length)));
+      // Keep a fully visible group's ring inside the viewport if it fits.
+      // Never pull an entirely offscreen group into view.
+      const rand=radius+13;
+      if(g.every(p=>p.x>=0&&p.x<=w&&p.y>=0&&p.y<=h)&&2*rand<=w&&2*rand<=h){
+        cx=Math.max(rand,Math.min(w-rand,cx));
+        cy=Math.max(rand,Math.min(h-rand,cy));
+      }
       // Pairs spread perpendicular to their original axis.
       const dx=g[1].x-g[0].x,dy=g[1].y-g[0].y;
       const start=g.length===2&&Math.hypot(dx,dy)>0.01?Math.atan2(dy,dx)-Math.PI/2:-Math.PI/2;
       const ziele=g.map((p,i)=>{
         const a=start+2*Math.PI*i/g.length;
         const q=map.unproject([cx+radius*Math.cos(a),cy+radius*Math.sin(a)]);
-        const lon=((q.lng+180)%360+360)%360-180;
+        const lon=weltkopien?((q.lng+180)%360+360)%360-180:q.lng;
         return [q.lat,lon];
       });
       // Very high pitch / projection horizon can produce invalid targets:
@@ -188,6 +197,8 @@
   ];
   function adapter(map,optionen){
     const o=optionen||{};let aktiv=true, snapshot=daten(null), anzeige=snapshot.quellen, auswahl=null, installiert=false, markiert=undefined;
+    let letzteBewegung=-Infinity;
+    const bewegungsIntervall=100; // at most 10 local point-layout updates/s while moving
     /* MapLibre BoxZoom unterdrückt auch einen stationären Shift-Klick (mouseupWindow).
        Shift ist im K1-Klickvertrag reserviert; die übrigen Kameragesten bleiben unverändert. */
     const boxZoomWarAktiv=!!map.boxZoom?.isEnabled();
@@ -200,7 +211,7 @@
     }
     function installieren(){
       if(!aktiv)return;
-      installiert=false;markiert=undefined;
+      installiert=false;markiert=undefined;letzteBewegung=-Infinity;
       /* Keine fremden Layer oder Quellen mit kollidierenden Kennungen verändern. */
       if(Object.values(ids).some(id=>map.getSource(id))||layer.some(l=>map.getLayer(l.id))||Object.keys(formen).some(k=>map.hasImage(symbolId(k)))){fehler();return;}
       try{
@@ -220,14 +231,25 @@
       if(!snapshot.treffer.has(auswahl))auswahl=null;
       aktualisieren();
     }
-    function aktualisieren(){
+    function aktualisieren(nurPunkte=false){
       if(!aktiv||!installiert)return;
       const neu=entflechten(snapshot.quellen,map);
-      for(const [k,id] of Object.entries(ids)){
-        if(JSON.stringify(anzeige[k])!==JSON.stringify(neu[k]))
-          map.getSource(id).setData(neu[k]);
+      const keys=nurPunkte===true?['punkte','leit']:Object.keys(ids);
+      for(const k of keys){
+        if(anzeige[k]!==neu[k]&&JSON.stringify(anzeige[k])!==JSON.stringify(neu[k]))
+          map.getSource(ids[k]).setData(neu[k]);
       }
-      anzeige=neu;markieren();
+      anzeige=neu;
+      if(nurPunkte!==true)markieren();
+    }
+    function bewegung(){
+      if(!aktiv||!installiert||snapshot.quellen.punkte.features.length<2||map.isMoving?.()!==true)return;
+      const jetzt=performance.now();
+      if(jetzt-letzteBewegung<bewegungsIntervall)return;
+      letzteBewegung=jetzt;aktualisieren(true);
+    }
+    function bewegungEnde(){
+      letzteBewegung=-Infinity;aktualisieren();
     }
     function setSelection(k){
       if(!aktiv)return false;
@@ -248,7 +270,7 @@
       o.onClick({ll:[e.lngLat.lat,e.lngLat.lng],treffer:hitTest(e.point),mehr:!!(ev&&(ev.shiftKey||ev.ctrlKey||ev.metaKey))});
     }
     function stilwechsel(stil){if(!aktiv)return;installiert=false;map.setStyle(stil,{diff:false});}
-    map.on('style.load',installieren);map.on('click',click);map.on('moveend',aktualisieren);map.on('resize',aktualisieren);
+    map.on('style.load',installieren);map.on('click',click);map.on('move',bewegung);map.on('moveend',bewegungEnde);map.on('resize',bewegungEnde);
     if(map.isStyleLoaded())installieren();
     return {setData,setSelection,hitTest,setStyle:stilwechsel,
       camera:()=>aktiv?{center:map.getCenter().toArray(),zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()}:null,
@@ -257,7 +279,7 @@
       resize:()=>{if(aktiv)map.resize();},
       flyTo:opts=>{if(aktiv)map.flyTo(opts);},
       ready:()=>aktiv&&installiert,
-      unmount:()=>{if(!aktiv)return;aktiv=false;map.off('style.load',installieren);map.off('click',click);map.off('moveend',aktualisieren);map.off('resize',aktualisieren);if(boxZoomWarAktiv)map.boxZoom.enable();if(installiert){for(const l of layer.slice().reverse())if(map.getLayer(l.id))map.removeLayer(l.id);for(const id of Object.values(ids))if(map.getSource(id))map.removeSource(id);for(const k of Object.keys(formen))if(map.hasImage(symbolId(k)))map.removeImage(symbolId(k));}snapshot=daten(null);anzeige=snapshot.quellen;auswahl=null;installiert=false;}
+      unmount:()=>{if(!aktiv)return;aktiv=false;map.off('style.load',installieren);map.off('click',click);map.off('move',bewegung);map.off('moveend',bewegungEnde);map.off('resize',bewegungEnde);if(boxZoomWarAktiv)map.boxZoom.enable();if(installiert){for(const l of layer.slice().reverse())if(map.getLayer(l.id))map.removeLayer(l.id);for(const id of Object.values(ids))if(map.getSource(id))map.removeSource(id);for(const k of Object.keys(formen))if(map.hasImage(symbolId(k)))map.removeImage(symbolId(k));}snapshot=daten(null);anzeige=snapshot.quellen;auswahl=null;installiert=false;}
     };
   }
   const api=Object.freeze({daten,adapter,legende,symbolBild,entflechten});
