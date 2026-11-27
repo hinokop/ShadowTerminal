@@ -5,21 +5,56 @@
   const P='shadow-v2-', ids={punkte:P+'punkte',zonen:P+'zonen',kanten:P+'kanten',mess:P+'mess',unsicherheit:P+'unsicherheit'};
   const farben={pin:'#2e9d4f',sichtung:'#d13b2f',person:'#2f7fd1',org:'#7a4fc9',ort:'#8e5bd6',ausgang:'#2e9d4f',standort:'#0f8a8a',zugriff:'#e08a00'};
   const linienfarben=Object.freeze({zone:'#e08a00',kante:'#879fb6',unsicherheit:farben.sichtung,auswahl:'#ffe66a',mess:'#fff'});
-  // Actual renderer symbols, shared with the K3 legend. Do not promise
-  // distinct shapes before the corresponding renderer layers exist.
+  // K3d-2: shared local symbol vocabulary, independent of provider sprites.
+  const formen=Object.freeze({person:'kreis',org:'quadrat',ort:'raute',pin:'pin',sichtung:'dreieck',ausgang:'kreuz',standort:'raute',zugriff:'quadrat',sonstige:'kreis'});
+  const symbolKat=k=>Object.prototype.hasOwnProperty.call(formen,k)?k:'sonstige';
+  const symbolId=k=>P+'icon-'+symbolKat(k);
+  const polygon=Object.freeze({
+    quadrat:[[-.82,-.82],[.82,-.82],[.82,.82],[-.82,.82]],
+    raute:[[0,-1],[1,0],[0,1],[-1,0]],
+    pin:[[-.8,-.85],[.8,-.85],[.8,.15],[0,1],[-.8,.15]],
+    dreieck:[[0,-1],[.96,.82],[-.96,.82]],
+    kreuz:[[-.33,-.95],[.33,-.95],[.33,-.33],[.95,-.33],[.95,.33],[.33,.33],[.33,.95],[-.33,.95],[-.33,.33],[-.95,.33],[-.95,-.33],[-.33,-.33]]
+  });
+  function innen(form,x,y){
+    if(form==='kreis')return x*x+y*y<=.9*.9;
+    const p=polygon[form];if(!p)return false;
+    let hit=false;
+    for(let i=0,j=p.length-1;i<p.length;j=i++){
+      const [a,b]=p[i],[c,d]=p[j];
+      if((b>y)!==(d>y)&&x<(c-a)*(y-b)/(d-b)+a)hit=!hit;
+    }
+    return hit;
+  }
+  // 20 CSS pixels, 2x raster; white contour and 4x coverage sampling.
+  function symbolBild(k){
+    k=symbolKat(k);const form=formen[k],farbe=farben[k]||'#758696';
+    const rgb=[1,3,5].map(i=>parseInt(farbe.slice(i,i+2),16));
+    const width=40,height=40,data=new Uint8Array(width*height*4);
+    for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+      let a=0,fill=0;
+      for(const dy of [.25,.75])for(const dx of [.25,.75]){
+        const u=(x+dx-20)/18,v=(y+dy-20)/18;
+        if(innen(form,u,v)){a++;if(innen(form,u/.76,v/.76))fill++;}
+      }
+      const i=(y*width+x)*4;
+      if(a){for(let c=0;c<3;c++)data[i+c]=Math.round((rgb[c]*fill+255*(a-fill))/a);data[i+3]=Math.round(a*255/4);}
+    }
+    return {width,height,data};
+  }
   const legende=Object.freeze([
-    ['personen','Personen','punkt',farben.person],
-    ['organisationen','Organisationen','punkt',farben.org],
-    ['orte','Orte','punkt',farben.ort],
-    ['pins','Pins','punkt',farben.pin],
+    ['personen','Personen',formen.person,farben.person,'person'],
+    ['organisationen','Organisationen',formen.org,farben.org,'org'],
+    ['orte','Orte',formen.ort,farben.ort,'ort'],
+    ['pins','Pins',formen.pin,farben.pin,'pin'],
     ['zonen','Eigene Zonen','zone',linienfarben.zone],
-    ['sichtungen','Sichtungen','punkt',farben.sichtung],
+    ['sichtungen','Sichtungen',formen.sichtung,farben.sichtung,'sichtung'],
     ['verbindungen','Verbindungen','linie',linienfarben.kante],
-    ['ausgang','Ausgangsorte','punkt',farben.ausgang],
+    ['ausgang','Ausgangsorte',formen.ausgang,farben.ausgang,'ausgang'],
     [null,'Unschärfering','ring',linienfarben.unsicherheit],
     [null,'Auswahl','ring',linienfarben.auswahl],
     [null,'Messung','linie',linienfarben.mess]
-  ].map(([filter,name,form,farbe])=>Object.freeze({filter,name,form,farbe})));
+  ].map(([filter,name,form,farbe,symbol])=>Object.freeze({filter,name,form,farbe,symbol:symbol||null})));
   const fc=features=>({type:'FeatureCollection',features});
   const gueltig=ll=>Array.isArray(ll)&&ll.length===2&&ll.every(Number.isFinite)&&Math.abs(ll[0])<=85.051129&&Math.abs(ll[1])<=180;
   const xy=ll=>[ll[1],ll[0]];
@@ -56,7 +91,7 @@
     for(const x of marker){
       if(!eindeutig(x)||!gueltig(x.ll))continue;
       const kat=x.kat==='figur'?(x.typ==='Organisation'?'org':'person'):x.kat;
-      const p=feature(x,{type:'Point',coordinates:xy(x.ll)},{kat:String(kat||''),farbe:farben[kat]||'#758696'});
+      const p=feature(x,{type:'Point',coordinates:xy(x.ll)},{kat:String(kat||''),farbe:farben[symbolKat(kat)]||'#758696',symbol:symbolId(kat)});
       punkte.push(p); treffer.set(x.renderKey,{id:x.id,renderKey:x.renderKey,art:'marker',ll:x.ll.slice()});
       if(x.entitaet){if(dossier.has(x.id))dossier.set(x.id,null);else dossier.set(x.id,x.ll);}
       const g=x.kat==='sichtung'&&x.unM?ring(x.ll,x.unM.m):null;
@@ -87,7 +122,7 @@
     {id:P+'auswahl-zone',type:'line',source:ids.zonen,filter:['==',['get','renderKey'],''],paint:{'line-color':linienfarben.auswahl,'line-width':4}},
     {id:P+'auswahl-kante',type:'line',source:ids.kanten,filter:['==',['get','renderKey'],''],paint:{'line-color':linienfarben.auswahl,'line-width':5}},
     {id:P+'auswahl',type:'circle',source:ids.punkte,filter:['==',['get','renderKey'],''],paint:{'circle-radius':13,'circle-color':linienfarben.auswahl,'circle-stroke-width':2,'circle-stroke-color':'#fff'}},
-    {id:P+'punkt',type:'circle',source:ids.punkte,paint:{'circle-radius':8,'circle-color':['get','farbe'],'circle-stroke-color':'#fff','circle-stroke-width':2}}
+    {id:P+'punkt',type:'symbol',source:ids.punkte,layout:{'icon-image':['get','symbol'],'icon-allow-overlap':true,'icon-ignore-placement':true,'icon-pitch-alignment':'viewport','icon-rotation-alignment':'viewport'}}
   ];
   function adapter(map,optionen){
     const o=optionen||{};let aktiv=true, snapshot=daten(null), auswahl=null, installiert=false;
@@ -104,8 +139,9 @@
       if(!aktiv)return;
       installiert=false;
       /* Keine fremden Layer oder Quellen mit kollidierenden Kennungen verändern. */
-      if(Object.values(ids).some(id=>map.getSource(id))||layer.some(l=>map.getLayer(l.id))){fehler();return;}
+      if(Object.values(ids).some(id=>map.getSource(id))||layer.some(l=>map.getLayer(l.id))||Object.keys(formen).some(k=>map.hasImage(symbolId(k)))){fehler();return;}
       try{
+        for(const k of Object.keys(formen))map.addImage(symbolId(k),symbolBild(k),{pixelRatio:2});
         for(const [k,id] of Object.entries(ids))map.addSource(id,{type:'geojson',data:snapshot.quellen[k]});
         for(const l of layer)map.addLayer(JSON.parse(JSON.stringify(l)));
         installiert=true;markieren();
@@ -145,9 +181,9 @@
       resize:()=>{if(aktiv)map.resize();},
       flyTo:opts=>{if(aktiv)map.flyTo(opts);},
       ready:()=>aktiv&&installiert,
-      unmount:()=>{if(!aktiv)return;aktiv=false;map.off('style.load',installieren);map.off('click',click);if(boxZoomWarAktiv)map.boxZoom.enable();if(installiert){for(const l of layer.slice().reverse())if(map.getLayer(l.id))map.removeLayer(l.id);for(const id of Object.values(ids))if(map.getSource(id))map.removeSource(id);}snapshot=daten(null);auswahl=null;installiert=false;}
+      unmount:()=>{if(!aktiv)return;aktiv=false;map.off('style.load',installieren);map.off('click',click);if(boxZoomWarAktiv)map.boxZoom.enable();if(installiert){for(const l of layer.slice().reverse())if(map.getLayer(l.id))map.removeLayer(l.id);for(const id of Object.values(ids))if(map.getSource(id))map.removeSource(id);for(const k of Object.keys(formen))if(map.hasImage(symbolId(k)))map.removeImage(symbolId(k));}snapshot=daten(null);auswahl=null;installiert=false;}
     };
   }
-  const api=Object.freeze({daten,adapter,legende});
+  const api=Object.freeze({daten,adapter,legende,symbolBild});
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.KARTE_V2_RENDERER=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
