@@ -2047,6 +2047,12 @@ function karteRegionZeigen() {
   K.lat=a.lat;K.lon=a.lon;K.zoom=a.zoom;
   karteFlug(z.lat,z.lon,z.zoom);
 }
+/* Shared preset definitions; legacy mission extensions remain legacy-only. */
+function karteRecherchePreset(name) {
+  if(name==='gesamt')return {orte:true,personen:true,organisationen:true,verbindungen:true,ausgang:true,sichtungen:true};
+  if(name==='netzwerk')return {orte:true,personen:true,organisationen:true,verbindungen:true,ausgang:false,sichtungen:false};
+  return null;
+}
 function renderKarte(m) {
   const K = VIEW.karte, def = karteAuftragsansicht();
   if (K.auswahlIdentitaet && K.auswahlIdentitaet.id !== K.auswahl) K.auswahlIdentitaet = null;
@@ -2092,7 +2098,7 @@ function renderKarte(m) {
     def ? h('button', { type: 'button', id: 'k-mehr', class: K.mehrModus ? 'aktiv' : '', 'aria-pressed': K.mehrModus ? 'true' : 'false', title: 'Zonen nacheinander anklicken, um mehrere gemeinsam zu bearbeiten (auch mit Umschalt- oder Strg-Klick)', onclick: function () { K.mehrModus = !K.mehrModus; if (!K.mehrModus) { K.mehr = []; } K.zoneSetzen = false; K.zugriffSetzen = false; K.messen = false; renderModule(); } }, K.mehrModus ? 'Mehrfach: Zonen anklicken' : 'Mehrfach') : null,
     h('button', { type: 'button', id: 'k-messen', class: K.messen ? 'aktiv' : '', 'aria-pressed': K.messen ? 'true' : 'false', title: 'Zwei Punkte oder Markierungen anklicken: Entfernung und Fahrzeit', onclick: function () { karteWerkzeugWaehlen('messen'); } }, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen'),
     h('button', { type: 'button', id: 'k-3d', class: K.ansicht3d ? 'aktiv' : '', 'aria-pressed': K.ansicht3d ? 'true' : 'false', title: 'Wechselt zwischen der flachen Karte und der geneigten Ansicht mit Gebäuden (benötigt Internetverbindung)', onclick: karte3dUmschalten }, K.ansicht3d ? '2D' : '3D'),
-    kartenExportVerwaistKnopf('k-export-verwaist-leiste')];
+    (typeof KARTE_V2_DEV==='undefined'||!KARTE_V2_DEV.aktiviert) ? kartenExportVerwaistKnopf('k-export-verwaist-leiste') : null];
   const preset = function (name, sets) {
     const aktiv = Object.keys(sets).every(function (k) { return !!K.ebenen[k] === sets[k]; });
     return h('button', { type: 'button', class: aktiv ? 'aktiv' : '', 'aria-pressed': aktiv ? 'true' : 'false', id: 'k-p-' + name.toLowerCase(), onclick: function () { Object.keys(sets).forEach(function (k) { K.ebenen[k] = sets[k]; }); karteWahlSichern(); renderModule(); } }, name);
@@ -2125,8 +2131,8 @@ function renderKarte(m) {
       K.keyHinweis ? h('p', { class: 'k-eb-note k-key-hinweis' }, 'CARTO verlangt einen kostenlosen Schlüssel (carto.com/basemaps/apikey). Unter Darstellung eintragen.') : null,
       h('div', { class: 'k-eb-gruppe' }, 'Ansicht'),
       h('div', { class: 'k-seg', role: 'group', 'aria-label': 'Ansicht' },
-        preset('Gesamt', Object.assign({ orte: true, personen: true, organisationen: true, verbindungen: true, ausgang: true, sichtungen: true }, def ? { standorte: true, fenster: true, route: true, strecke: true } : {})),
-        preset('Netzwerk', Object.assign({ orte: true, personen: true, organisationen: true, verbindungen: true, ausgang: false, sichtungen: false }, def ? { standorte: true, fenster: false, route: false, strecke: false } : {})),
+        preset('Gesamt', Object.assign(karteRecherchePreset('gesamt'), def ? { standorte: true, fenster: true, route: true, strecke: true } : {})),
+        preset('Netzwerk', Object.assign(karteRecherchePreset('netzwerk'), def ? { standorte: true, fenster: false, route: false, strecke: false } : {})),
         def ? preset('Zeit', { standorte: true, orte: true, personen: false, organisationen: false, verbindungen: false, fenster: true, ausgang: true, route: true, sichtungen: true, strecke: true }) : null),
       h('div', { class: 'k-eb-gruppe' }, 'Karte'),
       ebene(def ? ['standorte', 'orte'] : 'orte', def ? 'Standorte und Orte' : 'Orte', IKON.standorte),

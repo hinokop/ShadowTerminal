@@ -1039,6 +1039,43 @@ function assertCamera(actual,expected){
     await p.fill('#k-v2-suche','K2 Sued');await p.locator('#k-v2-suche').press('Escape');
     assert.equal(await p.locator('#k-v2-suche').inputValue(),'');assert.equal(await buttons.count(),0);
   }
+  {
+    // K4d-1: the existing export control is present once, in V2, even if
+    // hidden because this profile has no orphaned exports.
+    assert.equal(await p.locator('#k-export-verwaist-leiste').count(),1);
+    assert.equal(await p.locator('#k-v2-panel #k-export-verwaist-leiste').count(),1);
+    const before=await p.evaluate(()=>{
+      window.__presetAdapter=KARTE_V2_DEV.adapter();
+      return {cam:__presetAdapter.camera(),filters:{...VIEW.karte.ebenen}};
+    });
+    await providerDrain();
+    const netzVor=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
+    const details=p.locator('#k-v2-legende');
+    if(!await details.evaluate(el=>el.open))await details.locator('summary').click();
+    await p.click('#k-v2-preset-netzwerk');
+    assert.equal(await p.locator('#k-v2-preset-netzwerk').getAttribute('aria-pressed'),'true');
+    assert.equal(await p.locator('#k-v2-preset-gesamt').getAttribute('aria-pressed'),'false');
+    assert.equal(await p.locator('#k-v2-eb-sichtungen').isChecked(),false);
+    assert.equal(await p.locator('#k-v2-eb-ausgang').isChecked(),false);
+    assert.equal(await p.locator('#ke-sichtungen').isChecked(),false);
+    assert.equal(await p.evaluate(()=>karteRenderModell().marker.some(m=>m.kat==='sichtung')),false);
+    await p.click('#k-v2-preset-gesamt');
+    assert.equal(await p.locator('#k-v2-preset-gesamt').getAttribute('aria-pressed'),'true');
+    assert.equal(await p.locator('#k-v2-eb-sichtungen').isChecked(),true);
+    assert.equal(await p.locator('#ke-sichtungen').isChecked(),true);
+    assert.equal(await p.evaluate(()=>karteRenderModell().marker.some(m=>m.kat==='sichtung')),true);
+    for(const key of ['pins','zonen','kacheln']){
+      assert.equal(await p.evaluate(key=>VIEW.karte.ebenen[key],key),before.filters[key],'unrelated filter '+key);
+    }
+    await p.uncheck('#k-v2-eb-personen');
+    assert.equal(await p.locator('#k-v2-preset-gesamt').getAttribute('aria-pressed'),'false');
+    await p.check('#k-v2-eb-personen');
+    assert.equal(await p.locator('#k-v2-preset-gesamt').getAttribute('aria-pressed'),'true');
+    assert.equal(await p.evaluate(()=>__presetAdapter===KARTE_V2_DEV.adapter()),true);
+    assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),before.cam);
+    await providerDrain();
+    assert.deepEqual([anfragen.length,bildAnfragen.length,wetterAnfragen.length],netzVor,'preset changes are local');
+  }
   await p.close();
   // Echtes Laden des alten Browserprofils mit abweichender Schlüsseldatei.
   // Nur der in .kartenwahl bereits vorhandene Key darf verwendet werden.
@@ -1060,6 +1097,8 @@ function assertCamera(actual,expected){
   await standard.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
   assert.equal(await standard.locator('#k-v2-map').count(),0);
   assert.equal(await standard.locator('#k-v2-paneele').count(),0);
+  assert.equal(await standard.locator('#k-export-verwaist-leiste').count(),1);
+  assert.equal(await standard.locator('#k-v2-preset-gesamt').count(),0);
   assert.equal(await standard.locator('.karte-wrap #k-status').count(),1);
   assert.equal(await standard.locator('.karte-wrap #k-auswahl').count(),1);
   assert.equal(await standard.locator('#k-v2-inspektor-klapp').count(),0);

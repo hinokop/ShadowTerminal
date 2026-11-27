@@ -71,20 +71,30 @@
       if(!l.filter)continue;const el=$('k-v2-eb-'+l.filter);
       if(el)el.checked=ebeneAktiv(l.filter);
     }
+    for(const name of ['gesamt','netzwerk']){
+      const b=$('k-v2-preset-'+name);
+      if(!b)continue;
+      const gesetzt=Object.entries(karteRecherchePreset(name)).every(([key,v])=>ebeneAktiv(key)===v);
+      b.disabled=!getKontext()?.a;b.setAttribute('aria-pressed',String(gesetzt));b.classList.toggle('aktiv',gesetzt);
+    }
   }
   function ebeneAktiv(key){
     const v=VIEW.karte.ebenen[key];
     return ['pins','zonen','sichtungen'].includes(key)?v!==false:!!v;
   }
-  function ebeneWaehlen(key,wert){
-    if(!aktiv(getKontext())||!KARTE_V2_RENDERER.legende.some(l=>l.filter===key))return;
-    VIEW.karte.ebenen[key]=!!wert;
-    // Explicitly hiding sightings also clears the targeted-sighting exception.
-    if(key==='sichtungen'&&!wert)VIEW.karte.sichtungFokus=null;
-    // Use existing in-memory filters; no new V2 persistence (including key).
-    const alt=$('ke-'+key);if(alt)alt.checked=!!wert;
+  function ebenenWaehlen(werte){
+    if(!aktiv(getKontext())||!getKontext().a||!werte)return;
+    const erlaubte=new Set(KARTE_V2_RENDERER.legende.map(l=>l.filter).filter(Boolean));
+    for(const [key,wert] of Object.entries(werte)){
+      if(!erlaubte.has(key))continue;
+      VIEW.karte.ebenen[key]=!!wert;
+      if(key==='sichtungen'&&!wert)VIEW.karte.sichtungFokus=null;
+      const alt=$('ke-'+key);if(alt)alt.checked=!!wert;
+    }
+    // Same session-local filter state as the existing V2 individual toggles.
     karteRendererDatenAktualisieren();karteAuswahlAnzeige();karteStatusAkt();legendeAktualisieren();
   }
+  function ebeneWaehlen(key,wert){ebenenWaehlen({[key]:wert});}
   function kameraAnzeige(c){
     if(!aktiv(c)||!c.map)return;
     const el=$('k-v2-kamera'),p=bildPosition(c);
@@ -194,9 +204,12 @@
         gruppe('Werkzeuge',[
           ...['pin','zone','messen'].map((art,i)=>h('button',{type:'button',id:'k-v2-werkzeug-'+art,disabled:true,'aria-pressed':'false',
             onclick:()=>{if(aktiv(getKontext())&&getKontext().a)karteWerkzeugWaehlen(art);}},['Pin setzen','Zone markieren','Messen'][i]))]),
+        kartenExportVerwaistKnopf('k-export-verwaist-leiste'),
         h('output',{id:'k-v2-messwert',role:'status',hidden:true,style:'font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;'},''),
         h('details',{id:'k-v2-legende',style:'border:1px solid var(--border);padding:6px 10px;'},
           h('summary',{style:'cursor:pointer;'},'Rechercheebenen und Legende'),
+          h('div',{role:'group','aria-label':'Ebenenvoreinstellungen',style:'display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;'},
+            ...[['gesamt','Gesamt'],['netzwerk','Netzwerk']].map(([name,label])=>h('button',{type:'button',id:'k-v2-preset-'+name,disabled:true,'aria-pressed':'false',onclick:()=>ebenenWaehlen(karteRecherchePreset(name))},label))),
           h('div',{id:'k-v2-legendenliste',style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(155px,100%),1fr));gap:4px 12px;margin:6px 0;'}),
           h('small',null,'Objekte werden nach den vorhandenen Zugriffs- und Ebenenfiltern angezeigt. Basiskartenbeschriftungen sind davon unabhängig.'))),
       h('div',{id:'k-v2-buehne'},
