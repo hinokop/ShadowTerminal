@@ -275,7 +275,7 @@
   function gruppe(name,children){
     return h('div',{style:'display:flex;flex-direction:column;gap:4px;min-width:0;'},
       h('span',{style:'font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.72;'},name),
-      h('div',{role:'group','aria-label':name,style:'display:flex;gap:5px;flex-wrap:wrap;align-items:center;'},children));
+      h('div',{role:'group','aria-label':name,style:'display:flex;gap:5px;flex-wrap:wrap;align-items:center;min-width:0;'},children));
   }
   function legendeAktualisieren(){
     const box=$('k-v2-legendenliste');
@@ -353,7 +353,7 @@
   function ansicht(){
     if(!dev)return null;
     return h('section',{class:'panel',id:'k-v2-panel'},
-      h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:10px;'},
+      h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:8px;min-width:0;'},
         h('div',{style:'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;'},
           h('strong',null,'Lagekarte · MapLibre'),h('small',null,'Entwicklungsansicht'),
           h('button',{type:'button',id:'k-v2-voll',disabled:true,'aria-pressed':String(voll),onclick:()=>vollWaehlen(!voll)},voll?'Vollbild verlassen (Esc)':'Vollbild')),
@@ -371,15 +371,15 @@
             onclick:()=>{if(aktiv(kontext)&&kontext.a)karteWerkzeugWaehlen(art);}},['Pin setzen','Zone markieren','Messen'][i]))]),
         h('details',{id:'k-v2-legende',style:'border:1px solid var(--border);padding:6px 10px;'},
           h('summary',{style:'cursor:pointer;'},'Rechercheebenen und Legende'),
-          h('div',{id:'k-v2-legendenliste',style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:4px 12px;margin:6px 0;'}),
+          h('div',{id:'k-v2-legendenliste',style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(155px,100%),1fr));gap:4px 12px;margin:6px 0;'}),
           h('small',null,'Objekte werden nach den vorhandenen Zugriffs- und Ebenenfiltern angezeigt. Basiskartenbeschriftungen sind davon unabhängig.'))),
-      h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:clamp(420px,60vh,850px);min-height:240px;background:#101820;border:1px solid var(--border);'}),
+      h('div',{id:'k-v2-map',style:'position:relative;width:100%;box-sizing:border-box;height:clamp(420px,60vh,850px);min-height:240px;background:#101820;border:1px solid var(--border);'}),
       h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);'},
         h('div',{id:'k-v2-kamera',style:'font-size:11px;font-variant-numeric:tabular-nums;'},'Kamera wird geladen.'),
         h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.')),
       h('div',{id:'k-v2-paneele',style:'display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;padding:12px;'},
-        h('div',{class:'k-status',id:'k-status','aria-label':'Lage',style:'position:static;max-width:none;width:auto;flex:1 1 240px;box-sizing:border-box;'}),
-        h('div',{class:'k-popup',id:'k-auswahl',hidden:true,'aria-live':'polite',style:'position:static;transform:none;width:auto;flex:1 1 320px;max-height:55vh;box-sizing:border-box;'})),
+        h('div',{class:'k-status',id:'k-status','aria-label':'Lage',style:'position:static;max-width:none;width:auto;flex:1 1 240px;min-width:0;overflow-wrap:anywhere;box-sizing:border-box;'}),
+        h('div',{class:'k-popup',id:'k-auswahl',hidden:true,'aria-live':'polite',style:'position:static;transform:none;width:auto;flex:1 1 320px;min-width:0;overflow-wrap:anywhere;max-height:55vh;box-sizing:border-box;'})),
       h('details',{class:'pad',style:'border-top:1px solid var(--border);'},h('summary',null,'Technische Hinweise und Diagnose'),
         h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die alte Lagekarte. Die gemeinsame Kamera folgt in K4.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
@@ -390,9 +390,10 @@
   function qualitaetsbericht(){
     const c=kontext,feld=$('k-v2-qualitaetsbericht');
     if(!aktiv(c)||!c.a||!feld)return;
-    const out=['SHADOW / K2f – Qualitätsstichprobe','Modus: '+namen[c.modus],
+    const out=['SHADOW / K3 – Qualitätsstichprobe','Modus: '+namen[c.modus],
       'Zoom: '+c.map.getZoom().toFixed(2)+' · Neigung: '+c.map.getPitch().toFixed(1),
       'Bildquelle: '+(KARTE_V2_QUELLEN.bildInfo(c.bildQuelle)?.name||'keine'),
+      'Kartenfläche: '+c.el.clientWidth+' × '+c.el.clientHeight+' CSS-Pixel · DPR '+(root.devicePixelRatio||1)+' · Vollbild '+(voll?'ja':'nein'),
       'Status: '+c.status.textContent,
       'Nur Renderfragmente; keine eindeutige Objektzählung oder Sichtbarkeits-/Qualitätsgarantie.'];
     try{
