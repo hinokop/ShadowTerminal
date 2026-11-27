@@ -941,19 +941,45 @@ function assertCamera(actual,expected){
     assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),before.cam);
     await p.click('#k-v2-voll');
     // Actual dossier location placement via the common click contract.
+    // Chromium delivers mouse coordinates at CSS-pixel precision. Capture
+    // the native click BEFORE the map's handler rebuilds the module, then
+    // independently unproject its actual position (not the requested point
+    // or the application's stored result).
+    const platzierungKlick=async ll=>{
+      await p.evaluate(ll=>{
+        window.__platzierungKlick=null;
+        const el=$('k-v2-map').querySelector('.maplibregl-canvas-container');
+        el.addEventListener('click',ev=>{
+          const a=KARTE_V2_DEV.adapter(),r=el.getBoundingClientRect();
+          const x=(ev.clientX-r.left)/(r.width/el.offsetWidth||1)-el.clientLeft;
+          const y=(ev.clientY-r.top)/(r.height/el.offsetHeight||1)-el.clientTop;
+          const ziel=a.project(ll);
+          window.__platzierungKlick={trusted:ev.isTrusted,delta:Math.hypot(x-ziel.x,y-ziel.y),ll:a.unproject([x,y])};
+        },{capture:true,once:true});
+      },ll);
+      await click(ll);
+      const event=await p.evaluate(()=>window.__platzierungKlick);
+      assert.ok(event?.trusted&&Number.isFinite(event.delta)&&event.delta<=2,
+        'real native placement click within 2 CSS pixels: '+JSON.stringify(event));
+      assert.ok(Array.isArray(event.ll)&&event.ll.length===2&&event.ll.every(Number.isFinite));
+      return event.ll.map(v=>Math.round(v*1e5)/1e5);
+    };
     await p.evaluate(id=>{VIEW.karte.pick=id;VIEW.karte.auswahl=null;renderModule();},f.b);
     await ready();
     assert.match(await p.locator('#k-v2-platzierung').innerText(),/Position.*K2 Sued/);
-    await click([52.505,13.405]);
+    const koordVor=await p.evaluate(id=>PROFIL.koord[id]||null,f.b);
+    const erwartet=await platzierungKlick([52.505,13.405]);
+    assert.notDeepEqual(koordVor,erwartet,'placement must actually change dossier position');
     await ready();
-    assert.deepEqual(await p.evaluate(id=>PROFIL.koord[id],f.b),[52.505,13.405]);
+    assert.deepEqual(await p.evaluate(id=>PROFIL.koord[id],f.b),erwartet,'stored position matches rounded real click');
     assert.equal(await p.locator('#k-v2-platzierung').isVisible(),false);
     // Stale locked sighting placement must not disclose a name or write a pin.
     await p.evaluate(id=>{VIEW.karte.pick='SI:'+id;VIEW.karte.auswahl=null;renderModule();},f.a);
     await ready();
     assert.match(await p.locator('#k-v2-platzierung').innerText(),/Ziel nicht zugänglich/);
     const pinsVor=await p.evaluate(()=>PROFIL.pins.length);
-    await click([52.505,13.405]);await ready();
+    assert.equal(await p.evaluate(id=>dossierGesperrt(entitaet(id)),f.a),true,'locked fixture remains locked');
+    await platzierungKlick([52.505,13.405]);await ready();
     assert.equal(await p.evaluate(()=>PROFIL.pins.length),pinsVor);
     assert.equal(await p.evaluate(()=>VIEW.karte.pick),null);
     assert.equal(await p.locator('#k-v2-platzierung').isVisible(),false);
