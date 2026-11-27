@@ -58,6 +58,56 @@
       return titel+': '+aktiv.length+'/'+ls.length+' aktive Textlayer; Zoom '+(grenzen.join(', ')||'—');
     }).join('\n');
   }
-  const api=Object.freeze({ORTE,statistik,quelle,stichprobe,text,beschriftung});
+  // Fest definierte öffentliche Referenzorte, niemals Benutzer-/Profilkoordinaten.
+  const BILDPROBEN=Object.freeze([
+    ['berlin2024','Berlin-Mitte',[13.405,52.52],19],
+    ['brandenburg','Cottbus',[14.33,51.76],19],
+    ['rheinlandPfalz','Koblenz',[7.596,50.359],19],
+    ['nrw','Düsseldorf',[6.773,51.225],20],
+    ['sentinel2016','Sydney – Übersicht',[151.21,-33.87],8],
+    ['sentinel2016','Sydney – Detailgrenze',[151.21,-33.87],14]
+  ].map(([id,ort,center,z])=>Object.freeze({id,ort,center:Object.freeze(center),z})));
+  function bildProbe(Q,p){
+    if(!BILDPROBEN.includes(p))throw Error('Keine feste Referenzprobe');
+    const info=Q.bildInfo(p.id),s=Q.bildStil(p.id).sources[Q.BILD_ID];
+    if(!info||p.z<info.minzoom||p.z>info.maxzoom||Q.bildBereich(p.id,p.center,p.z-Math.log2(512/info.tileSize))!=='kandidat')throw Error('Probe außerhalb der Anfragegrenzen');
+    const [lon,lat]=p.center,n=2**p.z,R=20037508.342789244;
+    const x=Math.floor((lon+180)/360*n),y=Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n);
+    const d=2*R/n, bbox=[-R+x*d,R-(y+1)*d,-R+(x+1)*d,R-y*d];
+    const url=s.tiles[0].replace('{bbox-epsg-3857}',bbox.join(',')).replace('{z}',p.z).replace('{x}',x).replace('{y}',y);
+    if(!url.startsWith('https://')||/[{}]/.test(url))throw Error('Ungültige Referenz-URL');
+    return {url,x,y,z:p.z,tileSize:s.tileSize};
+  }
+  function pixelStatistik(data){
+    if(!data||!data.length||data.length%4)throw Error('Keine RGBA-Pixel');
+    let alpha=0,deckend=0,abweichend=0,erste=null;
+    for(let i=0;i<data.length;i+=4){
+      if(data[i+3]===0){alpha++;continue;}
+      if(data[i+3]===255)deckend++;
+      const rgb=data[i]*65536+data[i+1]*256+data[i+2];
+      if(erste===null)erste=rgb;else if(rgb!==erste)abweichend++;
+    }
+    const n=data.length/4;
+    return {pixel:n,transparent:alpha,deckend,einfarbig:erste!==null&&abweichend===0,
+      auffaellig:alpha===n||abweichend===0};
+  }
+  // Nur aggregierte Renderfragmente; keine Textwerte oder Nutzerobjekte.
+  function renderDetails(map){
+    const stil=map.getStyle();
+    if(!stil?.sources||!Array.isArray(stil.layers))return null;
+    const ids=Object.keys(stil.sources).filter(k=>stil.sources[k].type==='vector'&&stil.layers.some(l=>l.source===k&&['buildings','roads','places','pois'].includes(l['source-layer'])));
+    if(ids.length!==1)return null;
+    const id=ids[0];
+    const gruppen=[['Hausnummern','buildings','addr_housenumber'],['Straßen','roads',null],['Orte','places',null],['POIs','pois',null]];
+    const out={};
+    for(const [name,layer,feld] of gruppen){
+      const ids=stil.layers.filter(l=>l.source===id&&l['source-layer']===layer&&l.type==='symbol'&&l.layout?.visibility!=='none'&&l.layout?.['text-field']&&(!feld||l.id==='housenumber'||JSON.stringify(l.layout['text-field']).includes(feld))).map(l=>l.id);
+      out[name]={layer:ids.length,fragmente:ids.length?map.queryRenderedFeatures({layers:ids}).length:0};
+    }
+    const g=stil.layers.filter(l=>l.source===id&&l.type==='fill-extrusion'&&l.layout?.visibility!=='none').map(l=>l.id);
+    out.Extrusion={layer:g.length,fragmente:g.length?map.queryRenderedFeatures({layers:g}).length:0};
+    return out;
+  }
+  const api=Object.freeze({ORTE,statistik,quelle,stichprobe,text,beschriftung,BILDPROBEN,bildProbe,pixelStatistik,renderDetails});
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.KARTE_V2_DIAGNOSE=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

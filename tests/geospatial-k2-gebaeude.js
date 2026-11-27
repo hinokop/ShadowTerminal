@@ -158,6 +158,26 @@ hybridFixture.layers.push(
   assert.equal(await p.evaluate(id=>!!__m.getLayer(id),Q.GEBAEUDE_ID),false);
   assert.deepEqual(await p.evaluate(()=>window.__mapErr||[]),[]);
   await p.evaluate(()=>__m.remove());assert.deepEqual(errors,[]);
+  // Standalone K2f-Diagnose: nur bewusster Start, sechs feste Anfragen,
+  // echte Dekodierung, Fehlerklassifikation, keine URL-/Key-Ausgabe.
+  const probAnfragen=[];
+  await p.route(/^https?:/,r=>{
+    const u=new URL(r.request().url());probAnfragen.push({url:u.href,ref:r.request().headers().referer||''});
+    const headers={'access-control-allow-origin':'*'};
+    if(u.hostname==='www.wms.nrw.de')return r.fulfill({status:503,body:'fixture',headers});
+    if(u.hostname==='geo4.service24.rlp.de')return r.fulfill({body:'<xml>fixture</xml>',contentType:'text/xml',headers});
+    return r.fulfill({body:rasterPNG,contentType:'image/png',headers});
+  });
+  await p.goto(pathToFileURL(path.join(ROOT,'karte-v2-rasterdiagnose.html')).href);
+  assert.equal(probAnfragen.length,0);
+  await p.click('#start');await p.waitForFunction(()=>document.getElementById('status').textContent.includes('Prüfung beendet'));
+  const bericht=await p.locator('#bericht').inputValue();
+  assert.equal(probAnfragen.length,6);assert.ok(probAnfragen.every(a=>!a.ref&&!new URL(a.url).searchParams.has('key')));
+  assert.equal((bericht.match(/Dekodiert 256×256/g)||[]).length,4);
+  assert.equal((bericht.match(/auffällige\/gleichförmige Kachel/g)||[]).length,4);
+  assert.ok(bericht.includes('HTTP 503')&&bericht.includes('Keine erwartete Bildantwort'));
+  assert.ok(!bericht.includes('https://')&&!bericht.includes('FIXTURE'));
+  assert.deepEqual(errors,[]);
   console.log('OK: echte MVT-Gebäude, Ausschluss unplausibler Höhen/Adresspunkte, Zoom und Sichtbarkeit');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -184,6 +184,29 @@ assert.deepEqual(nurOverlay.sources['shadow-v2-hybrid-2'],hybridBasis.sources.pr
 assert.throws(()=>Q.hybridStil('nrw',hybridBasis,Q.BILD_ID,Q.BILD_ID));
 assert.equal(JSON.stringify(hybridBasis),hb);
 
+// K2f: fixed probe whitelist, exact WMS tile extent and WMTS row/column.
+assert.equal(D.BILDPROBEN.length,6);
+assert.throws(()=>D.bildProbe(Q,{...D.BILDPROBEN[0]}));
+for(const p of D.BILDPROBEN){
+  const b=D.bildProbe(Q,p),u=new URL(b.url),n=2**p.z;
+  assert.ok(b.x>=0&&b.x<n&&b.y>=0&&b.y<n);assert.equal(b.tileSize,256);
+  assert.ok(!u.searchParams.has('key')&&!/[{}]/.test(b.url));
+  if(p.id==='sentinel2016')assert.ok(u.pathname.endsWith('/'+p.z+'/'+b.y+'/'+b.x+'.jpg'));
+  else{
+    const box=u.searchParams.get('bbox').split(',').map(Number);
+    assert.ok(box.every(Number.isFinite)&&box[0]<box[2]&&box[1]<box[3]);
+    const d=40075016.685578488/n;
+    assert.ok(Math.abs(box[2]-box[0]-d)<1e-6&&Math.abs(box[3]-box[1]-d)<1e-6);
+  }
+}
+assert.deepEqual(D.pixelStatistik([1,2,3,255,1,2,3,255]),{pixel:2,transparent:0,deckend:2,einfarbig:true,auffaellig:true});
+assert.equal(D.pixelStatistik([1,2,3,0,9,9,9,0]).auffaellig,true);
+assert.equal(D.pixelStatistik([1,2,3,255,4,5,6,255]).auffaellig,false);
+assert.throws(()=>D.pixelStatistik([]));
+const render=D.renderDetails({getStyle:()=>angepasst,queryRenderedFeatures:()=>[{properties:{name:'PRIVATE_FIXTURE',token:'PRIVATE_FIXTURE'}}]});
+assert.equal(render.Hausnummern.layer,1);assert.equal(render.Hausnummern.fragmente,1);
+assert.ok(!JSON.stringify(render).includes('PRIVATE_FIXTURE'));
+assert.equal(D.renderDetails({getStyle:()=>Q.leererStil()}),null);
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'shadow-maplibre-'));
 try {
   const pkg=path.join(__dirname,'node_modules','maplibre-gl'), ziel=path.join(tmp,'vendor');

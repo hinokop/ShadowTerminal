@@ -265,6 +265,7 @@
     laden=Promise.resolve().then(()=>typeof maplibregl==='undefined'?script('vendor/maplibre-gl/maplibre-gl.js'):null)
       .then(()=>typeof KARTE_V2_RENDERER==='undefined'?script('karte-v2-renderer.js'):null)
       .then(()=>typeof KARTE_V2_QUELLEN==='undefined'?script('karte-v2-quellen.js'):null)
+      .then(()=>typeof KARTE_V2_DIAGNOSE==='undefined'?script('karte-v2-diagnose.js'):null)
       .catch(e=>{laden=null;throw e;});
     return laden;
   }
@@ -285,8 +286,26 @@
         h('p',{class:'note'},'Masken und Zentrieren wirken derzeit auf die Lagekarte. Die gemeinsame Kamera folgt später.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('p',{class:'note',id:'k-v2-status',role:'status'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.'),
+        h('div',null,h('button',{type:'button',id:'k-v2-qualitaet',onclick:qualitaetsbericht},'Qualitätsbericht'),
+          h('textarea',{id:'k-v2-qualitaetsbericht',hidden:true,readonly:true,rows:8,'aria-label':'Redigierter Qualitätsbericht',style:'display:none;width:100%;margin-top:8px;'})),
         h('small',null,'Bei Online-Auswahl sieht der jeweilige Anbieter Kartenausschnitt und IP, CARTO zusätzlich den Schlüssel. Die Bildquelle und ihre Metadaten werden im Status und in der Kartenattribution ausgewiesen. © OpenStreetMap-Mitwirkende, © CARTO.')),
       h('div',{id:'k-v2-map',style:'position:relative;width:100%;height:420px;min-height:240px;background:#101820;border:1px solid var(--border);'}));
+  }
+  function qualitaetsbericht(){
+    const c=kontext,feld=$('k-v2-qualitaetsbericht');
+    if(!aktiv(c)||!c.a||!feld)return;
+    const out=['SHADOW / K2f – Qualitätsstichprobe','Modus: '+namen[c.modus],
+      'Zoom: '+c.map.getZoom().toFixed(2)+' · Neigung: '+c.map.getPitch().toFixed(1),
+      'Bildquelle: '+(KARTE_V2_QUELLEN.bildInfo(c.bildQuelle)?.name||'keine'),
+      'Status: '+c.status.textContent,
+      'Nur Renderfragmente; keine eindeutige Objektzählung oder Sichtbarkeits-/Qualitätsgarantie.'];
+    try{
+      const d=KARTE_V2_DIAGNOSE.renderDetails(c.map);
+      if(d)for(const [k,v] of Object.entries(d))out.push(k+': '+v.layer+' aktive Layer; '+v.fragmente+' Renderfragmente');
+      else out.push('Keine eindeutige Vektorquelle.');
+      out.push('Kartenressourcen geladen: '+(c.map.areTilesLoaded()?'ja':'nein'));
+    }catch(e){out.push('Renderstichprobe nicht auswertbar.');}
+    feld.value=out.join('\n');feld.hidden=false;feld.style.display='block';
   }
   function auswahl(modell){
     const K=VIEW.karte, id=K.auswahl, k=karteAuswahlSchluessel();

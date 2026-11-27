@@ -265,6 +265,11 @@ function assertCamera(actual,expected){
   assert.equal(await p.locator('#k-v2-gebaeude').isDisabled(),true);
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
   assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]]);
+  await p.click('#k-v2-qualitaet');
+  const bericht=await p.locator('#k-v2-qualitaetsbericht').inputValue();
+  assert.ok(bericht.includes('Modus: Hybrid')&&bericht.includes('Bildquelle: Berlin TrueDOP 2024'));
+  assert.ok(bericht.includes('Hausnummern:')&&bericht.includes('Extrusion: 0 aktive Layer'));
+  assert.ok(!bericht.includes(fixtureKey)&&!bericht.includes('https://')&&!bericht.includes('K2 Sued')&&!bericht.includes('13.405'));
   const vorHybridRemount=stilAbrufe();
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();renderModule();});
   await hybridBereit();await hybridTreffer();
