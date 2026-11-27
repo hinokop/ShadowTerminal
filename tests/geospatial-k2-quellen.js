@@ -120,6 +120,15 @@ assert.deepEqual(Q.bildKandidaten([13.405,52.52],14,['berlin2024']),['brandenbur
 assert.deepEqual(Q.bildKandidaten([13.405,52.52],14,['berlin2024','brandenburg']),['sentinel2016']);
 assert.deepEqual(Q.bildKandidaten([14.33,51.76],14),['brandenburg','sentinel2016']);
 assert.deepEqual(Q.bildKandidaten([8.27,50.0],14),['rheinlandPfalz','sentinel2016']);
+// M1: real administrative polygons, not the rectangular request bounds.
+for(const center of [[7.596,50.359],[7.46,50.43],[7.83,50.44]])assert.deepEqual(Q.bildKandidaten(center,16),['rheinlandPfalz','sentinel2016']);
+for(const center of [[8.047,52.279],[8.678,50.584],[6.168,51.37]])assert.deepEqual(Q.bildKandidaten(center,16),['sentinel2016']);
+for(const center of [[13.22,52.405],[13.51,52.39]])assert.deepEqual(Q.bildKandidaten(center,16),['brandenburg','sentinel2016']);
+assert.deepEqual(Q.bildKandidaten([7.596,50.359],16,['rheinlandPfalz']),['sentinel2016']);
+// Explicit provider selection retains coarse request bounds for edge comparisons.
+assert.equal(Q.bildBereich('nrw',[7.596,50.359],16),'kandidat');
+assert.ok(Q.bildStil('nrw').sources[Q.BILD_ID].attribution.includes('BKG'));
+
 assert.deepEqual(Q.bildKandidaten([13.405,52.52],8),['sentinel2016']);
 assert.deepEqual(Q.bildKandidaten([NaN,52.52],14),[]);
 const bb=Q.bildStil('brandenburg','shadow-v2-bild-42');
@@ -207,6 +216,15 @@ const render=D.renderDetails({getStyle:()=>angepasst,queryRenderedFeatures:()=>[
 assert.equal(render.Hausnummern.layer,1);assert.equal(render.Hausnummern.fragmente,1);
 assert.ok(!JSON.stringify(render).includes('PRIVATE_FIXTURE'));
 assert.equal(D.renderDetails({getStyle:()=>Q.leererStil()}),null);
+const adr=D.adressDetails({getStyle:()=>angepasst,querySourceFeatures:()=>[
+  {geometry:{type:'Point'},properties:{addr_housenumber:'PRIVATE_1',kind:'address'}},
+  {geometry:{type:'Polygon'},properties:{addr_housenumber:'PRIVATE_2',kind:'building'}},
+  {geometry:{type:'Polygon'},properties:{addr_housenumber:''}},
+  {geometry:{type:'Point'},properties:{name:'PRIVATE_3'}}
+]});
+assert.equal(adr.punkt,1);assert.equal(adr.polygon,1);assert.equal(adr.kindAddress,1);
+assert.equal(adr.geprueft,4);assert.equal(adr.layer.length,1);assert.equal(adr.layer[0].min,17);
+assert.ok(!JSON.stringify(adr).includes('PRIVATE_'));
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'shadow-maplibre-'));
 try {
   const pkg=path.join(__dirname,'node_modules','maplibre-gl'), ziel=path.join(tmp,'vendor');

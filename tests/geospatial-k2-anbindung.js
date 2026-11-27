@@ -207,9 +207,11 @@ function assertCamera(actual,expected){
   await p.evaluate(()=>renderModule());await status('Mittelpunkt außerhalb des Anfragebereichs');
   assert.equal(await p.locator('#k-v2-bildwahl').inputValue(),'berlin2024');
   await p.selectOption('#k-v2-bildwahl','auto');await status('Brandenburg / Berlin DOP20');await status('Bildkacheln geladen');
-  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[8.27,50.0],zoom:14,duration:0}));
+  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[7.596,50.359],zoom:14,duration:0}));
   await status('Rheinland-Pfalz DOP20');await status('Bildkacheln geladen');
   assert.ok(bildAnfragen.some(a=>new URL(a.url).hostname==='geo4.service24.rlp.de'));
+  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[6.168,51.37],zoom:14,duration:0}));
+  await status('Sentinel-2 Übersicht (EOX)');await status('Bildkacheln geladen');
   await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[6.56,51.3],zoom:16,duration:0}));
   await status('Nordrhein-Westfalen DOP10');await status('Bildkacheln geladen');await status('nominal 10 cm');
   assert.ok(bildAnfragen.some(a=>new URL(a.url).hostname==='www.wms.nrw.de'));
@@ -287,7 +289,23 @@ function assertCamera(actual,expected){
   bildFehler=false;await p.selectOption('#k-v2-bildwahl','auto');await hybridBereit();
   // Vektor-Stil- und Kachelausfälle: Raster und Objektlayer bleiben, kein Moduswechsel.
   for(const [fehler,grund] of [['stilfehler','CARTO-Stil nicht verfügbar'],['kachelfehler','CARTO-Vektorkacheln nicht verfügbar']]){
-    netz=fehler;await p.click('#k-v2-hybrid');await status(grund);await status('Bildkacheln geladen');
+    netz=fehler;
+    if(fehler==='kachelfehler'){
+      // M3: no idle delivery at all during the failure phase. MapLibre still
+      // processes tile errors and render events. Recovery must not wait 25 s.
+      await p.evaluate(()=>{
+        const proto=maplibregl.Map.prototype, fire=proto.fire;
+        window.__idleUnterdrueckt=0;
+        window.__idleRestore=()=>{proto.fire=fire;delete window.__idleRestore;};
+        proto.fire=function(e,...args){if((typeof e==='string'?e:e?.type)==='idle'){window.__idleUnterdrueckt++;return this;}return fire.call(this,e,...args);};
+      });
+    }
+    await p.click('#k-v2-hybrid');
+    try{
+      await p.waitForFunction(text=>$('k-v2-status')?.textContent.includes(text),grund,{timeout:15000});
+      await status('Bildkacheln geladen');
+    }finally{if(fehler==='kachelfehler')await p.evaluate(()=>window.__idleRestore?.());}
+    // Whether MapLibre attempted to emit idle or not, none was delivered during the failure phase.
     assert.equal(await p.locator('#k-v2-hybrid').getAttribute('aria-pressed'),'true');await hybridTreffer();
     const vor=stilAbrufe();await p.evaluate(()=>renderModule());await status(grund);await status('Bildkacheln geladen');
     assert.equal(stilAbrufe(),vor,'kein automatischer CARTO-Neuversuch nach Fehler');

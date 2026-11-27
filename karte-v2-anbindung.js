@@ -45,6 +45,7 @@
   function stop(c){
     if(c.abort)c.abort.abort();c.abort=null;
     clearTimeout(c.timer);c.timer=null;
+    clearTimeout(c.fehlerTimer);c.fehlerTimer=null;
   }
   function hybridStop(c){
     const h=c.hyb;if(!h)return;c.hyb=null;
@@ -208,12 +209,13 @@
     }
     return false;
   }
-  function hybridIdle(c){
+  function hybridIdle(c,nurFehler=false){
     const h=c.hyb;if(!h?.stil||!h.vektorId)return false;
     for(const [id,t] of h.fehler)if(Date.now()-t>10000)h.fehler.delete(id);
     if((!h.geladen&&h.fehler.size)||(!h.erfolg&&h.fehler.size>=3)){
       hybridAusfall(c,'CARTO-Vektorkacheln nicht verfügbar');return true;
     }
+    if(nurFehler)return false;
     if(h.erfolg){if(!h.fehler.size)h.warnung=false;h.fehler.clear();}
     h.erfolg=false;return false;
   }
@@ -232,8 +234,8 @@
     c.timer=setTimeout(()=>{if(aktiv(c)&&c.generation===g)rueckfall(c,'CARTO-Zeitlimit erreicht');},25000);
     try{
       let s,zeit;
-      const wieder=cache&&cache.modus===n&&Date.now()-cache.zeit<STIL_RAM_MS&&Q.styleCachebar(cache.stil,key);
-      if(wieder){s=cache.stil;zeit=cache.zeit;}
+      const cacheTreffer=cache&&cache.modus===n&&Date.now()-cache.zeit<STIL_RAM_MS&&Q.styleCachebar(cache.stil,key);
+      if(cacheTreffer){s=cache.stil;zeit=cache.zeit;}
       else{
         const antwort=await fetch(Q.cartoRequest(Q.stil(n),key).url,{signal:ac.signal,referrerPolicy:'no-referrer',redirect:'error',credentials:'omit'});
         if(!antwort.ok)throw Error('Stilabruf');
@@ -244,7 +246,7 @@
       const stil=Q.gebaeudeStil(s,n==='dunkel',c.gebaeude);
       if(Q.styleCachebar(s,key)){
         c.stilKandidat={modus:n,zeit,stil:s};
-        if(wieder)c.stilCache=c.stilKandidat; // bereits in dieser Sitzung online bewährt
+        if(cacheTreffer)c.stilCache=c.stilKandidat; // bereits in dieser Sitzung online bewährt
       }
       c.quellen=new Set(Object.entries(stil.sources).filter(([,q])=>q.type==='vector').map(([id])=>id));
       c.phase='kacheln';c.a.setStyle(stil);sync();
@@ -303,6 +305,11 @@
       const d=KARTE_V2_DIAGNOSE.renderDetails(c.map);
       if(d)for(const [k,v] of Object.entries(d))out.push(k+': '+v.layer+' aktive Layer; '+v.fragmente+' Renderfragmente');
       else out.push('Keine eindeutige Vektorquelle.');
+      const a=KARTE_V2_DIAGNOSE.adressDetails(c.map);
+      if(a){
+        out.push('Adressdaten: '+a.geprueft+'/'+a.gesamt+' Gebäudefragmente geprüft; nummerierte Punkte '+a.punkt+', Polygone '+a.polygon+', sonstige '+a.sonstige+'; kind=address '+a.kindAddress);
+        for(const [i,l] of a.layer.entries())out.push('Adresslayer '+(i+1)+': Zoom '+l.min+'–'+l.max+', sichtbar '+(l.sichtbar?'ja':'nein')+', Geometriefilter '+(l.geometrieFilter?'ja':'nein')+', kind-Filter '+(l.kindFilter?'ja':'nein')+', Nummernfilter '+(l.nummerFilter?'ja':'nein'));
+      }
       out.push('Kartenressourcen geladen: '+(c.map.areTilesLoaded()?'ja':'nein'));
     }catch(e){out.push('Renderstichprobe nicht auswertbar.');}
     feld.value=out.join('\n');feld.hidden=false;feld.style.display='block';
@@ -351,13 +358,75 @@
     try{if(c.a)c.a.unmount();}catch(e){}
     try{if(c.map)c.map.remove();}catch(e){}
   }
+  // Fehler können nach dem letzten idle eintreffen. Erst nach Rückkehr
+  // aus MapLibre's Ereigniskette prüfen; ein Repaint deckt noch laufende Tiles ab.
+  // Nur Fehlerübergänge: Erfolgsfenster werden ausschließlich bei idle beendet.
+  function fehlerAuswertungPlanen(c){
+    if(!aktiv(c)||c.fehlerTimer!==null)return;
+    const g=c.generation;
+    c.fehlerTimer=setTimeout(()=>{
+      c.fehlerTimer=null;
+      if(!aktiv(c)||c.generation!==g)return;
+      kachelAuswerten(c,true);
+      if(aktiv(c)&&c.generation===g)c.map.triggerRepaint();
+    },0);
+  }
+  function kachelAuswerten(c,nurFehler=false){
+    if(!aktiv(c)||!c.a.ready())return;
+    if(c.phase==='bild'){
+      if(!c.map.areTilesLoaded())return;
+      if(hybridIdle(c,nurFehler))return;
+      if(!c.bildQuelle){bildStatus(c);return;}
+      if(!c.kachelGeladen&&(c.kachelWarnung||c.ressourcenWarnung)&&
+         KARTE_V2_QUELLEN.bildBereich(c.bildQuelle,bildPosition(c),c.map.getZoom())==='kandidat'){
+        bildAusfall(c,'Luftbild nicht verfügbar');return;
+      }
+      // Wie beim Vektorstil einzelne Ausfälle tolerieren; nach erfolgreichem
+      // Start erst bei einer Häufung ohne neuen Erfolg im Anfragebereich zurückfallen.
+      const jetzt=Date.now();
+      for(const [id,t] of c.kachelFehler)if(jetzt-t>10000)c.kachelFehler.delete(id);
+      if(c.kachelGeladen&&!c.kachelErfolg&&c.kachelFehler.size>=3&&
+         KARTE_V2_QUELLEN.bildBereich(c.bildQuelle,bildPosition(c),c.map.getZoom())==='kandidat'){
+        bildAusfall(c,'Luftbild nicht verfügbar');return;
+      }
+      if(nurFehler)return;
+      if(c.kachelErfolg){
+        if(!c.kachelFehler.size)c.kachelWarnung=false;
+        c.kachelFehler.clear();
+      }
+      c.kachelErfolg=false;bildStatus(c);return;
+    }
+    if(c.phase==='kacheln'||c.phase==='online'){
+      if(!c.map.areTilesLoaded())return;
+      const jetzt=Date.now();
+      for(const [id,t] of c.kachelFehler)if(jetzt-t>10000)c.kachelFehler.delete(id);
+      if(c.phase==='kacheln'){
+        // Einzelne fehlende Tiles sind tolerierbar; ohne irgendeine geladene
+        // Anbieter-Kachel darf der Stil nicht als online gemeldet werden.
+        if(!c.kachelGeladen){
+          if(c.kachelWarnung)rueckfall(c,'CARTO-Ressource nicht verfügbar');
+          return; // ansonsten greift das bestehende Zeitlimit
+        }
+        if(nurFehler)return;
+        stop(c);c.phase='online';c.stilCache=c.stilKandidat;c.stilKandidat=null;gebaeudeKnoepfe(c);
+      }else if(!c.kachelErfolg&&c.kachelFehler.size>=3){
+        rueckfall(c,'CARTO-Ressource nicht verfügbar');return;
+      }
+      if(nurFehler)return;
+      if(c.kachelErfolg){
+        if(!c.kachelFehler.size)c.kachelWarnung=false;
+        c.kachelFehler.clear();
+      }
+      c.kachelErfolg=false;onlineHinweis(c);
+    }else if(!nurFehler&&c.phase==='lokal'&&!c.status.textContent.includes('bleiben verfügbar'))hinweis(c,'Lokale Objektlayer bereit · keine Basiskarte · Kamera vorläufig unabhängig.');
+  }
   function mount(){
     if(!dev)return;
     const el=$('k-v2-map'),status=$('k-v2-status');
     if(!el||!status||document.body.classList.contains('locked'))return;
     if(kontext)unmount(true);
     const alt=sitzung;
-    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,bildWahl:alt?.bildWahl||'auto',bildAusgefallen:alt?.bildAusgefallen?.slice()||[],bildQuelle:null,bildSourceId:null,hyb:null,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null};
+    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,bildWahl:alt?.bildWahl||'auto',bildAusgefallen:alt?.bildAusgefallen?.slice()||[],bildQuelle:null,bildSourceId:null,hyb:null,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null,fehlerTimer:null};
     kachelReset(c);kontext=c;
     bibliothek().then(()=>{
       if(!aktiv(c))return;
@@ -370,7 +439,10 @@
       c.map.on('moveend',()=>{gebaeudeKnoepfe(c);bildAktualisieren(c);});
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
       c.map.on('sourcedata',e=>{
-        if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase)||e.tile?.state!=='loaded')return;
+        if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase))return;
+        if((c.quellen.has(e.sourceId)||(c.hyb?.vektorId&&e.sourceId===c.hyb.vektorId))&&
+           (c.kachelWarnung||c.ressourcenWarnung||c.hyb?.fehler?.size))fehlerAuswertungPlanen(c);
+        if(e.tile?.state!=='loaded')return;
         if(c.hyb?.vektorId&&e.sourceId===c.hyb.vektorId){c.hyb.geladen=true;c.hyb.erfolg=true;clearTimeout(c.hyb.tileTimer);c.hyb.tileTimer=null;bildStatus(c);return;}
         if(!c.quellen.has(e.sourceId))return;
         c.kachelGeladen=true;c.kachelErfolg=true;
@@ -378,10 +450,11 @@
       });
       c.map.on('error',e=>{
         if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase))return;
-        if(hybridFehler(c,e)||e?.sourceId?.startsWith('shadow-v2-hybrid-'))return;
-        if(kachelFehlerEintragen(c,e)){if(c.phase==='bild')bildStatus(c);return;}
+        if(hybridFehler(c,e)){if(e.sourceId===c.hyb?.vektorId)fehlerAuswertungPlanen(c);return;}
+        if(e?.sourceId?.startsWith('shadow-v2-hybrid-'))return;
+        if(kachelFehlerEintragen(c,e)){if(c.phase==='bild')bildStatus(c);fehlerAuswertungPlanen(c);return;}
         if(e?.sourceId?.startsWith(KARTE_V2_QUELLEN.BILD_ID+'-')){
-          if(c.phase==='bild'&&e.sourceId===c.bildSourceId){c.ressourcenWarnung=true;bildStatus(c);}return;
+          if(c.phase==='bild'&&e.sourceId===c.bildSourceId){c.ressourcenWarnung=true;bildStatus(c);fehlerAuswertungPlanen(c);}return;
         }
         if(e?.sourceId?.startsWith('shadow-v2-')){
           c.objektWarnung=true;hinweis(c,'Eigene Kartenlayer konnten nicht aufgebaut werden.');return;
@@ -393,52 +466,7 @@
         if(c.phase==='kacheln')rueckfall(c,'CARTO-Ressource nicht verfügbar');
         else {c.ressourcenWarnung=true;hinweis(c,namen[c.modus]+' · Kartenressource nicht verfügbar.');}
       });
-      c.map.on('idle',()=>{
-        if(!aktiv(c)||!c.a.ready())return;
-        if(c.phase==='bild'){
-          if(!c.map.areTilesLoaded())return;
-          if(hybridIdle(c))return;
-          if(!c.bildQuelle){bildStatus(c);return;}
-          if(!c.kachelGeladen&&(c.kachelWarnung||c.ressourcenWarnung)&&
-             KARTE_V2_QUELLEN.bildBereich(c.bildQuelle,bildPosition(c),c.map.getZoom())==='kandidat'){
-            bildAusfall(c,'Luftbild nicht verfügbar');return;
-          }
-          // Wie beim Vektorstil einzelne Ausfälle tolerieren; nach erfolgreichem
-          // Start erst bei einer Häufung ohne neuen Erfolg im Anfragebereich zurückfallen.
-          const jetzt=Date.now();
-          for(const [id,t] of c.kachelFehler)if(jetzt-t>10000)c.kachelFehler.delete(id);
-          if(c.kachelGeladen&&!c.kachelErfolg&&c.kachelFehler.size>=3&&
-             KARTE_V2_QUELLEN.bildBereich(c.bildQuelle,bildPosition(c),c.map.getZoom())==='kandidat'){
-            bildAusfall(c,'Luftbild nicht verfügbar');return;
-          }
-          if(c.kachelErfolg){
-            if(!c.kachelFehler.size)c.kachelWarnung=false;
-            c.kachelFehler.clear();
-          }
-          c.kachelErfolg=false;bildStatus(c);return;
-        }
-        if(c.phase==='kacheln'||c.phase==='online'){
-          if(!c.map.areTilesLoaded())return;
-          const jetzt=Date.now();
-          for(const [id,t] of c.kachelFehler)if(jetzt-t>10000)c.kachelFehler.delete(id);
-          if(c.phase==='kacheln'){
-            // Einzelne fehlende Tiles sind tolerierbar; ohne irgendeine geladene
-            // Anbieter-Kachel darf der Stil nicht als online gemeldet werden.
-            if(!c.kachelGeladen){
-              if(c.kachelWarnung)rueckfall(c,'CARTO-Ressource nicht verfügbar');
-              return; // ansonsten greift das bestehende Zeitlimit
-            }
-            stop(c);c.phase='online';c.stilCache=c.stilKandidat;c.stilKandidat=null;gebaeudeKnoepfe(c);
-          }else if(!c.kachelErfolg&&c.kachelFehler.size>=3){
-            rueckfall(c,'CARTO-Ressource nicht verfügbar');return;
-          }
-          if(c.kachelErfolg){
-            if(!c.kachelFehler.size)c.kachelWarnung=false;
-            c.kachelFehler.clear();
-          }
-          c.kachelErfolg=false;onlineHinweis(c);
-        }else if(c.phase==='lokal'&&!c.status.textContent.includes('bleiben verfügbar'))hinweis(c,'Lokale Objektlayer bereit · keine Basiskarte · Kamera vorläufig unabhängig.');
-      });
+      c.map.on('idle',()=>kachelAuswerten(c));
       knoepfe(c);gebaeudeKnoepfe(c);
       sync();
       if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);

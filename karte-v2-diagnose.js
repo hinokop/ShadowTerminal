@@ -108,6 +108,32 @@
     out.Extrusion={layer:g.length,fragmente:g.length?map.queryRenderedFeatures({layers:g}).length:0};
     return out;
   }
-  const api=Object.freeze({ORTE,statistik,quelle,stichprobe,text,beschriftung,BILDPROBEN,bildProbe,pixelStatistik,renderDetails});
+  // M2: fixed-category metadata only. Never return house numbers, names,
+  // coordinates, filter expressions or provider URLs.
+  function adressDetails(map){
+    const stil=map.getStyle(),id=quelle(stil);
+    if(!id)return null;
+    const ls=stil.layers.filter(l=>l.source===id&&l['source-layer']==='buildings'&&l.type==='symbol'&&
+      (l.id==='housenumber'||JSON.stringify(l.layout?.['text-field']||'').includes('addr_housenumber')));
+    const layer=ls.map(l=>{
+      const filter=JSON.stringify(l.filter||[]);
+      return {min:Number.isFinite(l.minzoom)?l.minzoom:0,max:Number.isFinite(l.maxzoom)?l.maxzoom:24,
+        sichtbar:l.layout?.visibility!=='none',geometrieFilter:filter.includes('geometry-type')||filter.includes('$type'),
+        kindFilter:filter.includes('"kind"'),nummerFilter:filter.includes('addr_housenumber')};
+    });
+    const features=map.querySourceFeatures(id,{sourceLayer:'buildings'});
+    const out={gesamt:features.length,geprueft:Math.min(features.length,10000),punkt:0,polygon:0,sonstige:0,kindAddress:0,layer};
+    for(let i=0;i<out.geprueft;i++){
+      const f=features[i],p=f.properties||{},nr=p.addr_housenumber;
+      if(nr===undefined||nr===null||String(nr).trim()==='')continue;
+      const typ=f.geometry?.type;
+      if(typ==='Point'||typ==='MultiPoint')out.punkt++;
+      else if(typ==='Polygon'||typ==='MultiPolygon')out.polygon++;
+      else out.sonstige++;
+      if(p.kind==='address')out.kindAddress++;
+    }
+    return out;
+  }
+  const api=Object.freeze({ORTE,statistik,quelle,stichprobe,text,beschriftung,BILDPROBEN,bildProbe,pixelStatistik,renderDetails,adressDetails});
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.KARTE_V2_DIAGNOSE=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
