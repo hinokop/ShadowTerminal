@@ -112,7 +112,7 @@ bild.bounds[0]=0;bq.bounds[0]=0;
 assert.equal(Q.bildInfo('berlin2024').bounds[0],13.07);
 assert.equal(Q.bildStil('berlin2024').sources[Q.BILD_ID].bounds[0],13.07);
 const liste=Q.bildListe();
-assert.deepEqual(liste.map(q=>q.id),['berlin2024','brandenburg','rheinlandPfalz','sentinel2016']);
+assert.deepEqual(liste.map(q=>q.id),['berlin2024','brandenburg','rheinlandPfalz','nrw','sentinel2016']);
 assert.ok(liste.every(q=>!Object.hasOwn(q,'url')));
 liste[0].bounds[0]=0;assert.equal(Q.bildInfo('berlin2024').bounds[0],13.07);
 assert.deepEqual(Q.bildKandidaten([13.405,52.52],14),['berlin2024','brandenburg','sentinel2016']);
@@ -140,6 +140,42 @@ assert.ok(eox.attribution.includes('2016 &amp; 2017')&&eox.attribution.includes(
 for(const src of [rp,eox])assert.deepEqual(Q.cartoRequest(src.tiles[0],key),{url:src.tiles[0]});
 
 
+// NRW: nominell feinere regionale Quelle, keine Jahresgarantie.
+assert.deepEqual(Q.bildKandidaten([6.56,51.3],14),['nrw','sentinel2016']);
+assert.deepEqual(Q.bildKandidaten([6.56,51.3],14,['nrw']),['sentinel2016']);
+assert.deepEqual(Q.bildKandidaten([6.56,51.3],8),['sentinel2016']);
+const nw=Q.bildStil('nrw').sources[Q.BILD_ID];
+assert.equal(Q.bildInfo('nrw').gsd,0.1);
+assert.equal(Q.bildInfo('nrw').lizenz,'dl-de-zero-2.0');
+assert.equal(nw.maxzoom,20);
+assert.ok(nw.tiles[0].includes('layers=nw_dop_rgb')&&nw.tiles[0].includes('crs=EPSG:3857'));
+assert.deepEqual(Q.cartoRequest(nw.tiles[0],key),{url:nw.tiles[0]});
+// Hybrid: Raster unter ausgewählten Linien und Texten; keinerlei Mutation.
+const hybridBasis=JSON.parse(JSON.stringify(detail));
+hybridBasis.layers.push(
+  {id:'water',type:'fill',source:'protomaps','source-layer':'water',paint:{'fill-color':'#333'}},
+  {id:'roads',type:'line',source:'protomaps','source-layer':'roads',minzoom:10,filter:['==',['get','kind'],'major_road'],paint:{'line-width':2,'line-color':'#000'}},
+  {id:'places',type:'symbol',source:'protomaps','source-layer':'places',layout:{'text-field':['get','name'],'text-font':['Fixture Regular'],'icon-image':'fixture'},paint:{'icon-opacity':1}},
+  {id:'hidden-road',type:'line',source:'protomaps','source-layer':'roads',layout:{visibility:'none'}},
+  {id:'poi',type:'symbol',source:'protomaps','source-layer':'pois',layout:{'text-field':['get','name']}}
+);
+hybridBasis.sprite='https://example.invalid/sprites';
+const hb=JSON.stringify(hybridBasis);
+const hybrid=Q.hybridStil('nrw',hybridBasis,'shadow-v2-bild-42');
+assert.equal(JSON.stringify(hybridBasis),hb);
+assert.deepEqual(hybrid.layers.map(l=>l.id),['hintergrund',Q.BILD_LAYER,'roads','places',Q.HAUSNUMMER_ID]);
+assert.equal(hybrid.sources['shadow-v2-bild-42'].type,'raster');
+assert.deepEqual(hybrid.sources.protomaps,hybridBasis.sources.protomaps);
+assert.equal(hybrid.glyphs,hybridBasis.glyphs);assert.equal(hybrid.sprite,undefined);
+assert.equal(hybrid.layers[2].paint['line-opacity'],0.55);
+assert.deepEqual(hybrid.layers[2].filter,hybridBasis.layers[3].filter);
+assert.equal(hybrid.layers[3].layout['icon-image'],undefined);
+assert.equal(hybrid.layers[3].paint['icon-opacity'],undefined);
+assert.equal(hybrid.layers[3].paint['text-halo-width'],1.4);
+assert.ok(hybrid.layers.every(l=>['background','raster','line','symbol'].includes(l.type)));
+assert.throws(()=>Q.hybridStil('nrw',Q.leererStil()));
+assert.throws(()=>Q.hybridStil('nrw',basis));
+assert.throws(()=>Q.hybridStil('nrw',hybridBasis,'protomaps'));
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'shadow-maplibre-'));
 try {
   const pkg=path.join(__dirname,'node_modules','maplibre-gl'), ziel=path.join(tmp,'vendor');

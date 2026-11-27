@@ -124,6 +124,13 @@
       bounds:Object.freeze([6.037773,48.897996,8.617703,51.000893]),minzoom:10,maxzoom:19,tileSize:256,
       url:'https://geo4.service24.rlp.de/wms/rp_dop20.fcgi?service=WMS&version=1.1.1&request=GetMap&layers=rp_dop20&styles=&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true'
     }),
+    nrw:Object.freeze({
+      name:'Nordrhein-Westfalen DOP10',anbieter:'Geobasis NRW',art:'Orthophoto',
+      aufnahme:'Aktueller qualitätsgesicherter Bestand; Aufnahmezeit je Kachel unbekannt',gsd:0.10,lizenz:'dl-de-zero-2.0',
+      attribution:'Geobasis NRW · DOP10 · <a href="https://www.govdata.de/dl-de/zero-2-0">dl-de-zero-2.0</a>',
+      bounds:Object.freeze([5.86,50.31,9.47,52.54]),minzoom:10,maxzoom:20,tileSize:256,
+      url:'https://www.wms.nrw.de/geobasis/wms_nw_dop?service=WMS&version=1.3.0&request=GetMap&layers=nw_dop_rgb&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true'
+    }),
     sentinel2016:Object.freeze({
       name:'Sentinel-2 Übersicht (EOX)',anbieter:'EOX IT Services GmbH',art:'Satellitenübersicht',
       aufnahme:'2016/2017 (historisches Mosaik)',gsd:10,lizenz:'CC BY 4.0',
@@ -160,7 +167,45 @@
     s.layers.push({id:BILD_LAYER,type:'raster',source:sourceId,paint:{'raster-fade-duration':0}});
     return s;
   }
-  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, styleCachebar, GEBAEUDE_ID, HAUSNUMMER_ID, bildInfo, bildBereich, bildListe, bildKandidaten, bildStil, BILD_ID, BILD_LAYER });
+  /* K2e-1: reiner Hybridstil. Raster bleibt sichtbar; ausschließlich
+     Straßenlinien und Textbeschriftungen aus dem geladenen Vektorstil.
+     Keine Flächenfüllungen, Gebäudeextrusion, Icons oder erfundenen Daten. */
+  function hybridStil(id,vektor,sourceId=BILD_ID){
+    const raster=bildStil(id,sourceId);
+    if(!vektorStil(vektor))throw Error('Keine geeignete Vektorquelle');
+    const copy=JSON.parse(JSON.stringify(vektor));
+    const quellen=Object.keys(copy.sources).filter(k=>copy.sources[k]?.type==='vector'&&copy.layers.some(l=>l.source===k&&l['source-layer']==='buildings'));
+    if(quellen.length!==1)throw Error('Vektorquelle nicht eindeutig');
+    const source=quellen[0];
+    if(Object.hasOwn(raster.sources,source)||copy.layers.some(l=>l.id===BILD_LAYER||l.id==='hintergrund'))throw Error('Hybrid-ID-Konflikt');
+    hausnummern(copy,source);
+    const textLayer=l=>l.type==='symbol'&&l.layout?.['text-field']&&(
+      ['roads','places'].includes(l['source-layer'])||
+      (l['source-layer']==='buildings'&&(l.id===HAUSNUMMER_ID||l.id==='housenumber'||JSON.stringify(l.layout['text-field']).includes('addr_housenumber'))));
+    const linien=[],texte=[];
+    for(const l of copy.layers){
+      if(l.source!==source||l.layout?.visibility==='none')continue;
+      if(l.type==='line'&&l['source-layer']==='roads'){
+        // Anbieterfilter, Zoomgrenzen und Linienbreiten erhalten.
+        l.paint={...l.paint,'line-color':'#f1e7cf','line-opacity':0.55};
+        delete l.paint['line-pattern'];delete l.paint['line-gradient'];
+        linien.push(l);
+      }else if(textLayer(l)){
+        // Nur Text: keine Sprite-Abhängigkeit, keine opaken Flächen.
+        for(const k of Object.keys(l.layout))if(k.startsWith('icon-'))delete l.layout[k];
+        for(const k of Object.keys(l.paint||{}))if(k.startsWith('icon-'))delete l.paint[k];
+        l.paint={...l.paint,'text-color':'#ffffff','text-halo-color':'#18232b','text-halo-width':1.4};
+        texte.push(l);
+      }
+    }
+    if(!linien.length&&!texte.length)throw Error('Keine geeigneten Hybridlayer');
+    if(texte.length&&typeof copy.glyphs!=='string')throw Error('Keine Glyphenquelle');
+    raster.sources[source]=copy.sources[source];
+    if(texte.length)raster.glyphs=copy.glyphs;
+    raster.layers.push(...linien,...texte);
+    return raster;
+  }
+  const api = Object.freeze({ cartoRequest, leererStil, stil, vektorStil, gebaeudeStil, styleCachebar, GEBAEUDE_ID, HAUSNUMMER_ID, bildInfo, bildBereich, bildListe, bildKandidaten, bildStil, hybridStil, BILD_ID, BILD_LAYER });
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KARTE_V2_QUELLEN = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

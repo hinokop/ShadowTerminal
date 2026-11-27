@@ -42,7 +42,10 @@ const features=rows.map((r,i)=>{
  return bytes(2,cat(field(1,i+1),packed(2,tags),field(3,point?1:3),packed(4,geom)));
 });
 const layer=cat(str(1,'buildings'),...features,...keys.map(k=>str(3,k)),...values.map(v=>bytes(4,typeof v==='string'?str(1,v):field(6,zz(v)))),field(5,4096),field(15,2));
-const tile=bytes(3,layer);
+// Zusatzlayer mit echter MVT-Linie; keine Testdaten aus dem Internet.
+const road=bytes(2,cat(field(1,101),packed(2,[0,0]),field(3,2),packed(4,[9,zz(500),zz(1250),10,zz(2000),0])));
+const roads=cat(str(1,'roads'),road,str(3,'kind'),bytes(4,str(1,'major_road')),field(5,4096),field(15,2));
+const tile=cat(bytes(3,layer),bytes(3,roads));
 // Deterministische synthetische SDF-Glyphe '7' (8x8, 3px Rand), kein fremder Font.
 const bitmap=Buffer.alloc(14*14);for(let y=3;y<11;y++)for(let x=3;x<11;x++)bitmap[y*14+x]=(y<5||x===10-(y-3))?255:64;
 const glyph=cat(field(1,55),bytes(2,bitmap),field(3,8),field(4,8),field(5,zz(0)),field(6,zz(8)),field(7,9));
@@ -55,13 +58,23 @@ const basis={version:8,sources:{protomaps:source},layers:[
  {id:'bg',type:'background',paint:{'background-color':'#e0e0e0'}},
  {id:'flat',type:'fill',source:'protomaps','source-layer':'buildings',paint:{'fill-color':'#909090'}}
 ]};
+const hybridFixture=JSON.parse(JSON.stringify(basis));
+hybridFixture.glyphs='https://example.invalid/fonts/{fontstack}/{range}.pbf';
+hybridFixture.layers.push(
+  {id:'font-fixture',type:'symbol',source:'protomaps','source-layer':'buildings',layout:{'text-field':'','text-font':['Fixture Regular']}},
+  {id:'hybrid-road',type:'line',source:'protomaps','source-layer':'roads',paint:{'line-color':'#333','line-width':3}}
+);
 (async()=>{
  const browser=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
   const p=await browser.newPage({viewport:{width:1200,height:900},reducedMotion:'reduce'});p.setDefaultTimeout(25000);
-  const errors=[],bildAnfragen=[];let requests=0,glyphRequests=0;p.on('pageerror',e=>errors.push(e.message));
+  const errors=[],bildAnfragen=[],stilAnfragen=[];let requests=0,glyphRequests=0,stilFehler=false;p.on('pageerror',e=>errors.push(e.message));
   await p.route(/^https?:/,r=>{
     const u=new URL(r.request().url());
+    if(u.origin+u.pathname===Q.stil('dunkel')){
+      stilAnfragen.push({key:u.searchParams.get('key'),referer:r.request().headers().referer||''});
+      return r.fulfill(stilFehler?{status:500,body:'Fixture',headers:{'access-control-allow-origin':'*'}}:{json:hybridFixture,headers:{'access-control-allow-origin':'*'}});
+    }
     if(u.hostname==='gdi.berlin.de'){
       bildAnfragen.push({url:u.href,referer:r.request().headers().referer||''});
       return r.fulfill({body:rasterPNG,contentType:'image/png',headers:{'access-control-allow-origin':'*','cache-control':'no-store'}});
@@ -90,6 +103,18 @@ const basis={version:8,sources:{protomaps:source},layers:[
     assert.ok(!u.searchParams.has('key')&&!a.url.includes('NICHT-AN-BILDDIENST')&&!a.referer);
   }
   await p.click('#leer');await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Keine Kachelquelle aktiv'));
+  await p.click('#hybrid');await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Kein Abruf erfolgt'));
+  assert.equal(stilAnfragen.length,0);
+  await p.fill('#key','HYBRID-FIXTURE');await p.click('#hybrid');
+  await p.waitForFunction(()=>{const t=document.getElementById('meldung').textContent;return t.includes('Hybrid · Berlin')&&t.includes('Bildkacheln geladen')&&t.includes('Vektorkacheln geladen');});
+  assert.equal(stilAnfragen.length,1);assert.deepEqual(stilAnfragen[0],{key:'HYBRID-FIXTURE',referer:''});
+  assert.ok(bildAnfragen.every(a=>!new URL(a.url).searchParams.has('key')&&!a.referer));
+  await p.click('#leer');await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Keine Kachelquelle aktiv'));
+  stilFehler=true;
+  await p.fill('#key','HYBRID-FIXTURE');await p.click('#hybrid');
+  await p.waitForFunction(()=>{const t=document.getElementById('meldung').textContent;return t.includes('reines Luftbild')&&t.includes('Bildkacheln geladen');});
+  await p.click('#leer');await p.waitForFunction(()=>document.getElementById('meldung').textContent.includes('Keine Kachelquelle aktiv'));
+  stilFehler=false;
   await p.evaluate(style=>{
     const el=document.createElement('div');Object.assign(el.style,{position:'fixed',inset:'0',zIndex:'100'});document.body.appendChild(el);
     const n=2**15,x=17604.5,y=10747.5;
@@ -122,6 +147,15 @@ const basis={version:8,sources:{protomaps:source},layers:[
   await p.evaluate(()=>__m.jumpTo({pitch:60}));await hausBereit();
   assert.deepEqual(await ids(Q.HAUSNUMMER_ID),[6],'Hausnummer bei 60 Grad Neigung');
   await p.evaluate(()=>__m.jumpTo({zoom:16,pitch:0}));await idle();assert.deepEqual(await ids(Q.HAUSNUMMER_ID),[],'Hausnummer erst ab Zoom 17');
+  // Tatsächliche Hybrid-Komposition mit Raster, Straßenlinie und Hausnummer.
+  await p.evaluate(style=>{
+    __m.setStyle(style,{diff:false});__m.jumpTo({zoom:17,pitch:0});
+  },Q.hybridStil('berlin2024',hybridFixture));
+  await hausBereit();
+  assert.deepEqual(await ids(Q.HAUSNUMMER_ID),[6]);
+  assert.deepEqual(await ids('hybrid-road'),[101]);
+  assert.equal(await p.evaluate(id=>__m.getSource(id).type,Q.BILD_ID),'raster');
+  assert.equal(await p.evaluate(id=>!!__m.getLayer(id),Q.GEBAEUDE_ID),false);
   assert.deepEqual(await p.evaluate(()=>window.__mapErr||[]),[]);
   await p.evaluate(()=>__m.remove());assert.deepEqual(errors,[]);
   console.log('OK: echte MVT-Gebäude, Ausschluss unplausibler Höhen/Adresspunkte, Zoom und Sichtbarkeit');
