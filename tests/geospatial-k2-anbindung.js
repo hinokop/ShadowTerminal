@@ -90,8 +90,16 @@ function assertCamera(actual,expected){
    Object.assign(VIEW.karte.ebenen,{kacheln:false,sichtungen:true,zonen:true,pins:true});renderModule();
    return {a,b,si,pin,zone};
   });
-  const ready=()=>p.waitForFunction(()=>document.getElementById('k-v2-status')?.textContent.includes('Objektlayer bereit')&&KARTE_V2_DEV.adapter()?.ready());
+  const ready=()=>p.waitForFunction(()=>$('k-v2-leer')?.getAttribute('aria-pressed')==='true'&&/Objektlayer bereit|Ohne Basiskarte|Kein lokaler CARTO-Schlüssel/.test($('k-v2-status')?.textContent||'')&&KARTE_V2_DEV.adapter()?.ready());
+  const startKey=await p.evaluate(()=>VIEW.karte.cartoKey);
+  if(startKey){
+    await p.waitForFunction(()=>$('k-v2-status')?.textContent.includes('Voyager bereit'));
+    assert.equal(await p.locator('#k-v2-voyager').getAttribute('aria-pressed'),'true');
+    assert.ok(anfragen.some(x=>x.art==='tile'&&x.key===startKey),'Voyager lädt beim Erststart');
+    await p.click('#k-v2-leer');
+  }
   await ready();
+  assert.equal(await p.locator('#k-v2-dunkel').count(),0,'Shadow ersetzt Dark Matter');
   assert.ok(await p.locator('#k-svg').isVisible(),'SVG bleibt vorhanden');
   assert.equal(bildAnfragen.length,0,'keine Bildanfrage vor expliziter Wahl');
   const key=(...x)=>JSON.stringify(x), ka=key('sichtung',f.a,f.si),kb=key('sichtung',f.b,f.si);
@@ -242,16 +250,15 @@ function assertCamera(actual,expected){
   await p.click('#k-v2-flach');
   await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===0&&KARTE_V2_DEV.adapter().camera().bearing===0);
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true','unabhängig von Neigung');
-  await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
-  assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true','Gebäudewunsch über Stilwechsel');
   await p.click('#k-v2-shadow');await status('Shadow bereit');
+  assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true','Gebäudewunsch über Stilwechsel');
   assert.equal(await p.locator('#k-v2-shadow').getAttribute('aria-pressed'),'true');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
   assert.equal((await hit([52.51,13.41])).renderKey,kb);
   assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
   assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]]);
-  await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
+  await p.click('#k-v2-voyager');await status('Voyager bereit');
   await p.click('#k-v2-gebaeude');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'false');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
@@ -279,9 +286,9 @@ function assertCamera(actual,expected){
   assert.equal(einzelFehler,1);assert.equal(await p.locator('#k-v2-voyager').getAttribute('aria-pressed'),'true');
   await p.waitForFunction(k=>{const a=KARTE_V2_DEV.adapter();return a?.ready()&&a.hitTest(a.project([52.51,13.41]))?.renderKey===k;},kb);
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
-  netz='stilfehler';await p.click('#k-v2-dunkel');await status('CARTO-Stil nicht verfügbar');
+  netz='stilfehler';await p.click('#k-v2-shadow');await status('CARTO-Stil nicht verfügbar');
   await rueckfallTreffer();
-  netz='kachelfehler';await p.click('#k-v2-dunkel');await status('CARTO-Ressource nicht verfügbar');
+  netz='kachelfehler';await p.click('#k-v2-shadow');await status('CARTO-Ressource nicht verfügbar');
   await rueckfallTreffer();
   // Amtliches Luftbild in der echten Anwendungsansicht: kein CARTO-Abruf,
   // lokale Objekte, Kamera und Messung erhalten; kein automatischer Providerwechsel.
@@ -497,8 +504,8 @@ function assertCamera(actual,expected){
   assert.equal(await p.evaluate(k=>Object.values(localStorage).some(v=>v.includes(k)),neuKey),false);
   await p.click('#k-v2-flach');await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===0&&KARTE_V2_DEV.adapter().camera().bearing===0);
   const pinCam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
-  for(const [stil,bezeichnung,ll] of [['voyager','Voyager',[52.503,13.407]],['dunkel','Dark Matter',[52.504,13.408]]]){
-    if(stil==='dunkel'){await p.click('#k-v2-dunkel');await status('Dark Matter bereit');}
+  for(const [stil,bezeichnung,ll] of [['voyager','Voyager',[52.503,13.407]],['shadow','Shadow',[52.504,13.408]]]){
+    if(stil==='shadow'){await p.click('#k-v2-shadow');await status('Shadow bereit');}
     await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();VIEW.karte.pinSetzen=true;});
     const n=await p.evaluate(()=>PROFIL.pins.length), vorPin=stilAbrufe();
     await click(ll);assert.equal(await p.evaluate(()=>PROFIL.pins.length),n+1,'gemeinsame Pin-Aktion '+stil);
@@ -514,7 +521,7 @@ function assertCamera(actual,expected){
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();dispatch({type:'NAVIGATION',modul:'dossier'});});
   assert.equal(await p.locator('#k-v2-map').count(),0);
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
-  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await status('Dark Matter bereit');
+  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await status('Shadow bereit');
   assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'false','Modulwechsel beendet Vollbild');
   assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
   assert.equal(stilAbrufe(),vorModulwechsel,'kein Stilabruf nach Modulwechsel');
@@ -529,14 +536,14 @@ function assertCamera(actual,expected){
   const gesperrt=anfragen.length, bildGesperrt=bildAnfragen.length;
   await p.fill('#gate-pw','pw-test-123');await p.click('#gate-go');
   await p.waitForFunction(()=>!document.body.classList.contains('locked'));
-  await ready();
+  await status('Voyager bereit');
   assert.ok(await p.evaluate(()=>KARTE_V2_DEV.adapter()!==__alt));
-  assert.equal(await p.locator('#k-v2-leer').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.locator('#k-v2-voyager').getAttribute('aria-pressed'),'true');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'false');
   assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'false','Sperre verwirft Layoutzustand');
-  assert.equal(anfragen.length,gesperrt,'kein automatischer erneuter CARTO-Abruf nach Sperre');
+  assert.ok(anfragen.slice(gesperrt).some(x=>x.art==='tile'),'Voyager nach Entsperrung frisch geladen');
   assert.equal(bildAnfragen.length,bildGesperrt,'kein automatischer erneuter Bildabruf nach Sperre');
-  const nachSperre=stilAbrufe();await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
+  const nachSperre=stilAbrufe();await p.click('#k-v2-shadow');await status('Shadow bereit');
   assert.equal(stilAbrufe(),nachSperre+1,'Stil nach Sperre frisch abrufen');
   await p.click('#k-v2-leer');await status('Ohne Basiskarte');
   // K3: shared Lagebox weather cache is independent of every V2 style.
@@ -553,7 +560,7 @@ function assertCamera(actual,expected){
   assert.equal(wetterAnfragen.length,vorWetter+1,'weather positive control');
   const wetterVorStil=wetterAnfragen.length;
   const wetterTextVor=await p.locator('#k-st-wetter').innerText();
-  for(const [modus,erwartet] of [['voyager','Voyager bereit'],['dunkel','Dark Matter bereit'],['shadow','Shadow bereit'],['luftbild','Bildkacheln geladen'],['hybrid','Vektorkacheln geladen'],['leer','Ohne Basiskarte']]){
+  for(const [modus,erwartet] of [['voyager','Voyager bereit'],['shadow','Shadow bereit'],['luftbild','Bildkacheln geladen'],['hybrid','Vektorkacheln geladen'],['leer','Ohne Basiskarte']]){
     await p.click('#k-v2-'+modus);await status(erwartet);
     // Refresh through the real shared panel, e.g. after camera/UI updates.
     await p.evaluate(()=>karteStatusAkt());
@@ -571,26 +578,46 @@ function assertCamera(actual,expected){
   assert.equal(wetterAnfragen.length,wetterVorStil+1);
   assert.notEqual(wetterAnfragen.at(-1).lat,wetterAnfragen.at(-2).lat);
   await p.evaluate(()=>{VIEW.karte.ebenen.kacheln=false;karteStatusAkt();});
+  await p.click('#k-v2-hybrid');await status('Bildkacheln geladen');await status('Vektorkacheln geladen');
+  const werkNetz=[stilAbrufe(),bildAnfragen.length];
+  const werkOnlineCam=await p.evaluate(()=>{window.__werkzeugAdapter=KARTE_V2_DEV.adapter();return __werkzeugAdapter.camera();});
+  for(const art of ['pin','zone','messen']){
+    const b=p.locator('#k-v2-werkzeug-'+art);
+    await b.click();assert.equal(await b.getAttribute('aria-pressed'),'true');
+    await b.click();assert.equal(await b.getAttribute('aria-pressed'),'false');
+    assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Hybrid-Werkzeug '+art+' ohne Neuaufbau');
+  }
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),werkOnlineCam);
+  assert.deepEqual([stilAbrufe(),bildAnfragen.length],werkNetz,'kein neuer Stil-/Bildabruf allein durch Werkzeugwahl');
+  await p.click('#k-v2-leer');await status('Ohne Basiskarte');
   // Real actions in the expanded map. Same application state and click contract.
   await p.click('#k-v2-voll');
-  const werkCam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
+  const werkCam=await p.evaluate(()=>{window.__werkzeugAdapter=KARTE_V2_DEV.adapter();return __werkzeugAdapter.camera();});
   const pos=werkCam.center.slice().reverse();
   const pins=await p.evaluate(()=>PROFIL.pins.length),zonen=await p.evaluate(()=>PROFIL.zonen.length);
   await p.click('#k-v2-werkzeug-pin');await ready();
   assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'true');
   assert.equal(await p.locator('#k-v2-werkzeug-pin').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Werkzeugwahl ohne Neuaufbau');
   await click(pos);await ready();
   assert.equal(await p.evaluate(()=>PROFIL.pins.length),pins+1);
   assert.equal(await p.locator('#k-v2-werkzeug-pin').getAttribute('aria-pressed'),'false');
   await p.click('#k-v2-werkzeug-zone');await ready();
   await click([pos[0]+0.001,pos[1]]);await ready();
   assert.equal(await p.evaluate(()=>PROFIL.zonen.length),zonen+1);
+  await p.evaluate(()=>{window.__werkzeugAdapter=KARTE_V2_DEV.adapter();});
   await p.click('#k-v2-werkzeug-messen');await ready();
-  await click(pos);await click([pos[0]+0.001,pos[1]+0.001]);await ready();
+  assert.match(await p.locator('#k-v2-messwert').innerText(),/Ersten Messpunkt/);
+  await click(pos);assert.match(await p.locator('#k-v2-messwert').innerText(),/Zweiten Messpunkt/);
+  await click([pos[0]+0.001,pos[1]+0.001]);await ready();
+  assert.match(await p.locator('#k-v2-messwert').innerText(),/^Luftlinie: \d+ m$/);
+  assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Messabschluss ohne Neuaufbau');
   assert.equal(await p.evaluate(()=>VIEW.karte.messPts.length),2);
   assert.equal(await p.locator('#k-v2-werkzeug-messen').innerText(),'Messung löschen');
   await p.click('#k-v2-werkzeug-messen');await ready();
   assert.equal(await p.evaluate(()=>VIEW.karte.messPts.length),0);
+  assert.equal(await p.locator('#k-v2-messwert').isVisible(),false);
+  assert.equal(await p.evaluate(()=>__werkzeugAdapter===KARTE_V2_DEV.adapter()),true,'Messung löschen ohne Neuaufbau');
   assert.equal(await p.locator('#k-v2-voll').getAttribute('aria-pressed'),'true');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),werkCam);
   await p.click('#k-v2-voll');await p.close();
@@ -603,10 +630,8 @@ function assertCamera(actual,expected){
   await stored.fill('#gate-pw','pw-test-123');if(await stored.isVisible('#gate-pw2'))await stored.fill('#gate-pw2','pw-test-123');await stored.click('#gate-go');
   await stored.waitForFunction(()=>!document.body.classList.contains('locked'));
   assert.ok(await stored.evaluate(k=>VIEW.karte.cartoKey===k,browserKey));
-  await stored.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
-  await stored.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
   const gespeichertVorher=anfragen.length;
-  await stored.click('#k-v2-voyager');
+  await stored.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
   await stored.waitForFunction(()=>$('k-v2-status')?.textContent.includes('Voyager bereit'));
   assert.ok(anfragen.length>gespeichertVorher&&anfragen.slice(gespeichertVorher).every(x=>x.key===browserKey&&!x.referer),'Browserquelle hat Vorrang beim Start');
   await stored.close();

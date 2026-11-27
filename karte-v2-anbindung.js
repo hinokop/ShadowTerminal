@@ -11,7 +11,7 @@
   }
   // Die Lagekarte hat Datei- und Browserquelle bereits aufgelöst (Browser hat Vorrang).
   const lokalKey=()=>typeof VIEW.karte.cartoKey==='string'?VIEW.karte.cartoKey.trim():'';
-  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter',shadow:'Shadow',luftbild:'Luftbild',hybrid:'Hybrid'};
+  const namen={voyager:'Voyager',shadow:'Shadow',luftbild:'Luftbild',hybrid:'Hybrid',leer:'Ohne Basiskarte'};
   const STIL_RAM_MS=10*60*1000; // begrenzte Wiederverwendung, nur beim Neuaufbau
   /* Nur Sitzungs-RAM: Kamera, explizite Stilwahl, Gebäudewunsch; kein Schlüssel,
      keine Objekte, keine persistente Speicherung. Gemeinsame Kamera folgt in K4. */
@@ -243,7 +243,7 @@
       }
       if(!aktiv(c)||c.generation!==g)return;
       if(!Q.vektorStil(s))throw Error('Vektorstil');
-      const basis=Q.gebaeudeStil(s,n==='dunkel'||n==='shadow',c.gebaeude);
+      const basis=Q.gebaeudeStil(s,n==='shadow',c.gebaeude);
       const stil=n==='shadow'?Q.shadowStil(basis):basis;
       if(Q.styleCachebar(s,key)){
         c.stilKandidat={modus:n,zeit,stil:s};
@@ -333,6 +333,16 @@
       const b=$('k-v2-werkzeug-'+id);
       if(b){b.disabled=!kontext?.a;b.textContent=txt;b.setAttribute('aria-pressed',String(!!aktiv));}
     }
+    const mess=$('k-v2-messwert');
+    if(mess){
+      const pts=K.messPts;
+      mess.hidden=!K.messen&&pts.length!==2;
+      if(pts.length===2){
+        const km=karteDistanz(pts[0],pts[1]);
+        mess.textContent='Luftlinie: '+(km<1?Math.round(km*1000)+' m':km.toFixed(2).replace('.',',')+' km');
+      }else mess.textContent=pts.length===1?'Zweiten Messpunkt wählen.':'Ersten Messpunkt wählen.';
+    }
+    if(kontext?.map)kontext.map.getCanvas().style.cursor=(K.pick||K.pinSetzen||K.zoneSetzen||K.zugriffSetzen||K.messen)?'crosshair':'';
   }
   const normalHoehe='clamp(420px,60vh,850px)';
   const vollHoehe='max(280px,calc(100vh - 230px))';
@@ -369,6 +379,7 @@
         gruppe('Werkzeuge',[
           ...['pin','zone','messen'].map((art,i)=>h('button',{type:'button',id:'k-v2-werkzeug-'+art,disabled:true,'aria-pressed':'false',
             onclick:()=>{if(aktiv(kontext)&&kontext.a)karteWerkzeugWaehlen(art);}},['Pin setzen','Zone markieren','Messen'][i]))]),
+        h('output',{id:'k-v2-messwert',role:'status',hidden:true,style:'font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;'},''),
         h('details',{id:'k-v2-legende',style:'border:1px solid var(--border);padding:6px 10px;'},
           h('summary',{style:'cursor:pointer;'},'Rechercheebenen und Legende'),
           h('div',{id:'k-v2-legendenliste',style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(155px,100%),1fr));gap:4px 12px;margin:6px 0;'}),
@@ -376,7 +387,7 @@
       h('div',{id:'k-v2-map',style:'position:relative;width:100%;box-sizing:border-box;height:clamp(420px,60vh,850px);min-height:240px;background:#101820;border:1px solid var(--border);'}),
       h('div',{class:'pad',style:'display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);'},
         h('div',{id:'k-v2-kamera',style:'font-size:11px;font-variant-numeric:tabular-nums;'},'Kamera wird geladen.'),
-        h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Vergleichsansicht wird geladen. Keine Basiskartenanfragen.')),
+        h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Karte wird geladen. Voyager ist die Standardkarte.')),
       h('div',{id:'k-v2-paneele',style:'display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;padding:12px;'},
         h('div',{class:'k-status',id:'k-status','aria-label':'Lage',style:'position:static;max-width:none;width:auto;flex:1 1 240px;min-width:0;overflow-wrap:anywhere;box-sizing:border-box;'}),
         h('div',{class:'k-popup',id:'k-auswahl',hidden:true,'aria-live':'polite',style:'position:static;transform:none;width:auto;flex:1 1 320px;min-width:0;overflow-wrap:anywhere;max-height:55vh;box-sizing:border-box;'})),
@@ -385,7 +396,7 @@
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('button',{type:'button',id:'k-v2-qualitaet',onclick:qualitaetsbericht},'Qualitätsbericht'),
         h('textarea',{id:'k-v2-qualitaetsbericht',hidden:true,readonly:true,rows:8,'aria-label':'Redigierter Qualitätsbericht',style:'display:none;width:100%;margin-top:8px;'}),
-        h('p',null,'Bei Online-Auswahl sieht der Anbieter Kartenausschnitt und IP, CARTO zusätzlich den Schlüssel. Attributionen stehen auf der Karte. © OpenStreetMap-Mitwirkende, © CARTO.')));
+        h('p',null,'Voyager lädt beim Kartenstart mit lokalem Schlüssel. Bei Online-Karten sieht der Anbieter Kartenausschnitt und IP, CARTO zusätzlich den Schlüssel. Attributionen stehen auf der Karte. © OpenStreetMap-Mitwirkende, © CARTO.')));
   }
   function qualitaetsbericht(){
     const c=kontext,feld=$('k-v2-qualitaetsbericht');
@@ -603,6 +614,7 @@
       sync();karteStatusAkt();kameraAnzeige(c);
       $('k-v2-voll').disabled=false;layout(c);
       if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);
+      else if(!alt)wechseln(c,'voyager');
     }).catch(()=>{
       if(!aktiv(c))return;
       hinweis(c,'Lokale MapLibre-Ansicht nicht verfügbar. Bestehende Karte bleibt verfügbar.');

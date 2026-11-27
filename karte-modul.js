@@ -1609,6 +1609,25 @@ function karte3dEingang(d, fr) {
    Anwendungsaktionen können die Oberfläche aktualisieren. neu ist der Redraw-Callback des Adapters. */
 /* Gemeinsame Werkzeugwahl für die alte und neue Lagekarte. Die
    eigentliche Objektanlage/Messung bleibt im Klickvertrag. */
+/* V2: reine Werkzeugzustände ohne Modul-/MapLibre-Neuaufbau aktualisieren. */
+function karteWerkzeugAktualisieren() {
+  if (typeof KARTE_V2_DEV === 'undefined' || !KARTE_V2_DEV.adapter()) return false;
+  const K = VIEW.karte, svg = $('k-svg');
+  if (svg) {
+    svg.classList.toggle('pick', !!(K.pick || K.pinSetzen || K.zoneSetzen || K.zugriffSetzen));
+    svg.classList.toggle('messen', !!K.messen);
+  }
+  [
+    ['k-pin-neu', K.pinSetzen, K.pinSetzen ? 'Pin: auf Karte klicken' : 'Pin setzen'],
+    ['k-ozone-neu', K.zoneSetzen === 'eigen', K.zoneSetzen === 'eigen' ? 'Zone: auf Karte klicken' : 'Zone markieren'],
+    ['k-messen', K.messen, K.messen ? 'Messen beenden' : K.messPts.length ? 'Messung löschen' : 'Messen']
+  ].forEach(function (x) {
+    const b = $(x[0]); if (!b) return;
+    b.classList.toggle('aktiv', !!x[1]); b.setAttribute('aria-pressed', String(!!x[1])); b.textContent = x[2];
+  });
+  karteRendererDatenAktualisieren(); karteAuswahlAnzeige();
+  return true;
+}
 function karteWerkzeugWaehlen(art) {
   const K = VIEW.karte;
   if (art === 'pin') {
@@ -1619,7 +1638,7 @@ function karteWerkzeugWaehlen(art) {
     if (K.messen || K.messPts.length) { K.messen = false; K.messPts = []; }
     else { K.messen = true; K.auswahl = null; }
   } else return;
-  renderModule();
+  if (!karteWerkzeugAktualisieren()) renderModule();
 }
 function karteKlickVerarbeiten(eingabe, neu) {
   const K = VIEW.karte, ll = eingabe.ll;
@@ -1694,7 +1713,7 @@ function karteKlickVerarbeiten(eingabe, neu) {
     if (t && eingabe.markerKey && !mk) return;
     const messLl = mk ? mk.ll : ll;
     K.messPts = (K.messPts.length >= 2 ? [] : K.messPts).concat([messLl]);
-    if (K.messPts.length >= 2) { K.messen = false; renderModule(); return; }      /* Messung ist einmalig: danach arbeiten Markierungen und Popups wieder normal */
+    if (K.messPts.length >= 2) { K.messen = false; if (!karteWerkzeugAktualisieren()) renderModule(); return; }      /* Messung ist einmalig: danach arbeiten Markierungen und Popups wieder normal */
     neu();
     return;
   }
