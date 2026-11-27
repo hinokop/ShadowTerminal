@@ -92,6 +92,15 @@
         else if(src==='buildings')p['fill-color']='#344550';
         else if(src==='earth')p['fill-color']='#17232b';
       }
+      // Preserve provider widths, filters, dash patterns and casing geometry.
+      // Only recolor recognized road classes; unknown classes retain provider paint.
+      if(l.type==='line'&&src==='roads'&&typeof p['line-color']==='string'){
+        const name=id.toLowerCase();
+        if(/casing|outline/.test(name))p['line-color']='#101820';
+        else if(/motorway|trunk|highway/.test(name))p['line-color']='#a6a18b';
+        else if(/major|primary|secondary/.test(name))p['line-color']='#718b99';
+        else if(/minor|tertiary|residential|service/.test(name))p['line-color']='#455c69';
+      }
       if(l.type==='symbol'&&l.layout?.['text-field']){
         const adresse=src==='buildings'&&(id==='housenumber'||id===HAUSNUMMER_ID||
           JSON.stringify(l.layout['text-field']).includes('addr_housenumber'));
