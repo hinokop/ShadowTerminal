@@ -170,8 +170,8 @@
   /* K2e-1: reiner Hybridstil. Raster bleibt sichtbar; ausschließlich
      Straßenlinien und Textbeschriftungen aus dem geladenen Vektorstil.
      Keine Flächenfüllungen, Gebäudeextrusion, Icons oder erfundenen Daten. */
-  function hybridStil(id,vektor,sourceId=BILD_ID){
-    const raster=bildStil(id,sourceId);
+  function hybridStil(id,vektor,sourceId=BILD_ID,vektorId=null){
+    const raster=id===null?leererStil():bildStil(id,sourceId);
     if(!vektorStil(vektor))throw Error('Keine geeignete Vektorquelle');
     const copy=JSON.parse(JSON.stringify(vektor));
     const quellen=Object.keys(copy.sources).filter(k=>copy.sources[k]?.type==='vector'&&copy.layers.some(l=>l.source===k&&l['source-layer']==='buildings'));
@@ -200,7 +200,10 @@
     }
     if(!linien.length&&!texte.length)throw Error('Keine geeigneten Hybridlayer');
     if(texte.length&&typeof copy.glyphs!=='string')throw Error('Keine Glyphenquelle');
-    raster.sources[source]=copy.sources[source];
+    const ziel=vektorId||source;
+    if(Object.hasOwn(raster.sources,ziel))throw Error('Hybrid-Quellkonflikt');
+    raster.sources[ziel]=copy.sources[source];
+    for(const l of [...linien,...texte])l.source=ziel;
     if(texte.length)raster.glyphs=copy.glyphs;
     raster.layers.push(...linien,...texte);
     return raster;

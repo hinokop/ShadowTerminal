@@ -44,7 +44,8 @@ function assertCamera(actual,expected){
   const mvt=Buffer.concat([Buffer.from([26,layer.length]),layer]);
   const stil={version:8,sources:{protomaps:{type:'vector',tiles:[tile],maxzoom:15,attribution:'© CARTO'}},layers:[
     {id:'bg',type:'background',paint:{'background-color':'#304050'}},
-    {id:'buildings',source:'protomaps','source-layer':'buildings',type:'fill',paint:{'fill-color':'#888'}}
+    {id:'buildings',source:'protomaps','source-layer':'buildings',type:'fill',paint:{'fill-color':'#888'}},
+    {id:'roads',source:'protomaps','source-layer':'roads',type:'line',paint:{'line-color':'#555','line-width':2}}
   ]};
   const route=async r=>{
     const u=new URL(r.request().url()),bare=u.origin+u.pathname;
@@ -118,6 +119,9 @@ function assertCamera(actual,expected){
   await ready();
   const ohne=anfragen.length;await p.click('#k-v2-voyager');await status('Kein lokaler CARTO-Schlüssel');
   assert.equal(anfragen.length,ohne);
+  await p.click('#k-v2-hybrid');await status('Kein lokaler CARTO-Schlüssel');await status('Bildkacheln geladen');
+  assert.equal(anfragen.length,ohne,'Hybrid ohne Key nur Luftbild');
+  await p.click('#k-v2-leer');await status('Ohne Basiskarte');
   // Tatsächliches bestehendes Eingabefeld, Datei leer, keine neue V2-Persistenz.
   await p.locator('#k-carto-key').evaluate(el=>{el.closest('details').open=true;});
   await p.fill('#k-carto-key',fixtureKey);await p.locator('#k-carto-key').blur();
@@ -252,6 +256,42 @@ function assertCamera(actual,expected){
     assert.ok(!u.searchParams.has('key')&&!a.referer);
   }
   assert.equal(anfragen.length,vorBild,'kein automatischer CARTO-Rückfall');
+  // Hybrid in der gemeinsamen Ansicht: beide Quellen unabhängig, ein Modus.
+  const hybridBereit=async()=>{await status('Bildkacheln geladen');await status('Vektorkacheln geladen');};
+  const hybridTreffer=()=>p.waitForFunction(k=>{const a=KARTE_V2_DEV.adapter();return a?.ready()&&a.hitTest(a.project([52.51,13.41]))?.renderKey===k;},kb);
+  await p.click('#k-v2-hybrid');await hybridBereit();await hybridTreffer();
+  assert.equal(await p.locator('#k-v2-hybrid').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.locator('#k-v2-bildwahl').inputValue(),'auto');
+  assert.equal(await p.locator('#k-v2-gebaeude').isDisabled(),true);
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
+  assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]]);
+  const vorHybridRemount=stilAbrufe();
+  await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();renderModule();});
+  await hybridBereit();await hybridTreffer();
+  assert.equal(await p.evaluate(()=>__alt.ready()),false);
+  assert.equal(stilAbrufe(),vorHybridRemount,'Hybrid-Stil im Sitzungs-RAM');
+  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[6.56,51.3],zoom:16,duration:0}));
+  await status('Nordrhein-Westfalen DOP10');await hybridBereit();
+  assert.equal(stilAbrufe(),vorHybridRemount,'kein neuer Stilabruf bei Bildquellenwechsel');
+  await p.evaluate(cam=>KARTE_V2_DEV.adapter().flyTo({...cam,duration:0}),cam);
+  await status('Berlin TrueDOP 2024');await hybridBereit();
+  // Manueller Bildausfall: Vektoroverlay bleibt, keine automatische Ersatzquelle.
+  bildFehler=true;
+  await p.selectOption('#k-v2-bildwahl','berlin2024');await status('Keine geeignete Bildquelle verfügbar');await status('Vektorkacheln geladen');
+  assert.equal(await p.locator('#k-v2-hybrid').getAttribute('aria-pressed'),'true');await hybridTreffer();
+  bildFehler=false;await p.selectOption('#k-v2-bildwahl','auto');await hybridBereit();
+  // Vektor-Stil- und Kachelausfälle: Raster und Objektlayer bleiben, kein Moduswechsel.
+  for(const [fehler,grund] of [['stilfehler','CARTO-Stil nicht verfügbar'],['kachelfehler','CARTO-Vektorkacheln nicht verfügbar']]){
+    netz=fehler;await p.click('#k-v2-hybrid');await status(grund);await status('Bildkacheln geladen');
+    assert.equal(await p.locator('#k-v2-hybrid').getAttribute('aria-pressed'),'true');await hybridTreffer();
+    const vor=stilAbrufe();await p.evaluate(()=>renderModule());await status(grund);await status('Bildkacheln geladen');
+    assert.equal(stilAbrufe(),vor,'kein automatischer CARTO-Neuversuch nach Fehler');
+  }
+  netz='ok';await p.click('#k-v2-hybrid');await hybridBereit();
+  bildFehler=true;await p.click('#k-v2-hybrid');await status('Keine geeignete Bildquelle verfügbar');await status('Vektorkacheln geladen');await hybridTreffer();
+  bildFehler=false;await p.click('#k-v2-leer');await status('Ohne Basiskarte');
+  assert.ok(bildAnfragen.every(a=>!new URL(a.url).searchParams.has('key')&&!a.referer));
+  assert.ok(anfragen.every(a=>a.key===fixtureKey&&!a.referer));
   await p.evaluate(()=>{VIEW.karte.messen=false;VIEW.karte.messPts=[];karteRendererDatenAktualisieren();});
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();});
   await p.evaluate(id=>dispatch({type:'DOSSIER_SPERREN',id}),f.a);
@@ -306,11 +346,12 @@ function assertCamera(actual,expected){
   assert.equal(stilAbrufe(),vorModulwechsel,'kein Stilabruf nach Modulwechsel');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),pinCam);
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
+  await p.click('#k-v2-hybrid');await hybridBereit();
   /* Reale Zugangssperre und erneute Freigabe, ohne Navigation oder Neuladen. */
   await p.evaluate(()=>{window.__alt=KARTE_V2_DEV.adapter();Zugang.sperren('K2-Test');});
   assert.equal(await p.evaluate(()=>__alt.ready()),false);
   assert.equal(await p.locator('#k-v2-map canvas').count(),0);
-  const gesperrt=anfragen.length;
+  const gesperrt=anfragen.length, bildGesperrt=bildAnfragen.length;
   await p.fill('#gate-pw','pw-test-123');await p.click('#gate-go');
   await p.waitForFunction(()=>!document.body.classList.contains('locked'));
   await ready();
@@ -318,6 +359,7 @@ function assertCamera(actual,expected){
   assert.equal(await p.locator('#k-v2-leer').getAttribute('aria-pressed'),'true');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'false');
   assert.equal(anfragen.length,gesperrt,'kein automatischer erneuter CARTO-Abruf nach Sperre');
+  assert.equal(bildAnfragen.length,bildGesperrt,'kein automatischer erneuter Bildabruf nach Sperre');
   const nachSperre=stilAbrufe();await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
   assert.equal(stilAbrufe(),nachSperre+1,'Stil nach Sperre frisch abrufen');
   await p.click('#k-v2-leer');await status('Ohne Basiskarte');

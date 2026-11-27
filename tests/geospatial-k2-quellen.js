@@ -176,6 +176,14 @@ assert.ok(hybrid.layers.every(l=>['background','raster','line','symbol'].include
 assert.throws(()=>Q.hybridStil('nrw',Q.leererStil()));
 assert.throws(()=>Q.hybridStil('nrw',basis));
 assert.throws(()=>Q.hybridStil('nrw',hybridBasis,'protomaps'));
+const nurOverlay=Q.hybridStil(null,hybridBasis,Q.BILD_ID,'shadow-v2-hybrid-2');
+assert.deepEqual(Object.keys(nurOverlay.sources),['shadow-v2-hybrid-2']);
+assert.ok(!nurOverlay.layers.some(l=>l.type==='raster'));
+assert.ok(nurOverlay.layers.filter(l=>l.source).every(l=>l.source==='shadow-v2-hybrid-2'));
+assert.deepEqual(nurOverlay.sources['shadow-v2-hybrid-2'],hybridBasis.sources.protomaps);
+assert.throws(()=>Q.hybridStil('nrw',hybridBasis,Q.BILD_ID,Q.BILD_ID));
+assert.equal(JSON.stringify(hybridBasis),hb);
+
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'shadow-maplibre-'));
 try {
   const pkg=path.join(__dirname,'node_modules','maplibre-gl'), ziel=path.join(tmp,'vendor');

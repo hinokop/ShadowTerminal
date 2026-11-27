@@ -11,7 +11,7 @@
   }
   // Die Lagekarte hat Datei- und Browserquelle bereits aufgelöst (Browser hat Vorrang).
   const lokalKey=()=>typeof VIEW.karte.cartoKey==='string'?VIEW.karte.cartoKey.trim():'';
-  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter',luftbild:'Luftbild'};
+  const namen={leer:'Ohne Basiskarte',voyager:'Voyager',dunkel:'Dark Matter',luftbild:'Luftbild',hybrid:'Hybrid'};
   const STIL_RAM_MS=10*60*1000; // begrenzte Wiederverwendung, nur beim Neuaufbau
   /* Nur Sitzungs-RAM: Kamera, explizite Stilwahl, Gebäudewunsch; kein Schlüssel,
      keine Objekte, keine persistente Speicherung. Gemeinsame Kamera folgt in K4. */
@@ -21,8 +21,9 @@
       const el=$('k-v2-'+n);if(el){el.disabled=!c.a;el.setAttribute('aria-pressed',String(c.modus===n));}
     }
     const row=$('k-v2-bildwahl-zeile'), sel=$('k-v2-bildwahl');
-    if(row)row.hidden=c.modus!=='luftbild';
-    if(sel){sel.disabled=!c.a||c.modus!=='luftbild';sel.value=c.bildWahl;}
+    const raster=['luftbild','hybrid'].includes(c.modus);
+    if(row)row.hidden=!raster;
+    if(sel){sel.disabled=!c.a||!raster;sel.value=c.bildWahl;}
   }
   function gebaeudeKnoepfe(c){
     if(!aktiv(c))return;
@@ -44,6 +45,10 @@
   function stop(c){
     if(c.abort)c.abort.abort();c.abort=null;
     clearTimeout(c.timer);c.timer=null;
+  }
+  function hybridStop(c){
+    const h=c.hyb;if(!h)return;c.hyb=null;
+    h.abort?.abort();clearTimeout(h.abrufTimer);clearTimeout(h.tileTimer);
   }
   function kachelReset(c){
     c.quellen=new Set();c.kachelFehler=new Map();c.kachelGeladen=false;c.kachelErfolg=false;c.kachelWarnung=false;c.ressourcenWarnung=false;c.objektWarnung=false;
@@ -67,7 +72,7 @@
   }
   function rueckfall(c,grund){
     if(!aktiv(c)||!c.a)return;
-    ++c.generation;stop(c);c.modus='leer';c.phase='lokal';c.bildQuelle=null;c.bildSourceId=null;c.key='';c.stilCache=null;c.stilKandidat=null;kachelReset(c);
+    ++c.generation;stop(c);hybridStop(c);c.modus='leer';c.phase='lokal';c.bildQuelle=null;c.bildSourceId=null;c.key='';c.stilCache=null;c.stilKandidat=null;kachelReset(c);
     try{c.a.setStyle(KARTE_V2_QUELLEN.leererStil());sync();}catch(e){}
     knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,grund+' · Lokale Objektlayer bleiben verfügbar.');
   }
@@ -77,7 +82,7 @@
   function bildPosition(c){return c.map.getCenter().wrap().toArray();}
   function bildKandidaten(c){
     const Q=KARTE_V2_QUELLEN, center=bildPosition(c), zoom=c.map.getZoom();
-    if(c.bildWahl!=='auto')return Q.bildBereich(c.bildWahl,center,zoom)==='kandidat'?[c.bildWahl]:[];
+    if(c.bildWahl!=='auto')return !c.hyb?.bildManuellFehler&&Q.bildBereich(c.bildWahl,center,zoom)==='kandidat'?[c.bildWahl]:[];
     return Q.bildKandidaten(center,zoom,c.bildAusgefallen);
   }
   function bildStatus(c){
@@ -88,7 +93,7 @@
       const bereiche=ids.map(id=>Q.bildBereich(id,bildPosition(c),c.map.getZoom()));
       const grund=bereiche.includes('kandidat')?'Keine geeignete Bildquelle verfügbar.':
         bereiche.includes('uebersicht')?'Weiter hineinzoomen.':'Mittelpunkt außerhalb des Anfragebereichs.';
-      hinweis(c,'Luftbild · '+grund+' Lokale Objektlayer bleiben verfügbar.');
+      hinweis(c,namen[c.modus]+' · '+grund+' Lokale Objektlayer bleiben verfügbar.'+hybridZusatz(c));
       return;
     }
     const info=Q.bildInfo(c.bildQuelle);
@@ -106,44 +111,118 @@
       bereich==='uebersicht'?'Weiter hineinzoomen.':
       c.kachelGeladen?'Bildkacheln geladen (seit Auswahl); tatsächliche Abdeckung visuell prüfen.':'Noch keine Bildkachel bestätigt.';
     const aufloesung=info.gsd>=1?info.gsd+' m':Math.round(info.gsd*100)+' cm';
-    hinweis(c,info.name+' · '+info.aufnahme+' · nominal '+aufloesung+' · '+stand+
+    hinweis(c,(c.modus==='hybrid'?'Hybrid · ':'')+info.name+' · '+info.aufnahme+' · nominal '+aufloesung+' · '+stand+
       (info.art==='Satellitenübersicht'?' Historische Übersicht, keine Gebäudedetailauflösung.':'')+
       (c.bildAusgefallen.length?' Automatischer Quellenrückfall.':'')+
       (c.kachelWarnung||c.ressourcenWarnung?' Teil-/Ladefehler.':'')+
       (c.objektWarnung?' Fehler in lokalen Objektlayern.':'')+
-      (over?' Overzoom, keine zusätzliche Bildinformation.':''));
+      (over?' Overzoom, keine zusätzliche Bildinformation.':'')+hybridZusatz(c));
   }
   function bildAusfall(c,grund){
     if(!aktiv(c)||c.phase!=='bild')return;
     if(c.bildWahl==='auto'&&c.bildQuelle){
       if(!c.bildAusgefallen.includes(c.bildQuelle))c.bildAusgefallen.push(c.bildQuelle);
       bildAktualisieren(c);
+    }else if(c.modus==='hybrid'&&c.bildQuelle){
+      c.hyb.bildManuellFehler=true;bildAktualisieren(c,true);
     }else rueckfall(c,grund);
   }
   function bildAktualisieren(c,erzwingen=false){
     if(!aktiv(c)||c.phase!=='bild')return;
     const Q=KARTE_V2_QUELLEN, id=bildKandidaten(c)[0]||null;
     if(!erzwingen&&id===c.bildQuelle){bildStatus(c);return;}
-    ++c.generation;stop(c);kachelReset(c);c.key='';c.stilCache=null;c.stilKandidat=null;
+    ++c.generation;stop(c);kachelReset(c);c.key=c.hyb?.stil&&c.hyb.key===lokalKey()?c.hyb.key:'';c.stilCache=null;c.stilKandidat=null;
     c.bildQuelle=id;c.bildSourceId=id?Q.BILD_ID+'-'+c.generation:null;
     if(id)c.quellen=new Set([c.bildSourceId]);
-    try{c.a.setStyle(id?Q.bildStil(id,c.bildSourceId):Q.leererStil());sync();bildStatus(c);}
-    catch(e){bildAusfall(c,'Luftbild nicht verfügbar');}
+    let stil;
+    const h=c.hyb;
+    if(h){
+      clearTimeout(h.tileTimer);h.tileTimer=null;h.vektorId=null;h.geladen=false;h.erfolg=false;h.fehler=new Map();h.warnung=false;
+      if(h.stil&&!c.key){h.stil=null;h.grund='CARTO-Schlüssel geändert';}
+      if(h.stil){
+        try{
+          h.vektorId='shadow-v2-hybrid-'+c.generation;
+          stil=Q.hybridStil(id,h.stil,c.bildSourceId||Q.BILD_ID,h.vektorId);
+          const g=c.generation;
+          h.tileTimer=setTimeout(()=>{if(aktiv(c)&&c.hyb===h&&c.generation===g&&!h.geladen)hybridAusfall(c,'CARTO-Kachelzeitlimit');},25000);
+        }catch(e){h.stil=null;h.vektorId=null;h.grund='CARTO-Hybridstil nicht verfügbar';c.key='';}
+      }
+    }
+    try{c.a.setStyle(stil||(id?Q.bildStil(id,c.bildSourceId):Q.leererStil()));sync();bildStatus(c);}
+    catch(e){if(h?.stil)hybridAusfall(c,'CARTO-Hybridstil nicht verfügbar');else if(id)bildAusfall(c,'Luftbild nicht verfügbar');else rueckfall(c,'Kartenstil nicht verfügbar');}
   }
   function bildWechseln(c,wieder=false){
-    c.modus='luftbild';c.phase='bild';
+    hybridStop(c);c.modus='luftbild';c.phase='bild';
     if(!wieder)c.bildAusgefallen=[];
     knoepfe(c);gebaeudeKnoepfe(c);bildAktualisieren(c,true);
   }
   function bildManuell(wahl){
     const c=kontext;
     if(!aktiv(c)||c.phase!=='bild'||(wahl!=='auto'&&!KARTE_V2_QUELLEN.bildInfo(wahl)))return;
-    c.bildWahl=wahl;c.bildAusgefallen=[];bildAktualisieren(c,true);
+    c.bildWahl=wahl;c.bildAusgefallen=[];if(c.hyb)c.hyb.bildManuellFehler=false;bildAktualisieren(c,true);
+  }
+  function hybridZusatz(c){
+    const h=c.hyb;if(!h)return '';
+    return h.laden?' CARTO-Stil wird geladen.':h.grund?' '+h.grund+'; ohne Vektoroverlay.':
+      h.geladen?' Vektorkacheln geladen'+(h.warnung?' (Teil-/Ladefehler).':'.'):
+      ' Vektorkacheln noch nicht bestätigt'+(h.warnung?' (Teil-/Ladefehler).':'.');
+  }
+  function hybridAusfall(c,grund){
+    const h=c.hyb;if(!aktiv(c)||!h)return;
+    h.abort?.abort();clearTimeout(h.abrufTimer);clearTimeout(h.tileTimer);
+    h.abort=null;h.laden=false;h.stil=null;h.grund=grund;c.key='';
+    bildAktualisieren(c,true);
+  }
+  async function hybridWechseln(c,wieder=false,alt=null){
+    hybridStop(c);c.modus='hybrid';c.phase='bild';
+    if(!wieder)c.bildAusgefallen=[];
+    const key=lokalKey(),h={key,laden:!!key,grund:key?'':'Kein lokaler CARTO-Schlüssel',stil:null,zeit:0,abort:null,abrufTimer:null,tileTimer:null,bildManuellFehler:!!(wieder&&alt?.bildManuellFehler)};
+    if(wieder&&alt?.grund){h.grund=alt.grund;h.laden=false;}
+    else if(wieder&&key&&alt?.stil&&Date.now()-alt.zeit<STIL_RAM_MS&&KARTE_V2_QUELLEN.styleCachebar(alt.stil,key)){
+      h.stil=alt.stil;h.zeit=alt.zeit;h.laden=false;
+    }
+    c.hyb=h;knoepfe(c);gebaeudeKnoepfe(c);bildAktualisieren(c,true);
+    if(!aktiv(c)||c.hyb!==h||!h.laden)return;
+    const Q=KARTE_V2_QUELLEN,ac=new AbortController();h.abort=ac;
+    h.abrufTimer=setTimeout(()=>{if(aktiv(c)&&c.hyb===h)hybridAusfall(c,'CARTO-Stilzeitlimit');},25000);
+    try{
+      const antwort=await fetch(Q.cartoRequest(Q.stil('dunkel'),key).url,{signal:ac.signal,referrerPolicy:'no-referrer',redirect:'error',credentials:'omit'});
+      if(!antwort.ok)throw Error('Stilabruf');
+      const s=await antwort.json();
+      if(!aktiv(c)||c.hyb!==h||h.abort!==ac)return;
+      // Kein Wiederverwenden eines Styles, der zu einem anderen Key geladen wurde.
+      if(key!==lokalKey()){hybridAusfall(c,'CARTO-Schlüssel geändert');return;}
+      h.stil=s;h.zeit=Date.now();h.laden=false;bildAktualisieren(c,true);
+    }catch(e){if(aktiv(c)&&c.hyb===h&&h.abort===ac)hybridAusfall(c,'CARTO-Stil nicht verfügbar');}
+    finally{clearTimeout(h.abrufTimer);if(h.abort===ac)h.abort=null;}
+  }
+  function hybridFehler(c,e){
+    const h=c.hyb;if(!h)return false;
+    if(e?.sourceId?.startsWith('shadow-v2-hybrid-')){
+      if(e.sourceId!==h.vektorId)return true;
+      h.warnung=true;
+      const id=e.tile?.tileID?.key;
+      const jetzt=Date.now();for(const [k,t] of h.fehler)if(jetzt-t>10000)h.fehler.delete(k);
+      if(id!==undefined)h.fehler.set(id,jetzt);
+      bildStatus(c);return true;
+    }
+    return false;
+  }
+  function hybridIdle(c){
+    const h=c.hyb;if(!h?.stil||!h.vektorId)return false;
+    for(const [id,t] of h.fehler)if(Date.now()-t>10000)h.fehler.delete(id);
+    if((!h.geladen&&h.fehler.size)||(!h.erfolg&&h.fehler.size>=3)){
+      hybridAusfall(c,'CARTO-Vektorkacheln nicht verfügbar');return true;
+    }
+    if(h.erfolg){if(!h.fehler.size)h.warnung=false;h.fehler.clear();}
+    h.erfolg=false;return false;
   }
   async function wechseln(c,n,cache=null,wieder=false){
     if(!aktiv(c)||!c.a||!Object.hasOwn(namen,n))return;
     if(n==='leer'){rueckfall(c,'Ohne Basiskarte');return;}
     if(n==='luftbild'){bildWechseln(c,wieder);return;}
+    if(n==='hybrid'){hybridWechseln(c,wieder,cache);return;}
+    hybridStop(c);
     const key=lokalKey();
     if(!key){rueckfall(c,'Kein lokaler CARTO-Schlüssel');return;}
     const Q=KARTE_V2_QUELLEN, g=++c.generation;stop(c);kachelReset(c);
@@ -242,11 +321,13 @@
       try{
         const kamera=c.a.camera();
         if(kamera)sitzung={kamera,modus:c.modus,gebaeude:c.gebaeude,
-          stilCache:c.key&&c.key===lokalKey()?c.stilCache:null,bildWahl:c.bildWahl,bildAusgefallen:c.bildAusgefallen.slice()};
+          stilCache:c.key&&c.key===lokalKey()?c.stilCache:null,bildWahl:c.bildWahl,bildAusgefallen:c.bildAusgefallen.slice(),
+          hybrid:c.hyb?{grund:c.hyb.grund,bildManuellFehler:c.hyb.bildManuellFehler,zeit:c.hyb.zeit,
+            stil:c.hyb.geladen&&c.hyb.key===lokalKey()&&KARTE_V2_QUELLEN.styleCachebar(c.hyb.stil,c.hyb.key)?c.hyb.stil:null}:null};
       }catch(e){sitzung=null;}
     }
     if(!c)return;
-    ++c.generation;stop(c);c.key='';c.stilCache=null;c.stilKandidat=null;
+    ++c.generation;stop(c);hybridStop(c);c.key='';c.stilCache=null;c.stilKandidat=null;
     /* Ein Fehler beim Aufräumen darf die bestehende Anwendung nicht blockieren. */
     try{if(c.a)c.a.unmount();}catch(e){}
     try{if(c.map)c.map.remove();}catch(e){}
@@ -257,7 +338,7 @@
     if(!el||!status||document.body.classList.contains('locked'))return;
     if(kontext)unmount(true);
     const alt=sitzung;
-    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,bildWahl:alt?.bildWahl||'auto',bildAusgefallen:alt?.bildAusgefallen?.slice()||[],bildQuelle:null,bildSourceId:null,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null};
+    const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,bildWahl:alt?.bildWahl||'auto',bildAusgefallen:alt?.bildAusgefallen?.slice()||[],bildQuelle:null,bildSourceId:null,hyb:null,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null};
     kachelReset(c);kontext=c;
     bibliothek().then(()=>{
       if(!aktiv(c))return;
@@ -270,21 +351,24 @@
       c.map.on('moveend',()=>{gebaeudeKnoepfe(c);bildAktualisieren(c);});
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
       c.map.on('sourcedata',e=>{
-        if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase)||!c.quellen.has(e.sourceId)||e.tile?.state!=='loaded')return;
+        if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase)||e.tile?.state!=='loaded')return;
+        if(c.hyb?.vektorId&&e.sourceId===c.hyb.vektorId){c.hyb.geladen=true;c.hyb.erfolg=true;clearTimeout(c.hyb.tileTimer);c.hyb.tileTimer=null;bildStatus(c);return;}
+        if(!c.quellen.has(e.sourceId))return;
         c.kachelGeladen=true;c.kachelErfolg=true;
         if(c.phase==='bild')bildStatus(c);
       });
       c.map.on('error',e=>{
         if(!aktiv(c)||!['kacheln','online','bild'].includes(c.phase))return;
+        if(hybridFehler(c,e)||e?.sourceId?.startsWith('shadow-v2-hybrid-'))return;
         if(kachelFehlerEintragen(c,e)){if(c.phase==='bild')bildStatus(c);return;}
-        if(c.phase==='bild'&&e?.sourceId?.startsWith(KARTE_V2_QUELLEN.BILD_ID+'-')){
-          if(e.sourceId===c.bildSourceId){c.ressourcenWarnung=true;bildStatus(c);}return;
+        if(e?.sourceId?.startsWith(KARTE_V2_QUELLEN.BILD_ID+'-')){
+          if(c.phase==='bild'&&e.sourceId===c.bildSourceId){c.ressourcenWarnung=true;bildStatus(c);}return;
         }
         if(e?.sourceId?.startsWith('shadow-v2-')){
           c.objektWarnung=true;hinweis(c,'Eigene Kartenlayer konnten nicht aufgebaut werden.');return;
         }
         if(c.phase==='bild'){
-          if(!e?.sourceId&&c.bildQuelle){c.ressourcenWarnung=true;bildStatus(c);}
+          if(!e?.sourceId){if(c.hyb?.stil)c.hyb.warnung=true;else if(c.bildQuelle)c.ressourcenWarnung=true;bildStatus(c);}
           return;
         }
         if(c.phase==='kacheln')rueckfall(c,'CARTO-Ressource nicht verfügbar');
@@ -293,8 +377,9 @@
       c.map.on('idle',()=>{
         if(!aktiv(c)||!c.a.ready())return;
         if(c.phase==='bild'){
-          if(!c.bildQuelle){bildStatus(c);return;}
           if(!c.map.areTilesLoaded())return;
+          if(hybridIdle(c))return;
+          if(!c.bildQuelle){bildStatus(c);return;}
           if(!c.kachelGeladen&&(c.kachelWarnung||c.ressourcenWarnung)&&
              KARTE_V2_QUELLEN.bildBereich(c.bildQuelle,bildPosition(c),c.map.getZoom())==='kandidat'){
             bildAusfall(c,'Luftbild nicht verfügbar');return;
@@ -337,7 +422,7 @@
       });
       knoepfe(c);gebaeudeKnoepfe(c);
       sync();
-      if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.stilCache,true);
+      if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);
     }).catch(()=>{
       if(!aktiv(c))return;
       hinweis(c,'Lokale MapLibre-Ansicht nicht verfügbar. Bestehende Karte bleibt verfügbar.');
