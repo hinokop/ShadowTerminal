@@ -1153,7 +1153,33 @@ function karteAuswahlAnzeige() {
   const box = $('k-auswahl'), id = VIEW.karte.auswahl;
   if (!box) return;
   const zu = h('button', { type: 'button', class: 'link k-pop-x', id: 'k-pop-x', 'aria-label': 'Schließen', onclick: function () { karteWaehlen(null, false); } }, '×');
-  const fertig = function (kopf, nodes) { box.hidden = false; const kk = h('div', { class: 'k-pop-kopf', title: karteGemeinsamePaneele() ? 'Objektinspektor' : 'Zum Verschieben ziehen' }, h('strong', null, kopf), zu); if (!karteGemeinsamePaneele()) kartePopupZiehbar(kk, box); box.replaceChildren(kk, h('div', { class: 'k-pop-body' }, nodes)); kartePopupPos(); };
+  const fertig = function (kopf, nodes) {
+    const gemeinsam = karteGemeinsamePaneele(), body = h('div', { class: 'k-pop-body' }, nodes);
+    let klapp = null;
+    if (gemeinsam) {
+      // Only remember the collapsed state for the same visible selection in this DOM.
+      // No new persistence, no changes to selection or weather/reference state.
+      const key = JSON.stringify([id, karteAuswahlSchluessel(), VIEW.karte.mehr || []]);
+      const offen = box.hidden || box._v2InspektorKey !== key || box._v2InspektorOffen !== false;
+      box._v2InspektorKey = key;
+      body.id = 'k-v2-inspektor-body';
+      function zustand(wert) {
+        box._v2InspektorOffen = wert;
+        body.hidden = !wert;
+        klapp.setAttribute('aria-expanded', String(wert));
+        klapp.textContent = wert ? 'Einklappen' : 'Ausklappen';
+      }
+      klapp = h('button', { type: 'button', class: 'link', id: 'k-v2-inspektor-klapp', 'aria-controls': body.id,
+        onclick: function () { zustand(body.hidden); } });
+      zustand(offen);
+    }
+    const kk = h('div', { class: 'k-pop-kopf', title: gemeinsam ? 'Objektinspektor' : 'Zum Verschieben ziehen',
+      ...(gemeinsam ? {style: 'cursor:default;touch-action:auto;flex-wrap:wrap;'} : {}) },
+      h('strong', null, kopf), gemeinsam ? h('span', {style:'display:flex;align-items:center;gap:8px;'}, klapp, zu) : zu);
+    box.hidden = false;
+    if (!gemeinsam) kartePopupZiehbar(kk, box);
+    box.replaceChildren(kk, body); kartePopupPos();
+  };
   if (VIEW.karte.mehr && VIEW.karte.mehr.length) { zonenMehrPanel(fertig); return; }
   if (!id) { box.hidden = true; box.replaceChildren(); return; }
   const gemeinsam = karteGemeinsamePaneele(), objekt = gemeinsam ? kartePanelObjekt(id,karteAuswahlSchluessel()) : null;
