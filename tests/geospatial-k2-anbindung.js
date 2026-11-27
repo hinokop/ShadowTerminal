@@ -125,6 +125,14 @@ function assertCamera(actual,expected){
   assert.ok(await p.locator('#k-v2-kamera').innerText().then(s=>s.includes('Zoom')));
   assert.equal(await p.locator('#k-v2-map .maplibregl-ctrl-scale').count(),1);
   await p.locator('#k-v2-legende summary').click();
+  assert.equal(await p.locator('#k-v2-legendenliste canvas[data-symbol]').count(),6);
+  assert.equal(await p.evaluate(()=>{
+    const canvases=[...document.querySelectorAll('#k-v2-legendenliste canvas[data-symbol]')];
+    return canvases.every(c=>{
+      const b=KARTE_V2_RENDERER.symbolBild(c.dataset.symbol),d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+      return c.width===b.width&&c.height===b.height&&d.every((v,i)=>i%4===3||b.data[i-i%4+3]===255?v===b.data[i]:true);
+    });
+  }),true,'Legende nutzt dieselbe Silhouette und opake Farbe wie Renderer');
   const legendCam=await p.evaluate(()=>{window.__legendenAdapter=KARTE_V2_DEV.adapter();return __legendenAdapter.camera();});
   const legendVorNetz=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
   await p.uncheck('#k-v2-eb-pins');
