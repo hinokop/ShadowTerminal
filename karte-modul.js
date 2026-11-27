@@ -1477,6 +1477,7 @@ function karteKameraUebernehmen(kamera) {
   if (isFinite(kamera.zoom)) K.zoom = Math.max(1.6, Math.min(19, kamera.zoom + KARTE_ZOOM_3D));
 }
 function karte3dUmschalten() {
+  if(typeof KARTE_V2_DEV !== 'undefined' && KARTE_V2_DEV.ansichtUmschalten()) return;
   const K = VIEW.karte;
   if (K.ansicht3d) { if (K.kamera3d) karteKameraUebernehmen(K.kamera3d); }                       /* zurück nach 2D: letzte 3D-Kamera übernehmen */
   else if (K.kamera3d) {                                                                         /* nach 3D: aktuelle 2D-Ansicht als Kamera, Neigung und Richtung bleiben (erster Aufruf: Ausgangslogik in karte3dDaten) */
@@ -1990,6 +1991,13 @@ function kartenProtokollAnsicht() {
       return [td('nw', fmtZ(x.t)), td('nw', x.art), td('nw', x.objekt ? objName(x) : '–'), td('nw', x.aktion), td('txt', gesperrt(x) ? '–' : x.text || '–'), td('nw', P.frist ? fmtZ(new Date(Date.parse(x.t) + P.frist * 3600000).toISOString()) : 'nie')];
     }), filter || objFilter ? 'Keine Einträge dieser Auswahl.' : 'Noch keine Einträge.'));
 }
+function karteRegionZeigen() {
+  const K=VIEW.karte,a={lat:K.lat,lon:K.lon,zoom:K.zoom};
+  karteGrundansicht();
+  const z={lat:K.lat,lon:K.lon,zoom:K.zoom};
+  K.lat=a.lat;K.lon=a.lon;K.zoom=a.zoom;
+  karteFlug(z.lat,z.lon,z.zoom);
+}
 function renderKarte(m) {
   const K = VIEW.karte, def = karteAuftragsansicht();
   if (K.auswahlIdentitaet && K.auswahlIdentitaet.id !== K.auswahl) K.auswahlIdentitaet = null;
@@ -2027,7 +2035,7 @@ function renderKarte(m) {
   };
   const fallPick = K.pick && K.pick.startsWith('X:') ? xFall(K.pick.slice(2)) : null;
   const pickE = K.pick ? (fallPick ? { id: fallPick.id, name: fallPick.titel } : K.pick.indexOf('SI:') === 0 ? (entitaet(K.pick.slice(3)) ? { id: 'Sichtung zu ' + K.pick.slice(3), name: entitaet(K.pick.slice(3)).name } : null) : K.pick === 'CI-AUS' ? { id: 'Check-in', name: 'Ausweichort' } : K.pick.indexOf('AO-') === 0 ? (PROFIL.ausgang.find(function (x) { return x.id === K.pick; }) || null) : K.pick.indexOf('ZP-') === 0 ? { id: K.pick, name: 'Zugriffspunkt' } : entitaet(K.pick)) : null;
-  const kopf = [knopf('k-raum', 'Region', function () { const a = { lat: K.lat, lon: K.lon, zoom: K.zoom }; karteGrundansicht(); const z = { lat: K.lat, lon: K.lon, zoom: K.zoom }; K.lat = a.lat; K.lon = a.lon; K.zoom = a.zoom; karteFlug(z.lat, z.lon, z.zoom); }),
+  const kopf = [knopf('k-raum', 'Region', karteRegionZeigen),
     knopf('k-eu', 'Europa', function () { karteFlug(50, 10, 4.4); }),
     knopf('k-welt', 'Welt', function () { karteFlug(25, 20, 1.9); }),
     h('button', { type: 'button', id: 'k-pin-neu', class: K.pinSetzen ? 'aktiv' : '', 'aria-pressed': K.pinSetzen ? 'true' : 'false', title: 'Auf die Karte klicken: setzt einen eigenen Pin mit Lageblatt (Zweck, Umgebung, Notiz, Textexport)', onclick: function () { karteWerkzeugWaehlen('pin'); } }, K.pinSetzen ? 'Pin: auf Karte klicken' : 'Pin setzen'),

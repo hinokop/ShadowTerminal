@@ -78,7 +78,10 @@
     }
     const reduziert=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     c.map.stop();
-    const p=c.a.camera(),gleich=Math.abs(p.center[0]-z.center[0])<1e-8&&Math.abs(p.center[1]-z.center[1])<1e-8&&Math.abs(p.zoom-z.zoom)<1e-8;
+    // Explicit overview jumps return to an unrotated flat map.
+    if(z.zoom<4)Object.assign(z,{pitch:0,bearing:0});
+    const p=c.a.camera(),gleich=Math.abs(p.center[0]-z.center[0])<1e-8&&Math.abs(p.center[1]-z.center[1])<1e-8&&Math.abs(p.zoom-z.zoom)<1e-8&&
+      (z.pitch===undefined||p.pitch===z.pitch&&p.bearing===z.bearing);
     if(gleich){kameraTeilen(c);if(fertig)fertig();return true;}
     if(animiert&&!reduziert){
       if(fertig)c.map.once('moveend',()=>{if(aktiv(c))fertig();});
@@ -86,6 +89,12 @@
     }else{
       c.map.jumpTo(z);kameraTeilen(c);if(fertig)fertig();
     }
+    return true;
+  }
+  function ansichtUmschalten(){
+    const c=kontext;
+    if(!aktiv(c)||!c.a||!c.map||VIEW.karte.ansicht3d)return false;
+    ui.neigung(c,c.map.getPitch()>=1?0:60);
     return true;
   }
   function mitte(){
@@ -184,5 +193,5 @@
   }
   /* Nur für die Entwicklungsansicht; Rückgabe der Adapterreferenz zur Prüfung
      tatsächlicher Treffer und des Lebenszyklus, kein zusätzlicher Datenbestand. */
-  root.KARTE_V2_DEV=Object.freeze({ansicht,mount,unmount,sync,mitte,kameraSetzen,aktiviert:dev,adapter:()=>aktiv(kontext)?kontext.a:null});
+  root.KARTE_V2_DEV=Object.freeze({ansicht,mount,unmount,sync,mitte,kameraSetzen,ansichtUmschalten,aktiviert:dev,adapter:()=>aktiv(kontext)?kontext.a:null});
 })(window);

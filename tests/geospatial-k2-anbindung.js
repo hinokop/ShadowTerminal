@@ -837,6 +837,31 @@ function assertCamera(actual,expected){
     await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'dossier'}));
     await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));await ready();
     assertCamera(await gemeinsameCam(),zurueck);
+    await p.evaluate(()=>{window.__k4Adapter=KARTE_V2_DEV.adapter();});
+    const stilVor=stilAbrufe(),bildVor=bildAnfragen.length,frameVor=await p.locator('#k-3d-frame').count();
+    await p.click('#k-3d');
+    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().pitch-60)<1e-6&&$('k-3d').textContent==='2D');
+    assert.equal(await p.locator('#k-v2-geneigt').getAttribute('aria-pressed'),'true');
+    assert.equal(await p.locator('#k-3d-frame').count(),frameVor,'no new legacy iframe');
+    assert.equal(await p.evaluate(()=>VIEW.karte.ansicht3d),false,'legacy renderer stays flat');
+    const geneigt=await gemeinsameCam();
+    assert.deepEqual(geneigt.center,zurueck.center);assert.equal(geneigt.zoom,zurueck.zoom);
+    await p.click('#k-v2-flach');
+    await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===0&&$('k-3d').textContent==='3D');
+    assertCamera(await gemeinsameCam(),zurueck);
+    await p.click('#k-v2-geneigt');
+    await p.waitForFunction(()=>KARTE_V2_DEV.adapter().camera().pitch===60);
+    await p.click('#k-v2-welt');
+    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-1.4)<1e-6&&KARTE_V2_DEV.adapter().camera().pitch===0);
+    const welt=await gemeinsameCam();assert.ok(Math.abs(welt.center[0]-20)<1e-6&&Math.abs(welt.center[1]-25)<1e-6);
+    await p.click('#k-v2-europa');
+    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-3.9)<1e-6);
+    await gemeinsameCam();
+    await p.click('#k-v2-region');
+    await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-1.7)<1e-6);
+    await gemeinsameCam();
+    assert.equal(await p.evaluate(()=>__k4Adapter===KARTE_V2_DEV.adapter()),true,'overview/orientation preserve map');
+    assert.equal(stilAbrufe(),stilVor);assert.equal(bildAnfragen.length,bildVor);
   }
   await p.close();
   // Echtes Laden des alten Browserprofils mit abweichender Schlüsseldatei.

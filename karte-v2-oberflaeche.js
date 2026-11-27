@@ -19,6 +19,15 @@
     if(g){g.disabled=!(c.phase==='online'&&c.map?.getLayer(KARTE_V2_QUELLEN.GEBAEUDE_ID));g.setAttribute('aria-pressed',String(c.gebaeude));}
     if(f){f.disabled=!c.map;f.setAttribute('aria-pressed',String(!!c.map&&c.map.getPitch()<1));}
     if(n){n.disabled=!c.map;n.setAttribute('aria-pressed',String(!!c.map&&c.map.getPitch()>=1));}
+    const alt=$('k-3d');
+    if(alt&&c.map&&!VIEW.karte.ansicht3d){
+      const geneigt=c.map.getPitch()>=1;
+      alt.classList.toggle('aktiv',geneigt);alt.setAttribute('aria-pressed',String(geneigt));
+      alt.textContent=geneigt?'2D':'3D';alt.title='Wechselt die Neigung der V2-Karte';
+    }
+    for(const id of ['region','europa','welt']){
+      const b=$('k-v2-'+id);if(b)b.disabled=!c.a;
+    }
   }
   function neigung(c,grad){
     if(!aktiv(c)||!c.map)return;
@@ -128,6 +137,10 @@
           h('button',{type:'button',id:'k-v2-voll',disabled:true,'aria-pressed':String(getVoll()),onclick:()=>vollWaehlen(!getVoll())},getVoll()?'Vollbild verlassen (Esc)':'Vollbild')),
         h('div',{style:'display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;'},
           gruppe('Basiskarte',Object.keys(namen).map(n=>h('button',{type:'button',id:'k-v2-'+n,disabled:true,'aria-pressed':String(n==='leer'),onclick:()=>wechseln(getKontext(),n)},namen[n]))),
+          gruppe('Ausschnitt',[
+            h('button',{type:'button',id:'k-v2-region',disabled:true,onclick:()=>karteRegionZeigen()},'Region'),
+            h('button',{type:'button',id:'k-v2-europa',disabled:true,onclick:()=>karteFlug(50,10,4.4)},'Europa'),
+            h('button',{type:'button',id:'k-v2-welt',disabled:true,onclick:()=>karteFlug(25,20,1.9)},'Welt')]),
           gruppe('Ansicht',[
             h('button',{type:'button',id:'k-v2-flach',disabled:true,'aria-pressed':'true',onclick:()=>neigung(getKontext(),0)},'2D'),
             h('button',{type:'button',id:'k-v2-geneigt',disabled:true,'aria-pressed':'false',onclick:()=>neigung(getKontext(),60)},'3D-Neigung'),
@@ -152,7 +165,7 @@
         h('div',{id:'k-v2-kamera',style:'font-size:11px;font-variant-numeric:tabular-nums;'},'Kamera wird geladen.'),
         h('p',{class:'note',id:'k-v2-status',role:'status',style:'margin:0;'},'Karte wird geladen. Shadow ist die Standardkarte.')),
       h('details',{class:'pad',style:'border-top:1px solid var(--border);'},h('summary',null,'Technische Hinweise und Diagnose'),
-        h('p',{class:'note'},'Mitte, Zoom und Zentrieren sind mit der SVG-Lagekarte gekoppelt. Masken und die historische 3D-Ansicht folgen in K4.'),
+        h('p',{class:'note'},'Mitte, Zoom, Zentrieren und der 3D-Schalter der SVG-Lagekarte steuern die gemeinsame V2-Ansicht. Die alte 3D-Ansicht bleibt im Standardmodus verfügbar.'),
         h('p',{class:'note'},'3D-Gebäude ab Zoom 15: Anbieterhöhen (können geschätzt sein), fehlende oder unplausible Werte bleiben flach. Keine eigene Höhenschätzung.'),
         h('button',{type:'button',id:'k-v2-qualitaet',onclick:qualitaetsbericht},'Qualitätsbericht'),
         h('textarea',{id:'k-v2-qualitaetsbericht',hidden:true,readonly:true,rows:8,'aria-label':'Redigierter Qualitätsbericht',style:'display:none;width:100%;margin-top:8px;'}),
@@ -185,7 +198,7 @@
     }catch(e){out.push('Renderstichprobe nicht auswertbar.');}
     feld.value=out.join('\n');feld.hidden=false;feld.style.display='block';
   }
-  return Object.freeze({knoepfe,gebaeudeKnoepfe,legendeAktualisieren,kameraAnzeige,werkzeugAnzeige,layout,vollWaehlen,ansicht});
+  return Object.freeze({knoepfe,gebaeudeKnoepfe,neigung,legendeAktualisieren,kameraAnzeige,werkzeugAnzeige,layout,vollWaehlen,ansicht});
   }
   root.KARTE_V2_OBERFLAECHE=Object.freeze({erstellen});
 })(window);
