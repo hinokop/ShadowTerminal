@@ -211,6 +211,14 @@ function assertCamera(actual,expected){
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true','unabhängig von Neigung');
   await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true','Gebäudewunsch über Stilwechsel');
+  await p.click('#k-v2-shadow');await status('Shadow bereit');
+  assert.equal(await p.locator('#k-v2-shadow').getAttribute('aria-pressed'),'true');
+  assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'true');
+  assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
+  assert.equal((await hit([52.51,13.41])).renderKey,kb);
+  assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
+  assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]]);
+  await p.click('#k-v2-dunkel');await status('Dark Matter bereit');
   await p.click('#k-v2-gebaeude');
   assert.equal(await p.locator('#k-v2-gebaeude').getAttribute('aria-pressed'),'false');
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),cam);
@@ -498,7 +506,7 @@ function assertCamera(actual,expected){
   assert.equal(wetterAnfragen.length,vorWetter+1,'weather positive control');
   const wetterVorStil=wetterAnfragen.length;
   const wetterTextVor=await p.locator('#k-st-wetter').innerText();
-  for(const [modus,erwartet] of [['voyager','Voyager bereit'],['dunkel','Dark Matter bereit'],['luftbild','Bildkacheln geladen'],['hybrid','Vektorkacheln geladen'],['leer','Ohne Basiskarte']]){
+  for(const [modus,erwartet] of [['voyager','Voyager bereit'],['dunkel','Dark Matter bereit'],['shadow','Shadow bereit'],['luftbild','Bildkacheln geladen'],['hybrid','Vektorkacheln geladen'],['leer','Ohne Basiskarte']]){
     await p.click('#k-v2-'+modus);await status(erwartet);
     // Refresh through the real shared panel, e.g. after camera/UI updates.
     await p.evaluate(()=>karteStatusAkt());
