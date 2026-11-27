@@ -47,6 +47,34 @@ s.treffer.get(a).ll[0]=0;assert.equal(model.marker[0].ll[0],52.52);
 const dup=R.daten({...model,marker:model.marker.concat(model.marker[0])});
 assert.equal(dup.treffer.has(a),false);assert.equal(dup.treffer.has(b),true);
 assert.equal(R.daten({...model,marker:model.marker.filter(x=>x.id!=='P-1')}).quellen.kanten.features.length,0);
+/* Adapter-level regression without browser timing: equivalent snapshots must
+   not cause worker refreshes, but changed or removed objects must. */
+{
+ const sources=new Map(),layers=new Map(),images=new Set(),handlers=new Map(),writes=[],filters=[];
+ const mock={
+   on:(e,fn)=>handlers.set(e,fn),off:e=>handlers.delete(e),
+   isStyleLoaded:()=>true,getSource:id=>sources.get(id),getLayer:id=>layers.get(id),hasImage:id=>images.has(id),
+   addSource:(id,s)=>sources.set(id,{data:s.data,setData(data){this.data=data;writes.push(id);}}),
+   addLayer:l=>layers.set(l.id,l),addImage:id=>images.add(id),
+   setFilter:(id,f)=>filters.push([id,f]),
+   queryRenderedFeatures:(p,{layers})=>layers[0]==='shadow-v2-punkt'?[{properties:{renderKey:a}}]:[],
+   removeSource:id=>sources.delete(id),removeLayer:id=>layers.delete(id),removeImage:id=>images.delete(id)
+ };
+ const adapter=R.adapter(mock);adapter.setData(model);adapter.setSelection(a);
+ writes.length=0;filters.length=0;
+ adapter.setData(JSON.parse(JSON.stringify(model)));adapter.setSelection(a);
+ assert.deepEqual(writes,[],'identical model no source writes');
+ assert.deepEqual(filters,[],'identical selection no filter writes');
+ adapter.setData(model,{mess:[[52.52,13.4]]});
+ assert.deepEqual(writes,['shadow-v2-mess'],'measurement only refreshes measurement source');
+ assert.deepEqual(filters,[]);
+ writes.length=0;adapter.setSelection(b);
+ assert.equal(filters.length,3);assert.deepEqual(writes,[],'selection does not update sources');
+ adapter.setData({...model,marker:model.marker.filter(x=>x.renderKey!==a)},{mess:[[52.52,13.4]]});
+ assert.ok(writes.includes('shadow-v2-punkte'));
+ assert.equal(adapter.hitTest({x:0,y:0}),null,'stale removed hit immediately rejected');
+ adapter.unmount();
+}
 (async()=>{
  const browser=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{

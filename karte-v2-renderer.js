@@ -125,19 +125,20 @@
     {id:P+'punkt',type:'symbol',source:ids.punkte,layout:{'icon-image':['get','symbol'],'icon-allow-overlap':true,'icon-ignore-placement':true,'icon-pitch-alignment':'viewport','icon-rotation-alignment':'viewport'}}
   ];
   function adapter(map,optionen){
-    const o=optionen||{};let aktiv=true, snapshot=daten(null), auswahl=null, installiert=false;
+    const o=optionen||{};let aktiv=true, snapshot=daten(null), auswahl=null, installiert=false, markiert=undefined;
     /* MapLibre BoxZoom unterdrückt auch einen stationären Shift-Klick (mouseupWindow).
        Shift ist im K1-Klickvertrag reserviert; die übrigen Kameragesten bleiben unverändert. */
     const boxZoomWarAktiv=!!map.boxZoom?.isEnabled();
     if(boxZoomWarAktiv)map.boxZoom.disable();
     const fehler=()=>{installiert=false;if(typeof o.onError==='function')o.onError('Eigene Kartenlayer konnten nicht aufgebaut werden.');};
     function markieren(){
-      if(!installiert)return;
+      if(!installiert||markiert===auswahl)return;
       for(const id of ['auswahl','auswahl-zone','auswahl-kante'])map.setFilter(P+id,['==',['get','renderKey'],auswahl||'']);
+      markiert=auswahl;
     }
     function installieren(){
       if(!aktiv)return;
-      installiert=false;
+      installiert=false;markiert=undefined;
       /* Keine fremden Layer oder Quellen mit kollidierenden Kennungen verändern. */
       if(Object.values(ids).some(id=>map.getSource(id))||layer.some(l=>map.getLayer(l.id))||Object.keys(formen).some(k=>map.hasImage(symbolId(k)))){fehler();return;}
       try{
@@ -149,9 +150,19 @@
     }
     function setData(modell,opts){
       if(!aktiv)return;
+      const vorher=snapshot;
       snapshot=daten(modell,opts);
+      // The hit registry always reflects the new authorized model immediately.
+      // Only changed GeoJSON sources need a worker update; selection and tool
+      // changes must not invalidate unchanged rendered symbols.
       if(!snapshot.treffer.has(auswahl))auswahl=null;
-      if(installiert){for(const [k,id] of Object.entries(ids))map.getSource(id).setData(snapshot.quellen[k]);markieren();}
+      if(installiert){
+        for(const [k,id] of Object.entries(ids)){
+          if(JSON.stringify(vorher.quellen[k])!==JSON.stringify(snapshot.quellen[k]))
+            map.getSource(id).setData(snapshot.quellen[k]);
+        }
+        markieren();
+      }
     }
     function setSelection(k){
       if(!aktiv)return false;

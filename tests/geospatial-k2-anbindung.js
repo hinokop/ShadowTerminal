@@ -133,12 +133,25 @@ function assertCamera(actual,expected){
   },{ka,kb,pin:f.pin,zone:f.zone});
   assert.equal((await hit([52.5,13.4])).renderKey,ka);assert.equal((await hit([52.51,13.41])).renderKey,kb);
   assert.equal((await hit([52.505,13.415])).id,f.zone);
-  const click=async ll=>{
-   await p.locator('#k-v2-map').scrollIntoViewIfNeeded();
-   const pt=await p.evaluate(ll=>{const a=KARTE_V2_DEV.adapter(),q=a.project(ll),r=$('k-v2-map').getBoundingClientRect();return [r.left+q.x,r.top+q.y];},ll);
+  const click=async (ll,expected=null)=>{
+   const canvas=p.locator('#k-v2-map canvas.maplibregl-canvas');
+   await canvas.scrollIntoViewIfNeeded();
+   // Projection is relative to the canvas, not the bordered outer container.
+   // Assert a genuine rendered hit before clicking a known object, without
+   // retrying the click or replacing the application selection.
+   await p.waitForFunction(({ll,expected})=>{
+     const a=KARTE_V2_DEV.adapter(),el=$('k-v2-map')?.querySelector('canvas.maplibregl-canvas');
+     if(!a?.ready()||!el)return false;
+     const q=a.project(ll),r=el.getBoundingClientRect();
+     if(!q||!Number.isFinite(q.x)||!Number.isFinite(q.y))return false;
+     const x=r.left+q.x,y=r.top+q.y;
+     if(document.elementFromPoint(x,y)!==el)return false;
+     return !expected||a.hitTest(q)?.renderKey===expected;
+   },{ll,expected});
+   const pt=await p.evaluate(ll=>{const a=KARTE_V2_DEV.adapter(),q=a.project(ll),r=$('k-v2-map').querySelector('canvas.maplibregl-canvas').getBoundingClientRect();return [r.left+q.x,r.top+q.y];},ll);
    await p.mouse.click(pt[0],pt[1]);
   };
-  await click([52.51,13.41]);assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
+  await click([52.51,13.41],kb);assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb);
   assert.match(await p.locator('#k-auswahl').innerText(),/K2 Sued/);
   assert.equal(await p.locator('#k-v2-paneele #k-auswahl').count(),1);
   assert.equal(await p.locator('#k-v2-paneele #k-status').count(),1);
@@ -146,14 +159,14 @@ function assertCamera(actual,expected){
   assert.equal(await p.locator('#k-status').count(),1);
   assert.match(await p.locator('#k-st-objekt').innerText(),/K2 Sued/);
   assert.equal(await p.evaluate(({si})=>kartePanelObjekt(si,null),f),null,'duplicate ID without typed key');
-  await click([52.505,13.395]);
+  await click([52.505,13.395],key('pin',f.pin));
   assert.match(await p.locator('#k-auswahl').innerText(),/K2 Pin/);
   assert.ok(await p.locator('#pin-export').isVisible());
   assert.ok(await p.locator('#k-st-protokoll').isVisible());
-  await click([52.505,13.415]);
+  await click([52.505,13.415],key('zone',f.zone));
   assert.ok(await p.locator('#oz-name').isVisible());
   assert.ok(await p.locator('#oz-protokoll').isVisible());
-  await click([52.51,13.41]);
+  await click([52.51,13.41],kb);
   assert.match(await p.locator('#k-st-objekt').innerText(),/K2 Sued/);
   // K3e: collapsing the inspector is not deselection or a new weather query.
   const vorKlapp=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
@@ -171,14 +184,14 @@ function assertCamera(actual,expected){
   assert.deepEqual([anfragen.length,bildAnfragen.length,wetterAnfragen.length],vorKlapp);
   // A different selection opens its own inspector.
   await klapp.click();
-  await click([52.505,13.395]);
+  await click([52.505,13.395],key('pin',f.pin));
   assert.equal(await body.isVisible(),true);
   assert.equal(await klapp.getAttribute('aria-expanded'),'true');
   assert.equal(await p.evaluate(()=>VIEW.karte.auswahl),f.pin,'new pin selected');
   // The pin name is in the inspector header and the input value, not body.innerText().
   assert.equal(await p.locator('#k-auswahl .k-pop-kopf strong').innerText(),'K2 Pin');
   assert.equal(await body.locator('#pin-name').inputValue(),'K2 Pin');
-  await click([52.51,13.41]);
+  await click([52.51,13.41],kb);
   // K3c-1: the legend is a real filter control, not a second data store.
   assert.equal(await p.locator('#k-v2-legendenliste input').count(),8);
   assert.ok(await p.locator('#k-v2-kamera').innerText().then(s=>s.includes('Zoom')));
@@ -209,7 +222,8 @@ function assertCamera(actual,expected){
   assertCamera(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),legendCam);
   assert.deepEqual([anfragen.length,bildAnfragen.length,wetterAnfragen.length],legendVorNetz);
   await p.locator('#k-v2-legende summary').click();
-  await click([52.51,13.41]);
+  await click([52.51,13.41],kb);
+  assert.equal(await p.evaluate(()=>karteAuswahlSchluessel()),kb,'selection before fullscreen');
   // K3c-2: enlarge the same MapLibre instance, retain camera and selection.
   const layoutVor=await p.evaluate(()=>{window.__layoutAdapter=KARTE_V2_DEV.adapter();return {cam:__layoutAdapter.camera(),h:$('k-v2-map').clientHeight};});
   const layoutNetz=[anfragen.length,bildAnfragen.length,wetterAnfragen.length];
@@ -484,7 +498,7 @@ function assertCamera(actual,expected){
   await p.evaluate(()=>{VIEW.karte.ebenen.sichtungen=true;karteRendererDatenAktualisieren();});
   await p.waitForFunction(()=>{const a=KARTE_V2_DEV.adapter();return !!a.hitTest(a.project([52.51,13.41]));});
   await p.evaluate(()=>{VIEW.karte.messen=true;VIEW.karte.messPts=[];});
-  await click([52.51,13.41]);assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]],'Messpunkt rastet an realer Sichtung ein');
+  await click([52.51,13.41],kb);assert.deepEqual(await p.evaluate(()=>VIEW.karte.messPts),[[52.51,13.41]],'Messpunkt rastet an realer Sichtung ein');
   await p.evaluate(()=>{VIEW.karte.messen=false;VIEW.karte.messPts=[];karteRendererDatenAktualisieren();});
   // Echter Neuaufbau mit unabhängiger Kamera, Stil und Gebäudewunsch; neuer Key
   // wird aus VIEW aufgelöst, nicht aus dem alten Kontext übernommen.
