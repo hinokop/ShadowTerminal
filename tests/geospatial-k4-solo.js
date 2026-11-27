@@ -55,7 +55,7 @@ const {APP}=require('./_pfad');
   assert.equal(await p.evaluate(()=>__soloAdapter===KARTE_V2_DEV.adapter()),true);
   await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'dossier'}));
   assert.equal(await p.evaluate(()=>KARTE_V2_DEV.adapter()),null);
-  await p.evaluate(()=>kartenObjektZeigen(id));
+  await p.evaluate(pinId=>kartenObjektZeigen(pinId),id);
   await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
   assert.equal(await p.locator('#pin-name').inputValue(),'K4 Solo Test');
   assert.equal(await p.locator('#k-svg').count(),0);
