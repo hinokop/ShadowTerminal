@@ -1483,7 +1483,7 @@ function karteSichtungZeigen(entId, sid, zoom) {
 /* Weiche Kamerafahrt (550 ms); ohne Bewegungsreduktion */
 function karteFlug(lat, lon, zoom, fertig, bezugId) {
   karteBezugSetzen(bezugId);                      /* gezielter Sprung setzt den Objektkontext der Lage-Box; Region, Europa und Welt löschen ihn */
-  if (typeof KARTE_V2_DEV !== 'undefined' && KARTE_V2_DEV.kameraSetzen(lat,lon,zoom,true,fertig)) return;
+  if (typeof KARTE_V2_DEV !== 'undefined' && KARTE_V2_DEV.kameraSetzen(lat,lon,zoom,true,fertig,bezugId)) return;
   if (VIEW.karte.ansicht3d) { KARTE_3D_ADAPTER.flyTo([lon, lat], Math.max(15, zoom || 15)); if (fertig) fertig(); return; }
   const K = VIEW.karte, a = { lat: K.lat, lon: K.lon, zoom: K.zoom }, t0 = performance.now();
   if (K.flug) cancelAnimationFrame(K.flug);
@@ -2024,7 +2024,7 @@ function kartenReiter(aktiv) {
   kpAufraeumen();
   return h('div', { class: 'reiterleiste', role: 'tablist', 'aria-label': 'Bereiche der Karte' },
     [['karte', 'Lagekarte'], ['protokoll', kartenProtokollReiterText()]].map(function (x) {
-      return h('button', { type: 'button', role: 'tab', id: 'ktab-' + x[0], 'aria-selected': aktiv === x[0] ? 'true' : 'false', class: aktiv === x[0] ? 'reiter on' : 'reiter', onclick: function () { VIEW.karte.reiter = x[0]; renderModule(); } }, x[1]);
+      return h('button', { type: 'button', role: 'tab', id: 'ktab-' + x[0], 'aria-selected': aktiv === x[0] ? 'true' : 'false', class: aktiv === x[0] ? 'reiter on' : 'reiter', onclick: function () { if (x[0] === 'protokoll' && typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.zielBeimVerlassen(); VIEW.karte.reiter = x[0]; renderModule(); } }, x[1]);
     }));
 }
 function kartenProtokollAnsicht() {

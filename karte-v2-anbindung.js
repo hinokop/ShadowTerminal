@@ -76,7 +76,24 @@
       c.kameraSvgOffen=false;const svg=$('k-svg');if(svg)zeichneKarte(svg);
     }
   }
-  function kameraSetzen(lat,lon,zoom,animiert=false,fertig){
+  // A deliberate module/tab change may complete an explicit destination,
+  // but a generic remount must never overwrite a newly assigned VIEW camera.
+  function zielBeimVerlassen(){
+    const c=kontext,K=VIEW.karte,flug=c?.zielflug;
+    if(!aktiv(c)||!c.a||!flug?.behalten||!c.map.isMoving()||K.ansicht3d)return;
+    const p=c.a.camera(),z=flug.ziel;
+    if(!p||K.lon!==normLon(p.center[0])||K.lat!==p.center[1]||K.zoom!==p.zoom+KARTE_V2_KAMERA.zoomOffset)return;
+    if(flug.id){
+      const x=kartePanelObjekt(flug.id,flug.key)?.objekt;
+      if(!x||!Array.isArray(x.ll)||x.ll[0]!==flug.lat||x.ll[1]!==flug.lon||K.bezug!==flug.id)return;
+    }
+    c.zielflug=null;
+    K.lon=z.center[0];K.lat=z.center[1];K.zoom=z.zoom+KARTE_V2_KAMERA.zoomOffset;K.init=true;
+    // Orientation is session-only. No jumpTo, no moveend callback and no
+    // additional provider requests on the departing map.
+    c.abgangKamera={pitch:z.pitch??p.pitch,bearing:z.bearing??p.bearing};
+  }
+  function kameraSetzen(lat,lon,zoom,animiert=false,fertig,bezugId){
     const c=kontext,z=zielKamera(lat,lon,zoom),K=VIEW.karte;
     if(!v2Aktiv()||!z||K.ansicht3d||!aktiv(c))return false;
     if(K.flug){cancelAnimationFrame(K.flug);K.flug=null;}
@@ -85,6 +102,7 @@
       if(fertig)fertig();return true;
     }
     const reduziert=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    c.zielflug=null;
     c.map.stop();
     // Explicit overview jumps return to an unrotated flat map.
     if(z.zoom<4)Object.assign(z,{pitch:0,bearing:0});
@@ -92,8 +110,11 @@
       (z.pitch===undefined||p.pitch===z.pitch&&p.bearing===z.bearing);
     if(gleich){kameraTeilen(c);if(fertig)fertig();return true;}
     if(animiert&&!reduziert){
-      if(fertig)c.map.once('moveend',()=>{if(aktiv(c))fertig();});
-      c.map.easeTo({...z,duration:550});
+      const objekt=bezugId?kartePanelObjekt(bezugId,K.bezugRenderKey)?.objekt:null;
+      const flug={ziel:z,id:bezugId||null,key:objekt?.renderKey||null,lat,lon,fertig};
+      // A target without a unique authorized object is not retained on exit.
+      c.zielflug=flug;flug.behalten=!bezugId||!!objekt?.renderKey;
+      c.map.easeTo({...z,duration:550},{shadowZielflug:flug});
     }else{
       c.map.jumpTo(z);kameraTeilen(c);if(fertig)fertig();
     }
@@ -120,6 +141,7 @@
     if(t&&m.marker.concat(m.zonen,m.kanten).filter(x=>x.id===t.id&&x.renderKey===t.renderKey).length!==1)return;
     const lon=e.ll[1], ll=[e.ll[0],lon>=-180&&lon<=180?lon:((lon%360+540)%360)-180];
     if(Math.abs(ll[0])>90)return;
+    c.zielflug=null;
     const K=VIEW.karte, werkzeug=K.pick||K.pinSetzen||K.zoneSetzen||K.zugriffSetzen||K.messen;
     karteKlickVerarbeiten({ll,markerId:t&&t.art==='marker'?t.id:null,markerKey:t&&t.art==='marker'?t.renderKey:null,
       zoneId:t&&t.art==='zone'?t.id:null,kanteId:t&&t.art==='verbindung'?t.id:null,mehr:!!e.mehr},karteRendererDatenAktualisieren);
@@ -137,7 +159,7 @@
     else if(c?.a&&c.map){
       // Auch bei fehlerhafter/entfernter Map muss der Abbau weiterlaufen.
       try{
-        const kamera=c.a.camera();
+        const aktuell=c.a.camera(),kamera=aktuell&&{...aktuell,...c.abgangKamera};
         if(kamera)sitzung={kamera,modus:c.modus,gebaeude:c.gebaeude,
           stilCache:c.key&&c.key===lokalKey()?c.stilCache:null,bildWahl:c.bildWahl,bildAusgefallen:c.bildAusgefallen.slice(),
           hybrid:c.hyb?{grund:c.hyb.grund,bildManuellFehler:c.hyb.bildManuellFehler,zeit:c.hyb.zeit,
@@ -248,9 +270,10 @@
       c.map.addControl(new maplibregl.ScaleControl({maxWidth:100,unit:'metric'}),'bottom-left');
       let letzteMitte=mitte();
       c.map.on('resize',()=>{if(aktiv(c))kartePopupPos();});
-      c.map.on('dragstart',()=>{if(aktiv(c)){VIEW.karte.bezug=null;VIEW.karte.bezugRenderKey=null;}});
+      c.map.on('dragstart',()=>{if(aktiv(c)){c.zielflug=null;VIEW.karte.bezug=null;VIEW.karte.bezugRenderKey=null;}});
+      c.map.on('movestart',e=>{if(aktiv(c)&&e.originalEvent)c.zielflug=null;});
       c.map.on('move',()=>kameraTeilen(c,false));
-      c.map.on('moveend',()=>{
+      c.map.on('moveend',e=>{
         if(!aktiv(c))return;
         gebaeudeKnoepfe(c);bildAktualisieren(c);kameraAnzeige(c);
         kameraTeilen(c);
@@ -258,6 +281,8 @@
         if(jetzt&&(!letzteMitte||jetzt.some((v,i)=>Math.abs(v-letzteMitte[i])>1e-9))){
           letzteMitte=jetzt;karteStatusAkt();
         }
+        const flug=e.shadowZielflug;
+        if(flug&&c.zielflug===flug){c.zielflug=null;if(flug.fertig)flug.fertig();}
       });
       c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:()=>objektFehler(c)});
       quelle.ereignisse(c);
@@ -270,6 +295,6 @@
   }
   /* Nur für die Entwicklungsansicht; Rückgabe der Adapterreferenz zur Prüfung
      tatsächlicher Treffer und des Lebenszyklus, kein zusätzlicher Datenbestand. */
-  root.KARTE_V2_DEV=Object.freeze({ansicht:()=>v2Aktiv()?ansicht():null,mount,unmount,sync,mitte,kameraSetzen,ansichtUmschalten,
+  root.KARTE_V2_DEV=Object.freeze({ansicht:()=>v2Aktiv()?ansicht():null,mount,unmount,sync,mitte,kameraSetzen,zielBeimVerlassen,ansichtUmschalten,
     get aktiviert(){return v2Aktiv();},get solo(){return solo&&v2Aktiv();},get rueckfall(){return rueckfall;},get rueckfallGrund(){return rueckfallGrund;},adapter:()=>aktiv(kontext)?kontext.a:null});
 })(window);

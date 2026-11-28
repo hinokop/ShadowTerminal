@@ -104,6 +104,52 @@ const {APP}=require('./_pfad');
   nah(zielCam.zoom,Math.max(sprung.geteilt.zoom,15)-.5,'explicit pin zoom');
   assert.equal(await p.locator('#pin-name').inputValue(),'K4 Solo Test');
   assert.equal(await p.locator('#k-svg').count(),0);
+  // Z7: actual explicit easeTo, sampled mid-animation. Extend only the
+  // test animation duration so a loaded CI runner cannot skip the sample.
+  await p.emulateMedia({reducedMotion:'no-preference'});
+  const zielflug=async(art)=>p.evaluate(async ({art,id})=>{
+    const a=KARTE_V2_DEV.adapter();a.flyTo({center:[13.46,52.54],zoom:15,pitch:0,bearing:0,duration:0});
+    const start=a.camera();let map=null;
+    const orig=maplibregl.Map.prototype.easeTo;
+    maplibregl.Map.prototype.easeTo=function(o,data){map=this;return orig.call(this,{...o,duration:3000,essential:true},data);};
+    try{
+      const x=kartePanelObjekt(id,null);
+      if(!x||!karteSuchSprung(id,x.objekt.renderKey))throw Error('authorized search jump refused');
+    }finally{maplibregl.Map.prototype.easeTo=orig;}
+    if(!map)throw Error('explicit easeTo not observed');
+    const zwischen=await new Promise((ok,no)=>{
+      const ende=performance.now()+4000;
+      function frame(){const c=a.camera();
+        if(map.isMoving()&&Math.abs(c.center[0]-start.center[0])>.0001&&Math.abs(c.center[0]-13.4)>.0001){ok(c);return;}
+        if(performance.now()>ende||!map.isMoving()){no(Error('no intermediate target frame'));return;}
+        requestAnimationFrame(frame);
+      }requestAnimationFrame(frame);
+    });
+    if(art==='modul')dispatch({type:'NAVIGATION',modul:'dossier'});
+    else if(art==='reiter')$('ktab-protokoll').click();
+    else if(art==='stand'){
+      asAnwenden({modul:'karte',karte:{lat:52.54,lon:13.46,zoom:15.5}});renderModule();
+    }else if(art==='gestoppt'){
+      map.stop();dispatch({type:'NAVIGATION',modul:'dossier'});
+    }
+    return {zwischen,altBereit:a.ready(),geteilt:{lat:VIEW.karte.lat,lon:VIEW.karte.lon,zoom:VIEW.karte.zoom}};
+  },{art,id});
+  for(const art of ['modul','reiter','stand','gestoppt']){
+    const ab=await zielflug(art);assert.equal(ab.altBereit,false);
+    if(art==='modul'||art==='reiter'){
+      nah(ab.geteilt.lon,13.4,'retained target longitude');nah(ab.geteilt.lat,52.5,'retained target latitude');nah(ab.geteilt.zoom,16.5,'retained target zoom');
+    }else if(art==='stand'){
+      nah(ab.geteilt.lon,13.46,'working state wins');nah(ab.geteilt.lat,52.54,'working state latitude');nah(ab.geteilt.zoom,15.5,'working state zoom');
+    }else{
+      nah(ab.geteilt.lon,ab.zwischen.center[0],'cancelled target retains visible longitude');nah(ab.geteilt.lat,ab.zwischen.center[1],'cancelled target retains visible latitude');
+    }
+    if(art==='reiter')await p.click('#ktab-karte');
+    else if(art!=='stand')await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
+    await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
+    const cam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
+    nah(cam.center[0],ab.geteilt.lon,'remounted longitude');nah(cam.center[1],ab.geteilt.lat,'remounted latitude');nah(cam.zoom,ab.geteilt.zoom-.5,'remounted zoom');
+  }
+  await p.emulateMedia({reducedMotion:'reduce'});
   // Z1: actual V2 camera at maximum zoom and above the old latitude limit.
   await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[13.4,85.02],zoom:22,pitch:0,bearing:0,duration:0}));
   await p.waitForFunction(()=>VIEW.karte.lat>85&&VIEW.karte.zoom===22.5);

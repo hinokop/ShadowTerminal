@@ -2147,6 +2147,7 @@ const ACTIONS = {
     /* Phase 5b8: nur die Arbeitsmodule sind ansteuerbar; die alten Missionsmodule bleiben nur als Registrierung für gespeicherte Stände. */
     const m = ARBEITSMODULE.find(function (x) { return x.id === a.modul; });
     if (!m || STATE.ui.modul === m.id) return null;
+    if (STATE.ui.modul === 'karte' && typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.zielBeimVerlassen();
     STATE.ui.modul = m.id;
     return { modul: m.log, aktion: 'Modul geöffnet', detail: m.titel };
   },
