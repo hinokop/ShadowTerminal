@@ -161,10 +161,21 @@
       if(aktiv(c))zurueckfallen(c,'MapLibre-Objektlayer konnten nicht aufgebaut werden.');
     });
   }
+  // Match the flat geographic scale at the actual SVG CSS-pixel size.
+  // Keep the historical shared zoom convention elsewhere; the SVG fallback
+  // has its own supported zoom interval and cannot preserve perspective.
+  function rueckfallZoom(v2Zoom,svgFaktor){
+    if(!Number.isFinite(v2Zoom)||!Number.isFinite(svgFaktor)||svgFaktor<=0)return null;
+    return Math.max(1.6,Math.min(19,v2Zoom+1-Math.log2(svgFaktor)));
+  }
   function zurueckfallen(c,grund='MapLibre konnte nicht gestartet werden.'){
+
     if(!aktiv(c)||rueckfall)return;
     // Keep the existing authorized application model, camera and placement
     // state. Do not activate a different online provider as a side effect.
+    // No fabricated scale for failures before a working camera exists.
+    let vorher=null;
+    try{vorher=c.a?.camera()||null;}catch(e){}
     rueckfall=true;rueckfallGrund=grund;
     VIEW.karte.ebenen.kacheln=false;
     VIEW.karte.ansicht3d=false;
@@ -172,6 +183,11 @@
     // The full render now assigns the shared panels and export control back
     // to SVG. The session flag prevents automatic retry loops.
     renderModule();
+    const svg=$('k-svg'),matrix=svg?.getScreenCTM();
+    if(vorher&&matrix){
+      const zoom=rueckfallZoom(vorher.zoom,Math.hypot(matrix.a,matrix.b));
+      if(zoom!==null){VIEW.karte.zoom=zoom;zeichneKarte(svg);}
+    }
   }
   function mount(){
     if(!v2Aktiv())return;

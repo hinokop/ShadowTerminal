@@ -5,8 +5,9 @@ const {APP}=require('./_pfad');
 (async()=>{
  const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
-  for(const art of ['bibliothek','webgl','layer']){
-   const p=await b.newPage({viewport:{width:1500,height:1100},reducedMotion:'reduce'});
+  for(const [art,viewport] of [['bibliothek',{width:1500,height:1100}],['webgl',{width:1500,height:1100}],['layer',{width:1500,height:1100}],['layer',{width:1200,height:900}]]){
+   const p=await b.newPage({viewport,reducedMotion:'reduce'});
+   let vorher=null;
    const errors=[],anfragen=[];p.on('pageerror',e=>errors.push(e.message));
    await p.route(/^https?:/,r=>{anfragen.push(r.request().url());return r.abort();});
    await p.addInitScript(art=>{
@@ -48,6 +49,12 @@ const {APP}=require('./_pfad');
      await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready()&&$('k-v2-status')?.textContent.includes('Kein lokaler CARTO-Schlüssel'));
      assert.equal(await p.locator('#pin-name').inputValue(),'K4 Rückfallpin');
      assert.equal(await p.locator('#k-svg').count(),0);
+     vorher=await p.evaluate(()=>{
+       const a=KARTE_V2_DEV.adapter(),cam=a.camera(),ll1=[cam.center[1],cam.center[0]],ll2=[cam.center[1],cam.center[0]+.001];
+       const p=a.project(ll1),q=a.project(ll2);
+       return {cam,ll1,ll2,px:Math.hypot(q.x-p.x,q.y-p.y)};
+     });
+     assert.ok(vorher.cam.pitch===0&&vorher.cam.bearing===0&&vorher.px>0);
      await p.evaluate(()=>{
        const orig=maplibregl.Map.prototype.addLayer;
        maplibregl.Map.prototype.addLayer=function(layer,...args){
@@ -66,6 +73,14 @@ const {APP}=require('./_pfad');
    if(art==='layer'){
      assert.equal(await p.evaluate(()=>__teilLayer),true,'failure after partial installation');
      assert.match(await p.locator('#k-v2-rueckfall').innerText(),/MapLibre-Objektlayer konnten nicht aufgebaut werden/);
+     const nachher=await p.evaluate(({ll1,ll2})=>{
+       const svg=$('k-svg'),m=svg.getScreenCTM(),P=karteProj(),K=VIEW.karte;
+       const a=new DOMPoint(P.px(ll1[1]),P.py(ll1[0])).matrixTransform(m),b=new DOMPoint(P.px(ll2[1]),P.py(ll2[0])).matrixTransform(m);
+       return {px:Math.hypot(b.x-a.x,b.y-a.y),faktor:Math.hypot(m.a,m.b),zoom:K.zoom,lat:K.lat,lon:K.lon};
+     },{ll1:vorher.ll1,ll2:vorher.ll2});
+     assert.ok(nachher.faktor>0&&Number.isFinite(nachher.faktor));
+     assert.ok(Math.abs(nachher.px-vorher.px)<1e-6,'same flat CSS scale after fallback '+JSON.stringify({viewport,vorher,nachher}));
+     assert.ok(Math.abs(nachher.lat-vorher.cam.center[1])<1e-9&&Math.abs(nachher.lon-vorher.cam.center[0])<1e-9,'fallback center unchanged');
    }
    assert.equal(await p.locator('#k-v2-map').count(),0);
    assert.equal(await p.locator('.karte-wrap #k-status').count(),1);
@@ -89,6 +104,6 @@ const {APP}=require('./_pfad');
    assert.deepEqual(errors,[],art+' no uncaught application errors');
    await p.close();
   }
-  console.log('OK: Bibliotheks-, WebGL- und nachträglicher Objektlayerfehler, vollständiger SVG-Rückfall, keine automatischen Neuversuche');
+  console.log('OK: Bibliotheks-, WebGL- und nachträglicher Objektlayerfehler, vollständiger SVG-Rückfall, flacher Maßstab bei zwei Fenstergrößen, keine automatischen Neuversuche');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
