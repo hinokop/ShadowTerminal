@@ -10,6 +10,9 @@
    Ein Klick auf einen Akteur öffnet sein Dossier. Kartenpositionen setzt der Agent im Dossier (Koordinaten oder Klick auf die Karte).
    ===================================================================== */
 const KW = 960, KH = 540, DEG = Math.PI / 180;
+/* Shared V2 camera/working-state contract. The legacy logical zoom is
+   the MapLibre zoom plus the historical offset, not a CSS-scale guarantee. */
+const KARTE_V2_KAMERA = Object.freeze({ maxLat: 85.051129, minZoom: 1.1, maxZoom: 22, zoomOffset: 0.5 });
 VIEW.karte = { cartoKey: '', cartoStil: 'dark_all', zoneSetzen: false, statusOffen: false, lat: 50.5, lon: 8, zoom: 5, dt: 0, auswahl: null, pick: null, init: false, messen: false, messPts: [], spiel: null, flug: null, suche: '', anbieter: 'osm', url: '', dunkel: true,
   ebenenOffen: true, quellenAus: {}, wetter: true, wetterOnline: null,
   ebenen: { ausgang: true, standorte: true, orte: true, personen: true, organisationen: true, verbindungen: true, sichtungen: true, fenster: true, route: true, strecke: true, gelaende: true, strassen: true, namen: true, zonen: true, pins: true, kacheln: false } };

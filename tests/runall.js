@@ -76,7 +76,10 @@ function lauf(name) {
     k.on('close', code => {
       clearTimeout(t); out.end();
       const status = zeit ? 'Zeit' : (code !== 0 || FEHLER.test(text)) ? 'rot' : !text.trim() ? 'ungeprüft' : 'grün';
-      res({ name, status, code, art: status === 'rot' ? fehlerArt(text) : null, falsch: Array.from(text.matchAll(/"([A-Za-z0-9_]+)": false/g), m => m[1]) });
+      // Synthetic scale diagnostic is useful even on successful runs. Do not
+      // dump general test output or unrelated environment/configuration data.
+      const diagnose = name === 'geospatial-k2-anbindung' ? text.split(/\r?\n/).filter(l => l.startsWith('K4 Maßstabsbaseline (CSS-Pixel): ')) : [];
+      res({ name, status, code, art: status === 'rot' ? fehlerArt(text) : null, falsch: Array.from(text.matchAll(/"([A-Za-z0-9_]+)": false/g), m => m[1]), diagnose });
     });
   });
 }
@@ -87,6 +90,7 @@ function lauf(name) {
   for (const g of gruppen) erg.push(...await gruppeLaufen(g));
   let neu = 0;
   erg.forEach(r => { const b = (BEKANNT_NUR[r.name] ? (r.status === 'rot' && r.falsch.length && r.falsch.every(x => BEKANNT_NUR[r.name].indexOf(x) >= 0) ? BEKANNT[r.name] : null) : BEKANNT[r.name]) || (HISTORISCH.indexOf(r.name) >= 0 ? 'historisch, stillgelegter Missionsablauf' : null), angefordert = wahl.indexOf(r.name) >= 0; console.log(r.name.padEnd(18) + r.status + (r.art && r.art !== 'fachlich' ? ' [' + r.art + ']' : '') + (r.status !== 'grün' && r.status !== 'fehlt' && b ? '  (bekannt: ' + b + ')' : '') + (r.status === 'fehlt' && angefordert ? '  (angefordert, aber nicht vorhanden)' : '')); if ((r.status === 'rot' || r.status === 'Zeit' || r.status === 'ungeprüft') && (geo || !b)) neu++; if (r.status === 'fehlt' && angefordert) neu++; });
+  for (const r of erg) for (const zeile of r.diagnose || []) console.log(zeile);
   console.log('\n' + erg.filter(r => r.status === 'grün').length + ' grün, ' + erg.filter(r => r.status === 'ungeprüft').length + ' ungeprüft, ' + erg.filter(r => r.status === 'fehlt').length + ' nicht vorhanden, ' + neu + ' unerwartet rot, ungeprüft oder fehlend. Ausgaben: ' + ausgabe);
   process.exit(neu ? 1 : 0);
 })();

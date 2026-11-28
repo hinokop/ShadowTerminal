@@ -104,7 +104,32 @@ const {APP}=require('./_pfad');
   nah(zielCam.zoom,Math.max(sprung.geteilt.zoom,15)-.5,'explicit pin zoom');
   assert.equal(await p.locator('#pin-name').inputValue(),'K4 Solo Test');
   assert.equal(await p.locator('#k-svg').count(),0);
+  // Z1: actual V2 camera at maximum zoom and above the old latitude limit.
+  await p.evaluate(()=>KARTE_V2_DEV.adapter().flyTo({center:[13.4,85.02],zoom:22,pitch:0,bearing:0,duration:0}));
+  await p.waitForFunction(()=>VIEW.karte.lat>85&&VIEW.karte.zoom===22.5);
+  const hoch=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
+  nah(hoch.zoom,22,'maximum V2 zoom');nah(hoch.center[1],85.02,'latitude beyond former limit');
+  await p.click('#as-speichern');
+  const gespeichert=await p.evaluate(()=>JSON.parse(localStorage.getItem(PROFIL_KEY)).arbeitsstand.karte);
+  nah(gespeichert.zoom,22.5,'persisted logical zoom');nah(gespeichert.lat,hoch.center[1],'persisted latitude');
+  await p.evaluate(()=>{
+    KARTE_V2_DEV.adapter().flyTo({center:[10,50],zoom:8,pitch:0,bearing:0,duration:0});
+    dispatch({type:'NAVIGATION',modul:'dossier'});
+  });
+  assert.equal(await p.evaluate(()=>VIEW.karte.zoom),8.5);
+  await p.click('#as-wieder');await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
+  kameraVergleich(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),hoch);
+  assert.equal(await p.evaluate(()=>VIEW.karte.zoom),22.5);
+  const gueltig=await p.evaluate(()=>{
+    const base={lat:85.02,lon:13.4,zoom:22.5};
+    const schlecht=[{lat:85.052},{lon:180.01},{zoom:22.51},{zoom:0},{lat:null},{zoom:'22'},{lon:NaN}];
+    return {alt:asKarteKameraGueltig({lat:0,lon:0,zoom:1}),neu:asKarteKameraGueltig(base),
+      ungueltig:schlecht.every(p=>!asKarteKameraGueltig({...base,...p})),
+      meldung:asAnwenden({modul:'karte',karte:{...base,zoom:23}}).uebersprungen};
+  });
+  assert.deepEqual(gueltig,{alt:true,neu:true,ungueltig:true,meldung:['Kartenkamera']});
+  assert.equal(await p.evaluate(()=>VIEW.karte.zoom),22.5,'invalid camera leaves last valid position intact');
   assert.deepEqual(net,[]);assert.deepEqual(errors,[]);
-  console.log('OK: eigenständiges V2, Filter, Suche, Werkzeuge, Meldungen, Pin-Anlage, Navigation ohne SVG, unterbrochene Kamerafahrt und expliziter Sprung');
+  console.log('OK: eigenständiges V2, Filter, Suche, Werkzeuge, Meldungen, Pin-Anlage, Navigation ohne SVG, unterbrochene Kamerafahrt, expliziter Sprung und Arbeitsstand bei maximalem Zoom');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

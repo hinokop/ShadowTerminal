@@ -32,6 +32,13 @@ function asAuswahlGueltig(id) {
     return karteMarkerFinden(id, null) !== null;
   } catch (e) { return false; }
 }
+/* The logical zoom can reach 22.5 in V2. Keep old low-zoom states readable,
+   reject malformed values explicitly instead of discarding a valid V2 camera. */
+function asKarteKameraGueltig(k) {
+  const g = KARTE_V2_KAMERA;
+  return [k.lat, k.lon, k.zoom].every(Number.isFinite) && Math.abs(k.lat) <= g.maxLat &&
+    Math.abs(k.lon) <= 180 && k.zoom >= 1 && k.zoom <= g.maxZoom + g.zoomOffset;
+}
 /* Wendet einen gespeicherten Stand an und nennt, was übersprungen wurde. Verändert nur Ansichtsdaten. */
 function asAnwenden(s) {
   const uebersprungen = [];
@@ -53,7 +60,8 @@ function asAnwenden(s) {
   }
   const k = s.karte, K = VIEW.karte;
   if (k && typeof k === 'object') {
-    if (isFinite(k.lat) && isFinite(k.lon) && Math.abs(k.lat) <= 85 && Math.abs(k.lon) <= 180 && isFinite(k.zoom) && k.zoom >= 1 && k.zoom <= 22) { K.lat = k.lat; K.lon = k.lon; K.zoom = k.zoom; K.init = true; }   /* init: die Karte soll beim ersten Aufbau nach dem Start nicht auf die Grundansicht zurückspringen */
+    if (asKarteKameraGueltig(k)) { K.lat = k.lat; K.lon = k.lon; K.zoom = k.zoom; K.init = true; }   /* init: die Karte soll beim ersten Aufbau nach dem Start nicht auf die Grundansicht zurückspringen */
+    else uebersprungen.push('Kartenkamera');
     if (k.ebenen && typeof k.ebenen === 'object') Object.keys(K.ebenen).forEach(function (n) { if (typeof k.ebenen[n] === 'boolean') K.ebenen[n] = k.ebenen[n]; });
     if (typeof karteWahlSichern === 'function') karteWahlSichern();
     K.pick = null; K.messen = false; K.messPts = [];
