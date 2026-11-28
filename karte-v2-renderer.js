@@ -197,20 +197,32 @@
   ];
   function adapter(map,optionen){
     const o=optionen||{};let aktiv=true, snapshot=daten(null), anzeige=snapshot.quellen, auswahl=null, installiert=false, markiert=undefined;
-    let letzteBewegung=-Infinity;
+    let letzteBewegung=-Infinity,fehlerhaft=false;
+    const eigeneQuellen=new Set(Object.values(ids));
     const bewegungsIntervall=100; // at most 10 local point-layout updates/s while moving
     /* MapLibre BoxZoom unterdrückt auch einen stationären Shift-Klick (mouseupWindow).
        Shift ist im K1-Klickvertrag reserviert; die übrigen Kameragesten bleiben unverändert. */
     const boxZoomWarAktiv=!!map.boxZoom?.isEnabled();
     if(boxZoomWarAktiv)map.boxZoom.disable();
-    const fehler=()=>{installiert=false;if(typeof o.onError==='function')o.onError('Eigene Kartenlayer konnten nicht aufgebaut werden.');};
+    const fehler=(phase='layer',e)=>{
+      if(!aktiv||fehlerhaft)return;
+      fehlerhaft=true;installiert=false;
+      if(typeof o.onError==='function')o.onError('Eigene Kartenlayer konnten nicht aufgebaut werden.',phase,e);
+    };
+    function quellFehler(e){
+      // Exact local IDs, not the shared shadow-v2 prefix of imagery/hybrid.
+      if(aktiv&&installiert&&eigeneQuellen.has(e?.sourceId))fehler('source',e.error);
+    }
     function markieren(){
       if(!installiert||markiert===auswahl)return;
-      for(const id of ['auswahl','auswahl-zone','auswahl-kante'])map.setFilter(P+id,['==',['get','renderKey'],auswahl||'']);
+      for(const id of ['auswahl','auswahl-zone','auswahl-kante']){
+        map.setFilter(P+id,['==',['get','renderKey'],auswahl||'']);
+        if(fehlerhaft)return;
+      }
       markiert=auswahl;
     }
     function installieren(){
-      if(!aktiv)return;
+      if(!aktiv||fehlerhaft)return;
       installiert=false;markiert=undefined;letzteBewegung=-Infinity;
       /* Keine fremden Layer oder Quellen mit kollidierenden Kennungen verändern. */
       if(Object.values(ids).some(id=>map.getSource(id))||layer.some(l=>map.getLayer(l.id))||Object.keys(formen).some(k=>map.hasImage(symbolId(k)))){fehler();return;}
@@ -220,10 +232,10 @@
         for(const [k,id] of Object.entries(ids))map.addSource(id,{type:'geojson',data:anzeige[k]});
         for(const l of layer)map.addLayer(JSON.parse(JSON.stringify(l)));
         installiert=true;markieren();
-      }catch(e){fehler();}
+      }catch(e){fehler('layer',e);}
     }
     function setData(modell,opts){
-      if(!aktiv)return;
+      if(!aktiv||fehlerhaft)return;
       snapshot=daten(modell,opts);
       // The hit registry always reflects the new authorized model immediately.
       // Only changed GeoJSON sources need a worker update; selection and tool
@@ -233,14 +245,17 @@
     }
     function aktualisieren(nurPunkte=false){
       if(!aktiv||!installiert)return;
-      const neu=entflechten(snapshot.quellen,map);
-      const keys=nurPunkte===true?['punkte','leit']:Object.keys(ids);
-      for(const k of keys){
-        if(anzeige[k]!==neu[k]&&JSON.stringify(anzeige[k])!==JSON.stringify(neu[k]))
-          map.getSource(ids[k]).setData(neu[k]);
-      }
-      anzeige=neu;
-      if(nurPunkte!==true)markieren();
+      try{
+        const neu=entflechten(snapshot.quellen,map);
+        const keys=nurPunkte===true?['punkte','leit']:Object.keys(ids);
+        for(const k of keys){
+          if(anzeige[k]!==neu[k]&&JSON.stringify(anzeige[k])!==JSON.stringify(neu[k]))
+            map.getSource(ids[k]).setData(neu[k]);
+          if(fehlerhaft)return;
+        }
+        anzeige=neu;
+        if(nurPunkte!==true)markieren();
+      }catch(e){fehler('update',e);}
     }
     function bewegung(){
       if(!aktiv||!installiert||snapshot.quellen.punkte.features.length<2||map.isMoving?.()!==true)return;
@@ -252,8 +267,10 @@
       letzteBewegung=-Infinity;aktualisieren();
     }
     function setSelection(k){
-      if(!aktiv)return false;
-      auswahl=snapshot.treffer.has(k)?k:null;markieren();return auswahl!==null;
+      if(!aktiv||fehlerhaft)return false;
+      auswahl=snapshot.treffer.has(k)?k:null;
+      try{markieren();}catch(e){fehler('update',e);}
+      return !fehlerhaft&&auswahl!==null;
     }
     function hitTest(p){
       if(!aktiv||!installiert)return null;
@@ -269,8 +286,8 @@
       const ev=e.originalEvent;
       o.onClick({ll:[e.lngLat.lat,e.lngLat.lng],treffer:hitTest(e.point),mehr:!!(ev&&(ev.shiftKey||ev.ctrlKey||ev.metaKey))});
     }
-    function stilwechsel(stil){if(!aktiv)return;installiert=false;map.setStyle(stil,{diff:false});}
-    map.on('style.load',installieren);map.on('click',click);map.on('move',bewegung);map.on('moveend',bewegungEnde);map.on('resize',bewegungEnde);
+    function stilwechsel(stil){if(!aktiv||fehlerhaft)return;installiert=false;map.setStyle(stil,{diff:false});}
+    map.on('style.load',installieren);map.on('error',quellFehler);map.on('click',click);map.on('move',bewegung);map.on('moveend',bewegungEnde);map.on('resize',bewegungEnde);
     if(map.isStyleLoaded())installieren();
     return {setData,setSelection,hitTest,setStyle:stilwechsel,
       camera:()=>aktiv?{center:map.getCenter().toArray(),zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()}:null,
@@ -279,7 +296,7 @@
       resize:()=>{if(aktiv)map.resize();},
       flyTo:opts=>{if(aktiv)map.flyTo(opts);},
       ready:()=>aktiv&&installiert,
-      unmount:()=>{if(!aktiv)return;aktiv=false;map.off('style.load',installieren);map.off('click',click);map.off('move',bewegung);map.off('moveend',bewegungEnde);map.off('resize',bewegungEnde);if(boxZoomWarAktiv)map.boxZoom.enable();if(installiert){for(const l of layer.slice().reverse())if(map.getLayer(l.id))map.removeLayer(l.id);for(const id of Object.values(ids))if(map.getSource(id))map.removeSource(id);for(const k of Object.keys(formen))if(map.hasImage(symbolId(k)))map.removeImage(symbolId(k));}snapshot=daten(null);anzeige=snapshot.quellen;auswahl=null;installiert=false;}
+      unmount:()=>{if(!aktiv)return;aktiv=false;map.off('style.load',installieren);map.off('error',quellFehler);map.off('click',click);map.off('move',bewegung);map.off('moveend',bewegungEnde);map.off('resize',bewegungEnde);if(boxZoomWarAktiv)map.boxZoom.enable();if(installiert){for(const l of layer.slice().reverse())if(map.getLayer(l.id))map.removeLayer(l.id);for(const id of Object.values(ids))if(map.getSource(id))map.removeSource(id);for(const k of Object.keys(formen))if(map.hasImage(symbolId(k)))map.removeImage(symbolId(k));}snapshot=daten(null);anzeige=snapshot.quellen;auswahl=null;installiert=false;}
     };
   }
   const api=Object.freeze({daten,adapter,legende,symbolBild,entflechten});

@@ -5,7 +5,7 @@ const {APP}=require('./_pfad');
 (async()=>{
  const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
-  for(const [art,viewport] of [['bibliothek',{width:1500,height:1100}],['webgl',{width:1500,height:1100}],['initialisierung',{width:1500,height:1100}],['layer',{width:1500,height:1100}],['layer',{width:1200,height:900}]]){
+  for(const [art,viewport] of [['bibliothek',{width:1500,height:1100}],['webgl',{width:1500,height:1100}],['initialisierung',{width:1500,height:1100}],['layer',{width:1500,height:1100}],['layer',{width:1200,height:900}],['update',{width:1500,height:1100}],['source',{width:1500,height:1100}]]){
    const p=await b.newPage({viewport,reducedMotion:'reduce'});
    let vorher=null;
    const errors=[],anfragen=[],diagnosen=[];p.on('pageerror',e=>errors.push(e.message));
@@ -89,12 +89,35 @@ const {APP}=require('./_pfad');
      // Real style reload: failure occurs in the adapter's asynchronous style.load.
      await p.click('#k-v2-leer');
    }
+   if(art==='update'||art==='source'){
+     await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready()&&$('k-v2-status')?.textContent.includes('Kein lokaler CARTO-Schlüssel'));
+     const probe=await p.evaluate(art=>{
+       const a=KARTE_V2_DEV.adapter(),orig=maplibregl.Map.prototype.flyTo;let map;
+       maplibregl.Map.prototype.flyTo=function(...args){map=this;return orig.apply(this,args);};
+       try{a.flyTo({...a.camera(),duration:0});}finally{maplibregl.Map.prototype.flyTo=orig;}
+       if(!map)throw Error('real map not observed');
+       // Provider-prefixed IDs are not local object sources.
+       map.fire('error',{sourceId:'shadow-v2-hybrid-999',error:new Error('fixture provider')});
+       const bereit=a.ready();
+       if(art==='update'){
+         map.getSource('shadow-v2-mess').setData=()=>{++window.__mapVersuche;throw new TypeError('synthetic-secret-DO-NOT-LOG');};
+         a.setData(karteRenderModell(),{mess:[[52.5,13.4]]});
+       }else{
+         ++window.__mapVersuche;
+         map.fire('error',{sourceId:'shadow-v2-punkte',error:new Error('synthetic-secret-DO-NOT-LOG')});
+         map.fire('error',{sourceId:'shadow-v2-punkte',error:new Error('duplicate fixture')});
+       }
+       return {bereit,danach:a.ready(),treffer:a.hitTest({x:0,y:0})};
+     },art);
+     assert.deepEqual(probe,{bereit:true,danach:false,treffer:null},'local failure immediately disables old hits; provider prefix does not');
+   }
    await p.waitForSelector('#k-v2-rueckfall');
-   const code={bibliothek:'V2-LIB',webgl:'V2-MAP',initialisierung:'V2-INIT',layer:'V2-LAYER'}[art];
+   const code={bibliothek:'V2-LIB',webgl:'V2-MAP',initialisierung:'V2-INIT',layer:'V2-LAYER',update:'V2-UPDATE',source:'V2-SOURCE'}[art];
    const meldung=await p.locator('#k-v2-rueckfall').innerText();
    assert.ok(meldung.includes('Diagnose: '+code+'.'),art+' correct diagnostic phase: '+meldung);
    assert.equal(diagnosen.length,1,art+' exactly one active-context diagnostic');
    assert.ok(['Error','TypeError','RangeError','unbekannt'].some(typ=>diagnosen[0]==='[Shadow V2] '+code+' ('+typ+')'));
+   if(art==='update'||art==='source')assert.ok(!meldung.includes('synthetic-secret'));
    if(art==='initialisierung'){
      assert.equal(await p.evaluate(()=>__konstruierteMap),true,'failure after map construction');
      assert.equal(diagnosen[0],'[Shadow V2] V2-INIT (TypeError)');
@@ -135,6 +158,6 @@ const {APP}=require('./_pfad');
    assert.deepEqual(errors,[],art+' no uncaught application errors');
    await p.close();
   }
-  console.log('OK: Bibliotheks-, WebGL-, Anwendungsaufbau- und nachträglicher Objektlayerfehler, vollständiger SVG-Rückfall, flacher Maßstab bei zwei Fenstergrößen, keine automatischen Neuversuche');
+  console.log('OK: Bibliotheks-, WebGL-, Anwendungsaufbau- und nachträglicher Objektlayerfehler sowie lokale Update-/Quellfehler, vollständiger SVG-Rückfall, flacher Maßstab bei zwei Fenstergrößen, keine automatischen Neuversuche');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

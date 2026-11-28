@@ -192,14 +192,17 @@
     diagnoseAusgeben(code,e);
     zurueckfallen(c,grund+' Diagnose: '+code+'.');
   }
-  function objektFehler(c){
+  function objektFehler(c,phase,e){
     if(!aktiv(c)||c.objektFehler)return;
     c.objektFehler=true;
-    hinweis(c,'Eigene Kartenlayer konnten nicht aufgebaut werden.');
+    const [code,grund]=phase==='source'?['V2-SOURCE','Lokale MapLibre-Objektquelle fehlgeschlagen.']:
+      phase==='update'?['V2-UPDATE','Lokale MapLibre-Objektlayer konnten nicht aktualisiert werden.']:
+      ['V2-LAYER','MapLibre-Objektlayer konnten nicht aufgebaut werden.'];
+    hinweis(c,grund);
     queueMicrotask(()=>{
       if(aktiv(c)){
-        diagnoseAusgeben('V2-LAYER');
-        zurueckfallen(c,'MapLibre-Objektlayer konnten nicht aufgebaut werden. Diagnose: V2-LAYER.');
+        diagnoseAusgeben(code,e);
+        zurueckfallen(c,grund+' Diagnose: '+code+'.');
       }
     });
   }
@@ -284,7 +287,7 @@
         const flug=e.shadowZielflug;
         if(flug&&c.zielflug===flug){c.zielflug=null;if(flug.fertig)flug.fertig();}
       });
-      c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:()=>objektFehler(c)});
+      c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:(_text,phase,e)=>objektFehler(c,phase,e)});
       quelle.ereignisse(c);
       knoepfe(c);gebaeudeKnoepfe(c);
       sync();kameraTeilen(c);karteAuswahlAnzeige();karteStatusAkt();kameraAnzeige(c);

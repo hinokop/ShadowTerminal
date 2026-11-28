@@ -125,7 +125,8 @@ const ringMarker=[
    queryRenderedFeatures:(p,{layers})=>layers[0]==='shadow-v2-punkt'?[{properties:{renderKey:a}}]:[],
    removeSource:id=>sources.delete(id),removeLayer:id=>layers.delete(id),removeImage:id=>images.delete(id)
  };
- const adapter=R.adapter(mock);adapter.setData(model);adapter.setSelection(a);
+ const fehler=[];
+ const adapter=R.adapter(mock,{onError:(_text,phase)=>fehler.push(phase)});adapter.setData(model);adapter.setSelection(a);
  writes.length=0;filters.length=0;
  adapter.setData(JSON.parse(JSON.stringify(model)));adapter.setSelection(a);
  assert.deepEqual(writes,[],'identical model no source writes');
@@ -138,7 +139,14 @@ const ringMarker=[
  adapter.setData({...model,marker:model.marker.filter(x=>x.renderKey!==a)},{mess:[[52.52,13.4]]});
  assert.ok(writes.includes('shadow-v2-punkte'));
  assert.equal(adapter.hitTest({x:0,y:0}),null,'stale removed hit immediately rejected');
+ handlers.get('error')({sourceId:'shadow-v2-hybrid-2'});
+ assert.equal(adapter.ready(),true);assert.deepEqual(fehler,[]);
+ mock.setFilter=()=>{throw new TypeError('fixture selection failure');};
+ assert.equal(adapter.setSelection(null),false);assert.equal(adapter.ready(),false);
+ assert.equal(adapter.hitTest({x:0,y:0}),null);assert.deepEqual(fehler,['update']);
+ handlers.get('error')({sourceId:'shadow-v2-punkte'});assert.deepEqual(fehler,['update'],'no second notification');
  adapter.unmount();
+ assert.equal(handlers.has('error'),false,'source error listener removed');
  assert.equal(handlers.has('move'),false,'movement listener removed');
  assert.equal(handlers.has('moveend'),false);
 }
