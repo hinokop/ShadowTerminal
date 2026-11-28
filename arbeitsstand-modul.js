@@ -16,9 +16,28 @@ function asErfassen() {
 }
 function asAuswahlGueltig(id) {
   if (typeof id !== 'string' || !id) return false;
-  if ((PROFIL.pins || []).some(function (p) { return p.id === id; })) return true;
+  const pin = (PROFIL.pins || []).find(function (p) { return p.id === id; });
+  if (pin) return !pinGesperrt(pin);
   if (typeof karteZoneFinden === 'function' && karteZoneFinden(id)) return true;
-  try { return karteMarker().some(function (m) { return m.id === id; }); } catch (e) { return false; }
+  try {
+    /* Alte Arbeitsstände enthalten nur die SI-Nummer. Auch ausgeblendete
+       oder gesperrte Doppelgänger zählen bei der Eindeutigkeitsprüfung. */
+    if (/^SI-/.test(id)) {
+      let n = 0;
+      Object.values(STATE.dossiers.entitaeten).forEach(function (d) {
+        (d.sichtungen || []).forEach(function (si) { if (si.id === id) n++; });
+      });
+      if (n !== 1) return false;
+    }
+    return karteMarkerFinden(id, null) !== null;
+  } catch (e) { return false; }
+}
+/* The logical zoom can reach 22.5 in V2. Keep old low-zoom states readable,
+   reject malformed values explicitly instead of discarding a valid V2 camera. */
+function asKarteKameraGueltig(k) {
+  const g = KARTE_V2_KAMERA;
+  return [k.lat, k.lon, k.zoom].every(Number.isFinite) && Math.abs(k.lat) <= g.maxLat &&
+    Math.abs(k.lon) <= 180 && k.zoom >= 1 && k.zoom <= g.maxZoom + g.zoomOffset;
 }
 /* Wendet einen gespeicherten Stand an und nennt, was übersprungen wurde. Verändert nur Ansichtsdaten. */
 function asAnwenden(s) {
@@ -41,11 +60,15 @@ function asAnwenden(s) {
   }
   const k = s.karte, K = VIEW.karte;
   if (k && typeof k === 'object') {
-    if (isFinite(k.lat) && isFinite(k.lon) && Math.abs(k.lat) <= 85 && Math.abs(k.lon) <= 180 && isFinite(k.zoom) && k.zoom >= 1 && k.zoom <= 22) { K.lat = k.lat; K.lon = k.lon; K.zoom = k.zoom; K.init = true; }   /* init: die Karte soll beim ersten Aufbau nach dem Start nicht auf die Grundansicht zurückspringen */
+    if (asKarteKameraGueltig(k)) { K.lat = k.lat; K.lon = k.lon; K.zoom = k.zoom; K.init = true; }   /* init: die Karte soll beim ersten Aufbau nach dem Start nicht auf die Grundansicht zurückspringen */
+    else uebersprungen.push('Kartenkamera');
     if (k.ebenen && typeof k.ebenen === 'object') Object.keys(K.ebenen).forEach(function (n) { if (typeof k.ebenen[n] === 'boolean') K.ebenen[n] = k.ebenen[n]; });
     if (typeof karteWahlSichern === 'function') karteWahlSichern();
     K.pick = null; K.messen = false; K.messPts = [];
     K.pinSetzen = false; K.zoneSetzen = false; K.zugriffSetzen = false;   /* kein Platziermodus aus der vorherigen Ansicht */
+    /* Laufzeitidentität und Fokus gehören nicht zum gespeicherten Arbeitsstand. */
+    K.auswahlIdentitaet = null; K.sichtungFokus = null; K.bezug = null; K.bezugRenderKey = null; K.popupVersatz = null;
+    K.mehr = []; K.mehrModus = false;
     if (k.auswahl) { if (asAuswahlGueltig(k.auswahl)) K.auswahl = k.auswahl; else { K.auswahl = null; uebersprungen.push('Kartenobjekt ' + k.auswahl); } } else K.auswahl = null;
   }
   const ziel = ARBEITSMODULE.some(function (m) { return m.id === s.modul; }) ? s.modul : 'profil';

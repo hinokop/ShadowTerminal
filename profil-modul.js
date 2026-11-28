@@ -3283,12 +3283,7 @@ function terminalPinZeigen(px) {
     karteAuswahlAnzeige();
     return true;
   }
-  const K = VIEW.karte;
-  K.pick = null; K.reiter = 'karte'; K.sichtungFokus = si.id; K.zoom = Math.max(K.zoom, 15); K.init = true;
-  dispatch({ type: 'NAVIGATION', modul: 'karte' });
-  renderModule();
-  karteWaehlen(si.id, true);
-  return true;
+  return karteSichtungZeigen(px.dossier, si.id, 15);
 }
 /* Nach einer neuen manuellen Sperre dürfen offene Tab-Listen und bereits sichtbare Terminaltexte
    keine zuvor angezeigten Namen geschützter Pins behalten. */

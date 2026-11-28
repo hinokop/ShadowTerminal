@@ -28,6 +28,8 @@ body.emb #bar{left:auto;right:56px}
 (function(){
   var emb = /eingebettet=1/.test(location.search) && window.parent !== window;
   if(emb) document.body.className='emb';
+  var aktiv=!emb, sitzung=null, resizeLaeuft=false;
+  function senden(d){if(emb&&aktiv){d.sitzung=sitzung;parent.postMessage(d,'*');}}
   var fe=document.getElementById('fehler');
   function fehler(kurz,lang){ fe.hidden=false; fe.innerHTML=''; var a=document.createElement('p'),b=document.createElement('p'); a.style.fontWeight='600'; a.textContent=kurz; b.textContent=lang; fe.appendChild(a); fe.appendChild(b);
     if(emb) parent.postMessage({typ:'karte3d-fehler',grund:kurz},'*'); }
@@ -41,7 +43,7 @@ body.emb #bar{left:auto;right:56px}
   window.karte3d = map;
   var cv=map.getCanvas();
   cv.addEventListener('webglcontextlost',function(ev){ ev.preventDefault(); fehler('Grafikkontext verloren','Die Grafikkarte hat der Karte den Kontext entzogen. Die Ansicht wird wiederhergestellt, sobald das System ihn zurückgibt.'); });
-  cv.addEventListener('webglcontextrestored',function(){ fe.hidden=true; try{map.triggerRepaint();}catch(e){} });
+  cv.addEventListener('webglcontextrestored',function(){ fe.hidden=true; if(emb) parent.postMessage({typ:'karte3d-erholt'},'*'); try{map.triggerRepaint();}catch(e){} });
   var pruefen=0;
   map.on('error',function(){ if(bereit||pruefen) return; pruefen=setTimeout(function(){ if(!bereit) fehler('Kartenstil nicht geladen','Der Kartenstil ist nicht erreichbar (offline oder gesperrt). Die 2D-Karte bleibt nutzbar.'); },4000); });   /* Fehler vor dem Laden; läuft das Laden doch noch durch, verschwindet der Hinweis */
   setTimeout(function(){ if(!bereit && fe.hidden) fehler('Karte lädt nicht','Der Kartenstil antwortet nicht. Bitte die Internetverbindung prüfen; die 2D-Karte bleibt nutzbar.'); },20000);
@@ -89,20 +91,20 @@ body.emb #bar{left:auto;right:56px}
   function setze(d){ /* d: {zonen, marker, auswahl, fadenkreuz, mess} */
     offen=d; if(!bereit) return;
     fadenkreuz=!!d.fadenkreuz; map.getCanvas().style.cursor=fadenkreuz?'crosshair':'';
-    var fz=(d.zonen||[]).map(function(z){return {type:'Feature',properties:{id:z.id,name:z.name||z.id},geometry:{type:'Polygon',coordinates:kreis(z.ll[0],z.ll[1],z.r||250)}};});
-    var fp=(d.marker||[]).map(function(m){return {type:'Feature',properties:{id:m.id,ico:symbolName(m),kat:m.kat||'figur',name:m.name||m.id,prio:m.stufe||0},geometry:{type:'Point',coordinates:[m.ll[1],m.ll[0]]}};});
+    var fz=(d.zonen||[]).map(function(z){return {type:'Feature',id:z.renderKey||z.id,properties:{id:z.id,name:z.name||z.id},geometry:{type:'Polygon',coordinates:kreis(z.ll[0],z.ll[1],z.r||250)}};});
+    var fp=(d.marker||[]).map(function(m){return {type:'Feature',id:m.renderKey||m.id,properties:{id:m.id,renderKey:m.renderKey||m.id,ico:symbolName(m),kat:m.kat||'figur',name:m.name||m.id,prio:m.stufe||0},geometry:{type:'Point',coordinates:[m.ll[1],m.ll[0]]}};});
     map.getSource('zonen').setData({type:'FeatureCollection',features:fz});
     map.getSource('punkte').setData({type:'FeatureCollection',features:fp});
     var mp=d.mess||[], mf=[];
     if(mp.length>1) mf.push({type:'Feature',properties:{},geometry:{type:'LineString',coordinates:mp.map(function(p){return[p[1],p[0]];})}});
     mp.forEach(function(p){mf.push({type:'Feature',properties:{},geometry:{type:'Point',coordinates:[p[1],p[0]]}});});
     map.getSource('mess').setData({type:'FeatureCollection',features:mf});
-    auswahl(d.auswahl);
+    auswahl(d.auswahl,d.auswahlRenderKey);
     ort.innerHTML='<option value="">Gehe zu …</option>'; ortListe={};
     (d.marker||[]).filter(function(m){return m.kat==='standort'||m.kat==='zugriff'||m.kat==='pin';}).forEach(function(m){
       ortListe[m.id]=m.ll;var o=document.createElement('option');o.value=m.id;o.textContent=m.id+' '+(m.name||'');ort.appendChild(o);});
   }
-  function auswahl(id){ if(!bereit) return; map.setFilter('p-auswahl',['==',['get','id'],id||'']); }
+  function auswahl(id,key){ if(!bereit) return; map.setFilter('p-auswahl',key===undefined?['==',['get','id'],id||'']:['==',['get','renderKey'],key||'']); }
 
   map.on('load',function(){
     fe.hidden=true;
@@ -132,12 +134,12 @@ body.emb #bar{left:auto;right:56px}
     var f=map.queryRenderedFeatures([[e.point.x-12,e.point.y-12],[e.point.x+12,e.point.y+12]],{layers:['p-sym']});
     map.getCanvas().style.cursor=f.length?'pointer':'';});
   map.on('click',function(e){
-    if(!emb) return;
+    if(!emb||!aktiv) return;
     var f=map.queryRenderedFeatures([[e.point.x-14,e.point.y-14],[e.point.x+14,e.point.y+14]],{layers:['p-sym']});
     var z=f.length?[]:map.queryRenderedFeatures(e.point,{layers:['z-fl']});
     var oe=e.originalEvent||{};
-    parent.postMessage({typ:'karte3d-klick',lat:e.lngLat.lat,lon:e.lngLat.lng,id:f.length?f[0].properties.id:null,zid:z.length?z[0].properties.id:null,
-      umschalt:!!(oe.shiftKey||oe.ctrlKey||oe.metaKey)},'*');
+    senden({typ:'karte3d-klick',lat:e.lngLat.lat,lon:e.lngLat.lng,id:f.length?f[0].properties.id:null,renderKey:f.length?f[0].properties.renderKey:null,zid:z.length?z[0].properties.id:null,
+      umschalt:!!(oe.shiftKey||oe.ctrlKey||oe.metaKey)});
   });
   ort.onchange=function(){var c=ortListe[ort.value];if(c)map.flyTo({center:[c[1],c[0]],zoom:16,pitch:60,duration:1200});};
   document.getElementById('b3d').onclick=function(e){var on=e.target.classList.toggle('on');
@@ -148,12 +150,23 @@ body.emb #bar{left:auto;right:56px}
   if(emb){
     window.addEventListener('message',function(ev){
       if(ev.source!==parent) return; var d=ev.data||{};
+      if(d.typ==='karte3d-aktiv'){
+        if(sitzung!==d.sitzung){aktiv=false;map.stop();sitzung=d.sitzung;map._kameraGesetzt=0;}
+        aktiv=!!d.aktiv;
+        if(!aktiv) setze({marker:[],zonen:[],mess:[],auswahl:null});
+        return;
+      }
+      if(!aktiv) return;
       if(d.typ==='karte3d-daten'){ if(d.kamera&&!map._kameraGesetzt){map._kameraGesetzt=1;map.jumpTo(d.kamera);} setze(d); }
-      else if(d.typ==='karte3d-auswahl'){ auswahl(d.id); }
+      else if(d.typ==='karte3d-auswahl'){ auswahl(d.id,d.renderKey); }
       else if(d.typ==='karte3d-flug'){ map.flyTo({center:d.center,zoom:Math.max(map.getZoom(),d.zoom||16),duration:900}); }
+      else if(d.typ==='karte3d-resize' && bereit && d.sitzung===sitzung){
+        /* Layoutänderung ist keine Benutzer-Kamerafahrt. */
+        resizeLaeuft=true; try{map.resize();}finally{resizeLaeuft=false;}
+      }
     });
-    map.on('dragstart',function(){parent.postMessage({typ:'karte3d-nutzer-bewegt'},'*');});   /* nur eigenes Ziehen; flyTo löst dragstart nicht aus, moveend dagegen auch nach Animationen */
-    map.on('moveend',function(){var c=map.getCenter();parent.postMessage({typ:'karte3d-kamera',kamera:{center:[c.lng,c.lat],zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()}},'*');});
+    map.on('dragstart',function(){senden({typ:'karte3d-nutzer-bewegt'});});   /* nur eigenes Ziehen; flyTo löst dragstart nicht aus, moveend dagegen auch nach Animationen */
+    map.on('moveend',function(){if(resizeLaeuft)return;var c=map.getCenter();senden({typ:'karte3d-kamera',kamera:{center:[c.lng,c.lat],zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()}});});
   } else {
     var sc=document.createElement('script'); sc.src='szenario.js';
     sc.onload=function(){var K=(window.SCENARIO&&SCENARIO.karte&&SCENARIO.karte.koord)||{},Z=(SCENARIO&&SCENARIO.zonen)||{};

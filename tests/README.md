@@ -17,3 +17,7 @@ Karte und 3D:
 - `zpform.js`: Layout des Zugriffspunkt-Popups
 
 Die Dienste (Kacheln, OpenFreeMap) werden in den Tests durch Platzhalter ersetzt; die Tests prüfen daher Ablauf und Fehlerbehandlung, nicht die echte Darstellung.
+
+## Geospatial-Schnelllauf
+
+`node tests/runall.js --geospatial` vom Projektordner (oder `node runall.js --geospatial` in `tests/`) führt alle in der Standardauswahl registrierten `geospatial-*`-Skripte und elf gezielt ausgewählte Geometrie-/Schnittstellentests aus (derzeit 20 insgesamt). Die Gruppenreihenfolge und Browser-Einzelgruppen bleiben erhalten. Fehlende, rote, zeitüberschrittene oder ungeprüfte ausgewählte Skripte schlagen fehl; keine Bekannt-rot-Ausnahme im Schnelllauf. Neue `geospatial-*`-Tests in der Standardauswahl werden automatisch mitgenommen. Der GitHub-Workflow **Geospatial CI** läuft bei PR-Updates gegen `main` parallel zur unveränderten vollständigen **CI**; bei Verfügbarkeit ist er auch manuell startbar. Identische Node-/Playwright-/MapLibre-Versionen, nicht geheimer CARTO-Fixture und FT_PARALLEL=4; getrenntes Fehlerartefakt. Grüne Geospatial CI ermöglicht schnelle Karteniteration, ersetzt aber keine vollständige CI bei Meilensteinabnahme oder Merge. Laufzeit nach dem ersten realen Lauf bewerten.

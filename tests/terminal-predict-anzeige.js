@@ -61,8 +61,15 @@ const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 10
     /* Über dem Horizont: fett markiert, nur diese Zeile; LOS-Countdown wie in der Link-Anzeige */
     const pass = await imUeberflug(p, { wahl: 'ok' });
     await p.clock.pauseAt(await p.evaluate(() => Date.now() + 1000));
+    const erwartet = await p.evaluate(() => {
+      const ms = Date.now();
+      return kestrelSats().map(s => ({name:s.name,el:kestrelEl(s,ms)})).filter(s=>s.el>=0).sort((a,b)=>b.el-a.el)[0]?.name;
+    });
+    assert.ok(erwartet, 'sichtbarer Einwahlsatellit');
     await cmd('pppd call kestrel updetach'); await p.clock.runFor(7600);
     await p.waitForFunction(() => TERMINAL_ZUSTAND.modem?.bereit);
+    const relais=await p.evaluate(()=>TERMINAL_ZUSTAND.satLink?.sat.name);
+    assert.equal(relais,erwartet,'höchster Satellit bei Einwahl');
     await cmd('tmux'); await cmd('tmux split-window -bd predict');
     await p.clock.runFor(1000);
     const pane = p.locator('.tmux-pane');
@@ -71,22 +78,23 @@ const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 10
     assert.ok(oben.includes(pass.name), 'Testaufbau: Überflug-Satellit über dem Horizont');
     assert.deepEqual(markiert.map(t => t.split(' ')[0]).sort(), oben.sort(), 'genau die Satelliten über dem Horizont');
     assert.equal(await pane.locator('.predict-oben').first().evaluate(e => getComputedStyle(e).fontWeight), '700');
-    const zeilePass = (await pane.textContent()).split('\n').find(z => z.startsWith(pass.name));
+    const zeilePass = (await pane.textContent()).split('\n').find(z => z.startsWith(relais));
     const badge = await p.locator('#profil-terminal-sat').textContent();
     assert.match(badge, /^KESTREL-\d · EST\. LOS \d\d:\d\d:\d\d$/);
+    assert.ok(badge.startsWith(relais+' · EST. LOS '),'Anzeige des tatsächlich verbundenen Relais');
     assert.ok(zeilePass.endsWith('(' + badge.split('LOS ')[1] + ')'), 'gleiche Rundung: ' + zeilePass + ' / ' + badge);
     /* Gleicher Zeitstand: zu beliebigen Zeitpunkten innerhalb der Sekunden zeigen Fensterkopf und PREDICT denselben Countdown */
     for (const schritt of [137, 251, 333, 89, 412, 177, 263, 501, 71, 349]) {
       await p.clock.runFor(schritt);
       const k = (await p.locator('#profil-terminal-sat').textContent()).split('LOS ')[1];
-      const z = (await pane.textContent()).split('\n').find(x => x.startsWith(pass.name)).match(/\((\d\d:\d\d:\d\d)\)$/)[1];
+      const z = (await pane.textContent()).split('\n').find(x => x.startsWith(relais)).match(/\((\d\d:\d\d:\d\d)\)$/)[1];
       assert.equal(z, k, 'Zeitstand nach +' + schritt + ' ms');
     }
     /* Sekundensprung innerhalb eines Takts: die Uhr läuft während des Takts weiter (Start 1 ms vor der Sekundengrenze, jeder Aufruf von Date.now() +400 ms);
        Fensterkopf und PREDICT nutzen trotzdem denselben, einmal erfassten Zeitstand */
     const gleich = async (wo) => {
       const k = (await p.locator('#profil-terminal-sat').textContent()).split('LOS ')[1];
-      const z = (await p.locator('.tmux-pane[aria-label="tmux: predict"]').textContent()).split('\n').find(x => x.startsWith(pass.name)).match(/\((\d\d:\d\d:\d\d)\)$/)[1];
+      const z = (await p.locator('.tmux-pane[aria-label="tmux: predict"]').textContent()).split('\n').find(x => x.startsWith(relais)).match(/\((\d\d:\d\d:\d\d)\)$/)[1];
       assert.equal(z, k, wo);
     };
     await p.evaluate(() => { const echt = Date.now, start = Math.ceil(echt() / 1000) * 1000 - 1; let n = 0; Date.now = () => start + 400 * n++; try { terminalTakt(); } finally { Date.now = echt; } });
@@ -132,7 +140,7 @@ const countdown = (bis, ms) => { const s = Math.max(0, Math.ceil((bis - ms) / 10
       return k && t ? { kopf: k.textContent, kc: getComputedStyle(k).color, kw: getComputedStyle(k).fontWeight, tc: getComputedStyle(t).color } : null;
     });
     assert.ok(orbitStil, 'Chat-Kopf mit Relais und Telemetrie');
-    assert.match(orbitStil.kopf, new RegExp('^' + pass.name + '  \\[LOS \\d\\d:\\d\\d:\\d\\d\\]$'));
+    assert.match(orbitStil.kopf, new RegExp('^' + relais + '  \\[LOS \\d\\d:\\d\\d:\\d\\d\\]$'));
     assert.equal(orbitStil.kw, '600');
     assert.ok(hell(orbitStil.kc) > hell(orbitStil.tc), 'Kopf heller als Telemetrie');
     assert.notEqual(orbitStil.tc, GRUEN);

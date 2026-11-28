@@ -144,6 +144,26 @@ const { APP } = require('./_pfad');
     assert.equal(await p.locator('#x-titel').count(), 0);
     await p.click('#as-speichern');
     assert.equal(await p.evaluate(() => PROFIL.arbeitsstand.fall), null, 'kein Fall gespeichert');
+    /* K2/G2: ein alter Arbeitsstand mit roher SI-ID darf nie die Laufzeitidentität
+       des anderen Dossiers übernehmen, auch wenn ein Doppelgänger gesperrt ist. */
+    const siTest=await p.evaluate(()=>{
+      dispatch({type:'DOSSIER_ANGELEGT',typ:'Person',name:'Stand SI A'});const a=STATE.dossiers.auswahl;
+      dispatch({type:'DOSSIER_ANGELEGT',typ:'Person',name:'Stand SI B'});const b=STATE.dossiers.auswahl;
+      dispatch({type:'SICHTUNG_HINZU',id:a,ort:'52.50, 13.40',text:'A'});
+      dispatch({type:'SICHTUNG_HINZU',id:b,ort:'52.51, 13.41',text:'B'});
+      const id=STATE.dossiers.entitaeten[a].sichtungen.at(-1).id;
+      STATE.dossiers.entitaeten[b].sichtungen.at(-1).id=id;
+      const K=VIEW.karte;K.ebenen.sichtungen=true;
+      const stand=()=>({modul:'karte',karte:{lat:52.5,lon:13.4,zoom:14,ebenen:{sichtungen:true},auswahl:id}});
+      karteSichtungZeigen(b,id,14);
+      const r=asAnwenden(stand()), doppelt=K.auswahl===null&&K.auswahlIdentitaet===null&&K.sichtungFokus===null&&r.uebersprungen.includes('Kartenobjekt '+id);
+      dispatch({type:'DOSSIER_SPERREN',id:a});karteSichtungZeigen(b,id,14);
+      const s=asAnwenden(stand()), gesperrt=K.auswahl===null&&s.uebersprungen.includes('Kartenobjekt '+id);
+      STATE.dossiers.entitaeten[a].sichtungen.pop();
+      const u=asAnwenden(stand()), eindeutig=K.auswahl===id&&K.auswahlIdentitaet===null&&u.uebersprungen.length===0;
+      return {doppelt,gesperrt,eindeutig};
+    });
+    for(const [k,v] of Object.entries(siTest))assert.equal(v,true,k);
     assert.deepEqual(fehler, []);
     console.log('OK: Arbeitsstand sichern und wiederherstellen, kein Autosprung, Überspringen');
   } finally { await browser.close(); }

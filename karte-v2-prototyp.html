@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Shadow Geospatial V2 – Quellenprototyp</title>
+<link rel="stylesheet" href="vendor/maplibre-gl/maplibre-gl.css">
+<style>
+html,body{height:100%;margin:0;background:#101820;color:#d9e3ed;font:14px system-ui,sans-serif}
+body{display:flex;flex-direction:column} header{padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #384451}
+header strong{margin-right:12px} button,input{font:inherit;background:#182530;color:inherit;border:1px solid #485766;padding:7px;border-radius:4px} button{cursor:pointer} button:disabled{opacity:.5;cursor:default}
+#m{position:relative;flex:1;min-height:0} footer{padding:8px 14px;min-height:20px} #meldung{color:#d8b77c}
+</style></head>
+<body><header><strong>SHADOW / K2a – Quellenprototyp</strong>
+<input id="key" type="password" placeholder="Lokaler CARTO-Schlüssel" aria-label="CARTO-Schlüssel" autocomplete="off" spellcheck="false">
+<button id="voyager" disabled>Voyager</button><button id="dunkel" disabled>Dark Matter (Referenz)</button><button id="leer" disabled>Leeren</button><button id="berlin2024" disabled>Berlin TrueDOP 2024 (20 cm)</button><button id="hybrid" disabled>Hybrid (Referenz)</button>
+<button id="diagnose" disabled>Vektordaten prüfen (9 Stichproben)</button><button id="demo" disabled>Testobjekte</button><button id="flach" disabled>2D</button><button id="geneigt" disabled>Geneigt</button></header>
+<div id="m" aria-label="Kartenprototyp"></div>
+<section id="diagnose-panel" hidden style="padding:8px 14px"><label for="diagnose-bericht">Vektordaten-Diagnose (Text markieren und kopieren)</label><textarea id="diagnose-bericht" readonly rows="9" style="box-sizing:border-box;width:100%;margin-top:5px;background:#182530;color:#d9e3ed;font:12px monospace"></textarea></section>
+<footer><span id="meldung" role="status">Lokale Bibliothek wird geprüft.</span> · Keine Profil- oder Terminaldaten · © OpenStreetMap contributors, © CARTO</footer>
+<script src="vendor/maplibre-gl/maplibre-gl.js"></script>
+<script src="karte-v2-quellen.js"></script>
+<script src="karte-v2-renderer.js"></script>
+<script src="karte-v2-diagnose.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const melden = s => { $('meldung').textContent = s; };
+  if (typeof maplibregl === 'undefined' || typeof KARTE_V2_QUELLEN === 'undefined') {
+    melden('Lokale MapLibre-Dateien fehlen. Entwicklungsanleitung: docs/geospatial-v2-entwicklungsplan.md, K2a.');
+    return;
+  }
+  const Q = KARTE_V2_QUELLEN;
+  let key = '', map, modus = 'leer', bildGeladen=false, bildFehler=false;
+  let hybrid=null, generation=0, abruf=null;
+  function wechselAbbrechen(){++generation;if(abruf)abruf.abort();abruf=null;hybrid=null;}
+  try {
+    map = new maplibregl.Map({ container: 'm', style: Q.leererStil(), center: [13.405,52.52], zoom: 13,
+      transformRequest: url => Q.cartoRequest(url, key), attributionControl: true });
+    map.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'top-right');
+  } catch (e) { melden('MapLibre konnte nicht gestartet werden. Grafikbeschleunigung prüfen.'); return; }
+  const A = KARTE_V2_RENDERER.adapter(map,{onClick:e=>{if(e.treffer){A.setSelection(e.treffer.renderKey);melden('Testobjekt: '+e.treffer.id);}else A.setSelection(null);},onError:melden});
+  let demo=false;
+  $('demo').onclick=()=>{
+    demo=!demo; $('demo').textContent=demo?'Testobjekte ausblenden':'Testobjekte';
+    const mk=(id,kat,ll,extra)=>Object.assign({id,kat,ll,renderKey:JSON.stringify([kat,id])},extra||{});
+    A.setData(demo?{marker:[mk('DEMO-PIN','pin',[52.52,13.405]),mk('DEMO-SI','sichtung',[52.521,13.409],{unM:{m:80}}),mk('DEMO-P','figur',[52.518,13.403],{entitaet:true,typ:'Person'})],zonen:[mk('DEMO-ZO','zone',[52.516,13.41],{r:200})]}:null);
+  };
+  /* Fehlermeldungen nicht aus Anbieter-URLs übernehmen (diese können den Key enthalten). */
+  map.on('error', e => {
+    if(modus==='hybrid'&&hybrid){
+      if(e.sourceId===hybrid.rasterId)bildFehler=true;
+      else hybrid.warnung=true;
+      hybridStatus();
+    }else if(modus==='berlin2024'){
+      if(e.sourceId===Q.BILD_ID||!e.sourceId)bildFehler=true;
+      bildStatus();
+    }else melden('Kartenressource nicht verfügbar. Verbindung, Schlüssel und Anbieter prüfen.');
+  });
+  function bildStatus(){
+    if(modus!=='berlin2024')return;
+    const b=Q.bildBereich(modus,map.getCenter().toArray(),map.getZoom());
+    const info=Q.bildInfo(modus), ueb=map.getZoom()>info.maxzoom-Math.log2(512/info.tileSize);
+    melden(info.name+' · nominal 20 cm · '+(b==='ausserhalb'?'Mittelpunkt außerhalb des Anfragebereichs.':b==='uebersicht'?'Weiter hineinzoomen.':bildGeladen?'Bildkacheln geladen; tatsächliche Abdeckung visuell prüfen.':'Noch keine Bildkachel bestätigt.')+(bildFehler?' Teil-/Ladefehler.':'')+(ueb?' Overzoom, keine zusätzliche Bildinformation.':''));
+  }
+  map.on('sourcedata',e=>{if(modus==='berlin2024'&&e.sourceId===Q.BILD_ID&&e.tile?.state==='loaded'){bildGeladen=true;bildStatus();}});
+  map.on('moveend',()=>{bildStatus();hybridStatus();});map.on('idle',()=>{bildStatus();hybridStatus();});
+  map.on('style.load', () => {if(modus==='hybrid')hybridStatus();else if(modus==='berlin2024')bildStatus();else melden(modus === 'leer' ? 'Lokale Karte bereit. Keine Kachelquelle aktiv.' : 'Stil geladen; Kacheln werden bei Bedarf angefordert.');});
+  function wechseln(name) {
+    const url = Q.stil(name), eingabe = $('key').value.trim();
+    if (!url || (!eingabe && !key)) { melden('CARTO-Schlüssel lokal eingeben. Kein Abruf erfolgt.'); return; }
+    wechselAbbrechen();if (eingabe) key = eingabe;
+    $('key').value = ''; modus = name;
+    melden('CARTO-Stil wird geladen.');
+    try { A.setStyle(url); }
+    catch (e) { melden('Kartenstil konnte nicht gewechselt werden.'); }
+  }
+  $('voyager').onclick = () => wechseln('voyager');
+  $('dunkel').onclick = () => wechseln('dunkel');
+  $('berlin2024').onclick=()=>{
+    // Bewusste Wahl einer einzigen Bildquelle, kein automatisches Nachladen anderer Anbieter.
+    wechselAbbrechen();key='';$('key').value='';modus='berlin2024';bildGeladen=false;bildFehler=false;
+    A.setStyle(Q.bildStil(modus));bildStatus();
+  };
+  $('leer').onclick = () => { wechselAbbrechen();modus = 'leer'; key = ''; $('key').value = ''; A.setStyle(Q.leererStil()); };
+  // K2e-1: bewusst ausgewählte Referenz am aktuellen Mittelpunkt. Der
+  // produktive Quellenwechsel und der getrennte Rückfall folgen in K2e-2.
+  function hybridStatus(){
+    if(modus!=='hybrid'||!hybrid||hybrid.laden)return;
+    const h=hybrid, info=Q.bildInfo(h.id), bereich=Q.bildBereich(h.id,map.getCenter().wrap().toArray(),map.getZoom());
+    const gsd=info.gsd>=1?info.gsd+' m':Math.round(info.gsd*100)+' cm';
+    melden('Hybrid · '+info.name+' · '+info.aufnahme+' · nominal '+gsd+
+      (bereich!=='kandidat'?' · Außerhalb des Anfragebereichs bzw. Zoomgrenze; Hybrid erneut wählen.':'')+
+      (bildGeladen?' · Bildkacheln geladen':' · Bildkacheln noch nicht bestätigt')+
+      (h.nurBild?' · CARTO nicht verfügbar; reines Luftbild':h.vektorGeladen?' · Vektorkacheln geladen':' · Vektorkacheln noch nicht bestätigt')+
+      (bildFehler||h.warnung?' · Teil-/Ladefehler.':'')+
+      ' · tatsächliche Abdeckung und Beschriftung visuell prüfen.');
+  }
+  map.on('sourcedata',e=>{
+    if(modus!=='hybrid'||!hybrid||hybrid.laden||e.tile?.state!=='loaded')return;
+    if(e.sourceId===hybrid.rasterId)bildGeladen=true;
+    if(e.sourceId===hybrid.vektorId)hybrid.vektorGeladen=true;
+    hybridStatus();
+  });
+  $('hybrid').onclick=async()=>{
+    const id=Q.bildKandidaten(map.getCenter().wrap().toArray(),map.getZoom())[0], eingabe=$('key').value.trim()||key;
+    if(!id){melden('Keine geeignete Bildquelle am Mittelpunkt.');return;}
+    if(!eingabe){melden('CARTO-Schlüssel für Hybrid lokal eingeben. Kein Abruf erfolgt.');return;}
+    wechselAbbrechen();const g=generation;
+    key=eingabe;$('key').value='';modus='hybrid';bildGeladen=false;bildFehler=false;
+    const rasterId=Q.BILD_ID+'-hybrid-'+g;
+    hybrid={id,rasterId,vektorId:null,vektorGeladen:false,warnung:false,nurBild:false,laden:true};
+    melden('Hybrid: CARTO-Stil wird geladen.');
+    const ac=new AbortController();abruf=ac;
+    const timer=setTimeout(()=>ac.abort(),25000);
+    try{
+      const antwort=await fetch(Q.cartoRequest(Q.stil('dunkel'),key).url,{signal:ac.signal,referrerPolicy:'no-referrer',redirect:'error',credentials:'omit'});
+      if(!antwort.ok)throw Error('Stilabruf');
+      const s=Q.hybridStil(id,await antwort.json(),rasterId);
+      if(g!==generation)return;
+      hybrid.vektorId=Object.keys(s.sources).find(k=>s.sources[k].type==='vector');
+      hybrid.laden=false;A.setStyle(s);hybridStatus();
+    }catch(e){
+      if(g!==generation)return;
+      key='';hybrid.laden=false;hybrid.nurBild=true;A.setStyle(Q.bildStil(id,rasterId));hybridStatus();
+    }finally{clearTimeout(timer);if(abruf===ac)abruf=null;}
+  };
+  /* Erst nach bewusst geladenem CARTO-Stil. Keine Abfrage bei Start oder ohne Schlüssel.
+     Neun Ansichten, je nach Verbindung/Tilegröße begrenzt; Fehler/Timeout nie als Nullbestand ausgeben. */
+  $('diagnose').onclick=async()=>{
+    const D=KARTE_V2_DIAGNOSE, panel=$('diagnose-panel'), bericht=$('diagnose-bericht');
+    panel.hidden=false;
+    const head='SHADOW / CARTO-Vektordaten – Stichprobe\\nKachelfragmente aus geladenen Quellkacheln; mögliche Duplikate und Randbereiche. Keine eindeutige Gebäudezählung, keine Flächenstatistik. Numerisch bedeutet nicht validierte Höhe.\\n';
+    if(!['voyager','dunkel'].includes(modus)||!key||!D.quelle(map.getStyle())){bericht.value=head+'Kein geeigneter CARTO-Vektorstil geladen. Voyager mit lokalem Schlüssel wählen.';return;}
+    const knoepfe=['voyager','dunkel','leer','berlin2024','hybrid','flach','geneigt','demo','diagnose','key'];
+    knoepfe.forEach(id=>$(id).disabled=true);
+    const alt={center:map.getCenter(),zoom:map.getZoom(),pitch:map.getPitch(),bearing:map.getBearing()};
+    const result=[head+'Stil: '+modus+'\n'+D.beschriftung(map.getStyle())];
+    function warten(ort,z){
+      return new Promise(resolve=>{
+        let timer, fertig=false, fehler=false;
+        function ende(ok){
+          if(fertig)return;fertig=true;clearTimeout(timer);map.off('idle',idle);map.off('error',error);resolve(ok);
+        }
+        function error(){fehler=true;}
+        function idle(){
+          const c=map.getCenter();
+          if(fehler||Math.abs(c.lng-ort.center[0])>0.00001||Math.abs(c.lat-ort.center[1])>0.00001||Math.abs(map.getZoom()-z)>0.001||!map.areTilesLoaded())ende(false);
+          else ende(true);
+        }
+        map.on('error',error);map.on('idle',idle);
+        timer=setTimeout(()=>ende(false),18000);
+        try{map.jumpTo({center:ort.center,zoom:z,pitch:0,bearing:0});map.triggerRepaint();}catch(e){ende(false);}
+      });
+    }
+    try{
+      map.resize();
+      for(const ort of D.ORTE)for(const z of [14,15,16]){
+        melden('Diagnose: '+ort.name+' · Zoom '+z+' – bitte Karte nicht bewegen.');
+        bericht.value=result.join('\\n\\n')+'\\n\\nLade nächste Stichprobe …';
+        if(!await warten(ort,z)){result.push(ort.name+' | Zoom '+z+': NICHT AUSWERTBAR (Ladefehler, Zeitlimit oder Kartenbewegung).');continue;}
+        try{result.push(D.text(ort.name,z,D.stichprobe(map)));}catch(e){result.push(ort.name+' | Zoom '+z+': NICHT AUSWERTBAR (Quellenabfrage fehlgeschlagen).');}
+      }
+    }finally{
+      bericht.value=result.join('\\n\\n');knoepfe.forEach(id=>$(id).disabled=false);
+      map.jumpTo(alt);melden('Diagnose beendet. Bericht kopieren; nicht auswertbare Stichproben ggf. wiederholen.');
+    }
+  };
+  $('flach').onclick = () => map.easeTo({pitch:0,bearing:0});
+  $('geneigt').onclick = () => map.easeTo({pitch:60});
+  ['voyager','dunkel','leer','berlin2024','hybrid','flach','geneigt','demo','diagnose'].forEach(id => { $(id).disabled = false; });
+  melden('MapLibre lokal bereit. CARTO-Abruf erst nach Stilwahl.');
+})();
+</script></body></html>

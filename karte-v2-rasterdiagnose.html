@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>Shadow / K2f – Rasterdiagnose</title>
+<style>
+body{background:#101820;color:#d9e3ed;font:15px system-ui,sans-serif;margin:24px;max-width:1100px}button,textarea{font:inherit;background:#182530;color:inherit;border:1px solid #485766;padding:8px}button{cursor:pointer}button:disabled{opacity:.5}#proben{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:16px;margin:16px 0}article{border:1px solid #485766;padding:12px}canvas{display:block;width:256px;max-width:100%;height:auto;background:repeating-conic-gradient(#404952 0% 25%,#202830 0% 50%) 0/16px 16px}textarea{width:100%;box-sizing:border-box}small{color:#b4c1cc}h1{font-size:23px}h2{font-size:17px}
+</style></head><body>
+<h1>SHADOW / K2f – Rasterdiagnose</h1>
+<p>Sechs einzelne Kachelanfragen an freigegebene Bilddienste, nur nach bewusstem Start. Feste öffentliche Referenzorte; keine Profildaten, keine Schlüssel, keine Speicherung der Bilder. Der Anbieter erhält die öffentliche Kachelposition und IP. Erfolgreiche Dekodierung bestätigt keine flächendeckende Abdeckung, Aktualität oder tatsächliche Bodenauflösung.</p>
+<button id="start" disabled>6 Referenzkacheln prüfen</button> <button id="stop" disabled>Abbrechen</button>
+<p id="status" role="status">Bereit. Keine Netzabfragen.</p>
+<div id="proben"></div>
+<label for="bericht">Redigierter Diagnosebericht (kopieren; keine URLs oder Bilddaten)</label>
+<textarea id="bericht" rows="12" readonly></textarea>
+<script src="karte-v2-quellen.js"></script><script src="karte-v2-diagnose.js"></script>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id), Q=window.KARTE_V2_QUELLEN,D=window.KARTE_V2_DIAGNOSE;
+if(!Q||!D){$('status').textContent='Lokale Diagnoseskripte fehlen.';return;}
+let lauf=null;
+const el=(tag,text)=>{const x=document.createElement(tag);if(text)x.textContent=text;return x;};
+const cards=D.BILDPROBEN.map(p=>{
+ const a=el('article'),i=Q.bildInfo(p.id),c=el('canvas'),s=el('p','Nicht geprüft.');
+ c.width=c.height=256;
+ const at=el('small');at.innerHTML=i.attribution; // ausschließlich feste lokale Quellenkonstanten
+ a.append(el('h2',p.ort),el('p',i.name+' · Quellzoom '+p.z),c,s,at);$('proben').append(a);
+ return {p,c,s};
+});
+$('start').disabled=false;
+$('stop').onclick=()=>{if(lauf){lauf.stop=true;lauf.ac?.abort();}};
+$('start').onclick=async()=>{
+ if(lauf)return;
+ const l={stop:false,ac:null};lauf=l;$('start').disabled=true;$('stop').disabled=false;
+ const out=['SHADOW / K2f – Rasterdiagnose','Sechs feste Kacheln; kein Flächennachweis; keine Qualitäts- oder Altersmessung.'];
+ const report=()=>$('bericht').value=out.join('\n');
+ for(const {c,s} of cards){c.getContext('2d').clearRect(0,0,c.width,c.height);s.textContent='Nicht geprüft.';}
+ report();
+ try{
+  for(const {p,c,s} of cards){
+   if(l.stop){out.push(p.ort+' | nicht geprüft (Abbruch)');report();continue;}
+   const ac=new AbortController();l.ac=ac;
+   const start=performance.now();let timed=false,bm=null;
+   const timer=setTimeout(()=>{timed=true;ac.abort();},15000);
+   let result='Nicht auswertbar';
+   $('status').textContent='Prüfe '+p.ort+' …';s.textContent='Lädt …';
+   try{
+    const probe=D.bildProbe(Q,p);
+    const res=await fetch(probe.url,{mode:'cors',credentials:'omit',referrerPolicy:'no-referrer',redirect:'error',signal:ac.signal,cache:'no-store'});
+    if(!res.ok)result='HTTP '+res.status;
+    else{
+     const type=(res.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
+     if(!['image/png','image/jpeg','image/webp'].includes(type))result='Keine erwartete Bildantwort';
+     else{
+      // Begrenzung auf 4 MiB auch ohne Content-Length.
+      const reader=res.body.getReader(),teile=[];let size=0;
+      try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>4194304){await reader.cancel();throw Error('limit');}teile.push(value);}}
+      finally{reader.releaseLock();}
+      bm=await createImageBitmap(new Blob(teile,{type}));
+      if(l.stop||timed)result='Abgebrochen';
+      else if(bm.width!==probe.tileSize||bm.height!==probe.tileSize)result='Unerwartete Bildgröße '+bm.width+'×'+bm.height;
+      else{
+       const ctx=c.getContext('2d');ctx.drawImage(bm,0,0);
+       const st=D.pixelStatistik(ctx.getImageData(0,0,c.width,c.height).data);
+       result='Dekodiert '+bm.width+'×'+bm.height+' · '+Math.round(performance.now()-start)+' ms · transparent '+(100*st.transparent/st.pixel).toFixed(1)+' % · '+(st.auffaellig?'auffällige/gleichförmige Kachel':'unterschiedliche Pixel; visuell prüfen');
+      }
+     }
+    }
+   }catch(e){result=l.stop?'Abgebrochen':timed?'Zeitlimit':'Abruf/Dekodierung fehlgeschlagen (CORS, Netzwerk oder Bildformat)';}
+   finally{clearTimeout(timer);bm?.close();l.ac=null;}
+   s.textContent=result;out.push(p.ort+' | '+p.id+' | z'+p.z+' | '+result);report();
+  }
+ }finally{lauf=null;$('start').disabled=false;$('stop').disabled=true;$('status').textContent=l.stop?'Prüfung abgebrochen.':'Prüfung beendet. Bilder visuell kontrollieren; Bericht kopieren.';}
+};
+})();
+</script></body></html>

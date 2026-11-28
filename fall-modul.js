@@ -160,9 +160,7 @@ function xZurKarte(f, pin) {
   } else if ($('k-svg')) $('k-svg').focus();
 }
 function xSichtungsZiel(si, pin) {
-  VIEW.karte.sichtungFokus = si.id;
-  const id = karteMarker().some(function (m) { return m.id === si.id; }) ? si.id : pin.id;
-  karteWaehlen(id, true);
+  if (!karteSichtungZeigen(pin.dossier, si.id, 14)) karteWaehlen(pin.id, true);
 }
 function xPinSetzen(id, ll) {
   const f = xFall(id);

@@ -1,0 +1,51 @@
+name: Geospatial CI
+
+# Fast map feedback; the full CI remains independent and mandatory for
+# project acceptance. No production key or external live service is needed.
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: geospatial-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Geospatial syntax and targeted browser regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser dependencies
+        working-directory: tests
+        run: |
+          npm install --no-save --no-package-lock playwright@1.57.0 maplibre-gl@4.7.1
+          npx playwright install --with-deps chromium
+      - name: Create non-secret CARTO fixture
+        run: |
+          printf 'window.KARTEN_SCHLUESSEL = {carto: "cb1_ci_fixture_not_a_real_token"};\n' > kartenschluessel.js
+      - name: Syntax of map scripts and runner
+        run: |
+          for f in karte-modul.js karte-v2-*.js tests/runall.js tests/geospatial-*.js; do node --check "$f" || exit 1; done
+      - name: Geospatial test selection
+        env:
+          FT_PARALLEL: '4'
+        run: node tests/runall.js --geospatial
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geospatial-ci-test-logs
+          path: /tmp/ft-out/*.txt
+          if-no-files-found: ignore
+          retention-days: 3

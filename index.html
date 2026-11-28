@@ -395,6 +395,19 @@ fieldset:disabled .opt{color:var(--text-dim)}
 .k-st-v{color:var(--text);font-family:var(--mono);font-size:11.5px}
 .k-popup{position:absolute;z-index:4;width:min(384px,calc(100% - 40px));background:rgba(17,23,30,.97);border:1px solid var(--border-strong);border-radius:3px;box-shadow:0 6px 22px rgba(0,0,0,.55);transform:translate(18px,-24px);font-size:12px}
 .k-popup[hidden]{display:none}
+/* V2: overlay sibling of the MapLibre container. Empty overlay space never
+   intercepts map gestures; only the two actual panels are interactive. */
+#k-v2-buehne{position:relative;isolation:isolate;min-width:0}
+#k-v2-paneele{position:absolute;inset:1px;z-index:5;pointer-events:none}
+#k-v2-paneele .k-status,#k-v2-paneele .k-popup{pointer-events:auto;box-sizing:border-box;overflow-wrap:anywhere;max-height:calc(100% - 16px);overflow-y:auto}
+#k-v2-paneele .k-status{top:8px;right:48px;width:min(230px,33%);max-width:none}
+#k-v2-paneele .k-popup{top:8px;left:8px;width:min(340px,42%);transform:none}
+#k-v2-paneele .k-pop-kopf{position:sticky;top:0;background:var(--panel);z-index:1;flex-wrap:wrap}
+#k-v2-paneele .k-pop-body[hidden]{display:none}
+@media (max-width:600px){
+  #k-v2-paneele .k-status{width:min(190px,42%);right:44px}
+  #k-v2-paneele .k-popup{width:min(290px,calc(100% - 16px));max-height:65%;top:auto;bottom:8px}
+}
 .k-popup input,.k-popup select,.k-popup textarea{max-width:100%;box-sizing:border-box}
 .k-popup select{width:100%}
 .k-popup.links{transform:translate(calc(-100% - 18px),-24px)}
@@ -2134,6 +2147,7 @@ const ACTIONS = {
     /* Phase 5b8: nur die Arbeitsmodule sind ansteuerbar; die alten Missionsmodule bleiben nur als Registrierung für gespeicherte Stände. */
     const m = ARBEITSMODULE.find(function (x) { return x.id === a.modul; });
     if (!m || STATE.ui.modul === m.id) return null;
+    if (STATE.ui.modul === 'karte' && typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.zielBeimVerlassen();
     STATE.ui.modul = m.id;
     return { modul: m.log, aktion: 'Modul geöffnet', detail: m.titel };
   },
@@ -2915,7 +2929,13 @@ function dispatch(action, opt) {
     if ((PROFIL_AKTIONEN[action.type] || kpNeu) && !profilSpeichern()) meldung('Profil konnte nicht gespeichert werden (Speicher voll?).');
   }
   if (typeof terminalSchutzPruefen === 'function') terminalSchutzPruefen();   /* gelesene geschützte Archivtexte nach jeder Zustandsänderung neu prüfen */
-  render(liste.every(function (e) { return e.leicht; })); /* (4) */
+  /* Only ordinary map-toolbar creation may retain the live V2 module.
+     Persistence, logging and access checks above are always executed first. */
+  const karteAnlage = opt && opt.karteAnlage === true && !action.xFall && !action.dossier &&
+    (action.type === 'PIN_ANGELEGT' || action.type === 'OZONE_ANGELEGT' || action.type === 'OZONE_STAND') &&
+    STATE.ui.modul === 'karte' && typeof karteAnlageAktualisieren === 'function' &&
+    karteAnlageAktualisieren(action);
+  render(karteAnlage || liste.every(function (e) { return e.leicht; })); /* (4) */
 }
 
 /* =====================================================================
@@ -3345,7 +3365,11 @@ function sichtungLetzteMitOrt(e) {
 function sichtungKnopf(e) {
   const st = sichtungsStart(e), letzte = sichtungLetzteMitOrt(e);
   const zurKarte = function (ll, zoom, wahl) {
-    const K = VIEW.karte; K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, zoom); K.sichtungFokus = wahl && /^SI-/.test(wahl) ? wahl : null;
+    if (wahl && /^SI-/.test(wahl)) {
+      if (!karteSichtungZeigen(e.id, wahl, zoom)) meldung('Sichtung ist nicht eindeutig oder nicht zugänglich und kann nicht auf der Karte angezeigt werden.');
+      return;
+    }
+    const K = VIEW.karte; K.pick = null; K.lat = ll[0]; K.lon = ll[1]; K.zoom = Math.max(K.zoom, zoom); K.sichtungFokus = null;
     VIEW.karte.reiter = 'karte'; dispatch({ type: 'NAVIGATION', modul: 'karte' });
     if (wahl) setTimeout(function () { if (typeof karteWaehlen === 'function') karteWaehlen(wahl, true); }, 0);
   };
@@ -3879,9 +3903,11 @@ function renderModule() {
   const scrolls = Array.prototype.map.call(main.querySelectorAll('[data-scroll]'), function (el) {
     return [el.getAttribute('data-scroll'), el.scrollTop, el.scrollLeft];
   });
+  if (typeof karteRendererVorRender === 'function') karteRendererVorRender(m.id);
   RENDERING = true;
   try { main.replaceChildren.apply(main, RENDER[m.id](m).filter(Boolean)); }
   finally { RENDERING = false; }
+  if (typeof karteRendererNachRender === 'function') karteRendererNachRender();
   scrolls.forEach(function (x) {
     const el = main.querySelector('[data-scroll="' + x[0] + '"]');
     if (el) { el.scrollTop = x[1]; el.scrollLeft = x[2]; }
@@ -3939,7 +3965,11 @@ function renderSysbar() {
     ? 'Archiv pgcl-eu3.arch07 verbunden · ' + kb + ' KB · Gesichert ' + (x ? dtg(x) : '–') + ' · Protokoll ' + STATE.log.length + ' · Tasten 1–4 · P, L, X'
     : 'Archiv pgcl-eu3.arch07 nicht erreichbar, nicht gesichert · Protokoll ' + STATE.log.length + ' · Tasten 1–4 · P, L, X';
 }
-function meldung(text) { $('sys-msg').textContent = text ? dtg(new Date()) + ' · ' + text : ''; }
+function meldung(text) {
+  const msg=text ? dtg(new Date()) + ' · ' + text : '';
+  $('sys-msg').textContent=msg;
+  const spiegel=$('k-v2-systemmeldung');if(spiegel)spiegel.textContent=msg;
+}
 
 /* leicht = true: Modulbereich bleibt stehen, nur die Änderungszeitstempel der Freitextfelder werden nachgeführt */
 function render(leicht) {
@@ -3948,6 +3978,8 @@ function render(leicht) {
     document.querySelectorAll('[data-geaendert]').forEach(function (e) { e.textContent = fmtZ(STATE.agent[e.getAttribute('data-geaendert') + 'Geaendert']); });
     aktualisiereSchreibt();
     document.querySelectorAll('[data-nstatus]').forEach(function (e) { const n = nachricht(e.getAttribute('data-nstatus')); if (n) e.textContent = 'Status: ' + n.msg.status; });
+    if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.sync();
+    if (STATE.ui.modul === 'karte' && typeof kartenProtokollReiterAktualisieren === 'function') kartenProtokollReiterAktualisieren();
   } else renderModule();
   renderLog(); renderSysbar();
 }
@@ -4356,6 +4388,7 @@ const Zugang = (function () {
     if (!APP_BEREIT || document.body.classList.contains('locked')) return;
     ['dlg', 'regie'].forEach(function (id) { const d = $(id); if (d && d.open) d.close(); });
     document.body.classList.add('locked');
+    if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.unmount();
     Leiste.relais(0);
     wieder = true;
     $('gate-pw').value = ''; $('gate-pw2').value = '';
@@ -4456,6 +4489,7 @@ const Zugang = (function () {
     ['dlg', 'regie'].forEach(function (id) { const d = $(id); if (d && d.open) d.close(); });
     dispatch({ type: 'AUTH_EREIGNIS', liste: [{ modul: 'System', aktion: 'Sitzung beendet', detail: 'Abmeldung durch Benutzer', t: nowIso() }] });
     document.body.classList.add('locked');
+    if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.unmount();
     $('gate-box').hidden = true; $('gate-boot').hidden = true;
     const end = $('gate-end'), liste = $('gate-end-list'), rm = reduziert();
     end.hidden = false; liste.replaceChildren(); $('gate-end-fertig').hidden = true;
@@ -4492,7 +4526,7 @@ const Zugang = (function () {
     $('gate-pw').value = ''; $('gate-pw2').value = '';
     letzteAktion = Date.now();
     if (initCb) { const cb = initCb; initCb = null; cb(); }
-    else { const b = $('btn-lock'); if (b) b.focus(); }
+    else { if (typeof KARTE_V2_DEV !== 'undefined') KARTE_V2_DEV.mount(); const b = $('btn-lock'); if (b) b.focus(); }
   }
 
   function erfolg() {
@@ -4699,6 +4733,9 @@ if (typeof SCENARIO === 'undefined' || !SCENARIO || !Array.isArray(SCENARIO.miss
 else window.addEventListener('load', function () { Zugang.start(init); });   /* nach allen Skripten, auch karte-modul.js */
 </script>
 <script src="karte-modul.js"></script>
+<script src="karte-v2-quellensteuerung.js"></script>
+<script src="karte-v2-oberflaeche.js"></script>
+<script src="karte-v2-anbindung.js"></script>
 <script src="akten-modul.js"></script>
 <script src="recherche-modul.js"></script>
 <script src="satellite.min.js"></script>

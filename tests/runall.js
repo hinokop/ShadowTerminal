@@ -2,12 +2,15 @@
    Historische UI-Tests (siehe docs/r5-bereinigung.md) sind per Namen weiterhin aufrufbar.
    Aufruf (im Ordner tests/, Playwright installiert):   node runall.js            Standardauswahl
                                                         node runall.js zev zp     nur diese Skripte (ohne .js)
+                                                        node runall.js --geospatial  gezielte Kartenregression
    Je Gruppe laufen die Skripte parallel, höchstens FT_PARALLEL gleichzeitig (Vorgabe: os.availableParallelism(), ältere Node-Versionen: Anzahl der Kerne); Ausgaben und von den Tests geschriebene Dateien (zum Beispiel Screenshots) liegen in <TMP>/ft-out/.
    Ergebnis je Skript: grün; rot (Exit-Code != 0, Zeitüberschreitung nach 170 s oder Treffer auf FAIL, FEHLER: n, Fehlschläge: n, Error);
    ungeprüft (Exit 0, aber keine Ausgabe: das Skript hat nichts belegt); fehlt (Datei nicht vorhanden). Bekannt rote und unzuverlässige Skripte
    werden getrennt ausgewiesen. Exit-Code 1 bei jedem anderen roten oder ungeprüften Skript und bei einem ausdrücklich angeforderten, fehlenden Skript. */
 const { spawn } = require('child_process'); const fs = require('fs'); const os = require('os'); const path = require('path');
 const GRUPPEN = [
+  ['geospatial-k4-suche', 'geospatial-k1-klickvertrag', 'geospatial-k1-zonen', 'geospatial-k1-modell', 'geospatial-k1-lebenszyklus', 'zonen-vorschau', 'geospatial-k2-quellen'],
+  ['geospatial-k2-browser'], ['geospatial-k2-objekte'], ['geospatial-k2-anbindung'], ['geospatial-k2-startprofil'], ['geospatial-k2-gebaeude'], ['geospatial-k4-rueckfall'], ['geospatial-k4-stilfehler'], ['geospatial-k4-solo'], ['geospatial-k4-last'],
   ['kt', 'kv3', 'alterung', 'pin-nummern-tasten', 'speicher-voll'], ['rs'],
   ['un'], ['p4', 'pn', 'kc'],
   ['kartenprotokoll', 'pins', 'unterlagen', 'aussagen-alt', 'fallpaket', 'recherche'], ['kartensprung', 'identitaeten', 'verlaesslichkeit', 'arbeitsnavigation', 'kartenbereinigung', 'profil-arbeitsansicht'], ['profil-assessment', 'missionstrennung', 'dossier-einheitlich', 'phase5b2-recherchezugang', 'phase5b3-dossieroberflaeche', 'phase5b4-arbeitszugang', 'phase5b5-dossier-nachtraege', 'phase5b6-dossier-kennungen', 'phase5b7-missionsbetrieb', 'phase5c1a-profiltexte', 'phase5c1b-zustandsformat', 'phase5c1b-ladefehler', 'phase5c2a-altdaten', 'phase5c2b-tickblock', 'phase5c2b-sichtungtext', 'phase5c2b-frischer-zustand', 'phase5c2b-karte-altbestand', 'dossier-kurzlage', 'dossier-nummern', 'dossier-maske', 'sichtung-pin', 'sichtung-import', 'bearbeitet-hinweis', 'dossier-sperre'], ['recherche-oberflaeche', 'karten-messen', 'ablage-eingang', 'lage-box', 'terminal-bruecken-ausfall', 'fall-modul', 'dossier-fallverweise', 'dossier-galerie-nummern', 'profil-seq-galerie', 'sichtung-export', 'arbeitsstand', 'lagebriefing', 'briefing-eintraege', 'fallpaket-x', 'arbeitsstand-tasten', 'terminal-konsole', 'terminal-link-kette', 'terminal-shell-kern', 'terminal-einwahl-abschluss', 'terminal-einwahl-realismus', 'terminal-tmux', 'terminal-befehlstabelle', 'terminal-auswahlliste', 'terminal-vorschlag', 'terminal-einfaerbung', 'terminal-ppp-persist', 'terminal-plog', 'terminal-tmux-bereiche', 'terminal-predict-anzeige', 'terminal-einwahl-zeiten', 'terminal-ppp-abbruch', 'terminal-link-end', 'terminal-onion', 'terminal-profanity-fenster', 'terminal-profanity-win10', 'terminal-nmap', 'terminal-profanity-sendfile', 'terminal-link-anzeige', 'terminal-profanity-kontakt', 'terminal-profanity-offline', 'terminal-strg-rechts', 'terminal-vorschlag-ergaenzung', 'terminal-benutzer', 'karte-sperre-pins', 'terminal-navigation', 'terminal-sudo', 'terminal-fs-ist', 'terminal-fs-sperrstand', 'terminal-fs-schnittstelle', 'terminal-fs-vergleich', 'terminal-pwd-bash', 'terminal-cd-bash', 'terminal-ls-gnu', 'terminal-locale', 'terminal-pin-suche', 'terminal-namensnavigation', 'terminal-vault', 'terminal-objektnavigation', 'terminal-archiv-zugriff', 'terminal-vfs', 'terminal-vfs-review', 'terminal-vfs-sicherung', 'terminal-home-bruecke', 'terminal-intel', 'terminal-intel-schutz', 'terminal-intel-export', 'terminal-sys', 'terminal-sys-review', 'terminal-paket4-versand', 'terminal-paket4-review', 'terminal-paket4-exporte', 'terminal-paket4-review3', 'terminal-paket5-recherche', 'terminal-paket5-last', 'terminal-paket5-a0']
@@ -39,7 +42,28 @@ async function gruppeLaufen(namen) {
   return erg;
 }
 const ausgabe = path.join(process.env.TMPDIR || os.tmpdir(), 'ft-out'); fs.mkdirSync(ausgabe, { recursive: true });
-const wahl = process.argv.slice(2);
+// Targeted map suite follows the same group boundaries as the full run.
+const GEO_SCHNITTSTELLEN = new Set([
+  'zonen-vorschau', 'kartenprotokoll', 'pins', 'kartensprung', 'identitaeten',
+  'kartenbereinigung', 'dossier-maske', 'sichtung-pin', 'karten-messen',
+  'karte-sperre-pins', 'terminal-objektnavigation'
+]);
+const argumente = process.argv.slice(2);
+const geo = argumente.length === 1 && argumente[0] === '--geospatial';
+if (argumente.some(x => x.startsWith('--')) && !geo) {
+  console.error('Aufruf: node runall.js [--geospatial | testname ...]');
+  process.exit(1);
+}
+const geoGruppen = GRUPPEN.map(g => g.filter(n => n.startsWith('geospatial-') || GEO_SCHNITTSTELLEN.has(n))).filter(g => g.length);
+// Guard against accidentally dropping a mandatory interface regression.
+// Newly added geospatial-* scripts enter the focused suite automatically
+// when registered in the standard selection.
+if (geo && (!geoGruppen.flat().some(n => n.startsWith('geospatial-')) ||
+    Array.from(GEO_SCHNITTSTELLEN).some(n => !geoGruppen.flat().includes(n)))) {
+  console.error('Geospatial-Auswahl unvollständig; GRUPPEN prüfen.');
+  process.exit(1);
+}
+const wahl = geo ? geoGruppen.flat() : argumente;
 if (!fs.existsSync(path.join(__dirname, '..', 'kartenschluessel.js'))) console.log('Hinweis: ../kartenschluessel.js fehlt (lokale Datei, nie einchecken). Ohne sie erscheint ein Startfehler, einige Tests (zum Beispiel zn, pn) scheitern dann.\n');
 function lauf(name) {
   return new Promise(res => {
@@ -52,16 +76,24 @@ function lauf(name) {
     k.on('close', code => {
       clearTimeout(t); out.end();
       const status = zeit ? 'Zeit' : (code !== 0 || FEHLER.test(text)) ? 'rot' : !text.trim() ? 'ungeprüft' : 'grün';
-      res({ name, status, code, art: status === 'rot' ? fehlerArt(text) : null, falsch: Array.from(text.matchAll(/"([A-Za-z0-9_]+)": false/g), m => m[1]) });
+      // Synthetic scale diagnostic is useful even on successful runs. Do not
+      // dump general test output or unrelated environment/configuration data.
+      const praefixe = name === 'geospatial-k2-anbindung' ? ['K4 Maßstabsbaseline (CSS-Pixel): '] :
+        name === 'geospatial-k2-objekte' ? ['K4 Z2 GeoJSON-Aktualisierungen: '] :
+        name === 'geospatial-k4-last' ? ['K4 Last Hardware: ','K4 Last Messung: '] : [];
+      const diagnose = text.split(/\r?\n/).filter(l => praefixe.some(p => l.startsWith(p)));
+      res({ name, status, code, art: status === 'rot' ? fehlerArt(text) : null, falsch: Array.from(text.matchAll(/"([A-Za-z0-9_]+)": false/g), m => m[1]), diagnose });
     });
   });
 }
 (async () => {
-  const gruppen = wahl.length ? [wahl] : GRUPPEN, erg = [];
+  const gruppen = geo ? geoGruppen : wahl.length ? [wahl] : GRUPPEN, erg = [];
+  if (geo) console.log('Geospatial: ' + wahl.length + ' gezielte Skripte.');
   console.log('Gleichzeitig: ' + PARALLEL + ' (FT_PARALLEL)\n');
   for (const g of gruppen) erg.push(...await gruppeLaufen(g));
   let neu = 0;
-  erg.forEach(r => { const b = (BEKANNT_NUR[r.name] ? (r.status === 'rot' && r.falsch.length && r.falsch.every(x => BEKANNT_NUR[r.name].indexOf(x) >= 0) ? BEKANNT[r.name] : null) : BEKANNT[r.name]) || (HISTORISCH.indexOf(r.name) >= 0 ? 'historisch, stillgelegter Missionsablauf' : null), angefordert = wahl.indexOf(r.name) >= 0; console.log(r.name.padEnd(18) + r.status + (r.art && r.art !== 'fachlich' ? ' [' + r.art + ']' : '') + (r.status !== 'grün' && r.status !== 'fehlt' && b ? '  (bekannt: ' + b + ')' : '') + (r.status === 'fehlt' && angefordert ? '  (angefordert, aber nicht vorhanden)' : '')); if ((r.status === 'rot' || r.status === 'Zeit' || r.status === 'ungeprüft') && !b) neu++; if (r.status === 'fehlt' && angefordert) neu++; });
+  erg.forEach(r => { const b = (BEKANNT_NUR[r.name] ? (r.status === 'rot' && r.falsch.length && r.falsch.every(x => BEKANNT_NUR[r.name].indexOf(x) >= 0) ? BEKANNT[r.name] : null) : BEKANNT[r.name]) || (HISTORISCH.indexOf(r.name) >= 0 ? 'historisch, stillgelegter Missionsablauf' : null), angefordert = wahl.indexOf(r.name) >= 0; console.log(r.name.padEnd(18) + r.status + (r.art && r.art !== 'fachlich' ? ' [' + r.art + ']' : '') + (r.status !== 'grün' && r.status !== 'fehlt' && b ? '  (bekannt: ' + b + ')' : '') + (r.status === 'fehlt' && angefordert ? '  (angefordert, aber nicht vorhanden)' : '')); if ((r.status === 'rot' || r.status === 'Zeit' || r.status === 'ungeprüft') && (geo || !b)) neu++; if (r.status === 'fehlt' && angefordert) neu++; });
+  for (const r of erg) for (const zeile of r.diagnose || []) console.log(zeile);
   console.log('\n' + erg.filter(r => r.status === 'grün').length + ' grün, ' + erg.filter(r => r.status === 'ungeprüft').length + ' ungeprüft, ' + erg.filter(r => r.status === 'fehlt').length + ' nicht vorhanden, ' + neu + ' unerwartet rot, ungeprüft oder fehlend. Ausgaben: ' + ausgabe);
   process.exit(neu ? 1 : 0);
 })();
