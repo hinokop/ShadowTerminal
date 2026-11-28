@@ -836,6 +836,23 @@ function assertCamera(actual,expected){
       return a.v;
     };
     await gemeinsameCam();
+    // Baseline of actual flat-map CSS pixel scales, not an assertion that
+    // the historical half-zoom offset guarantees physical scale parity.
+    const massstab=await p.evaluate(()=>{
+      const svg=$('k-svg'),m=svg.getScreenCTM(),P=karteProj(),K=VIEW.karte,a=KARTE_V2_DEV.adapter();
+      const ll1=[K.lat,K.lon],ll2=[K.lat,K.lon+.001];
+      const s1=new DOMPoint(P.px(ll1[1]),P.py(ll1[0])).matrixTransform(m),s2=new DOMPoint(P.px(ll2[1]),P.py(ll2[0])).matrixTransform(m);
+      const v1=a.project(ll1),v2=a.project(ll2),cam=a.camera();
+      return {svgPx:Math.hypot(s2.x-s1.x,s2.y-s1.y),v2Px:Math.hypot(v2.x-v1.x,v2.y-v1.y),
+        svgFaktor:Math.hypot(m.a,m.b),svgWelt:P.Wd,v2Zoom:cam.zoom,pitch:cam.pitch,bearing:cam.bearing,
+        svgBreite:svg.getBoundingClientRect().width,v2Breite:$('k-v2-map').clientWidth};
+    });
+    assert.equal(massstab.pitch,0);assert.equal(massstab.bearing,0);
+    for(const k of ['svgPx','v2Px','svgFaktor','svgWelt','svgBreite','v2Breite'])assert.ok(Number.isFinite(massstab[k])&&massstab[k]>0,'scale '+k);
+    const sollSvg=massstab.svgWelt*.001/360*massstab.svgFaktor,sollV2=512*2**massstab.v2Zoom*.001/360;
+    assert.ok(Math.abs(massstab.svgPx-sollSvg)<1e-6,'SVG projection/CTM');
+    assert.ok(Math.abs(massstab.v2Px-sollV2)<1e-6,'MapLibre CSS projection');
+    console.log('K4 Maßstabsbaseline (CSS-Pixel): '+JSON.stringify({...massstab,verhaeltnis:massstab.v2Px/massstab.svgPx}));
     await p.click('#k-eu');await p.waitForFunction(()=>Math.abs(KARTE_V2_DEV.adapter().camera().zoom-3.9)<1e-6);
     const europa=await gemeinsameCam();
     // f.pin belongs to the dossier explicitly locked earlier in this test.

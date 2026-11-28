@@ -59,7 +59,52 @@ const {APP}=require('./_pfad');
   await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
   assert.equal(await p.locator('#pin-name').inputValue(),'K4 Solo Test');
   assert.equal(await p.locator('#k-svg').count(),0);
+  // Interrupt a real camera animation while its position differs from both
+  // the start and the destination. Sample and navigate in the same JS turn.
+  const unterbrechen=async(zielPin=null)=>p.evaluate(async pinId=>{
+    const adapter=KARTE_V2_DEV.adapter();
+    adapter.flyTo({center:[13.4,52.5],zoom:15,pitch:20,bearing:12,duration:0});
+    const start=adapter.camera();let map=null;
+    const orig=maplibregl.Map.prototype.flyTo;
+    maplibregl.Map.prototype.flyTo=function(...args){map=this;return orig.apply(this,args);};
+    try{adapter.flyTo({center:[13.46,52.54],zoom:15,duration:3000,essential:true});}
+    finally{maplibregl.Map.prototype.flyTo=orig;}
+    if(!map)throw Error('real MapLibre flyTo not observed');
+    const vorher=await new Promise((resolve,reject)=>{
+      const ende=performance.now()+4000;
+      function frame(){
+        const cam=adapter.camera();
+        if(map.isMoving()&&Math.abs(cam.center[0]-start.center[0])>0.0001&&Math.abs(cam.center[0]-13.46)>0.0001){resolve(cam);return;}
+        if(performance.now()>ende||!map.isMoving()){reject(Error('no intermediate camera frame'));return;}
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    });
+    const geteilt={lat:VIEW.karte.lat,lon:VIEW.karte.lon,zoom:VIEW.karte.zoom};
+    if(pinId){if(!kartenObjektZeigen(pinId))throw Error('authorized pin jump refused');}
+    else dispatch({type:'NAVIGATION',modul:'dossier'});
+    return {start,vorher,geteilt,altBereit:adapter.ready()};
+  },zielPin);
+  const nah=(a,b,label)=>assert.ok(Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a-b)<1e-8,label+': '+a+' vs '+b);
+  const kameraVergleich=(a,b)=>{for(let i=0;i<2;i++)nah(a.center[i],b.center[i],'center '+i);for(const k of ['zoom','pitch','bearing'])nah(a[k],b[k],k);};
+  const abbruch=await unterbrechen();
+  assert.equal(abbruch.altBereit,false);
+  nah(abbruch.geteilt.lon,abbruch.vorher.center[0],'live shared longitude');
+  nah(abbruch.geteilt.lat,abbruch.vorher.center[1],'live shared latitude');
+  nah(abbruch.geteilt.zoom,abbruch.vorher.zoom+.5,'live shared zoom');
+  await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
+  await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
+  kameraVergleich(await p.evaluate(()=>KARTE_V2_DEV.adapter().camera()),abbruch.vorher);
+  // Direct object navigation while the old map is moving must win, even when
+  // the explicit destination is the initial center of that animation.
+  const sprung=await unterbrechen(id);assert.equal(sprung.altBereit,false);
+  await p.waitForFunction(()=>KARTE_V2_DEV.adapter()?.ready());
+  const zielCam=await p.evaluate(()=>KARTE_V2_DEV.adapter().camera());
+  nah(zielCam.center[0],13.4,'explicit pin longitude');nah(zielCam.center[1],52.5,'explicit pin latitude');
+  nah(zielCam.zoom,Math.max(sprung.geteilt.zoom,15)-.5,'explicit pin zoom');
+  assert.equal(await p.locator('#pin-name').inputValue(),'K4 Solo Test');
+  assert.equal(await p.locator('#k-svg').count(),0);
   assert.deepEqual(net,[]);assert.deepEqual(errors,[]);
-  console.log('OK: eigenständiges V2, Filter, Suche, Werkzeuge, Meldungen, Pin-Anlage, Navigation ohne SVG');
+  console.log('OK: eigenständiges V2, Filter, Suche, Werkzeuge, Meldungen, Pin-Anlage, Navigation ohne SVG, unterbrochene Kamerafahrt und expliziter Sprung');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

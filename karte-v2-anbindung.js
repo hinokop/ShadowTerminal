@@ -61,14 +61,19 @@
     return {center:[normLon(lon),Math.max(-85.051129,Math.min(85.051129,lat))],
       zoom:Math.max(1.1,Math.min(22,zoom-0.5))};
   }
-  function kameraTeilen(c){
+  function kameraTeilen(c,zeichnen=true){
     if(!aktiv(c)||!c.a||VIEW.karte.ansicht3d)return;
     const p=c.a.camera(),K=VIEW.karte;
     if(!p||!p.center.every(Number.isFinite)||!Number.isFinite(p.zoom))return;
     const lon=normLon(p.center[0]),lat=p.center[1],zoom=p.zoom+.5;
     const anders=K.lon!==lon||K.lat!==lat||K.zoom!==zoom;
     K.lon=lon;K.lat=lat;K.zoom=zoom;
-    if(anders){const svg=$('k-svg');if(svg)zeichneKarte(svg);}
+    // Share the last visible frame even if navigation interrupts the gesture.
+    // The comparison SVG is redrawn only on moveend, never for every frame.
+    if(anders)c.kameraSvgOffen=true;
+    if(zeichnen&&c.kameraSvgOffen){
+      c.kameraSvgOffen=false;const svg=$('k-svg');if(svg)zeichneKarte(svg);
+    }
   }
   function kameraSetzen(lat,lon,zoom,animiert=false,fertig){
     const c=kontext,z=zielKamera(lat,lon,zoom),K=VIEW.karte;
@@ -202,6 +207,7 @@
       let letzteMitte=mitte();
       c.map.on('resize',()=>{if(aktiv(c))kartePopupPos();});
       c.map.on('dragstart',()=>{if(aktiv(c)){VIEW.karte.bezug=null;VIEW.karte.bezugRenderKey=null;}});
+      c.map.on('move',()=>kameraTeilen(c,false));
       c.map.on('moveend',()=>{
         if(!aktiv(c))return;
         gebaeudeKnoepfe(c);bildAktualisieren(c);kameraAnzeige(c);
