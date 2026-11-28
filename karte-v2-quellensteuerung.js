@@ -2,7 +2,7 @@
    network or DOM side effects; the controller owns the active context. */
 (function(root){
   'use strict';
-  function erstellen({namen,aktiv,hinweis,sync,knoepfe,gebaeudeKnoepfe}){
+  function erstellen({namen,aktiv,hinweis,sync,knoepfe,gebaeudeKnoepfe,lokalFehler}){
   const lokalKey=()=>typeof VIEW.karte.cartoKey==='string'?VIEW.karte.cartoKey.trim():'';
   const STIL_RAM_MS=10*60*1000; // bounded reuse in session RAM
   function stop(c){
@@ -34,11 +34,23 @@
       (c.kachelWarnung?' Einzelne Kacheln nicht verfügbar.':'')+
       (c.ressourcenWarnung?' Kartenressource nicht verfügbar.':''));
   }
+  function lokalBereit(c){
+    if(!aktiv(c)||c.phase!=='lokal-laden'||!c.a.ready()||c.objektFehler)return;
+    stop(c);c.phase='lokal';hinweis(c,c.lokalGrund+' · Lokale Objektlayer bleiben verfügbar.');
+  }
   function rueckfall(c,grund){
-    if(!aktiv(c)||!c.a)return;
-    ++c.generation;stop(c);hybridStop(c);c.modus='leer';c.phase='lokal';c.bildQuelle=null;c.bildSourceId=null;c.key='';c.stilCache=null;c.stilKandidat=null;kachelReset(c);
-    try{c.a.setStyle(KARTE_V2_QUELLEN.leererStil());sync();}catch(e){}
-    knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,grund+' · Lokale Objektlayer bleiben verfügbar.');
+    if(!aktiv(c)||!c.a||c.objektFehler)return;
+    const g=++c.generation;stop(c);hybridStop(c);c.modus='leer';c.phase='lokal-laden';c.lokalGrund=grund;c.bildQuelle=null;c.bildSourceId=null;c.key='';c.stilCache=null;c.stilKandidat=null;kachelReset(c);
+    knoepfe(c);gebaeudeKnoepfe(c);hinweis(c,'Lokaler Kartenstil wird wiederhergestellt.');
+    try{c.a.setStyle(KARTE_V2_QUELLEN.leererStil());}
+    catch(e){lokalFehler(c,'style',e);return;}
+    try{sync();}catch(e){lokalFehler(c,'update',e);return;}
+    // style.load installs the adapter first. A local style that never
+    // becomes ready must not leave the interface permanently unusable.
+    if(c.phase==='lokal-laden'&&!c.objektFehler){
+      c.timer=setTimeout(()=>{if(aktiv(c)&&c.generation===g&&c.phase==='lokal-laden')lokalFehler(c,'style');},25000);
+      lokalBereit(c);
+    }
   }
   /* K2d-2b: Modus unabhängig von der Quelle. Automatik wählt nur aus
      der freigegebenen Liste anhand Mittelpunkt/Zoom; keine Abdeckungsgarantie.
@@ -306,7 +318,8 @@
         if(c.phase==='kacheln')rueckfall(c,'CARTO-Ressource nicht verfügbar');
         else {c.ressourcenWarnung=true;hinweis(c,namen[c.modus]+' · Kartenressource nicht verfügbar.');}
       });
-      c.map.on('idle',()=>kachelAuswerten(c));
+      c.map.on('style.load',()=>lokalBereit(c));
+      c.map.on('idle',()=>{lokalBereit(c);kachelAuswerten(c);});
   }
   return Object.freeze({lokalKey,stop,hybridStop,kachelReset,bildPosition,bildAktualisieren,bildManuell,wechseln,ereignisse});
   }

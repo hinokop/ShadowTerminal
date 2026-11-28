@@ -16,7 +16,7 @@
   // Factories are side-effect-free on creation. Cross-module commands are
   // resolved lazily, after both interfaces have been constructed.
   const quelle=KARTE_V2_QUELLENSTEUERUNG.erstellen({namen,aktiv,hinweis,sync,
-    knoepfe:c=>ui.knoepfe(c),gebaeudeKnoepfe:c=>ui.gebaeudeKnoepfe(c)});
+    knoepfe:c=>ui.knoepfe(c),gebaeudeKnoepfe:c=>ui.gebaeudeKnoepfe(c),lokalFehler:(c,phase,e)=>objektFehler(c,phase,e)});
   const ui=KARTE_V2_OBERFLAECHE.erstellen({dev,namen,aktiv,
     getKontext:()=>kontext,getVoll:()=>voll,setVoll:v=>{voll=v;},
     wechseln:quelle.wechseln,bildManuell:quelle.bildManuell,bildPosition:quelle.bildPosition});
@@ -195,7 +195,8 @@
   function objektFehler(c,phase,e){
     if(!aktiv(c)||c.objektFehler)return;
     c.objektFehler=true;
-    const [code,grund]=phase==='source'?['V2-SOURCE','Lokale MapLibre-Objektquelle fehlgeschlagen.']:
+    const [code,grund]=phase==='style'?['V2-STYLE','Lokaler MapLibre-Stil konnte nicht wiederhergestellt werden.']:
+      phase==='source'?['V2-SOURCE','Lokale MapLibre-Objektquelle fehlgeschlagen.']:
       phase==='update'?['V2-UPDATE','Lokale MapLibre-Objektlayer konnten nicht aktualisiert werden.']:
       ['V2-LAYER','MapLibre-Objektlayer konnten nicht aufgebaut werden.'];
     hinweis(c,grund);
@@ -241,8 +242,10 @@
     if(kontext)unmount(true,true);
     const alt=sitzung;
     const c={el,status,map:null,a:null,modus:'leer',phase:'lokal',gebaeude:alt?.gebaeude||false,bildWahl:alt?.bildWahl||'auto',bildAusgefallen:alt?.bildAusgefallen?.slice()||[],bildQuelle:null,bildSourceId:null,hyb:null,key:'',stilCache:null,stilKandidat:null,generation:0,abort:null,timer:null,fehlerTimer:null};
-    kachelReset(c);kontext=c;layout(c);
-    c.vollTaste=e=>{
+    kontext=c;
+    try{
+      kachelReset(c);layout(c);
+      c.vollTaste=e=>{
       if(!aktiv(c)||!c.a||e.key!=='Escape'||e.defaultPrevented||$('dlg')?.open||$('regie')?.open)return;
       if(['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName)&&e.target.type!=='checkbox'&&e.target.type!=='radio')return;
       if(!voll&&!$('k-v2-panel')?.contains(e.target))return;
@@ -255,7 +258,11 @@
       }
       if(voll){e.preventDefault();e.stopPropagation();vollWaehlen(false);}
     };
-    document.addEventListener('keydown',c.vollTaste,true);
+      document.addEventListener('keydown',c.vollTaste,true);
+    }catch(e){
+      // Do not reenter renderModule while its post-render hook is running.
+      queueMicrotask(()=>startFehler(c,'initialisierung',e));return;
+    }
     let startPhase='bibliothek';
     Promise.resolve().then(()=>aktiv(c)?bibliothek():null).then(()=>{
       if(!aktiv(c))return;
