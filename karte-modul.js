@@ -2196,7 +2196,7 @@ function renderKarte(m) {
     kartenReiter('karte'),
     panel('Lagekarte', null,
       typeof KARTE_V2_DEV!=='undefined'&&KARTE_V2_DEV.rueckfall ?
-        h('p',{id:'k-v2-rueckfall',class:'note pad',role:'status'},'MapLibre konnte nicht gestartet werden. Die lokale SVG-Karte ist aktiv; Online-Kacheln wurden für diese Sitzung deaktiviert. Zum erneuten V2-Versuch die Anwendung neu laden.') : null,
+        h('p',{id:'k-v2-rueckfall',class:'note pad',role:'status'},KARTE_V2_DEV.rueckfallGrund+' Die lokale SVG-Karte ist aktiv; Online-Kacheln wurden für diese Sitzung deaktiviert. Zum erneuten V2-Versuch die Anwendung neu laden.') : null,
       (typeof KARTE_V2_DEV==='undefined'||!KARTE_V2_DEV.aktiviert) ? kartePlatzierungsMaske() : null,
       h('div', { class: 'row' }, kopf),
       h('div', { class: 'karte-wrap' + (K.ansicht3d ? ' ist3d' : '') }, svg, K.ansicht3d ? karte3dRahmen() : null, leiste,

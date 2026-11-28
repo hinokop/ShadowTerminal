@@ -5,7 +5,7 @@
   'use strict';
   const modus=new URLSearchParams(location.search).get('geospatial-v2');
   const solo=modus==='solo',dev=modus==='1'||solo;
-  let kontext=null, laden=null, sitzung=null, voll=false, rueckfall=false;
+  let kontext=null, laden=null, sitzung=null, voll=false, rueckfall=false, rueckfallGrund='';
   const v2Aktiv=()=>dev&&!rueckfall;
   /* Nur Opt-in, vor allen MapLibre-Netzanfragen. Die Standardansicht bleibt unverändert. */
   if(dev){
@@ -144,11 +144,22 @@
     try{if(c.a)c.a.unmount();}catch(e){}
     try{if(c.map)c.map.remove();}catch(e){}
   }
-  function zurueckfallen(c){
+  // Renderer callbacks can run inside style.load or even adapter construction.
+  // Defer teardown until the MapLibre stack has returned; never tear down a
+  // newer context because an old style or map failed.
+  function objektFehler(c){
+    if(!aktiv(c)||c.objektFehler)return;
+    c.objektFehler=true;
+    hinweis(c,'Eigene Kartenlayer konnten nicht aufgebaut werden.');
+    queueMicrotask(()=>{
+      if(aktiv(c))zurueckfallen(c,'MapLibre-Objektlayer konnten nicht aufgebaut werden.');
+    });
+  }
+  function zurueckfallen(c,grund='MapLibre konnte nicht gestartet werden.'){
     if(!aktiv(c)||rueckfall)return;
     // Keep the existing authorized application model, camera and placement
     // state. Do not activate a different online provider as a side effect.
-    rueckfall=true;
+    rueckfall=true;rueckfallGrund=grund;
     VIEW.karte.ebenen.kacheln=false;
     VIEW.karte.ansicht3d=false;
     unmount();
@@ -200,7 +211,7 @@
           letzteMitte=jetzt;karteStatusAkt();
         }
       });
-      c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:t=>hinweis(c,t)});
+      c.a=KARTE_V2_RENDERER.adapter(c.map,{onClick:e=>klick(c,e),onError:()=>objektFehler(c)});
       quelle.ereignisse(c);
       knoepfe(c);gebaeudeKnoepfe(c);
       sync();kameraTeilen(c);karteAuswahlAnzeige();karteStatusAkt();kameraAnzeige(c);
@@ -214,5 +225,5 @@
   /* Nur für die Entwicklungsansicht; Rückgabe der Adapterreferenz zur Prüfung
      tatsächlicher Treffer und des Lebenszyklus, kein zusätzlicher Datenbestand. */
   root.KARTE_V2_DEV=Object.freeze({ansicht:()=>v2Aktiv()?ansicht():null,mount,unmount,sync,mitte,kameraSetzen,ansichtUmschalten,
-    get aktiviert(){return v2Aktiv();},get solo(){return solo&&v2Aktiv();},get rueckfall(){return rueckfall;},adapter:()=>aktiv(kontext)?kontext.a:null});
+    get aktiviert(){return v2Aktiv();},get solo(){return solo&&v2Aktiv();},get rueckfall(){return rueckfall;},get rueckfallGrund(){return rueckfallGrund;},adapter:()=>aktiv(kontext)?kontext.a:null});
 })(window);
