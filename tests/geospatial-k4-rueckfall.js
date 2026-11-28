@@ -5,10 +5,11 @@ const {APP}=require('./_pfad');
 (async()=>{
  const b=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
  try{
-  for(const [art,viewport] of [['bibliothek',{width:1500,height:1100}],['webgl',{width:1500,height:1100}],['layer',{width:1500,height:1100}],['layer',{width:1200,height:900}]]){
+  for(const [art,viewport] of [['bibliothek',{width:1500,height:1100}],['webgl',{width:1500,height:1100}],['initialisierung',{width:1500,height:1100}],['layer',{width:1500,height:1100}],['layer',{width:1200,height:900}]]){
    const p=await b.newPage({viewport,reducedMotion:'reduce'});
    let vorher=null;
-   const errors=[],anfragen=[];p.on('pageerror',e=>errors.push(e.message));
+   const errors=[],anfragen=[],diagnosen=[];p.on('pageerror',e=>errors.push(e.message));
+   p.on('console',msg=>{if(msg.text().startsWith('[Shadow V2] '))diagnosen.push(msg.text());});
    await p.route(/^https?:/,r=>{anfragen.push(r.request().url());return r.abort();});
    await p.addInitScript(art=>{
     window.__mapVersuche=0;
@@ -22,6 +23,25 @@ const {APP}=require('./_pfad');
           return node;
         }
         return orig.call(this,node);
+      };
+    }else if(art==='initialisierung'){
+      // All libraries have loaded except the final local diagnostic script.
+      // Inject a fault only after map construction, not in the constructor.
+      const append=HTMLHeadElement.prototype.appendChild;
+      HTMLHeadElement.prototype.appendChild=function(node){
+        if(node.tagName==='SCRIPT'&&node.src.endsWith('/karte-v2-diagnose.js')&&!window.__initPatch){
+          window.__initPatch=true;
+          const orig=maplibregl.Map.prototype.addControl;
+          maplibregl.Map.prototype.addControl=function(control,...args){
+            if(control instanceof maplibregl.NavigationControl){
+              ++window.__mapVersuche;
+              window.__konstruierteMap=!!this.getCanvas();
+              throw new TypeError('synthetic-secret-DO-NOT-LOG https://example.invalid/?key=fixture');
+            }
+            return orig.call(this,control,...args);
+          };
+        }
+        return append.call(this,node);
       };
     }else if(art==='webgl'){
       const orig=HTMLCanvasElement.prototype.getContext;
@@ -70,6 +90,16 @@ const {APP}=require('./_pfad');
      await p.click('#k-v2-leer');
    }
    await p.waitForSelector('#k-v2-rueckfall');
+   const code={bibliothek:'V2-LIB',webgl:'V2-MAP',initialisierung:'V2-INIT',layer:'V2-LAYER'}[art];
+   const meldung=await p.locator('#k-v2-rueckfall').innerText();
+   assert.ok(meldung.includes('Diagnose: '+code+'.'),art+' correct diagnostic phase: '+meldung);
+   assert.equal(diagnosen.length,1,art+' exactly one active-context diagnostic');
+   assert.ok(['Error','TypeError','RangeError','unbekannt'].some(typ=>diagnosen[0]==='[Shadow V2] '+code+' ('+typ+')'));
+   if(art==='initialisierung'){
+     assert.equal(await p.evaluate(()=>__konstruierteMap),true,'failure after map construction');
+     assert.equal(diagnosen[0],'[Shadow V2] V2-INIT (TypeError)');
+     assert.ok(!meldung.includes('synthetic-secret')&&!meldung.includes('example.invalid'));
+   }
    if(art==='layer'){
      assert.equal(await p.evaluate(()=>__teilLayer),true,'failure after partial installation');
      assert.match(await p.locator('#k-v2-rueckfall').innerText(),/MapLibre-Objektlayer konnten nicht aufgebaut werden/);
@@ -99,11 +129,12 @@ const {APP}=require('./_pfad');
    await p.evaluate(()=>dispatch({type:'NAVIGATION',modul:'karte'}));
    await p.waitForSelector('#k-v2-rueckfall');
    assert.equal(await p.evaluate(()=>__mapVersuche),versuche,'no automatic retry');
+   assert.equal(diagnosen.length,1,'no duplicate diagnostic after navigation');
    assert.equal(await p.evaluate(id=>PROFIL.pins.some(x=>x.id===id),id),true);
    assert.deepEqual(anfragen,[],art+' offline fallback');
    assert.deepEqual(errors,[],art+' no uncaught application errors');
    await p.close();
   }
-  console.log('OK: Bibliotheks-, WebGL- und nachträglicher Objektlayerfehler, vollständiger SVG-Rückfall, flacher Maßstab bei zwei Fenstergrößen, keine automatischen Neuversuche');
+  console.log('OK: Bibliotheks-, WebGL-, Anwendungsaufbau- und nachträglicher Objektlayerfehler, vollständiger SVG-Rückfall, flacher Maßstab bei zwei Fenstergrößen, keine automatischen Neuversuche');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

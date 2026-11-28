@@ -153,12 +153,32 @@
   // Renderer callbacks can run inside style.load or even adapter construction.
   // Defer teardown until the MapLibre stack has returned; never tear down a
   // newer context because an old style or map failed.
+  // Fixed diagnostic codes only: third-party exception messages and stacks
+  // can contain provider URLs, credentials or application data.
+  const startDiagnosen=Object.freeze({
+    bibliothek:['V2-LIB','Lokale MapLibre-Bibliothek konnte nicht geladen werden.'],
+    map:['V2-MAP','MapLibre-Karte konnte nicht erstellt werden (WebGL oder Kartenkonstruktion).'],
+    initialisierung:['V2-INIT','MapLibre-Karte: Anwendungsaufbau fehlgeschlagen.']
+  });
+  function diagnoseAusgeben(code,e){
+    const typ=e instanceof TypeError?'TypeError':e instanceof RangeError?'RangeError':e instanceof Error?'Error':'unbekannt';
+    console.error('[Shadow V2] '+code+' ('+typ+')');
+  }
+  function startFehler(c,phase,e){
+    if(!aktiv(c)||rueckfall)return;
+    const [code,grund]=startDiagnosen[phase]||startDiagnosen.initialisierung;
+    diagnoseAusgeben(code,e);
+    zurueckfallen(c,grund+' Diagnose: '+code+'.');
+  }
   function objektFehler(c){
     if(!aktiv(c)||c.objektFehler)return;
     c.objektFehler=true;
     hinweis(c,'Eigene Kartenlayer konnten nicht aufgebaut werden.');
     queueMicrotask(()=>{
-      if(aktiv(c))zurueckfallen(c,'MapLibre-Objektlayer konnten nicht aufgebaut werden.');
+      if(aktiv(c)){
+        diagnoseAusgeben('V2-LAYER');
+        zurueckfallen(c,'MapLibre-Objektlayer konnten nicht aufgebaut werden. Diagnose: V2-LAYER.');
+      }
     });
   }
   // Match the flat geographic scale at the actual SVG CSS-pixel size.
@@ -211,14 +231,19 @@
       if(voll){e.preventDefault();e.stopPropagation();vollWaehlen(false);}
     };
     document.addEventListener('keydown',c.vollTaste,true);
-    bibliothek().then(()=>{
+    let startPhase='bibliothek';
+    Promise.resolve().then(()=>aktiv(c)?bibliothek():null).then(()=>{
       if(!aktiv(c))return;
+      startPhase='initialisierung';
       const K=VIEW.karte, sel=$('k-v2-bildwahl');
       if(sel)for(const q of KARTE_V2_QUELLEN.bildListe())sel.appendChild(h('option',{value:q.id},q.name));
-      c.map=new maplibregl.Map({container:el,style:KARTE_V2_QUELLEN.leererStil(),
+      const stil=KARTE_V2_QUELLEN.leererStil();
+      startPhase='map';
+      c.map=new maplibregl.Map({container:el,style:stil,
         ...zielKamera(K.lat,K.lon,K.zoom),pitch:alt?.kamera?.pitch||0,bearing:alt?.kamera?.bearing||0,
         minZoom:KARTE_V2_KAMERA.minZoom,maxZoom:KARTE_V2_KAMERA.maxZoom,attributionControl:true,renderWorldCopies:false,
         transformRequest:url=>KARTE_V2_QUELLEN.cartoRequest(url,c.key)});
+      startPhase='initialisierung';
       c.map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
       c.map.addControl(new maplibregl.ScaleControl({maxWidth:100,unit:'metric'}),'bottom-left');
       let letzteMitte=mitte();
@@ -241,9 +266,7 @@
       $('k-v2-voll').disabled=false;layout(c);
       if(alt&&alt.modus!=='leer')wechseln(c,alt.modus,alt.modus==='hybrid'?alt.hybrid:alt.stilCache,true);
       else if(!alt)wechseln(c,'shadow');
-    }).catch(()=>{
-      zurueckfallen(c);
-    });
+    }).catch(e=>startFehler(c,startPhase,e));
   }
   /* Nur für die Entwicklungsansicht; Rückgabe der Adapterreferenz zur Prüfung
      tatsächlicher Treffer und des Lebenszyklus, kein zusätzlicher Datenbestand. */
