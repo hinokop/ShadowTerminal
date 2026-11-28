@@ -154,7 +154,7 @@ const ringMarker=[
 // lines; rapid events are throttled, moveend settles the exact final layout.
 {
  const sources=new Map(),layers=new Map(),images=new Set(),handlers=new Map(),writes=[];
- let scale=10000,zeit=0,moving=false;
+ let scale=10000,zeit=0,moving=false,offset=0,rauschen=0;
  const mock={
    on:(e,fn)=>handlers.set(e,fn),off:e=>handlers.delete(e),
    isStyleLoaded:()=>true,getSource:id=>sources.get(id),getLayer:id=>layers.get(id),hasImage:id=>images.has(id),
@@ -162,8 +162,8 @@ const ringMarker=[
    addLayer:l=>layers.set(l.id,l),addImage:id=>images.add(id),setFilter:()=>{},
    removeSource:id=>sources.delete(id),removeLayer:id=>layers.delete(id),removeImage:id=>images.delete(id),
    getCanvas:()=>({clientWidth:1000,clientHeight:800}),getCenter:()=>({lng:13.405}),isMoving:()=>moving,
-   project:([x,y])=>({x:500+(x-13.405)*scale,y:400-(y-52.52)*scale}),
-   unproject:([x,y])=>({lng:13.405+(x-500)/scale,lat:52.52-(y-400)/scale})
+   project:([x,y])=>({x:500+offset+(x-13.405)*scale,y:400-(y-52.52)*scale}),
+   unproject:([x,y])=>({lng:13.405+(x-500-offset)/scale+rauschen,lat:52.52-(y-400)/scale})
  };
  const descriptor=Object.getOwnPropertyDescriptor(globalThis,'performance');
  Object.defineProperty(globalThis,'performance',{configurable:true,value:{now:()=>zeit}});
@@ -182,6 +182,21 @@ const ringMarker=[
    const expected=R.entflechten(R.daten({marker:ringMarker}).quellen,mock);
    assert.deepEqual(sources.get('shadow-v2-punkte').data,expected.punkte);
    assert.deepEqual(sources.get('shadow-v2-leit').data,expected.leit);
+   // Flat pan with inverse-projection noise: no redundant worker writes.
+   scale=10000;handlers.get('moveend')();writes.length=0;
+   moving=true;offset=30;rauschen=4.5e-12;zeit=300;handlers.get('move')();
+   assert.deepEqual(writes,[],'pan noise does not refresh sources');
+   // The reference is the last submitted payload, not the last skipped frame.
+   rauschen=.75e-9;zeit=400;handlers.get('move')();assert.deepEqual(writes,[]);
+   rauschen=1.5e-9;zeit=500;handlers.get('move')();assert.deepEqual(writes,['shadow-v2-punkte','shadow-v2-leit'],'accumulated deviation is eventually submitted');
+   // Edge clamping must still update actual display positions.
+   writes.length=0;offset=-490;rauschen=0;moving=false;handlers.get('moveend')();
+   assert.deepEqual(writes,['shadow-v2-punkte','shadow-v2-leit'],'edge layout is not suppressed');
+   // Even a true change below the display tolerance must be transmitted.
+   adapter.setData({marker:[ringMarker[0]]});writes.length=0;
+   const changed={...ringMarker[0],ll:[ringMarker[0].ll[0],ringMarker[0].ll[1]+1e-10]};
+   adapter.setData({marker:[changed]});assert.deepEqual(writes,['shadow-v2-punkte']);
+   assert.deepEqual(sources.get('shadow-v2-punkte').data.features[0].geometry.coordinates,[changed.ll[1],changed.ll[0]]);
    adapter.unmount();assert.equal(handlers.size,0);
  }finally{
    if(descriptor)Object.defineProperty(globalThis,'performance',descriptor);
@@ -270,6 +285,30 @@ const ringMarker=[
     return d.leit.features.filter(f=>f.geometry.type==='LineString').length===3&&
       d.punkte.features.every(f=>__adapter.hitTest(__map.project(f.geometry.coordinates))?.renderKey===f.properties.renderKey);
   },ringMarker);
+  await ringReady();
+  // Z2: actual flat MapLibre pan, with all overlapping markers well inside
+  // the viewport. Count actual calls to the worker-facing setData methods.
+  const pan=await p.evaluate(async()=>{
+    const map=__map,ids=['shadow-v2-punkte','shadow-v2-leit'],counts=[0,0],restore=[];
+    for(const [i,id] of ids.entries()){
+      const src=map.getSource(id),orig=src.setData;
+      src.setData=function(...args){counts[i]++;return orig.apply(this,args);};
+      restore.push(()=>{src.setData=orig;});
+    }
+    let frames=0;const frame=()=>{frames++;};const start=map.getCenter().toArray(),zoom=map.getZoom();
+    map.on('move',frame);
+    try{
+      await new Promise(resolve=>{map.once('moveend',resolve);map.panBy([35,20],{duration:1500,essential:true});});
+      const ende=map.getCenter().toArray(),panWrites=counts.slice(),panFrames=frames;
+      map.jumpTo({zoom:zoom+.5});const zoomWrites=counts.map((n,i)=>n-panWrites[i]);
+      map.jumpTo({center:start,zoom});
+      return {panWrites,zoomWrites,panFrames,changed:Math.hypot(ende[0]-start[0],ende[1]-start[1])>1e-6};
+    }finally{map.off('move',frame);restore.forEach(f=>f());}
+  });
+  assert.ok(pan.changed&&pan.panFrames>1,'actual animated pan: '+JSON.stringify(pan));
+  assert.deepEqual(pan.panWrites,[0,0],'flat pan without edge/group change: '+JSON.stringify(pan));
+  assert.ok(pan.zoomWrites.every(n=>n>0),'zoom must still update both sources');
+  console.log('K4 Z2 GeoJSON-Aktualisierungen: '+JSON.stringify(pan));
   await ringReady();
   for(const m of ringMarker){
     const pnt=await p.evaluate(({marker,key})=>{

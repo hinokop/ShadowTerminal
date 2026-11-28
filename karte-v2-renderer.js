@@ -195,9 +195,29 @@
     {id:P+'auswahl',type:'circle',source:ids.punkte,filter:['==',['get','renderKey'],''],paint:{'circle-radius':13,'circle-color':linienfarben.auswahl,'circle-stroke-width':2,'circle-stroke-color':'#fff'}},
     {id:P+'punkt',type:'symbol',source:ids.punkte,layout:{'icon-image':['get','symbol'],'icon-allow-overlap':true,'icon-ignore-placement':true,'icon-pitch-alignment':'viewport','icon-rotation-alignment':'viewport'}}
   ];
+  // Sub-millimetre tolerance only for camera-derived display geometry, never
+  // for authoritative object changes. Compare against the last sent source
+  // (not the last computed frame), so small differences cannot accumulate.
+  const layoutToleranz=1e-9;
+  function koordinatenGleich(a,b){
+    if(a===b)return true;
+    if(Array.isArray(a)&&Array.isArray(b))return a.length===b.length&&a.every((v,i)=>koordinatenGleich(v,b[i]));
+    return Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a-b)<=layoutToleranz;
+  }
+  function quelleGleich(a,b,layout){
+    if(a===b)return true;
+    if(!layout)return JSON.stringify(a)===JSON.stringify(b);
+    if(a.features.length!==b.features.length)return false;
+    return a.features.every((f,i)=>{
+      const g=b.features[i];
+      return f===g||(f.geometry.type===g.geometry.type&&
+        (f.properties===g.properties||JSON.stringify(f.properties)===JSON.stringify(g.properties))&&
+        koordinatenGleich(f.geometry.coordinates,g.geometry.coordinates));
+    });
+  }
   function adapter(map,optionen){
     const o=optionen||{};let aktiv=true, snapshot=daten(null), anzeige=snapshot.quellen, auswahl=null, installiert=false, markiert=undefined;
-    let letzteBewegung=-Infinity,fehlerhaft=false;
+    let letzteBewegung=-Infinity,fehlerhaft=false,punktBasis=snapshot.quellen.punkte;
     const eigeneQuellen=new Set(Object.values(ids));
     const bewegungsIntervall=100; // at most 10 local point-layout updates/s while moving
     /* MapLibre BoxZoom unterdrückt auch einen stationären Shift-Klick (mouseupWindow).
@@ -228,7 +248,7 @@
       if(Object.values(ids).some(id=>map.getSource(id))||layer.some(l=>map.getLayer(l.id))||Object.keys(formen).some(k=>map.hasImage(symbolId(k)))){fehler();return;}
       try{
         for(const k of Object.keys(formen))map.addImage(symbolId(k),symbolBild(k),{pixelRatio:2});
-        anzeige=entflechten(snapshot.quellen,map);
+        anzeige={...entflechten(snapshot.quellen,map)};punktBasis=snapshot.quellen.punkte;
         for(const [k,id] of Object.entries(ids))map.addSource(id,{type:'geojson',data:anzeige[k]});
         for(const l of layer)map.addLayer(JSON.parse(JSON.stringify(l)));
         installiert=true;markieren();
@@ -248,12 +268,17 @@
       try{
         const neu=entflechten(snapshot.quellen,map);
         const keys=nurPunkte===true?['punkte','leit']:Object.keys(ids);
+        const gleicheBasis=quelleGleich(punktBasis,snapshot.quellen.punkte,false);
         for(const k of keys){
-          if(anzeige[k]!==neu[k]&&JSON.stringify(anzeige[k])!==JSON.stringify(neu[k]))
+          const layout=gleicheBasis&&(k==='punkte'||k==='leit');
+          if(!quelleGleich(anzeige[k],neu[k],layout)){
             map.getSource(ids[k]).setData(neu[k]);
+            if(fehlerhaft)return;
+            anzeige[k]=neu[k];
+          }
           if(fehlerhaft)return;
         }
-        anzeige=neu;
+        punktBasis=snapshot.quellen.punkte;
         if(nurPunkte!==true)markieren();
       }catch(e){fehler('update',e);}
     }

@@ -78,7 +78,9 @@ function lauf(name) {
       const status = zeit ? 'Zeit' : (code !== 0 || FEHLER.test(text)) ? 'rot' : !text.trim() ? 'ungeprüft' : 'grün';
       // Synthetic scale diagnostic is useful even on successful runs. Do not
       // dump general test output or unrelated environment/configuration data.
-      const diagnose = name === 'geospatial-k2-anbindung' ? text.split(/\r?\n/).filter(l => l.startsWith('K4 Maßstabsbaseline (CSS-Pixel): ')) : [];
+      const praefix = name === 'geospatial-k2-anbindung' ? 'K4 Maßstabsbaseline (CSS-Pixel): ' :
+        name === 'geospatial-k2-objekte' ? 'K4 Z2 GeoJSON-Aktualisierungen: ' : null;
+      const diagnose = praefix ? text.split(/\r?\n/).filter(l => l.startsWith(praefix)) : [];
       res({ name, status, code, art: status === 'rot' ? fehlerArt(text) : null, falsch: Array.from(text.matchAll(/"([A-Za-z0-9_]+)": false/g), m => m[1]), diagnose });
     });
   });
