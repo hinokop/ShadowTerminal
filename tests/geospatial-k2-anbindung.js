@@ -21,10 +21,19 @@ function assertCamera(actual,expected){
  }
 }
 
+// Flat and north-up: both signs of zero denote exactly the same angle.
+function assertFlatNorth(camera){
+ assert.ok(camera.pitch===0&&camera.bearing===0,'flat north-up camera: pitch '+camera.pitch+', bearing '+camera.bearing);
+}
+
 // Selbstprüfung der Vergleichsfunktion: nur numerisch identische Nullwerte akzeptieren.
 {
  const cam={center:[13.4,52.5],zoom:14.25,pitch:0,bearing:0};
  assertCamera({...cam,bearing:-0},cam);
+ assertFlatNorth(cam);assertFlatNorth({...cam,pitch:-0,bearing:-0});
+ for(const k of ['pitch','bearing'])for(const v of [.001,-.001,NaN,Infinity,'0',null,undefined]){
+  assert.throws(()=>assertFlatNorth({...cam,[k]:v}),assert.AssertionError);
+ }
  // Actual numerical residuals from the K4b-2 pitch regression.
  assertCamera({...cam,center:[13.395000000001517,52.50500000000022],pitch:60},
    {...cam,center:[13.395,52.50500000000002],pitch:60});
@@ -847,7 +856,7 @@ function assertCamera(actual,expected){
         svgFaktor:Math.hypot(m.a,m.b),svgWelt:P.Wd,v2Zoom:cam.zoom,pitch:cam.pitch,bearing:cam.bearing,
         svgBreite:svg.getBoundingClientRect().width,v2Breite:$('k-v2-map').clientWidth};
     });
-    assert.equal(massstab.pitch,0);assert.equal(massstab.bearing,0);
+    assertFlatNorth(massstab);
     for(const k of ['svgPx','v2Px','svgFaktor','svgWelt','svgBreite','v2Breite'])assert.ok(Number.isFinite(massstab[k])&&massstab[k]>0,'scale '+k);
     const sollSvg=massstab.svgWelt*.001/360*massstab.svgFaktor,sollV2=512*2**massstab.v2Zoom*.001/360;
     assert.ok(Math.abs(massstab.svgPx-sollSvg)<1e-6,'SVG projection/CTM');
